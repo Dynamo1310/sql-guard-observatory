@@ -9,6 +9,7 @@ import { AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import superviseLogo from '@/assets/supervielle-logo.png';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
 export default function Login() {
   const [domainUser, setDomainUser] = useState('');
@@ -63,6 +64,10 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      
       <Card className="w-full max-w-md shadow-glow">
         <CardHeader className="space-y-4">
           <div className="flex justify-center">

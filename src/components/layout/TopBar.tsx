@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
+import { ThemeToggle } from './ThemeToggle';
 
 interface TopBarProps {
   onRefresh?: () => void;
@@ -66,6 +67,8 @@ export function TopBar({
       </div>
 
       <div className="flex items-center gap-3">
+        <ThemeToggle />
+        
         {onRefresh && (
           <Button
             variant="outline"
