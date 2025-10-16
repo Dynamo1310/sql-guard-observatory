@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Overview from "./pages/Overview";
@@ -12,6 +12,7 @@ import Databases from "./pages/Databases";
 import Backups from "./pages/Backups";
 import Indexes from "./pages/Indexes";
 import AdminUsers from "./pages/AdminUsers";
+import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
 
@@ -31,6 +32,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   if (!user?.allowed) {
     return <Unauthorized />;
   }
@@ -45,20 +50,25 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <AuthGate>
-            <Routes>
-              <Route element={<AppLayout />}>
-                <Route path="/" element={<Overview />} />
-                <Route path="/jobs" element={<Jobs />} />
-                <Route path="/disks" element={<Disks />} />
-                <Route path="/databases" element={<Databases />} />
-                <Route path="/backups" element={<Backups />} />
-                <Route path="/indexes" element={<Indexes />} />
-                <Route path="/admin/users" element={<AdminUsers />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AuthGate>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="*" element={
+              <AuthGate>
+                <Routes>
+                  <Route element={<AppLayout />}>
+                    <Route path="/" element={<Overview />} />
+                    <Route path="/jobs" element={<Jobs />} />
+                    <Route path="/disks" element={<Disks />} />
+                    <Route path="/databases" element={<Databases />} />
+                    <Route path="/backups" element={<Backups />} />
+                    <Route path="/indexes" element={<Indexes />} />
+                    <Route path="/admin/users" element={<AdminUsers />} />
+                  </Route>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </AuthGate>
+            } />
+          </Routes>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>

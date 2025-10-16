@@ -6,6 +6,7 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   checkAuth: () => Promise<void>;
+  logout: () => void;
   isAdmin: boolean;
 }
 
@@ -21,25 +22,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       setError(null);
       
-      // Mock API call - simulating AD auth
-      // In production, this would call GET /api/auth/me
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Check localStorage for authenticated user
+      const domainUser = localStorage.getItem('domain_user');
+      const displayName = localStorage.getItem('display_name');
+      const rolesStr = localStorage.getItem('roles');
       
-      // Simulate different user states
-      const mockUser: User = {
-        domainUser: "BANCO\\admin.user",
-        displayName: "Admin User",
-        allowed: true,
-        roles: ["Admin"]
-      };
-
-      setUser(mockUser);
+      if (domainUser && displayName && rolesStr) {
+        const roles = JSON.parse(rolesStr);
+        setUser({
+          domainUser,
+          displayName,
+          allowed: true,
+          roles
+        });
+      } else {
+        setUser(null);
+      }
     } catch (err) {
       setError('Error al verificar autenticación');
       setUser(null);
     } finally {
       setLoading(false);
     }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('domain_user');
+    localStorage.removeItem('display_name');
+    localStorage.removeItem('roles');
+    setUser(null);
   };
 
   useEffect(() => {
@@ -49,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAdmin = user?.roles.includes('Admin') ?? false;
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, checkAuth, isAdmin }}>
+    <AuthContext.Provider value={{ user, loading, error, checkAuth, logout, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,5 +1,6 @@
-import { Home, Activity, HardDrive, Database, Save, ListTree, Users } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { Home, Activity, HardDrive, Database, Save, ListTree, Users, LogOut } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import superviseLogo from '@/assets/supervielle-logo.png';
 import {
   Sidebar,
   SidebarContent,
@@ -28,12 +29,36 @@ const adminItems = [
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { isAdmin } = useAuth();
+  const { isAdmin, logout, user } = useAuth();
+  const navigate = useNavigate();
   const isCollapsed = state === 'collapsed';
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
+        {/* Logo Section */}
+        <div className="p-4 border-b border-sidebar-border">
+          <div className="flex items-center gap-3">
+            <img 
+              src={superviseLogo} 
+              alt="Supervielle" 
+              className={isCollapsed ? "h-8 mx-auto" : "h-8"}
+            />
+            {!isCollapsed && (
+              <div>
+                <p className="text-xs font-semibold text-sidebar-foreground">
+                  Observabilidad
+                </p>
+                <p className="text-xs text-muted-foreground">{user?.displayName}</p>
+              </div>
+            )}
+          </div>
+        </div>
         <SidebarGroup>
           <SidebarGroupLabel className={isCollapsed ? 'sr-only' : ''}>
             Observabilidad
@@ -90,6 +115,20 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+
+        {/* Logout Button */}
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={handleLogout}>
+                  <LogOut className="h-4 w-4" />
+                  {!isCollapsed && <span>Cerrar Sesión</span>}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
     </Sidebar>
   );
