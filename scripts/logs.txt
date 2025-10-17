@@ -1,3 +1,4 @@
+
 =====================================
  Relevamiento Jobs de Mantenimiento
 =====================================
@@ -9,12 +10,152 @@
       ✓ 125 instancias a procesar
 
 [3/4] Verificando tabla destino...
-The certificate chain was issued by an authority that is not trusted
-At line:97921 char:9
-+         throw $records[0]
-+         ~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : ConnectionError: (SSPR17MON-01:String) [], Exception
-    + FullyQualifiedErrorId : dbatools_Invoke-DbaQuery
+Invoke-DbaQuery : A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+At C:\Temp\Tobi\RelevamientoJobsMant.ps1:65 char:103
++ ... se -Query $createSql -EnableException -TrustServerCertificate | Out-N ...
++                                           ~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:) [Invoke-DbaQuery], ParameterBindingException
+    + FullyQualifiedErrorId : NamedParameterNotFound,Invoke-DbaQuery
  
+      ✓ Tabla lista: SSPR17MON-01.SQLNova.dbo.InventarioJobsSnapshot
+
+[4/4] Procesando instancias...
+
+[1/125] SSDS16-03 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[2/125] SSDS19-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[3/125] SSTS19-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[4/125] SSDS17-03 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[5/125] SSDS19BAW-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[6/125] SSTS17-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[7/125] RSCRM365-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[8/125] TQRSA-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[9/125] SSDS17CRM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[10/125] SSDS17-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[11/125] SSTS19HBE-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[12/125] SSDS17HBI-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[13/125] SSDS14ODM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[14/125] SSDS17SMO-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[15/125] SSTS14-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[16/125] SSDS19HBE-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[17/125] RSCRM365-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[18/125] SSTS17HBI-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[19/125] SSDS17-04 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[20/125] SSTS17-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[21/125] SSDS14-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[22/125] SSTS17DWH-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[23/125] SSTS17-04 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[24/125] SSDS12-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[25/125] TRCRM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[26/125] SSDS16-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[27/125] SSDS14-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[28/125] SSDS16BPM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[29/125] SSTS16-03 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[30/125] SSTS17-03 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[31/125] SSTS19HBE-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[32/125] SSTS14-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[33/125] SSTS12-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[34/125] SSPR14-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[35/125] SSPR16SOA-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[36/125] SSPR16SOA-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[37/125] SSPR19MSV-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[38/125] SSPR14ODM-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[39/125] SSPR12-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[40/125] SSPR17DWH-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[41/125] SSPR17MSV-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[42/125] SSPR16NXS-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[43/125] SSPR17MGF-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[44/125] SSPR19VEEAM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[45/125] SSPR14ODM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[46/125] SSPR14-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[47/125] SSPR17HBI-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[48/125] SSPR17CMX-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[49/125] SSPR17MSV-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[50/125] SSPR19VEEAM-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[51/125] SSPR17-04 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[52/125] SSPR16TRD-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[53/125] SSPR17MGF-52 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[54/125] SSISC-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[55/125] SSPR17-03 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[56/125] SSPR19HBE-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[57/125] SSPR17DWH-03 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[58/125] SSPR17MGF-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[59/125] SSPR17WUP-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[60/125] SSPR17PBI-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[61/125] SSPR17MON-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[62/125] SSPR17-52 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[63/125] SSPR17-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[64/125] SSPR17HBI-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[65/125] SSPR17DWH-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[66/125] SSPR19CRMPBI-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[67/125] SSPR17CRM365-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[68/125] SSPR17CRM365-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[69/125] SSPR16NXS-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[70/125] SSPR17EBK-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[71/125] SSPR17EMX-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[72/125] SSPR17EMX-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[73/125] SSPR19MSV-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[74/125] SSPR16BPM-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[75/125] SSPR17-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[76/125] SSPR19-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[77/125] SSPR16BPM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[78/125] SSPR19CRMPBI-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[79/125] SSPR16-03 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[80/125] SSPR14EBK-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[81/125] SSPR14AON-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[82/125] SSPR17CAL-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[83/125] SSPR16-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[84/125] SSPR17CMX-52 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[85/125] SSPR19HBE-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[86/125] SSPR17MGF-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[87/125] SSMBK-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[88/125] SSPR14AON-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[89/125] SSPR17SMO-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[90/125] RSCRM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[91/125] SSPR16PLD-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[92/125] SSCC08 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[93/125] BD04SER - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[94/125] SSMCS-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[95/125] SSCC03 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[96/125] SSPR19MBK-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[97/125] SSPR19MBK-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[98/125] RPPR16TFS-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[99/125] SSPR19BAW-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[100/125] SSRSA-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[101/125] SSPR17MCM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[102/125] SSPR19BAW-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[103/125] SSPR16ANL-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[104/125] SSDS17-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[105/125] SSDS17CRM365-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[106/125] RSTSCRM365-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[107/125] SSTS16-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[108/125] SSTS14ODM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[109/125] SSTS17SMO-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[110/125] SSTS16BPM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[111/125] SSTS16BPM-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[112/125] SSTS17CRM365-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[113/125] SSDES05 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[114/125] SSTES-05 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[115/125] SSPR19SSO-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[116/125] SSPR19SSO-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[117/125] SSPR19CTM-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[118/125] SSPR19CTM-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[119/125] SSPR19VFH-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[120/125] SSPR19VFH-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[121/125] SSDS16-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[122/125] SSTS16-02 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[123/125] SSPRAW19CTD-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[124/125] SSPR19USR-01 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+[125/125] SSPR19USR-51 - ERROR: A parameter cannot be found that matches parameter name 'TrustServerCertificate'.
+
+=====================================
+ RESUMEN
+=====================================
+Instancias procesadas:  0
+Instancias con error:   125
+Total jobs insertados:  0
+
+Timestamp: 10/17/2025 20:11:22
+
+❌ Proceso falló
 
 PS C:\Users\TB03260ADM> 
