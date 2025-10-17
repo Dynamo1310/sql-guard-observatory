@@ -62,7 +62,7 @@ BEGIN
 END
 "@
     
-    Invoke-DbaQuery -SqlInstance $SqlServer -Database $SqlDatabase -Query $createSql -EnableException | Out-Null
+    Invoke-DbaQuery -SqlInstance $SqlServer -Database $SqlDatabase -Query $createSql -EnableException -TrustServerCertificate | Out-Null
 }
 
 # ========= MAIN =========
@@ -200,7 +200,7 @@ if ($allResults.Count -gt 0) {
     Write-Host "Insertando $($allResults.Count) registros..." -NoNewline
     try {
         # Usar Write-DbaDataTable de dbatools
-        $allResults | Write-DbaDataTable -SqlInstance $SqlServer -Database $SqlDatabase -Table "[$SqlSchema].[$SqlTable]" -AutoCreateTable:$false
+        $allResults | Write-DbaDataTable -SqlInstance $SqlServer -Database $SqlDatabase -Table "[$SqlSchema].[$SqlTable]" -AutoCreateTable:$false -TrustServerCertificate
         Write-Host " ✓" -ForegroundColor Green
     } catch {
         Write-Host " ERROR" -ForegroundColor Red
