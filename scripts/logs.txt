@@ -1,5 +1,3 @@
-PS C:\Users\TB03260ADM> C:\Temp\SQLNovaDistribuidor\RelevamientoJobsMant.ps1
-
 =====================================
  Relevamiento Jobs de Mantenimiento
 =====================================
@@ -11,145 +9,152 @@ PS C:\Users\TB03260ADM> C:\Temp\SQLNovaDistribuidor\RelevamientoJobsMant.ps1
       ✓ 125 instancias a procesar
 
 [3/4] Verificando tabla destino...
+Invoke-DbaQuery : A parameter cannot be found that matches parameter name 'CommandTimeout'.
+At C:\Temp\SQLNovaDistribuidor\RelevamientoJobsMant.ps1:65 char:86
++ ... rver -Database $SqlDatabase -Query $createSql -CommandTimeout 120 | O ...
++                                                   ~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:) [Invoke-DbaQuery], ParameterBindingException
+    + FullyQualifiedErrorId : NamedParameterNotFound,Invoke-DbaQuery
+ 
       ✓ Tabla lista: SSPR17MON-01.SQLNova.dbo.InventarioJobsSnapshot
 
 [4/4] Procesando instancias...
 
-[1/125] SSDS16-03 - Sin jobs
-[2/125] SSDS19-01 - Sin jobs
-[3/125] SSTS19-01 - ERROR: You cannot call a method on a null-valued expression.
-[4/125] SSDS17-03 - Sin jobs
-[5/125] SSDS19BAW-01 - ERROR: You cannot call a method on a null-valued expression.
-[6/125] SSTS17-02 - ERROR: You cannot call a method on a null-valued expression.
-[7/125] RSCRM365-01 - ERROR: You cannot call a method on a null-valued expression.
-[8/125] TQRSA-02 - ERROR: You cannot call a method on a null-valued expression.
-[9/125] SSDS17CRM-01 - Sin jobs
-[10/125] SSDS17-01 - ERROR: You cannot call a method on a null-valued expression.
-[11/125] SSTS19HBE-51 - Sin jobs
-[12/125] SSDS17HBI-01 - Sin jobs
-[13/125] SSDS14ODM-01 - ERROR: You cannot call a method on a null-valued expression.
-[14/125] SSDS17SMO-01 - ERROR: You cannot call a method on a null-valued expression.
-[15/125] SSTS14-01 - Sin jobs
-[16/125] SSDS19HBE-01 - ERROR: You cannot call a method on a null-valued expression.
-[17/125] RSCRM365-02 - ERROR: You cannot call a method on a null-valued expression.
-[18/125] SSTS17HBI-01 - ERROR: You cannot call a method on a null-valued expression.
-[19/125] SSDS17-04 - Sin jobs
-[20/125] SSTS17-01 - ERROR: You cannot call a method on a null-valued expression.
-[21/125] SSDS14-02 - Sin jobs
-[22/125] SSTS17DWH-01 - Sin jobs
-[23/125] SSTS17-04 - ERROR: You cannot call a method on a null-valued expression.
-[24/125] SSDS12-01 - ERROR: You cannot call a method on a null-valued expression.
-[25/125] TRCRM-01 - ERROR: You cannot call a method on a null-valued expression.
-[26/125] SSDS16-01 - ERROR: You cannot call a method on a null-valued expression.
-[27/125] SSDS14-01 - ERROR: You cannot call a method on a null-valued expression.
-[28/125] SSDS16BPM-01 - ERROR: You cannot call a method on a null-valued expression.
-[29/125] SSTS16-03 - ERROR: You cannot call a method on a null-valued expression.
-[30/125] SSTS17-03 - ERROR: You cannot call a method on a null-valued expression.
-[31/125] SSTS19HBE-01 - Sin jobs
-[32/125] SSTS14-02 - ERROR: You cannot call a method on a null-valued expression.
-[33/125] SSTS12-01 - ERROR: You cannot call a method on a null-valued expression.
-[34/125] SSPR14-01 - ERROR: You cannot call a method on a null-valued expression.
-[35/125] SSPR16SOA-02 - ERROR: You cannot call a method on a null-valued expression.
-[36/125] SSPR16SOA-01 - ERROR: You cannot call a method on a null-valued expression.
-[37/125] SSPR19MSV-01 - ERROR: You cannot call a method on a null-valued expression.
-[38/125] SSPR14ODM-02 - ERROR: You cannot call a method on a null-valued expression.
-[39/125] SSPR12-01 - ERROR: You cannot call a method on a null-valued expression.
-[40/125] SSPR17DWH-02 - ERROR: You cannot call a method on a null-valued expression.
-[41/125] SSPR17MSV-51 - Sin jobs
-[42/125] SSPR16NXS-01 - Sin jobs
-[43/125] SSPR17MGF-51 - ERROR: You cannot call a method on a null-valued expression.
-[44/125] SSPR19VEEAM-01 - ERROR: You cannot call a method on a null-valued expression.
-[45/125] SSPR14ODM-01 - ERROR: You cannot call a method on a null-valued expression.
-[46/125] SSPR14-02 - ERROR: You cannot call a method on a null-valued expression.
-[47/125] SSPR17HBI-01 - ERROR: You cannot call a method on a null-valued expression.
-[48/125] SSPR17CMX-01 - Sin jobs
-[49/125] SSPR17MSV-01 - Sin jobs
-[50/125] SSPR19VEEAM-51 - ERROR: You cannot call a method on a null-valued expression.
-[51/125] SSPR17-04 - Sin jobs
-[52/125] SSPR16TRD-01 - ERROR: You cannot call a method on a null-valued expression.
-[53/125] SSPR17MGF-52 - ERROR: You cannot call a method on a null-valued expression.
-[54/125] SSISC-01 - ERROR: You cannot call a method on a null-valued expression.
-[55/125] SSPR17-03 - ERROR: You cannot call a method on a null-valued expression.
-[56/125] SSPR19HBE-51 - Sin jobs
-[57/125] SSPR17DWH-03 - ERROR: You cannot call a method on a null-valued expression.
-[58/125] SSPR17MGF-02 - ERROR: You cannot call a method on a null-valued expression.
-[59/125] SSPR17WUP-01 - ERROR: You cannot call a method on a null-valued expression.
-[60/125] SSPR17PBI-01 - Sin jobs
-[61/125] SSPR17MON-01 - Sin jobs
-[62/125] SSPR17-52 - ERROR: You cannot call a method on a null-valued expression.
-[63/125] SSPR17-01 - ERROR: You cannot call a method on a null-valued expression.
-[64/125] SSPR17HBI-51 - ERROR: You cannot call a method on a null-valued expression.
-[65/125] SSPR17DWH-01 - ERROR: You cannot call a method on a null-valued expression.
-[66/125] SSPR19CRMPBI-51 - ERROR: You cannot call a method on a null-valued expression.
-[67/125] SSPR17CRM365-01 - ERROR: You cannot call a method on a null-valued expression.
-[68/125] SSPR17CRM365-51 - Sin jobs
-[69/125] SSPR16NXS-51 - Sin jobs
-[70/125] SSPR17EBK-01 - ERROR: You cannot call a method on a null-valued expression.
-[71/125] SSPR17EMX-01 - Sin jobs
-[72/125] SSPR17EMX-51 - ERROR: You cannot call a method on a null-valued expression.
-[73/125] SSPR19MSV-51 - ERROR: You cannot call a method on a null-valued expression.
-[74/125] SSPR16BPM-02 - ERROR: You cannot call a method on a null-valued expression.
-[75/125] SSPR17-02 - ERROR: You cannot call a method on a null-valued expression.
-[76/125] SSPR19-01 - ERROR: You cannot call a method on a null-valued expression.
-[77/125] SSPR16BPM-01 - ERROR: You cannot call a method on a null-valued expression.
-[78/125] SSPR19CRMPBI-01 - ERROR: You cannot call a method on a null-valued expression.
-[79/125] SSPR16-03 - ERROR: You cannot call a method on a null-valued expression.
-[80/125] SSPR14EBK-01 - ERROR: You cannot call a method on a null-valued expression.
-[81/125] SSPR14AON-01 - Sin jobs
-[82/125] SSPR17CAL-01 - Sin jobs
-[83/125] SSPR16-01 - ERROR: You cannot call a method on a null-valued expression.
-[84/125] SSPR17CMX-52 - Sin jobs
-[85/125] SSPR19HBE-01 - Sin jobs
-[86/125] SSPR17MGF-01 - ERROR: You cannot call a method on a null-valued expression.
-[87/125] SSMBK-01 - ERROR: You cannot call a method on a null-valued expression.
-[88/125] SSPR14AON-02 - Sin jobs
-[89/125] SSPR17SMO-01 - Sin jobs
-[90/125] RSCRM-01 - ERROR: You cannot call a method on a null-valued expression.
-[91/125] SSPR16PLD-01 - Sin jobs
-[92/125] SSCC08 - ERROR: You cannot call a method on a null-valued expression.
-[93/125] BD04SER - ERROR: You cannot call a method on a null-valued expression.
-[94/125] SSMCS-02 - Sin jobs
-[95/125] SSCC03 - ERROR: You cannot call a method on a null-valued expression.
-[96/125] SSPR19MBK-01 - ERROR: You cannot call a method on a null-valued expression.
-[97/125] SSPR19MBK-51 - Sin jobs
-[98/125] RPPR16TFS-01 - ERROR: You cannot call a method on a null-valued expression.
-[99/125] SSPR19BAW-51 - ERROR: You cannot call a method on a null-valued expression.
-[100/125] SSRSA-02 - ERROR: You cannot call a method on a null-valued expression.
-[101/125] SSPR17MCM-01 - ERROR: You cannot call a method on a null-valued expression.
-[102/125] SSPR19BAW-01 - ERROR: You cannot call a method on a null-valued expression.
-[103/125] SSPR16ANL-01 - Sin jobs
-[104/125] SSDS17-02 - ERROR: You cannot call a method on a null-valued expression.
-[105/125] SSDS17CRM365-01 - Sin jobs
-[106/125] RSTSCRM365-01 - Sin jobs
-[107/125] SSTS16-01 - Sin jobs
-[108/125] SSTS14ODM-01 - ERROR: You cannot call a method on a null-valued expression.
-[109/125] SSTS17SMO-01 - Sin jobs
-[110/125] SSTS16BPM-01 - ERROR: You cannot call a method on a null-valued expression.
-[111/125] SSTS16BPM-02 - ERROR: You cannot call a method on a null-valued expression.
-[112/125] SSTS17CRM365-01 - Sin jobs
-[113/125] SSDES05 - Sin jobs
-[114/125] SSTES-05 - ERROR: You cannot call a method on a null-valued expression.
-[115/125] SSPR19SSO-01 - ERROR: You cannot call a method on a null-valued expression.
-[116/125] SSPR19SSO-51 - ERROR: You cannot call a method on a null-valued expression.
-[117/125] SSPR19CTM-01 - ERROR: You cannot call a method on a null-valued expression.
-[118/125] SSPR19CTM-51 - ERROR: You cannot call a method on a null-valued expression.
-[119/125] SSPR19VFH-01 - ERROR: You cannot call a method on a null-valued expression.
-[120/125] SSPR19VFH-51 - ERROR: You cannot call a method on a null-valued expression.
-[121/125] SSDS16-02 - ERROR: You cannot call a method on a null-valued expression.
-[122/125] SSTS16-02 - Sin jobs
-[123/125] SSPRAW19CTD-01 - ERROR: You cannot call a method on a null-valued expression.
-[124/125] SSPR19USR-01 - ERROR: You cannot call a method on a null-valued expression.
-[125/125] SSPR19USR-51 - Sin jobs
+[1/125] SSDS16-03 - ERROR: The certificate chain was issued by an authority that is not trusted
+[2/125] SSDS19-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[3/125] SSTS19-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[4/125] SSDS17-03 - ERROR: The certificate chain was issued by an authority that is not trusted
+[5/125] SSDS19BAW-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[6/125] SSTS17-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[7/125] RSCRM365-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[8/125] TQRSA-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[9/125] SSDS17CRM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[10/125] SSDS17-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[11/125] SSTS19HBE-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[12/125] SSDS17HBI-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[13/125] SSDS14ODM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[14/125] SSDS17SMO-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[15/125] SSTS14-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[16/125] SSDS19HBE-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[17/125] RSCRM365-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[18/125] SSTS17HBI-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[19/125] SSDS17-04 - ERROR: The certificate chain was issued by an authority that is not trusted
+[20/125] SSTS17-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[21/125] SSDS14-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[22/125] SSTS17DWH-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[23/125] SSTS17-04 - ERROR: The certificate chain was issued by an authority that is not trusted
+[24/125] SSDS12-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[25/125] TRCRM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[26/125] SSDS16-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[27/125] SSDS14-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[28/125] SSDS16BPM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[29/125] SSTS16-03 - ERROR: The certificate chain was issued by an authority that is not trusted
+[30/125] SSTS17-03 - ERROR: The certificate chain was issued by an authority that is not trusted
+[31/125] SSTS19HBE-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[32/125] SSTS14-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[33/125] SSTS12-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[34/125] SSPR14-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[35/125] SSPR16SOA-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[36/125] SSPR16SOA-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[37/125] SSPR19MSV-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[38/125] SSPR14ODM-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[39/125] SSPR12-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[40/125] SSPR17DWH-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[41/125] SSPR17MSV-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[42/125] SSPR16NXS-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[43/125] SSPR17MGF-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[44/125] SSPR19VEEAM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[45/125] SSPR14ODM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[46/125] SSPR14-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[47/125] SSPR17HBI-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[48/125] SSPR17CMX-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[49/125] SSPR17MSV-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[50/125] SSPR19VEEAM-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[51/125] SSPR17-04 - ERROR: The certificate chain was issued by an authority that is not trusted
+[52/125] SSPR16TRD-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[53/125] SSPR17MGF-52 - ERROR: The certificate chain was issued by an authority that is not trusted
+[54/125] SSISC-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[55/125] SSPR17-03 - ERROR: The certificate chain was issued by an authority that is not trusted
+[56/125] SSPR19HBE-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[57/125] SSPR17DWH-03 - ERROR: The certificate chain was issued by an authority that is not trusted
+[58/125] SSPR17MGF-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[59/125] SSPR17WUP-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[60/125] SSPR17PBI-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[61/125] SSPR17MON-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[62/125] SSPR17-52 - ERROR: The certificate chain was issued by an authority that is not trusted
+[63/125] SSPR17-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[64/125] SSPR17HBI-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[65/125] SSPR17DWH-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[66/125] SSPR19CRMPBI-51 - ERROR: A parameter cannot be found that matches parameter name 'OutcomesType'.
+[67/125] SSPR17CRM365-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[68/125] SSPR17CRM365-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[69/125] SSPR16NXS-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[70/125] SSPR17EBK-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[71/125] SSPR17EMX-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[72/125] SSPR17EMX-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[73/125] SSPR19MSV-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[74/125] SSPR16BPM-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[75/125] SSPR17-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[76/125] SSPR19-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[77/125] SSPR16BPM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[78/125] SSPR19CRMPBI-01 - ERROR: A parameter cannot be found that matches parameter name 'OutcomesType'.
+[79/125] SSPR16-03 - ERROR: The certificate chain was issued by an authority that is not trusted
+[80/125] SSPR14EBK-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[81/125] SSPR14AON-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[82/125] SSPR17CAL-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[83/125] SSPR16-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[84/125] SSPR17CMX-52 - ERROR: The certificate chain was issued by an authority that is not trusted
+[85/125] SSPR19HBE-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[86/125] SSPR17MGF-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[87/125] SSMBK-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[88/125] SSPR14AON-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[89/125] SSPR17SMO-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[90/125] RSCRM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[91/125] SSPR16PLD-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[92/125] SSCC08 - ERROR: The certificate chain was issued by an authority that is not trusted
+[93/125] BD04SER - ERROR: The certificate chain was issued by an authority that is not trusted
+[94/125] SSMCS-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[95/125] SSCC03 - ERROR: The certificate chain was issued by an authority that is not trusted
+[96/125] SSPR19MBK-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[97/125] SSPR19MBK-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[98/125] RPPR16TFS-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[99/125] SSPR19BAW-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[100/125] SSRSA-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[101/125] SSPR17MCM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[102/125] SSPR19BAW-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[103/125] SSPR16ANL-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[104/125] SSDS17-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[105/125] SSDS17CRM365-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[106/125] RSTSCRM365-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[107/125] SSTS16-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[108/125] SSTS14ODM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[109/125] SSTS17SMO-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[110/125] SSTS16BPM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[111/125] SSTS16BPM-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[112/125] SSTS17CRM365-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[113/125] SSDES05 - ERROR: The certificate chain was issued by an authority that is not trusted
+[114/125] SSTES-05 - ERROR: The certificate chain was issued by an authority that is not trusted
+[115/125] SSPR19SSO-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[116/125] SSPR19SSO-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[117/125] SSPR19CTM-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[118/125] SSPR19CTM-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[119/125] SSPR19VFH-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[120/125] SSPR19VFH-51 - ERROR: The certificate chain was issued by an authority that is not trusted
+[121/125] SSDS16-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[122/125] SSTS16-02 - ERROR: The certificate chain was issued by an authority that is not trusted
+[123/125] SSPRAW19CTD-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[124/125] SSPR19USR-01 - ERROR: The certificate chain was issued by an authority that is not trusted
+[125/125] SSPR19USR-51 - ERROR: The certificate chain was issued by an authority that is not trusted
 
 =====================================
  RESUMEN
 =====================================
-Instancias procesadas:  40
-Instancias con error:   85
+Instancias procesadas:  0
+Instancias con error:   125
 Total jobs insertados:  0
 
-Timestamp: 10/17/2025 19:54:04
+Timestamp: 10/17/2025 20:03:51
 
-⚠️ Proceso completado con algunos errores
+❌ Proceso falló
 
 PS C:\Users\TB03260ADM> 
