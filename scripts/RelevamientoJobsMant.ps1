@@ -62,7 +62,7 @@ BEGIN
 END
 "@
     
-    Invoke-DbaQuery -SqlInstance $SqlServer -Database $SqlDatabase -Query $createSql -CommandTimeout 120 | Out-Null
+    Invoke-DbaQuery -SqlInstance $SqlServer -Database $SqlDatabase -Query $createSql -EnableException | Out-Null
 }
 
 # ========= MAIN =========
@@ -135,8 +135,8 @@ foreach ($inst in $instancesFiltered) {
     Write-Host "[$counter/$($instancesFiltered.Count)] $instanceName" -NoNewline
     
     try {
-        # Obtener agent jobs usando dbatools
-        $jobs = Get-DbaAgentJob -SqlInstance $instanceName -EnableException | Where-Object {
+        # Obtener agent jobs usando dbatools con TrustServerCertificate
+        $jobs = Get-DbaAgentJob -SqlInstance $instanceName -EnableException -TrustServerCertificate | Where-Object {
             $_.Name -like '*IndexOptimize*' -or 
             $_.Name -like '*DatabaseIntegrityCheck*' -or 
             $_.Name -like '*Actualizacion_estadisticas*'
@@ -150,8 +150,9 @@ foreach ($inst in $instancesFiltered) {
         
         $jobCount = 0
         foreach ($job in $jobs) {
-            # Obtener última ejecución del job
-            $lastRun = $job | Get-DbaAgentJobHistory -ExcludeJobSteps -OutcomesType Completed, Failed | 
+            # Obtener última ejecución del job (sin -OutcomesType para compatibilidad)
+            $lastRun = $job | Get-DbaAgentJobHistory -ExcludeJobSteps | 
+                       Where-Object { $_.Status -in @('Succeeded', 'Failed') } |
                        Select-Object -First 1
             
             if ($lastRun) {
