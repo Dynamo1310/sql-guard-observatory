@@ -249,15 +249,32 @@ foreach ($inst in $instancesFiltered) {
             $row["InstanceName"] = $instanceName
             $row["Ambiente"] = if ($ambiente) { $ambiente } else { [DBNull]::Value }
             $row["Hosting"] = if ($hosting) { $hosting } else { [DBNull]::Value }
-            $row["JobName"] = $job["JobName"]
-            $row["JobStart"] = if ($job["StartTime"] -is [datetime]) { $job["StartTime"] } else { [DBNull]::Value }
-            $row["JobEnd"] = if ($job["StartTime"] -is [datetime] -and $job["DurationSeconds"] -is [int]) { 
-                ([datetime]$job["StartTime"]).AddSeconds([int]$job["DurationSeconds"]) 
-            } else { 
-                [DBNull]::Value 
+            $row["JobName"] = if ($job["JobName"] -ne [DBNull]::Value) { $job["JobName"] } else { [DBNull]::Value }
+            
+            # JobStart
+            $jobStart = $job["StartTime"]
+            $row["JobStart"] = if ($jobStart -ne [DBNull]::Value -and $null -ne $jobStart) { $jobStart } else { [DBNull]::Value }
+            
+            # JobEnd (StartTime + DurationSeconds)
+            $jobStartValue = $job["StartTime"]
+            $durationValue = $job["DurationSeconds"]
+            if ($jobStartValue -ne [DBNull]::Value -and $null -ne $jobStartValue -and 
+                $durationValue -ne [DBNull]::Value -and $null -ne $durationValue) {
+                try {
+                    $row["JobEnd"] = ([datetime]$jobStartValue).AddSeconds([int]$durationValue)
+                } catch {
+                    $row["JobEnd"] = [DBNull]::Value
+                }
+            } else {
+                $row["JobEnd"] = [DBNull]::Value
             }
-            $row["JobDurationSeconds"] = if ($job["DurationSeconds"] -ne [DBNull]::Value) { $job["DurationSeconds"] } else { [DBNull]::Value }
-            $row["JobStatus"] = $job["JobStatus"]
+            
+            # JobDurationSeconds
+            $row["JobDurationSeconds"] = if ($durationValue -ne [DBNull]::Value -and $null -ne $durationValue) { $durationValue } else { [DBNull]::Value }
+            
+            # JobStatus
+            $row["JobStatus"] = if ($job["JobStatus"] -ne [DBNull]::Value) { $job["JobStatus"] } else { [DBNull]::Value }
+            
             $row["CaptureDate"] = $captureTime
             
             $dataTable.Rows.Add($row)
