@@ -30,8 +30,12 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
 
 Import-Module dbatools -ErrorAction Stop
 
-# TLS
+# TLS y configuración de certificados
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# Configurar dbatools para ignorar certificados SSL (versión antigua de dbatools)
+Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true -PassThru | Register-DbatoolsConfig
+Set-DbatoolsConfig -FullName sql.connection.encrypt -Value $false -PassThru | Register-DbatoolsConfig
 
 # ========= FUNCIONES =========
 
@@ -61,8 +65,8 @@ BEGIN
     CREATE INDEX IX_${SqlTable}_Job_Capture ON [$SqlSchema].[$SqlTable] ([JobName], [CaptureDate]);
 END
 "@
-    
-    Invoke-DbaQuery -SqlInstance $SqlServer -Database $SqlDatabase -Query $createSql -EnableException -TrustServerCertificate | Out-Null
+
+    Invoke-DbaQuery -SqlInstance $SqlServer -Database $SqlDatabase -Query $createSql -EnableException | Out-Null
 }
 
 # ========= MAIN =========
@@ -109,9 +113,9 @@ Create-TableIfNotExists
 Write-Host "      ✓ Tabla lista: $SqlServer.$SqlDatabase.$SqlSchema.$SqlTable" -ForegroundColor Green
 
 # 4. Procesar instancias
-Write-Host ""
+    Write-Host ""
 Write-Host "[4/4] Procesando instancias..." -ForegroundColor Cyan
-Write-Host ""
+    Write-Host ""
 
 $captureTime = [datetime]::UtcNow
 $allResults = @()
@@ -135,8 +139,8 @@ foreach ($inst in $instancesFiltered) {
     Write-Host "[$counter/$($instancesFiltered.Count)] $instanceName" -NoNewline
     
     try {
-        # Obtener agent jobs usando dbatools con TrustServerCertificate
-        $jobs = Get-DbaAgentJob -SqlInstance $instanceName -EnableException -TrustServerCertificate | Where-Object {
+        # Obtener agent jobs usando dbatools
+        $jobs = Get-DbaAgentJob -SqlInstance $instanceName -EnableException | Where-Object {
             $_.Name -like '*IndexOptimize*' -or 
             $_.Name -like '*DatabaseIntegrityCheck*' -or 
             $_.Name -like '*Actualizacion_estadisticas*'
@@ -196,11 +200,11 @@ foreach ($inst in $instancesFiltered) {
 
 # 5. Insertar todos los datos
 if ($allResults.Count -gt 0) {
-    Write-Host ""
+Write-Host ""
     Write-Host "Insertando $($allResults.Count) registros..." -NoNewline
     try {
         # Usar Write-DbaDataTable de dbatools
-        $allResults | Write-DbaDataTable -SqlInstance $SqlServer -Database $SqlDatabase -Table "[$SqlSchema].[$SqlTable]" -AutoCreateTable:$false -TrustServerCertificate
+        $allResults | Write-DbaDataTable -SqlInstance $SqlServer -Database $SqlDatabase -Table "[$SqlSchema].[$SqlTable]" -AutoCreateTable:$false
         Write-Host " ✓" -ForegroundColor Green
     } catch {
         Write-Host " ERROR" -ForegroundColor Red
