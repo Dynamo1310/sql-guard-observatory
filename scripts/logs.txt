@@ -1,3 +1,5 @@
+PS C:\Users\TB03260ADM> C:\Temp\SQLNovaDistribuidor\RelevamientoJobsMant.ps1
+
 =====================================
  Relevamiento Jobs de Mantenimiento
 =====================================
@@ -146,7 +148,7 @@ Instancias procesadas:  40
 Instancias con error:   85
 Total jobs insertados:  0
 
-Timestamp: 10/17/2025 19:48:27
+Timestamp: 10/17/2025 19:54:04
 
 ⚠️ Proceso completado con algunos errores
 
