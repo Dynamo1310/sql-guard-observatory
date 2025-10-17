@@ -235,9 +235,14 @@ foreach ($inst in $instancesFiltered) {
     
     try {
         # Consultar jobs de la instancia
-        $jobs = Invoke-SqlQuery -ServerInstance $instanceName -Database "msdb" -Query $SqlQuery -Timeout $TimeoutSec
+        $jobs = $null
+        try {
+            $jobs = Invoke-SqlQuery -ServerInstance $instanceName -Database "msdb" -Query $SqlQuery -Timeout $TimeoutSec
+        } catch {
+            throw "Error al consultar SQL: $($_.Exception.Message)"
+        }
         
-        if ($jobs.Rows.Count -eq 0) {
+        if ($null -eq $jobs -or $jobs.Rows.Count -eq 0) {
             Write-Host " - Sin jobs" -ForegroundColor Gray
             $successCount++
             continue
