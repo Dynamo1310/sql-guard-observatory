@@ -1,8 +1,10 @@
 ﻿<#  
     RelevamientoJobsMant.ps1
     - Consulta la API de inventario
-    - Por cada instancia, trae los jobs de mantenimiento (IndexOptimize, DatabaseIntegrityCheck, Actualización_estadísticas)
+    - Por cada instancia, trae los jobs de mantenimiento usando dbatools
     - Inserta los resultados en la tabla de destino
+    
+    Requisitos: Install-Module dbatools -Scope CurrentUser
 #>
 
 # ========= CONFIGURACIÓN =========
@@ -13,79 +15,25 @@ $SqlSchema   = "dbo"
 $SqlTable    = "InventarioJobsSnapshot"
 $TimeoutSec  = 90
 
+# ========= VERIFICAR DBATOOLS =========
+if (-not (Get-Module -ListAvailable -Name dbatools)) {
+    Write-Host "dbatools no está instalado. Instalando..." -ForegroundColor Yellow
+    try {
+        Install-Module dbatools -Scope CurrentUser -Force -AllowClobber
+        Write-Host "✓ dbatools instalado correctamente" -ForegroundColor Green
+    } catch {
+        Write-Error "No se pudo instalar dbatools: $($_.Exception.Message)"
+        Write-Host "Ejecuta manualmente: Install-Module dbatools -Scope CurrentUser" -ForegroundColor Yellow
+        exit 1
+    }
+}
+
+Import-Module dbatools -ErrorAction Stop
+
 # TLS
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# ========= QUERY SQL =========
-$SqlQuery = @"
-    SELECT
-    JobName = j.name,
-    StartTime = CASE 
-        WHEN ISDATE(
-            STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, ' ') + ' ' +
-            STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
-        ) = 1 
-        THEN CONVERT(datetime, 
-            STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, ' ') + ' ' +
-            STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
-        )
-        ELSE NULL 
-    END,
-    DurationSeconds = ((h.run_duration/10000)*3600) + ((h.run_duration%10000)/100)*60 + (h.run_duration%100),
-    JobStatus = CASE h.run_status
-        WHEN 0 THEN 'Failed'
-        WHEN 1 THEN 'Succeeded'
-        WHEN 2 THEN 'Retry'
-        WHEN 3 THEN 'Canceled'
-        WHEN 4 THEN 'In progress'
-        ELSE CAST(h.run_status AS varchar(10))
-    END
-FROM msdb.dbo.sysjobs j
-INNER JOIN msdb.dbo.sysjobhistory h ON j.job_id = h.job_id
-WHERE h.step_id = 0
-    AND h.instance_id IN (
-        SELECT MAX(h2.instance_id)
-        FROM msdb.dbo.sysjobhistory h2
-        WHERE h2.job_id = j.job_id AND h2.step_id = 0
-    )
-    AND (
-        j.name LIKE '%IndexOptimize%'
-        OR j.name LIKE '%DatabaseIntegrityCheck%'
-        OR j.name LIKE '%Actualizacion_estadisticas%'
-    )
-ORDER BY j.name;
-"@
-
 # ========= FUNCIONES =========
-
-function Invoke-SqlQuery {
-    param(
-        [string]$ServerInstance,
-        [string]$Database,
-        [string]$Query,
-        [int]$Timeout = 90
-    )
-    
-    $connStr = "Server=$ServerInstance;Database=$Database;Integrated Security=True;TrustServerCertificate=True;Connect Timeout=$Timeout"
-    $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
-    $cmd = $conn.CreateCommand()
-    $cmd.CommandText = $Query
-    $cmd.CommandTimeout = $Timeout
-    
-    $dt = New-Object System.Data.DataTable
-    try {
-        $conn.Open()
-        $adapter = New-Object System.Data.SqlClient.SqlDataAdapter($cmd)
-        [void]$adapter.Fill($dt)
-    } finally {
-        if ($conn.State -ne [System.Data.ConnectionState]::Closed) { 
-            $conn.Close() 
-        }
-        $conn.Dispose()
-    }
-    
-    return $dt
-}
 
 function Create-TableIfNotExists {
     $createSql = @"
@@ -113,54 +61,8 @@ BEGIN
     CREATE INDEX IX_${SqlTable}_Job_Capture ON [$SqlSchema].[$SqlTable] ([JobName], [CaptureDate]);
 END
 "@
-
-    Invoke-SqlQuery -ServerInstance $SqlServer -Database $SqlDatabase -Query $createSql -Timeout 120 | Out-Null
-}
-
-function Insert-JobData {
-    param(
-        [System.Data.DataTable]$DataTable
-    )
     
-    if ($DataTable.Rows.Count -eq 0) {
-        return
-    }
-    
-    $connStr = "Server=$SqlServer;Database=$SqlDatabase;Integrated Security=True;TrustServerCertificate=True"
-    $bulkCopy = New-Object System.Data.SqlClient.SqlBulkCopy($connStr)
-    $bulkCopy.DestinationTableName = "[$SqlSchema].[$SqlTable]"
-    $bulkCopy.BatchSize = 5000
-    $bulkCopy.BulkCopyTimeout = 300
-    
-    # Mapeo de columnas
-    $DataTable.Columns | ForEach-Object {
-        [void]$bulkCopy.ColumnMappings.Add($_.ColumnName, $_.ColumnName)
-    }
-    
-    try {
-        $bulkCopy.WriteToServer($DataTable)
-    } finally {
-        $bulkCopy.Close()
-    }
-}
-
-function Create-DataTable {
-    $dt = New-Object System.Data.DataTable
-
-    # Columnas string
-    @("InstanceName", "Ambiente", "Hosting", "JobName", "JobStatus") | ForEach-Object {
-        [void]$dt.Columns.Add($_, [string])
-    }
-
-    # Columnas datetime
-    @("JobStart", "JobEnd", "CaptureDate") | ForEach-Object {
-        [void]$dt.Columns.Add($_, [datetime])
-    }
-
-    # Columna int
-    [void]$dt.Columns.Add("JobDurationSeconds", [int])
-    
-    return $dt
+    Invoke-DbaQuery -SqlInstance $SqlServer -Database $SqlDatabase -Query $createSql -CommandTimeout 120 | Out-Null
 }
 
 # ========= MAIN =========
@@ -207,13 +109,12 @@ Create-TableIfNotExists
 Write-Host "      ✓ Tabla lista: $SqlServer.$SqlDatabase.$SqlSchema.$SqlTable" -ForegroundColor Green
 
 # 4. Procesar instancias
-    Write-Host ""
+Write-Host ""
 Write-Host "[4/4] Procesando instancias..." -ForegroundColor Cyan
-    Write-Host ""
+Write-Host ""
 
 $captureTime = [datetime]::UtcNow
-$dataTable = Create-DataTable
-$totalJobs = 0
+$allResults = @()
 $successCount = 0
 $errorCount = 0
 
@@ -234,59 +135,56 @@ foreach ($inst in $instancesFiltered) {
     Write-Host "[$counter/$($instancesFiltered.Count)] $instanceName" -NoNewline
     
     try {
-        # Consultar jobs de la instancia
-        $jobs = $null
-        try {
-            $jobs = Invoke-SqlQuery -ServerInstance $instanceName -Database "msdb" -Query $SqlQuery -Timeout $TimeoutSec
-        } catch {
-            throw "Error al consultar SQL: $($_.Exception.Message)"
+        # Obtener agent jobs usando dbatools
+        $jobs = Get-DbaAgentJob -SqlInstance $instanceName -EnableException | Where-Object {
+            $_.Name -like '*IndexOptimize*' -or 
+            $_.Name -like '*DatabaseIntegrityCheck*' -or 
+            $_.Name -like '*Actualizacion_estadisticas*'
         }
         
-        if ($null -eq $jobs -or $jobs.Rows.Count -eq 0) {
+        if (-not $jobs -or $jobs.Count -eq 0) {
             Write-Host " - Sin jobs" -ForegroundColor Gray
             $successCount++
             continue
         }
         
-        # Agregar filas al DataTable
-        foreach ($job in $jobs.Rows) {
-            $row = $dataTable.NewRow()
-            $row["InstanceName"] = $instanceName
-            $row["Ambiente"] = if ($ambiente) { $ambiente } else { [DBNull]::Value }
-            $row["Hosting"] = if ($hosting) { $hosting } else { [DBNull]::Value }
-            $row["JobName"] = if ($job["JobName"] -ne [DBNull]::Value) { $job["JobName"] } else { [DBNull]::Value }
+        $jobCount = 0
+        foreach ($job in $jobs) {
+            # Obtener última ejecución del job
+            $lastRun = $job | Get-DbaAgentJobHistory -ExcludeJobSteps -OutcomesType Completed, Failed | 
+                       Select-Object -First 1
             
-            # JobStart
-            $jobStart = $job["StartTime"]
-            $row["JobStart"] = if ($jobStart -ne [DBNull]::Value -and $null -ne $jobStart) { $jobStart } else { [DBNull]::Value }
-            
-            # JobEnd (StartTime + DurationSeconds)
-            $jobStartValue = $job["StartTime"]
-            $durationValue = $job["DurationSeconds"]
-            if ($jobStartValue -ne [DBNull]::Value -and $null -ne $jobStartValue -and 
-                $durationValue -ne [DBNull]::Value -and $null -ne $durationValue) {
-                try {
-                    $row["JobEnd"] = ([datetime]$jobStartValue).AddSeconds([int]$durationValue)
-                } catch {
-                    $row["JobEnd"] = [DBNull]::Value
+            if ($lastRun) {
+                $allResults += [PSCustomObject]@{
+                    InstanceName       = $instanceName
+                    Ambiente           = if ($ambiente) { $ambiente } else { $null }
+                    Hosting            = if ($hosting) { $hosting } else { $null }
+                    JobName            = $job.Name
+                    JobStart           = $lastRun.RunDate
+                    JobEnd             = if ($lastRun.RunDate -and $lastRun.RunDuration) { 
+                        $lastRun.RunDate.Add($lastRun.RunDuration) 
+                    } else { 
+                        $null 
+                    }
+                    JobDurationSeconds = if ($lastRun.RunDuration) { 
+                        [int]$lastRun.RunDuration.TotalSeconds 
+                    } else { 
+                        $null 
+                    }
+                    JobStatus          = switch ($lastRun.Status) {
+                        'Succeeded' { 'Succeeded' }
+                        'Failed'    { 'Failed' }
+                        'Retry'     { 'Retry' }
+                        'Canceled'  { 'Canceled' }
+                        default     { $lastRun.Status }
+                    }
+                    CaptureDate        = $captureTime
                 }
-            } else {
-                $row["JobEnd"] = [DBNull]::Value
+                $jobCount++
             }
-            
-            # JobDurationSeconds
-            $row["JobDurationSeconds"] = if ($durationValue -ne [DBNull]::Value -and $null -ne $durationValue) { $durationValue } else { [DBNull]::Value }
-            
-            # JobStatus
-            $row["JobStatus"] = if ($job["JobStatus"] -ne [DBNull]::Value) { $job["JobStatus"] } else { [DBNull]::Value }
-            
-            $row["CaptureDate"] = $captureTime
-            
-            $dataTable.Rows.Add($row)
-            $totalJobs++
         }
         
-        Write-Host " - $($jobs.Rows.Count) jobs" -ForegroundColor Green
+        Write-Host " - $jobCount jobs" -ForegroundColor Green
         $successCount++
         
     } catch {
@@ -296,11 +194,12 @@ foreach ($inst in $instancesFiltered) {
 }
 
 # 5. Insertar todos los datos
-if ($dataTable.Rows.Count -gt 0) {
-Write-Host ""
-    Write-Host "Insertando $($dataTable.Rows.Count) registros..." -NoNewline
+if ($allResults.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Insertando $($allResults.Count) registros..." -NoNewline
     try {
-        Insert-JobData -DataTable $dataTable
+        # Usar Write-DbaDataTable de dbatools
+        $allResults | Write-DbaDataTable -SqlInstance $SqlServer -Database $SqlDatabase -Table "[$SqlSchema].[$SqlTable]" -AutoCreateTable:$false
         Write-Host " ✓" -ForegroundColor Green
     } catch {
         Write-Host " ERROR" -ForegroundColor Red
@@ -315,7 +214,7 @@ Write-Host " RESUMEN" -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host "Instancias procesadas:  $successCount" -ForegroundColor Green
 Write-Host "Instancias con error:   $errorCount" -ForegroundColor $(if ($errorCount -gt 0) {"Red"} else {"Green"})
-Write-Host "Total jobs insertados:  $totalJobs" -ForegroundColor Cyan
+Write-Host "Total jobs insertados:  $($allResults.Count)" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Timestamp: $captureTime" -ForegroundColor Gray
 Write-Host ""
