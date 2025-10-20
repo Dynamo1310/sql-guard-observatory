@@ -81,7 +81,8 @@ builder.Services.AddCors(options =>
             "http://localhost:5174",
             "http://localhost:3000",
             "http://localhost:4200",
-            "http://localhost:8080"
+            "http://localhost:8080",
+            "http://asprbm-nov-01:8080"
         )
         .AllowAnyMethod()
         .AllowAnyHeader()

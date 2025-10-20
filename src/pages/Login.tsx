@@ -37,7 +37,9 @@ export default function Login() {
       }
 
       toast.success('Inicio de sesión exitoso');
-      navigate('/');
+      
+      // Forzar recarga completa para que el AuthContext se actualice
+      window.location.href = '/';
     } catch (err: any) {
       console.error('Error al iniciar sesión:', err);
       setError(err.message || 'Error al verificar credenciales. Intenta nuevamente.');

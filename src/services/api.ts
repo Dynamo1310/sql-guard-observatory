@@ -1,5 +1,23 @@
 // API Service para conectar con el backend .NET
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// Detectar automáticamente si estamos en localhost o en el servidor
+const getApiUrl = () => {
+  // Si hay variable de entorno, usarla
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // Si no, detectar automáticamente basado en el hostname
+  const hostname = window.location.hostname;
+  
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:5000';
+  } else {
+    // Si se accede por el nombre del servidor, usar el mismo servidor para el API
+    return `http://${hostname}:5000`;
+  }
+};
+
+const API_URL = getApiUrl();
 
 interface ApiError {
   message: string;
