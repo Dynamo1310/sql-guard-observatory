@@ -59,8 +59,7 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
     };
-})
-.AddNegotiate(); // Windows Authentication
+});
 
 builder.Services.AddAuthorization(options =>
 {
@@ -71,7 +70,6 @@ builder.Services.AddAuthorization(options =>
 // Registrar servicios personalizados
 builder.Services.AddScoped<IJobsService, JobsService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IActiveDirectoryService, ActiveDirectoryService>();
 
 // Configurar CORS
 builder.Services.AddCors(options =>

@@ -7,6 +7,8 @@ C:\Temp\Backend\SQLGuardObservatory.API.pdb
 C:\Temp\Backend\Azure.Core.dll
 C:\Temp\Backend\Azure.Identity.dll
 C:\Temp\Backend\Microsoft.AspNetCore.Authentication.JwtBearer.dll
+C:\Temp\Backend\Microsoft.AspNetCore.Authentication.Negotiate.dll
+C:\Temp\Backend\Microsoft.AspNetCore.Connections.Abstractions.dll
 C:\Temp\Backend\Microsoft.AspNetCore.Cryptography.Internal.dll
 C:\Temp\Backend\Microsoft.AspNetCore.Cryptography.KeyDerivation.dll
 C:\Temp\Backend\Microsoft.AspNetCore.Identity.EntityFrameworkCore.dll
@@ -25,6 +27,7 @@ C:\Temp\Backend\Microsoft.Extensions.DependencyInjection.dll
 C:\Temp\Backend\Microsoft.Extensions.DependencyInjection.Abstractions.dll
 C:\Temp\Backend\Microsoft.Extensions.Diagnostics.dll
 C:\Temp\Backend\Microsoft.Extensions.Diagnostics.Abstractions.dll
+C:\Temp\Backend\Microsoft.Extensions.Features.dll
 C:\Temp\Backend\Microsoft.Extensions.Hosting.dll
 C:\Temp\Backend\Microsoft.Extensions.Hosting.Abstractions.dll
 C:\Temp\Backend\Microsoft.Extensions.Hosting.WindowsServices.dll

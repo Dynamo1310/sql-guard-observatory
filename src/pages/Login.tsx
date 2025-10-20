@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { authApi } from '@/services/api';
-import { Building2 } from 'lucide-react';
 import supervLogo from '/SUPV.png';
 
 export default function Login() {
@@ -16,7 +15,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleDirectLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
       setError('Por favor completa todos los campos');
@@ -41,22 +40,6 @@ export default function Login() {
     }
   };
 
-  const handleWindowsLogin = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      await authApi.loginWithWindowsAuth();
-
-      // Forzar recarga completa para actualizar el AuthContext
-      window.location.href = '/';
-    } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión con cuenta Supervielle. Verifica que estés logueado en Windows con tu cuenta de dominio GSCORP y que tu usuario esté en la lista blanca.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
       <Card className="w-full max-w-md shadow-2xl">
@@ -76,7 +59,7 @@ export default function Login() {
             </Alert>
           )}
 
-          <form onSubmit={handleDirectLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Usuario</Label>
               <Input
@@ -103,36 +86,10 @@ export default function Login() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Utiliza tu usuario y contraseña del sistema
+            </p>
           </form>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">
-                O
-              </span>
-            </div>
-          </div>
-
-          <Button 
-            type="button" 
-            variant="outline" 
-            className="w-full"
-            onClick={handleWindowsLogin}
-            disabled={loading}
-          >
-            <Building2 className="mr-2 h-4 w-4" />
-            Acceder con Cuenta Supervielle
-          </Button>
-
-          <Alert>
-            <AlertDescription className="text-xs">
-              <strong>Acceso con Cuenta Supervielle:</strong> Usa automáticamente tu usuario de Windows (GSCORP). 
-              Solo usuarios autorizados en la lista blanca pueden acceder.
-            </AlertDescription>
-          </Alert>
         </CardContent>
       </Card>
     </div>

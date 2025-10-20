@@ -47,12 +47,6 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface ADLoginRequest {
-  domain: string;
-  username: string;
-  password: string;
-}
-
 export interface LoginResponse {
   token: string;
   domainUser: string;
@@ -91,29 +85,6 @@ export const authApi = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(credentials),
-    });
-    const data = await handleResponse<LoginResponse>(response);
-    
-    // Guardar token en localStorage
-    if (data.token) {
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify({
-        domainUser: data.domainUser,
-        displayName: data.displayName,
-        roles: data.roles,
-      }));
-    }
-    
-    return data;
-  },
-
-  async loginWithWindowsAuth(): Promise<LoginResponse> {
-    const response = await fetch(`${API_URL}/api/auth/login/windows`, {
-      method: 'POST',
-      credentials: 'include', // Enviar credenciales de Windows
-      headers: {
-        'Content-Type': 'application/json',
-      },
     });
     const data = await handleResponse<LoginResponse>(response);
     
