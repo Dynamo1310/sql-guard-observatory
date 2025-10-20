@@ -2,126 +2,196 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
 import { authApi } from '@/services/api';
-import { toast } from 'sonner';
-import supvLogo from '/SUPV.png';
-import { ThemeToggle } from '@/components/layout/ThemeToggle';
+import { Separator } from '@/components/ui/separator';
+import { Building2 } from 'lucide-react';
 
 export default function Login() {
-  const [domainUser, setDomainUser] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [domainUsername, setDomainUsername] = useState('');
+  const [domainPassword, setDomainPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loginMode, setLoginMode] = useState<'direct' | 'ad'>('direct');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleDirectLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username || !password) {
+      setError('Por favor completa todos los campos');
+      return;
+    }
+
     setLoading(true);
-    setError(null);
+    setError('');
 
     try {
-      // Login con el backend .NET
-      const response = await authApi.login({
-        username: domainUser,
-        password: password
+      await authApi.login({
+        username,
+        password,
       });
 
-      if (!response.allowed) {
-        setError('No tienes permisos para acceder a esta aplicación. Contacta al administrador.');
-        setLoading(false);
-        return;
-      }
-
-      toast.success('Inicio de sesión exitoso');
-      
-      // Forzar recarga completa para que el AuthContext se actualice
+      // Forzar recarga completa para actualizar el AuthContext
       window.location.href = '/';
     } catch (err: any) {
-      console.error('Error al iniciar sesión:', err);
-      setError(err.message || 'Error al verificar credenciales. Intenta nuevamente.');
+      setError(err.message || 'Error al iniciar sesión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleADLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!domainUsername || !domainPassword) {
+      setError('Por favor completa todos los campos');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await authApi.loginWithAD({
+        domain: 'GSCORP',
+        username: domainUsername,
+        password: domainPassword,
+      });
+
+      // Forzar recarga completa para actualizar el AuthContext
+      window.location.href = '/';
+    } catch (err: any) {
+      setError(err.message || 'Error al iniciar sesión con Active Directory');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
-      
-      <Card className="w-full max-w-md shadow-glow">
-        <CardHeader className="space-y-4">
-          <div className="flex justify-center">
-            <img 
-              src={supvLogo} 
-              alt="Supervielle" 
-              className="h-16 object-contain"
-            />
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
+      <Card className="w-full max-w-md shadow-2xl">
+        <CardHeader className="space-y-1">
+          <div className="flex items-center justify-center mb-4">
+            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <Building2 className="h-8 w-8 text-primary" />
+            </div>
           </div>
-          <div className="text-center">
-            <CardTitle className="text-2xl">Observabilidad SQL Server</CardTitle>
-            <CardDescription>
-              Ingresa tus credenciales para acceder
-            </CardDescription>
-          </div>
+          <CardTitle className="text-2xl text-center">Observabilidad SQL Server</CardTitle>
+          <CardDescription className="text-center">
+            Selecciona tu método de autenticación
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="domainUser">Usuario</Label>
-              <Input
-                id="domainUser"
-                type="text"
-                placeholder="TB03260"
-                value={domainUser}
-                onChange={(e) => setDomainUser(e.target.value)}
-                required
-                disabled={loading}
-              />
-              <p className="text-xs text-muted-foreground">
-                Ingresa tu usuario
-              </p>
-            </div>
+        <CardContent className="space-y-6">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
-
+          {/* Botones para elegir modo de login */}
+          <div className="grid grid-cols-2 gap-2">
             <Button
-              type="submit"
-              className="w-full"
-              disabled={loading}
+              type="button"
+              variant={loginMode === 'direct' ? 'default' : 'outline'}
+              onClick={() => {
+                setLoginMode('direct');
+                setError('');
+              }}
             >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
-                  Verificando...
-                </>
-              ) : (
-                'Iniciar Sesión'
-              )}
+              Acceso Directo
             </Button>
-          </form>
+            <Button
+              type="button"
+              variant={loginMode === 'ad' ? 'default' : 'outline'}
+              onClick={() => {
+                setLoginMode('ad');
+                setError('');
+              }}
+            >
+              Cuenta Supervielle
+            </Button>
+          </div>
+
+          <Separator />
+
+          {/* Formulario Acceso Directo */}
+          {loginMode === 'direct' && (
+            <form onSubmit={handleDirectLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Usuario</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="TB12345"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={loading}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Contraseña</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Contraseña"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Utiliza tu usuario y contraseña del sistema
+              </p>
+            </form>
+          )}
+
+          {/* Formulario Active Directory */}
+          {loginMode === 'ad' && (
+            <form onSubmit={handleADLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="domain-username">Usuario de Dominio</Label>
+                <Input
+                  id="domain-username"
+                  type="text"
+                  placeholder="TB12345"
+                  value={domainUsername}
+                  onChange={(e) => setDomainUsername(e.target.value)}
+                  disabled={loading}
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">
+                  Solo tu usuario (sin GSCORP\)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="domain-password">Contraseña de Dominio</Label>
+                <Input
+                  id="domain-password"
+                  type="password"
+                  placeholder="Contraseña"
+                  value={domainPassword}
+                  onChange={(e) => setDomainPassword(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Autenticando...' : 'Acceder con Cuenta Supervielle'}
+              </Button>
+              <Alert>
+                <AlertDescription className="text-xs">
+                  <strong>Importante:</strong> Solo usuarios autorizados en la lista blanca pueden acceder, 
+                  incluso con credenciales de Active Directory válidas.
+                </AlertDescription>
+              </Alert>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -44,6 +44,31 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Login con Active Directory
+    /// </summary>
+    [HttpPost("login/ad")]
+    [AllowAnonymous]
+    public async Task<IActionResult> LoginWithAD([FromBody] ADLoginRequest request)
+    {
+        try
+        {
+            var result = await _authService.AuthenticateWithADAsync(request.Domain, request.Username, request.Password);
+            
+            if (result == null)
+            {
+                return Unauthorized(new { message = "Credenciales inválidas o usuario no autorizado en el sistema" });
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en login AD");
+            return StatusCode(500, new { message = "Error al procesar el login con Active Directory" });
+        }
+    }
+
+    /// <summary>
     /// Obtiene la lista de usuarios (solo admin)
     /// </summary>
     [HttpGet("users")]

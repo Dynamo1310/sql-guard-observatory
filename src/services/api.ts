@@ -47,6 +47,12 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface ADLoginRequest {
+  domain: string;
+  username: string;
+  password: string;
+}
+
 export interface LoginResponse {
   token: string;
   domainUser: string;
@@ -80,6 +86,29 @@ export interface UpdateUserRequest {
 export const authApi = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const response = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials),
+    });
+    const data = await handleResponse<LoginResponse>(response);
+    
+    // Guardar token en localStorage
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify({
+        domainUser: data.domainUser,
+        displayName: data.displayName,
+        roles: data.roles,
+      }));
+    }
+    
+    return data;
+  },
+
+  async loginWithAD(credentials: ADLoginRequest): Promise<LoginResponse> {
+    const response = await fetch(`${API_URL}/api/auth/login/ad`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -5,6 +5,7 @@ namespace SQLGuardObservatory.API.Services;
 public interface IAuthService
 {
     Task<LoginResponse?> AuthenticateAsync(string username, string password);
+    Task<LoginResponse?> AuthenticateWithADAsync(string domain, string username, string password);
     Task<List<UserDto>> GetUsersAsync();
     Task<UserDto?> GetUserByIdAsync(string userId);
     Task<UserDto?> CreateUserAsync(CreateUserRequest request);

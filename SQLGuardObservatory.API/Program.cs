@@ -70,6 +70,7 @@ builder.Services.AddAuthorization(options =>
 // Registrar servicios personalizados
 builder.Services.AddScoped<IJobsService, JobsService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IActiveDirectoryService, ActiveDirectoryService>();
 
 // Configurar CORS
 builder.Services.AddCors(options =>

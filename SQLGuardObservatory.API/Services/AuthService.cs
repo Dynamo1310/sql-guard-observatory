@@ -13,11 +13,13 @@ public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
+    private readonly IActiveDirectoryService _adService;
 
-    public AuthService(UserManager<ApplicationUser> userManager, IConfiguration configuration)
+    public AuthService(UserManager<ApplicationUser> userManager, IConfiguration configuration, IActiveDirectoryService adService)
     {
         _userManager = userManager;
         _configuration = configuration;
+        _adService = adService;
     }
 
     public async Task<LoginResponse?> AuthenticateAsync(string username, string password)
@@ -41,6 +43,37 @@ public class AuthService : IAuthService
             DomainUser = user.DomainUser ?? user.UserName ?? string.Empty,
             DisplayName = user.DisplayName ?? string.Empty,
             Allowed = user.IsActive,
+            Roles = roles.ToList()
+        };
+    }
+
+    public async Task<LoginResponse?> AuthenticateWithADAsync(string domain, string username, string password)
+    {
+        // 1. Validar credenciales contra Active Directory
+        var (isValid, displayName) = await _adService.ValidateCredentialsAsync(domain, username, password);
+        
+        if (!isValid)
+            return null;
+
+        // 2. Verificar que el usuario esté en la lista blanca (base de datos)
+        var user = await _userManager.FindByNameAsync(username);
+        
+        if (user == null || !user.IsActive)
+        {
+            // Usuario no está en la lista blanca o está inactivo
+            return null;
+        }
+
+        // 3. Usuario autenticado y autorizado - generar token
+        var roles = await _userManager.GetRolesAsync(user);
+        var token = GenerateJwtToken(user, roles.ToList());
+
+        return new LoginResponse
+        {
+            Token = token,
+            DomainUser = $"{domain}\\{username}",
+            DisplayName = displayName,
+            Allowed = true,
             Roles = roles.ToList()
         };
     }
