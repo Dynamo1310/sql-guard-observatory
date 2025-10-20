@@ -107,13 +107,13 @@ export const authApi = {
     return data;
   },
 
-  async loginWithAD(credentials: ADLoginRequest): Promise<LoginResponse> {
-    const response = await fetch(`${API_URL}/api/auth/login/ad`, {
+  async loginWithWindowsAuth(): Promise<LoginResponse> {
+    const response = await fetch(`${API_URL}/api/auth/login/windows`, {
       method: 'POST',
+      credentials: 'include', // Enviar credenciales de Windows
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(credentials),
     });
     const data = await handleResponse<LoginResponse>(response);
     

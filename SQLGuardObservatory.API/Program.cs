@@ -59,7 +59,8 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
     };
-});
+})
+.AddNegotiate(); // Windows Authentication
 
 builder.Services.AddAuthorization(options =>
 {

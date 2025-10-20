@@ -69,6 +69,41 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Login con autenticación de Windows (usa credenciales del usuario logueado en Windows)
+    /// </summary>
+    [HttpPost("login/windows")]
+    [AllowAnonymous]
+    public async Task<IActionResult> LoginWithWindows()
+    {
+        try
+        {
+            // Obtener el usuario de Windows del contexto
+            var windowsIdentity = User?.Identity?.Name;
+            
+            if (string.IsNullOrEmpty(windowsIdentity))
+            {
+                return Unauthorized(new { message = "No se pudo obtener la identidad de Windows. Asegúrate de estar logueado con una cuenta de dominio GSCORP." });
+            }
+
+            _logger.LogInformation("Intento de login con Windows: {Identity}", windowsIdentity);
+
+            var result = await _authService.AuthenticateWithWindowsAsync(windowsIdentity);
+            
+            if (result == null)
+            {
+                return Unauthorized(new { message = "Usuario no autorizado. Verifica que tu usuario esté en la lista blanca del sistema." });
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en login Windows");
+            return StatusCode(500, new { message = "Error al procesar el login con Windows Authentication" });
+        }
+    }
+
+    /// <summary>
     /// Obtiene la lista de usuarios (solo admin)
     /// </summary>
     [HttpGet("users")]

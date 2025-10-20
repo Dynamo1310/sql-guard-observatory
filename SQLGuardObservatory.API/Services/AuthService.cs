@@ -78,6 +78,43 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<LoginResponse?> AuthenticateWithWindowsAsync(string windowsIdentity)
+    {
+        // Extraer el nombre de usuario del formato DOMAIN\Username
+        var parts = windowsIdentity.Split('\\');
+        if (parts.Length != 2)
+            return null;
+
+        var domain = parts[0];
+        var username = parts[1];
+
+        // Solo permitir dominio GSCORP
+        if (!domain.Equals("GSCORP", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        // Verificar que el usuario esté en la lista blanca (base de datos)
+        var user = await _userManager.FindByNameAsync(username);
+        
+        if (user == null || !user.IsActive)
+        {
+            // Usuario no está en la lista blanca o está inactivo
+            return null;
+        }
+
+        // Usuario autenticado por Windows y autorizado - generar token
+        var roles = await _userManager.GetRolesAsync(user);
+        var token = GenerateJwtToken(user, roles.ToList());
+
+        return new LoginResponse
+        {
+            Token = token,
+            DomainUser = windowsIdentity,
+            DisplayName = user.DisplayName ?? username,
+            Allowed = true,
+            Roles = roles.ToList()
+        };
+    }
+
     public async Task<List<UserDto>> GetUsersAsync()
     {
         var users = await _userManager.Users.ToListAsync();
