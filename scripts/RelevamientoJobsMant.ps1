@@ -154,28 +154,50 @@ foreach ($inst in $instancesFiltered) {
         
         $jobCount = 0
         foreach ($job in $jobs) {
-            # Obtener última ejecución del job (sin -OutcomesType para compatibilidad)
+            # Obtener última ejecución del job - ordenar por fecha descendente para obtener la más reciente
             $lastRun = $job | Get-DbaAgentJobHistory -ExcludeJobSteps | 
                        Where-Object { $_.Status -in @('Succeeded', 'Failed') } |
+                       Sort-Object RunDate -Descending |
                        Select-Object -First 1
             
             if ($lastRun) {
+                # Calcular duración en segundos
+                $durationSeconds = $null
+                if ($lastRun.RunDuration) {
+                    # RunDuration puede venir como TimeSpan o como string en formato hhmmss
+                    if ($lastRun.RunDuration -is [TimeSpan]) {
+                        $durationSeconds = [int]$lastRun.RunDuration.TotalSeconds
+                    } elseif ($lastRun.RunDuration -is [string]) {
+                        # Formato: "001234" = 00h 12m 34s
+                        $durStr = $lastRun.RunDuration.PadLeft(6, '0')
+                        $hours = [int]$durStr.Substring(0, 2)
+                        $minutes = [int]$durStr.Substring(2, 2)
+                        $seconds = [int]$durStr.Substring(4, 2)
+                        $durationSeconds = ($hours * 3600) + ($minutes * 60) + $seconds
+                    } else {
+                        # Intentar convertir a int directamente
+                        try {
+                            $durationSeconds = [int]$lastRun.RunDuration
+                        } catch {
+                            $durationSeconds = $null
+                        }
+                    }
+                }
+                
+                # Calcular JobEnd
+                $jobEnd = $null
+                if ($lastRun.RunDate -and $durationSeconds) {
+                    $jobEnd = $lastRun.RunDate.AddSeconds($durationSeconds)
+                }
+                
                 $allResults += [PSCustomObject]@{
                     InstanceName       = $instanceName
                     Ambiente           = if ($ambiente) { $ambiente } else { $null }
                     Hosting            = if ($hosting) { $hosting } else { $null }
                     JobName            = $job.Name
                     JobStart           = $lastRun.RunDate
-                    JobEnd             = if ($lastRun.RunDate -and $lastRun.RunDuration) { 
-                        $lastRun.RunDate.Add($lastRun.RunDuration) 
-                    } else { 
-                        $null 
-                    }
-                    JobDurationSeconds = if ($lastRun.RunDuration) { 
-                        [int]$lastRun.RunDuration.TotalSeconds 
-                    } else { 
-                        $null 
-                    }
+                    JobEnd             = $jobEnd
+                    JobDurationSeconds = $durationSeconds
                     JobStatus          = switch ($lastRun.Status) {
                         'Succeeded' { 'Succeeded' }
                         'Failed'    { 'Failed' }
