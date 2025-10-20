@@ -143,7 +143,10 @@ foreach ($inst in $instancesFiltered) {
         $jobs = Get-DbaAgentJob -SqlInstance $instanceName -EnableException | Where-Object {
             $_.Name -like '*IndexOptimize*' -or 
             $_.Name -like '*DatabaseIntegrityCheck*' -or 
-            $_.Name -like '*Actualizacion_estadisticas*'
+            $_.Name -like '*Actualizacion_estadisticas*' -or
+            $_.Name -like '*Actualizacion_estadísticas*' -or
+            $_.Name -like '*Actualización_estadisticas*' -or
+            $_.Name -like '*Actualización_estadísticas*'
         }
         
         if (-not $jobs -or $jobs.Count -eq 0) {
