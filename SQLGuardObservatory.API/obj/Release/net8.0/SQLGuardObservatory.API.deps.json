@@ -9,13 +9,11 @@
       "SQLGuardObservatory.API/1.0.0": {
         "dependencies": {
           "Microsoft.AspNetCore.Authentication.JwtBearer": "8.0.10",
-          "Microsoft.AspNetCore.Authentication.Negotiate": "8.0.10",
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "8.0.10",
           "Microsoft.EntityFrameworkCore.SqlServer": "8.0.10",
           "Microsoft.EntityFrameworkCore.Tools": "8.0.10",
           "Microsoft.Extensions.Hosting.WindowsServices": "8.0.1",
-          "Swashbuckle.AspNetCore": "6.5.0",
-          "System.DirectoryServices.Protocols": "8.0.0"
+          "Swashbuckle.AspNetCore": "6.5.0"
         },
         "runtime": {
           "SQLGuardObservatory.API.dll": {}
@@ -63,31 +61,6 @@
         "runtime": {
           "lib/net8.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll": {
             "assemblyVersion": "8.0.10.0",
-            "fileVersion": "8.0.1024.46804"
-          }
-        }
-      },
-      "Microsoft.AspNetCore.Authentication.Negotiate/8.0.10": {
-        "dependencies": {
-          "Microsoft.AspNetCore.Connections.Abstractions": "8.0.10",
-          "Microsoft.Extensions.Caching.Memory": "8.0.1",
-          "System.DirectoryServices.Protocols": "8.0.0"
-        },
-        "runtime": {
-          "lib/net8.0/Microsoft.AspNetCore.Authentication.Negotiate.dll": {
-            "assemblyVersion": "8.0.10.0",
-            "fileVersion": "8.0.1024.46804"
-          }
-        }
-      },
-      "Microsoft.AspNetCore.Connections.Abstractions/8.0.10": {
-        "dependencies": {
-          "Microsoft.Extensions.Features": "8.0.10",
-          "System.IO.Pipelines": "8.0.0"
-        },
-        "runtime": {
-          "lib/net8.0/Microsoft.AspNetCore.Connections.Abstractions.dll": {
-            "assemblyVersion": "8.0.0.0",
             "fileVersion": "8.0.1024.46804"
           }
         }
@@ -160,7 +133,7 @@
           "Microsoft.Bcl.AsyncInterfaces": "6.0.0",
           "Microsoft.CodeAnalysis.Common": "4.5.0",
           "System.Composition": "6.0.0",
-          "System.IO.Pipelines": "8.0.0",
+          "System.IO.Pipelines": "6.0.3",
           "System.Threading.Channels": "6.0.0"
         }
       },
@@ -426,14 +399,6 @@
           "lib/net8.0/Microsoft.Extensions.Diagnostics.Abstractions.dll": {
             "assemblyVersion": "8.0.0.0",
             "fileVersion": "8.0.1024.46610"
-          }
-        }
-      },
-      "Microsoft.Extensions.Features/8.0.10": {
-        "runtime": {
-          "lib/net8.0/Microsoft.Extensions.Features.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.1024.46804"
           }
         }
       },
@@ -889,34 +854,6 @@
           }
         }
       },
-      "System.DirectoryServices.Protocols/8.0.0": {
-        "runtime": {
-          "lib/net8.0/System.DirectoryServices.Protocols.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.23.53103"
-          }
-        },
-        "runtimeTargets": {
-          "runtimes/linux/lib/net8.0/System.DirectoryServices.Protocols.dll": {
-            "rid": "linux",
-            "assetType": "runtime",
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.23.53103"
-          },
-          "runtimes/osx/lib/net8.0/System.DirectoryServices.Protocols.dll": {
-            "rid": "osx",
-            "assetType": "runtime",
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.23.53103"
-          },
-          "runtimes/win/lib/net8.0/System.DirectoryServices.Protocols.dll": {
-            "rid": "win",
-            "assetType": "runtime",
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.23.53103"
-          }
-        }
-      },
       "System.Drawing.Common/6.0.0": {
         "dependencies": {
           "Microsoft.Win32.SystemEvents": "6.0.0"
@@ -961,7 +898,7 @@
           "System.Security.Principal.Windows": "5.0.0"
         }
       },
-      "System.IO.Pipelines/8.0.0": {},
+      "System.IO.Pipelines/6.0.3": {},
       "System.Memory/4.5.4": {},
       "System.Memory.Data/1.0.2": {
         "dependencies": {
@@ -1122,20 +1059,6 @@
       "sha512": "sha512-rcPXghZCc82IB9U2Px1Ln5Zn3vjV4p83H/Few5T/904hBddjSz03COQ2zOGWBBvdTBY+GciAUJwgBFNWaxLfqw==",
       "path": "microsoft.aspnetcore.authentication.jwtbearer/8.0.10",
       "hashPath": "microsoft.aspnetcore.authentication.jwtbearer.8.0.10.nupkg.sha512"
-    },
-    "Microsoft.AspNetCore.Authentication.Negotiate/8.0.10": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-GqvrITdCJ8M3ldDjGVFfBnB0f3O4X/AgprzcJFVLSO2qkGWgctdAwxsBjrILsYgTE5Cv2U6eL5cSrla7lQYCTQ==",
-      "path": "microsoft.aspnetcore.authentication.negotiate/8.0.10",
-      "hashPath": "microsoft.aspnetcore.authentication.negotiate.8.0.10.nupkg.sha512"
-    },
-    "Microsoft.AspNetCore.Connections.Abstractions/8.0.10": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-7fqSpSGzBRldyO1obKMPGYUdU4iwvMPsUEgdufgRZe2tBF9rKf8ffGmuObP81N4AKb5A438+5ER5t3ES0r1yDQ==",
-      "path": "microsoft.aspnetcore.connections.abstractions/8.0.10",
-      "hashPath": "microsoft.aspnetcore.connections.abstractions.8.0.10.nupkg.sha512"
     },
     "Microsoft.AspNetCore.Cryptography.Internal/8.0.10": {
       "type": "package",
@@ -1374,13 +1297,6 @@
       "sha512": "sha512-elH2vmwNmsXuKmUeMQ4YW9ldXiF+gSGDgg1vORksob5POnpaI6caj1Hu8zaYbEuibhqCoWg0YRWDazBY3zjBfg==",
       "path": "microsoft.extensions.diagnostics.abstractions/8.0.1",
       "hashPath": "microsoft.extensions.diagnostics.abstractions.8.0.1.nupkg.sha512"
-    },
-    "Microsoft.Extensions.Features/8.0.10": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-6SpN2/BuqUnhrw1i+vXsw7CA4ADYt7lf1G9/eDs+bY7eJoug5YQVFd4OS+37m8dSbklCdq6b7rLbCVQUZgL6oQ==",
-      "path": "microsoft.extensions.features/8.0.10",
-      "hashPath": "microsoft.extensions.features.8.0.10.nupkg.sha512"
     },
     "Microsoft.Extensions.FileProviders.Abstractions/8.0.0": {
       "type": "package",
@@ -1697,13 +1613,6 @@
       "path": "system.diagnostics.eventlog/8.0.1",
       "hashPath": "system.diagnostics.eventlog.8.0.1.nupkg.sha512"
     },
-    "System.DirectoryServices.Protocols/8.0.0": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-puwJxURHDrYLGTQdsHyeMS72ClTqYa4lDYz6LHSbkZEk5hq8H8JfsO4MyYhB5BMMxg93jsQzLUwrnCumj11UIg==",
-      "path": "system.directoryservices.protocols/8.0.0",
-      "hashPath": "system.directoryservices.protocols.8.0.0.nupkg.sha512"
-    },
     "System.Drawing.Common/6.0.0": {
       "type": "package",
       "serviceable": true,
@@ -1732,12 +1641,12 @@
       "path": "system.io.filesystem.accesscontrol/5.0.0",
       "hashPath": "system.io.filesystem.accesscontrol.5.0.0.nupkg.sha512"
     },
-    "System.IO.Pipelines/8.0.0": {
+    "System.IO.Pipelines/6.0.3": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-FHNOatmUq0sqJOkTx+UF/9YK1f180cnW5FVqnQMvYUN0elp6wFzbtPSiqbo1/ru8ICp43JM1i7kKkk6GsNGHlA==",
-      "path": "system.io.pipelines/8.0.0",
-      "hashPath": "system.io.pipelines.8.0.0.nupkg.sha512"
+      "sha512": "sha512-ryTgF+iFkpGZY1vRQhfCzX0xTdlV3pyaTTqRu2ETbEv+HlV7O6y7hyQURnghNIXvctl5DuZ//Dpks6HdL/Txgw==",
+      "path": "system.io.pipelines/6.0.3",
+      "hashPath": "system.io.pipelines.6.0.3.nupkg.sha512"
     },
     "System.Memory/4.5.4": {
       "type": "package",

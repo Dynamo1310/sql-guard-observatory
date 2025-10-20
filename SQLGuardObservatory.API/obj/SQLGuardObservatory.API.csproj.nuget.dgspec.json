@@ -42,10 +42,6 @@
               "target": "Package",
               "version": "[8.0.10, )"
             },
-            "Microsoft.AspNetCore.Authentication.Negotiate": {
-              "target": "Package",
-              "version": "[8.0.10, )"
-            },
             "Microsoft.AspNetCore.Identity.EntityFrameworkCore": {
               "target": "Package",
               "version": "[8.0.10, )"
@@ -67,10 +63,6 @@
             "Swashbuckle.AspNetCore": {
               "target": "Package",
               "version": "[6.5.0, )"
-            },
-            "System.DirectoryServices.Protocols": {
-              "target": "Package",
-              "version": "[8.0.0, )"
             }
           },
           "imports": [
