@@ -22,18 +22,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       setError(null);
       
-      // Check localStorage for authenticated user
-      const domainUser = localStorage.getItem('domain_user');
-      const displayName = localStorage.getItem('display_name');
-      const rolesStr = localStorage.getItem('roles');
+      // Check localStorage for authenticated user (nuevas claves del api.ts)
+      const token = localStorage.getItem('token');
+      const userStr = localStorage.getItem('user');
       
-      if (domainUser && displayName && rolesStr) {
-        const roles = JSON.parse(rolesStr);
+      if (token && userStr) {
+        const userData = JSON.parse(userStr);
         setUser({
-          domainUser,
-          displayName,
+          domainUser: userData.domainUser,
+          displayName: userData.displayName,
           allowed: true,
-          roles
+          roles: userData.roles
         });
       } else {
         setUser(null);
@@ -47,9 +46,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    localStorage.removeItem('domain_user');
-    localStorage.removeItem('display_name');
-    localStorage.removeItem('roles');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setUser(null);
   };
 

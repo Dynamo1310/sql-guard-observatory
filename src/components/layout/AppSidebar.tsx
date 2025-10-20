@@ -1,9 +1,6 @@
 import { Home, Activity, HardDrive, Database, Save, ListTree, Users, LogOut } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
 import supvLogo from '/SUPV.png';
-import supvBigLogo from '/SUPV_BIG.png';
-import supvBigLogoDark from '/SUPV_BIG_DARK.png';
 import {
   Sidebar,
   SidebarContent,
@@ -32,28 +29,9 @@ const adminItems = [
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { isAdmin, logout, user } = useAuth();
+  const { isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const isCollapsed = state === 'collapsed';
-  const [isDark, setIsDark] = useState(false);
-
-  useEffect(() => {
-    // Detectar el tema inicial
-    const checkTheme = () => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    };
-    
-    checkTheme();
-    
-    // Observar cambios en el tema
-    const observer = new MutationObserver(checkTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-    
-    return () => observer.disconnect();
-  }, []);
 
   const handleLogout = () => {
     logout();
@@ -65,28 +43,12 @@ export function AppSidebar() {
       <SidebarContent>
         {/* Logo Section */}
         <div className="p-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-3">
-            {isCollapsed ? (
-              <img 
-                src={supvLogo} 
-                alt="Supervielle" 
-                className="h-8 mx-auto"
-              />
-            ) : (
-              <>
-                <img 
-                  src={isDark ? supvBigLogoDark : supvBigLogo} 
-                  alt="Supervielle" 
-                  className="h-8"
-                />
-                <div>
-                  <p className="text-xs font-semibold text-sidebar-foreground">
-                    Observabilidad
-                  </p>
-                  <p className="text-xs text-muted-foreground">{user?.displayName}</p>
-                </div>
-              </>
-            )}
+          <div className="flex justify-center">
+            <img 
+              src={supvLogo} 
+              alt="Supervielle" 
+              className={isCollapsed ? "h-8" : "h-10"}
+            />
           </div>
         </div>
         <SidebarGroup>

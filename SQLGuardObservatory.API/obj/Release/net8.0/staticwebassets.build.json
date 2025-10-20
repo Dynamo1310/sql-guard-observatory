@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "Feiuiia3E8MsbhzvCnXLcgahS72NvbEflneibosfAz4=",
+  "Source": "SQLGuardObservatory.API",
+  "BasePath": "_content/SQLGuardObservatory.API",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

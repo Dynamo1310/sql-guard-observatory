@@ -80,7 +80,8 @@ builder.Services.AddCors(options =>
             "http://localhost:5173",
             "http://localhost:5174",
             "http://localhost:3000",
-            "http://localhost:4200"
+            "http://localhost:4200",
+            "http://localhost:8080"
         )
         .AllowAnyMethod()
         .AllowAnyHeader()
@@ -110,13 +111,10 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection(); // Deshabilitado - solo usamos HTTP
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();

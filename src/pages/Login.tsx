@@ -6,9 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { authApi } from '@/services/api';
 import { toast } from 'sonner';
-import superviseLogo from '@/assets/supervielle-logo.png';
+import supvLogo from '/SUPV.png';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
 export default function Login() {
@@ -24,39 +24,23 @@ export default function Login() {
     setError(null);
 
     try {
-      // Validate format DOM\usuario
-      if (!domainUser.includes('\\')) {
-        setError('El formato debe ser DOMINIO\\usuario');
-        setLoading(false);
-        return;
-      }
-
-      // Call edge function to validate AD credentials and check whitelist
-      const { data, error: functionError } = await supabase.functions.invoke('validate-ad-user', {
-        body: { domainUser, password }
+      // Login con el backend .NET
+      const response = await authApi.login({
+        username: domainUser,
+        password: password
       });
 
-      if (functionError) {
-        throw functionError;
-      }
-
-      if (!data.allowed) {
+      if (!response.allowed) {
         setError('No tienes permisos para acceder a esta aplicación. Contacta al administrador.');
         setLoading(false);
         return;
       }
 
-      // Store domain user and roles in localStorage temporarily
-      // In production, this should use proper JWT tokens with domain_user claim
-      localStorage.setItem('domain_user', domainUser);
-      localStorage.setItem('display_name', data.displayName);
-      localStorage.setItem('roles', JSON.stringify(data.roles));
-      
       toast.success('Inicio de sesión exitoso');
       navigate('/');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al iniciar sesión:', err);
-      setError('Error al verificar credenciales. Intenta nuevamente.');
+      setError(err.message || 'Error al verificar credenciales. Intenta nuevamente.');
     } finally {
       setLoading(false);
     }
@@ -72,7 +56,7 @@ export default function Login() {
         <CardHeader className="space-y-4">
           <div className="flex justify-center">
             <img 
-              src={superviseLogo} 
+              src={supvLogo} 
               alt="Supervielle" 
               className="h-16 object-contain"
             />
@@ -80,7 +64,7 @@ export default function Login() {
           <div className="text-center">
             <CardTitle className="text-2xl">Observabilidad SQL Server</CardTitle>
             <CardDescription>
-              Ingresa tus credenciales de Active Directory
+              Ingresa tus credenciales para acceder
             </CardDescription>
           </div>
         </CardHeader>
@@ -94,18 +78,18 @@ export default function Login() {
             )}
             
             <div className="space-y-2">
-              <Label htmlFor="domainUser">Usuario de Dominio</Label>
+              <Label htmlFor="domainUser">Usuario</Label>
               <Input
                 id="domainUser"
                 type="text"
-                placeholder="BANCO\usuario"
+                placeholder="TB03260"
                 value={domainUser}
                 onChange={(e) => setDomainUser(e.target.value)}
                 required
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground">
-                Formato: DOMINIO\usuario
+                Ingresa tu usuario
               </p>
             </div>
 
