@@ -1,7 +1,11 @@
 import { ShieldAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 export default function Unauthorized() {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-background">
       <Card className="max-w-md w-full gradient-card shadow-card">
@@ -13,11 +17,18 @@ export default function Unauthorized() {
         </CardHeader>
         <CardContent className="text-center space-y-4">
           <p className="text-muted-foreground">
-            No tiene permisos para acceder a esta aplicación.
+            No tienes permisos para acceder a esta vista.
           </p>
           <p className="text-sm text-muted-foreground">
-            Si necesita acceso, contacte al administrador del sistema.
+            Si crees que deberías tener acceso, contacta al administrador del sistema.
           </p>
+          <Button 
+            onClick={() => navigate('/')} 
+            variant="outline"
+            className="mt-4"
+          >
+            Volver al Inicio
+          </Button>
         </CardContent>
       </Card>
     </div>

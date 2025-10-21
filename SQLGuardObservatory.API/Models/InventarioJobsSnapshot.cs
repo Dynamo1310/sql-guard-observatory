@@ -7,7 +7,7 @@ namespace SQLGuardObservatory.API.Models;
 public class InventarioJobsSnapshot
 {
     [Key]
-    public int Id { get; set; }
+    public long Id { get; set; }
 
     [MaxLength(255)]
     public string? InstanceName { get; set; }
@@ -21,6 +21,9 @@ public class InventarioJobsSnapshot
     [MaxLength(255)]
     public string? JobName { get; set; }
 
+    [MaxLength(20)]
+    public string? JobEnabled { get; set; }
+
     public DateTime? JobStart { get; set; }
 
     public DateTime? JobEnd { get; set; }
@@ -28,7 +31,7 @@ public class InventarioJobsSnapshot
     public int? JobDurationSeconds { get; set; }
 
     [MaxLength(50)]
-    public string? JobStatus { get; set; }
+    public string? ExecutionStatus { get; set; }
 
     public DateTime? CaptureDate { get; set; }
 

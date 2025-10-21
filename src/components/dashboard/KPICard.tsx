@@ -21,19 +21,19 @@ export function KPICard({ title, value, icon: Icon, description, trend, variant 
 
   return (
     <Card className={cn('gradient-card shadow-card transition-smooth hover:shadow-glow', variantStyles[variant])}>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <Icon className={cn('h-5 w-5', {
+      <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6">
+        <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <Icon className={cn('h-4 w-4 sm:h-5 sm:w-5', {
           'text-foreground': variant === 'default',
           'text-success': variant === 'success',
           'text-warning': variant === 'warning',
           'text-destructive': variant === 'critical',
         })} />
       </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-bold font-mono">{value}</div>
+      <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
+        <div className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono">{value}</div>
         {description && (
-          <p className="text-xs text-muted-foreground mt-2">{description}</p>
+          <p className="text-xs text-muted-foreground mt-1 sm:mt-2">{description}</p>
         )}
       </CardContent>
     </Card>

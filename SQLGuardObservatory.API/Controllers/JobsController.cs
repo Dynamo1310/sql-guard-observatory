@@ -19,14 +19,17 @@ public class JobsController : ControllerBase
     }
 
     /// <summary>
-    /// Obtiene la lista de jobs
+    /// Obtiene la lista de jobs con filtros opcionales
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetJobs([FromQuery] string? ambiente = null, [FromQuery] string? hosting = null)
+    public async Task<IActionResult> GetJobs(
+        [FromQuery] string? ambiente = null, 
+        [FromQuery] string? hosting = null,
+        [FromQuery] string? instance = null)
     {
         try
         {
-            var jobs = await _jobsService.GetJobsAsync(ambiente, hosting);
+            var jobs = await _jobsService.GetJobsAsync(ambiente, hosting, instance);
             return Ok(jobs);
         }
         catch (Exception ex)
@@ -37,14 +40,17 @@ public class JobsController : ControllerBase
     }
 
     /// <summary>
-    /// Obtiene el resumen de jobs (KPIs)
+    /// Obtiene el resumen de jobs (KPIs) con filtros opcionales
     /// </summary>
     [HttpGet("summary")]
-    public async Task<IActionResult> GetJobsSummary()
+    public async Task<IActionResult> GetJobsSummary(
+        [FromQuery] string? ambiente = null,
+        [FromQuery] string? hosting = null,
+        [FromQuery] string? instance = null)
     {
         try
         {
-            var summary = await _jobsService.GetJobsSummaryAsync();
+            var summary = await _jobsService.GetJobsSummaryAsync(ambiente, hosting, instance);
             return Ok(summary);
         }
         catch (Exception ex)
@@ -55,21 +61,20 @@ public class JobsController : ControllerBase
     }
 
     /// <summary>
-    /// Obtiene los jobs fallidos recientes
+    /// Obtiene los valores disponibles para los filtros
     /// </summary>
-    [HttpGet("failed")]
-    public async Task<IActionResult> GetFailedJobs([FromQuery] int limit = 5)
+    [HttpGet("filters")]
+    public async Task<IActionResult> GetFilters()
     {
         try
         {
-            var jobs = await _jobsService.GetFailedJobsAsync(limit);
-            return Ok(jobs);
+            var filters = await _jobsService.GetAvailableFiltersAsync();
+            return Ok(filters);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al obtener jobs fallidos");
-            return StatusCode(500, new { message = "Error al obtener los jobs fallidos" });
+            _logger.LogError(ex, "Error al obtener filtros");
+            return StatusCode(500, new { message = "Error al obtener los filtros" });
         }
     }
 }
-

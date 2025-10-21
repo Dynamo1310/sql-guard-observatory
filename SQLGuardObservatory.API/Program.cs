@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -38,7 +39,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 
-// Configurar JWT Authentication
+// Configurar JWT Authentication y Windows Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("SecretKey no configurada");
 
@@ -59,17 +60,24 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
     };
+})
+.AddNegotiate(options =>
+{
+    // Configurar para aceptar solo autenticación de Windows
+    options.PersistKerberosCredentials = true;
 });
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin", "SuperAdmin"));
     options.AddPolicy("WhitelistOnly", policy => policy.RequireAuthenticatedUser());
 });
 
 // Registrar servicios personalizados
 builder.Services.AddScoped<IJobsService, JobsService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IActiveDirectoryService, ActiveDirectoryService>();
 
 // Configurar CORS
 builder.Services.AddCors(options =>
@@ -101,8 +109,10 @@ using (var scope = app.Services.CreateScope())
         var context = services.GetRequiredService<ApplicationDbContext>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+        var configuration = services.GetRequiredService<IConfiguration>();
         
         await DbInitializer.Initialize(context, userManager, roleManager);
+        await PermissionInitializer.InitializePermissions(context, roleManager, configuration);
     }
     catch (Exception ex)
     {

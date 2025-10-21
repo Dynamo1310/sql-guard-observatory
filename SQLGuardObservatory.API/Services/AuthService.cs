@@ -45,6 +45,47 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<LoginResponse?> AuthenticateWindowsUserAsync(string windowsIdentity)
+    {
+        // Extraer el nombre de usuario del formato DOMAIN\username
+        var username = windowsIdentity;
+        if (windowsIdentity.Contains("\\"))
+        {
+            var parts = windowsIdentity.Split('\\');
+            username = parts[1]; // TB03260
+        }
+        else if (windowsIdentity.Contains("@"))
+        {
+            var parts = windowsIdentity.Split('@');
+            username = parts[0]; // TB03260
+        }
+
+        // Verificar que el usuario esté en el dominio gscorp.ad
+        if (!windowsIdentity.ToUpper().Contains("GSCORP"))
+        {
+            return null;
+        }
+
+        // Buscar el usuario en la lista blanca
+        var user = await _userManager.Users
+            .FirstOrDefaultAsync(u => u.DomainUser == username || u.UserName == username);
+        
+        if (user == null || !user.IsActive)
+            return null;
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var token = GenerateJwtToken(user, roles.ToList());
+
+        return new LoginResponse
+        {
+            Token = token,
+            DomainUser = user.DomainUser ?? user.UserName ?? string.Empty,
+            DisplayName = user.DisplayName ?? string.Empty,
+            Allowed = user.IsActive,
+            Roles = roles.ToList()
+        };
+    }
+
     public async Task<List<UserDto>> GetUsersAsync()
     {
         var users = await _userManager.Users.ToListAsync();
@@ -87,6 +128,27 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<UserDto?> GetUserByDomainUserAsync(string domainUser)
+    {
+        var user = await _userManager.Users
+            .FirstOrDefaultAsync(u => u.DomainUser == domainUser || u.UserName == domainUser);
+        
+        if (user == null)
+            return null;
+
+        var roles = await _userManager.GetRolesAsync(user);
+        
+        return new UserDto
+        {
+            Id = user.Id,
+            DomainUser = user.DomainUser ?? user.UserName ?? string.Empty,
+            DisplayName = user.DisplayName ?? string.Empty,
+            Role = roles.FirstOrDefault() ?? "Reader",
+            Active = user.IsActive,
+            CreatedAt = user.CreatedAt.ToString("o")
+        };
+    }
+
     public async Task<UserDto?> CreateUserAsync(CreateUserRequest request)
     {
         var existingUser = await _userManager.FindByNameAsync(request.DomainUser);
@@ -103,7 +165,10 @@ public class AuthService : IAuthService
             CreatedAt = DateTime.UtcNow
         };
 
-        var result = await _userManager.CreateAsync(newUser, request.Password);
+        // Crear usuario sin contraseña (autenticación de Windows)
+        // Usamos un GUID aleatorio como contraseña interna (no se usará nunca)
+        var dummyPassword = Guid.NewGuid().ToString() + "Aa1!";
+        var result = await _userManager.CreateAsync(newUser, dummyPassword);
         
         if (!result.Succeeded)
             return null;
@@ -165,6 +230,17 @@ public class AuthService : IAuthService
             return false;
 
         var result = await _userManager.DeleteAsync(user);
+        return result.Succeeded;
+    }
+
+    public async Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        
+        if (user == null)
+            return false;
+
+        var result = await _userManager.ChangePasswordAsync(user, currentPassword, newPassword);
         return result.Succeeded;
     }
 

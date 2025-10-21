@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
+using System.Runtime.Versioning;
 
 namespace SQLGuardObservatory.API.Controllers;
 
@@ -10,16 +12,21 @@ namespace SQLGuardObservatory.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IActiveDirectoryService _activeDirectoryService;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(
+        IAuthService authService, 
+        IActiveDirectoryService activeDirectoryService,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
+        _activeDirectoryService = activeDirectoryService;
         _logger = logger;
     }
 
     /// <summary>
-    /// Login de usuario
+    /// Login de usuario (deprecado - mantener para compatibilidad)
     /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
@@ -40,6 +47,41 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Error en login");
             return StatusCode(500, new { message = "Error al procesar el login" });
+        }
+    }
+
+    /// <summary>
+    /// Autenticación con Windows (autenticación automática)
+    /// </summary>
+    [HttpGet("windows-login")]
+    [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)]
+    public async Task<IActionResult> WindowsLogin()
+    {
+        try
+        {
+            // Obtener la identidad de Windows del usuario actual
+            var windowsIdentity = User.Identity?.Name;
+            
+            _logger.LogInformation($"Intento de login con Windows Identity: {windowsIdentity}");
+
+            if (string.IsNullOrEmpty(windowsIdentity))
+            {
+                return Unauthorized(new { message = "No se pudo obtener la identidad de Windows. Asegúrate de que Windows Authentication esté habilitado en IIS." });
+            }
+
+            var result = await _authService.AuthenticateWindowsUserAsync(windowsIdentity);
+            
+            if (result == null)
+            {
+                return Unauthorized(new { message = "Usuario no autorizado. El usuario debe estar en la lista blanca de la aplicación y pertenecer al dominio gscorp.ad" });
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en login de Windows");
+            return StatusCode(500, new { message = "Error al procesar el login con Windows" });
         }
     }
 
@@ -159,6 +201,208 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Error al eliminar usuario");
             return StatusCode(500, new { message = "Error al eliminar el usuario" });
+        }
+    }
+
+    /// <summary>
+    /// Cambia la contraseña del usuario autenticado
+    /// </summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        try
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new { message = "Usuario no autenticado" });
+            }
+
+            var result = await _authService.ChangePasswordAsync(userId, request.CurrentPassword, request.NewPassword);
+            
+            if (!result)
+            {
+                return BadRequest(new { message = "No se pudo cambiar la contraseña. Verifica que la contraseña actual sea correcta." });
+            }
+
+            return Ok(new { message = "Contraseña cambiada exitosamente" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al cambiar contraseña");
+            return StatusCode(500, new { message = "Error al cambiar la contraseña" });
+        }
+    }
+
+    /// <summary>
+    /// Refresca el token del usuario actual con los roles actualizados
+    /// </summary>
+    [HttpPost("refresh-session")]
+    [Authorize]
+    public async Task<IActionResult> RefreshSession()
+    {
+        try
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new { message = "Usuario no autenticado" });
+            }
+
+            var userDto = await _authService.GetUserByIdAsync(userId);
+            
+            if (userDto == null || !userDto.Active)
+            {
+                return Unauthorized(new { message = "Usuario no encontrado o inactivo" });
+            }
+
+            // Re-autenticar al usuario para obtener un nuevo token con roles actualizados
+            var result = await _authService.AuthenticateWindowsUserAsync(userDto.DomainUser);
+            
+            if (result == null)
+            {
+                return Unauthorized(new { message = "No se pudo refrescar la sesión" });
+            }
+
+            _logger.LogInformation($"Sesión refrescada para usuario {userDto.DomainUser}");
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al refrescar sesión");
+            return StatusCode(500, new { message = "Error al refrescar la sesión" });
+        }
+    }
+
+    /// <summary>
+    /// Obtiene los miembros de un grupo de Active Directory
+    /// </summary>
+    [HttpGet("ad-group-members")]
+    [Authorize(Policy = "AdminOnly")]
+    [SupportedOSPlatform("windows")]
+    public async Task<IActionResult> GetAdGroupMembers([FromQuery] string groupName)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(groupName))
+            {
+                return BadRequest(new { message = "El nombre del grupo es requerido" });
+            }
+
+            _logger.LogInformation($"Consultando miembros del grupo AD: {groupName}");
+            
+            var members = await _activeDirectoryService.GetGroupMembersAsync(groupName);
+            
+            return Ok(new { 
+                groupName = groupName, 
+                count = members.Count,
+                members = members 
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error al obtener miembros del grupo AD: {groupName}");
+            return StatusCode(500, new { message = $"Error al consultar Active Directory: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Importa usuarios desde un grupo de Active Directory
+    /// </summary>
+    [HttpPost("import-from-ad-group")]
+    [Authorize(Policy = "AdminOnly")]
+    [SupportedOSPlatform("windows")]
+    public async Task<IActionResult> ImportFromAdGroup([FromBody] ImportUsersFromGroupRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.GroupName))
+            {
+                return BadRequest(new { message = "El nombre del grupo es requerido" });
+            }
+
+            if (request.SelectedUsernames == null || !request.SelectedUsernames.Any())
+            {
+                return BadRequest(new { message = "Debe seleccionar al menos un usuario para importar" });
+            }
+
+            _logger.LogInformation($"Importando {request.SelectedUsernames.Count} usuarios del grupo {request.GroupName}");
+
+            // Obtener los miembros del grupo para validar
+            var groupMembers = await _activeDirectoryService.GetGroupMembersAsync(request.GroupName);
+            
+            var importedCount = 0;
+            var skippedCount = 0;
+            var errors = new List<string>();
+
+            foreach (var username in request.SelectedUsernames)
+            {
+                try
+                {
+                    // Verificar que el usuario existe en el grupo
+                    var adUser = groupMembers.FirstOrDefault(u => u.SamAccountName.Equals(username, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (adUser == null)
+                    {
+                        errors.Add($"{username}: No encontrado en el grupo AD");
+                        skippedCount++;
+                        continue;
+                    }
+
+                    // Verificar si el usuario ya existe en la base de datos
+                    var existingUser = await _authService.GetUserByDomainUserAsync(username);
+                    
+                    if (existingUser != null)
+                    {
+                        _logger.LogInformation($"Usuario {username} ya existe, se omite");
+                        skippedCount++;
+                        continue;
+                    }
+
+                    // Crear el usuario
+                    var createRequest = new CreateUserRequest
+                    {
+                        DomainUser = adUser.SamAccountName,
+                        DisplayName = adUser.DisplayName,
+                        Role = request.DefaultRole
+                    };
+
+                    var created = await _authService.CreateUserAsync(createRequest);
+                    
+                    if (created != null)
+                    {
+                        importedCount++;
+                        _logger.LogInformation($"Usuario {username} importado exitosamente");
+                    }
+                    else
+                    {
+                        errors.Add($"{username}: Error al crear en la base de datos");
+                        skippedCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error al importar usuario {username}");
+                    errors.Add($"{username}: {ex.Message}");
+                    skippedCount++;
+                }
+            }
+
+            return Ok(new
+            {
+                message = $"Importación completada: {importedCount} usuarios importados, {skippedCount} omitidos",
+                imported = importedCount,
+                skipped = skippedCount,
+                errors = errors
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al importar usuarios desde grupo AD");
+            return StatusCode(500, new { message = $"Error al importar usuarios: {ex.Message}" });
         }
     }
 }

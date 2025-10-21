@@ -76,6 +76,19 @@ try {
 
 Write-Host "Backend compilado exitosamente" -ForegroundColor Green
 
+# Copiar scripts SQL
+Write-Host "Copiando scripts SQL..." -ForegroundColor Green
+$SqlSourcePath = Join-Path $ProjectPath "SQL"
+$SqlDestPath = Join-Path $BackendPath "SQL"
+
+if (Test-Path $SqlSourcePath) {
+    New-Item -ItemType Directory -Force -Path $SqlDestPath | Out-Null
+    Copy-Item -Path "$SqlSourcePath\*" -Destination $SqlDestPath -Recurse -Force
+    Write-Host "Scripts SQL copiados a: $SqlDestPath" -ForegroundColor Green
+} else {
+    Write-Host "No se encontraron scripts SQL para copiar" -ForegroundColor Yellow
+}
+
 # Configurar appsettings.json
 $appsettingsPath = Join-Path $BackendPath "appsettings.json"
 if (-not (Test-Path $appsettingsPath)) {
@@ -149,11 +162,13 @@ if ($serviceStatus.Status -eq "Running") {
     Write-Host "Puerto: $Port" -ForegroundColor Cyan
     Write-Host "Ruta: $BackendPath" -ForegroundColor Cyan
     Write-Host "`nPróximos pasos:" -ForegroundColor Yellow
-    Write-Host "1. Revisar y actualizar la configuración en: $appsettingsPath" -ForegroundColor White
-    Write-Host "2. Cambiar JWT SecretKey por una clave segura" -ForegroundColor White
-    Write-Host "3. Verificar las cadenas de conexión a SQL Server" -ForegroundColor White
-    Write-Host "4. Cambiar la contraseña del usuario admin TB03260 (contraseña inicial: Admin123!)" -ForegroundColor White
-    Write-Host "5. Probar el API en: http://localhost:$Port/swagger" -ForegroundColor White
+    Write-Host "1. IMPORTANTE: Aplicar la migración de la base de datos:" -ForegroundColor White
+    Write-Host "   Ejecutar: cd '$BackendPath\SQL' y luego .\Apply-RolePermissionsMigration.ps1" -ForegroundColor Cyan
+    Write-Host "2. Revisar y actualizar la configuración en: $appsettingsPath" -ForegroundColor White
+    Write-Host "3. Cambiar JWT SecretKey por una clave segura" -ForegroundColor White
+    Write-Host "4. Verificar las cadenas de conexión a SQL Server" -ForegroundColor White
+    Write-Host "5. Cambiar la contraseña del usuario admin TB03260 (contraseña inicial: Admin123!)" -ForegroundColor White
+    Write-Host "6. Probar el API en: http://localhost:$Port/swagger" -ForegroundColor White
 } else {
     Write-Warning "El servicio no está corriendo. Revisar logs en: $LogPath"
     Write-Host "Para ver logs: Get-Content '$LogPath\error.log' -Tail 50" -ForegroundColor Cyan

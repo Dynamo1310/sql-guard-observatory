@@ -1,41 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { authApi } from '@/services/api';
 import supervLogo from '/SUPV.png';
+import windows11Logo from '/Windows11.png';
+import { Loader2 } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState('Autenticando con Windows...');
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!username || !password) {
-      setError('Por favor completa todos los campos');
-      return;
-    }
+  // No hay autenticación automática - useEffect vacío o removido
 
+  const handleWindowsLogin = async () => {
     setLoading(true);
     setError('');
 
     try {
-      await authApi.login({
-        username,
-        password,
-      });
+      setStatus('Verificando credenciales de Windows...');
+      await authApi.windowsLogin();
 
+      setStatus('Autenticación exitosa. Redirigiendo...');
+      
       // Forzar recarga completa para actualizar el AuthContext
-      window.location.href = '/';
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500);
     } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión');
-    } finally {
+      setError(err.message || 'Error al iniciar sesión con Windows. Asegúrate de estar en el dominio gscorp.ad y estar en la lista blanca de usuarios.');
       setLoading(false);
     }
   };
@@ -49,7 +45,7 @@ export default function Login() {
           </div>
           <CardTitle className="text-2xl text-center">Observabilidad SQL Server</CardTitle>
           <CardDescription className="text-center">
-            Ingresa tus credenciales para acceder
+            Autenticación con Windows (Dominio gscorp.ad)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -59,37 +55,37 @@ export default function Login() {
             </Alert>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Usuario</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="TB12345"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={loading}
-                autoFocus
-              />
+          {loading ? (
+            <div className="flex flex-col items-center justify-center space-y-4 py-8">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground text-center">{status}</p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+          ) : (
+            <div className="flex flex-col items-center space-y-4 py-4">
+              <p className="text-sm text-muted-foreground text-center">
+                Haz clic en el botón para iniciar sesión con tu cuenta de Windows del dominio gscorp.ad
+              </p>
+              <Button
+                onClick={handleWindowsLogin}
+                className="w-full"
                 disabled={loading}
-              />
+                size="lg"
+              >
+                <img src={windows11Logo} alt="Windows 11" className="h-5 w-5 mr-2" />
+                Iniciar Sesión con Windows
+              </Button>
+              {error && (
+                <div className="text-xs text-muted-foreground text-center">
+                  <p className="mb-2">Verifica que:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Estés conectado al dominio gscorp.ad</li>
+                    <li>Tu usuario esté en la lista blanca</li>
+                    <li>Windows Authentication esté habilitado</li>
+                  </ul>
+                </div>
+              )}
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              Utiliza tu usuario y contraseña del sistema
-            </p>
-          </form>
+          )}
         </CardContent>
       </Card>
     </div>

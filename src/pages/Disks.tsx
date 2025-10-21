@@ -5,11 +5,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress';
 import { mockDisks } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
+import { useTableSort } from '@/hooks/use-table-sort';
 
 export default function Disks() {
   const criticalDisks = mockDisks.filter(d => d.pctFree < 10).length;
   const warningDisks = mockDisks.filter(d => d.pctFree >= 10 && d.pctFree < 20).length;
   const healthyDisks = mockDisks.filter(d => d.pctFree >= 20).length;
+
+  const { sortedData, requestSort, getSortIndicator } = useTableSort(mockDisks);
 
   const getDiskSeverity = (pctFree: number): 'critical' | 'warning' | 'success' => {
     if (pctFree < 10) return 'critical';
@@ -18,13 +21,13 @@ export default function Disks() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
       <div>
-        <h1 className="text-3xl font-bold">Espacio en Disco</h1>
-        <p className="text-muted-foreground mt-1">Monitoreo de almacenamiento por servidor</p>
+        <h1 className="text-2xl sm:text-3xl font-bold">Espacio en Disco</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">Monitoreo de almacenamiento por servidor</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <KPICard
           title="Discos Críticos"
           value={criticalDisks}
@@ -52,30 +55,55 @@ export default function Disks() {
         <CardHeader>
           <CardTitle>Detalle por Disco</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Servidor</TableHead>
-                <TableHead>Drive</TableHead>
-                <TableHead className="text-right">Total (GB)</TableHead>
-                <TableHead className="text-right">Libre (GB)</TableHead>
-                <TableHead className="text-right">% Libre</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('server')}
+                >
+                  Servidor {getSortIndicator('server')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('drive')}
+                >
+                  Drive {getSortIndicator('drive')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs text-right cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('totalGb')}
+                >
+                  Total (GB) {getSortIndicator('totalGb')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs text-right cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('freeGb')}
+                >
+                  Libre (GB) {getSortIndicator('freeGb')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs text-right cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('pctFree')}
+                >
+                  % Libre {getSortIndicator('pctFree')}
+                </TableHead>
+                <TableHead className="text-xs">Estado</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockDisks.map((disk, idx) => {
+              {sortedData.map((disk, idx) => {
                 const severity = getDiskSeverity(disk.pctFree);
                 const usedPct = 100 - disk.pctFree;
                 
                 return (
                   <TableRow key={idx}>
-                    <TableCell className="font-mono text-sm">{disk.server}</TableCell>
-                    <TableCell className="font-mono font-bold">{disk.drive}</TableCell>
-                    <TableCell className="text-right font-mono">{disk.totalGb}</TableCell>
-                    <TableCell className="text-right font-mono">{disk.freeGb}</TableCell>
-                    <TableCell className="text-right font-mono font-bold">
+                    <TableCell className="font-mono text-xs py-2">{disk.server}</TableCell>
+                    <TableCell className="font-mono text-xs font-bold py-2">{disk.drive}</TableCell>
+                    <TableCell className="text-right font-mono text-xs py-2">{disk.totalGb}</TableCell>
+                    <TableCell className="text-right font-mono text-xs py-2">{disk.freeGb}</TableCell>
+                    <TableCell className="text-right font-mono text-xs font-bold py-2">
                       <span className={cn({
                         'text-destructive': severity === 'critical',
                         'text-warning': severity === 'warning',
@@ -84,7 +112,7 @@ export default function Disks() {
                         {disk.pctFree.toFixed(1)}%
                       </span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2">
                       <div className="w-24">
                         <Progress 
                           value={usedPct} 

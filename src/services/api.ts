@@ -67,7 +67,6 @@ export interface UserDto {
 export interface CreateUserRequest {
   domainUser: string;
   displayName: string;
-  password: string;
   role: string;
 }
 
@@ -75,6 +74,37 @@ export interface UpdateUserRequest {
   displayName: string;
   role: string;
   active: boolean;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ActiveDirectoryUserDto {
+  samAccountName: string;
+  displayName: string;
+  email: string;
+  distinguishedName: string;
+}
+
+export interface GetGroupMembersResponse {
+  groupName: string;
+  count: number;
+  members: ActiveDirectoryUserDto[];
+}
+
+export interface ImportUsersFromGroupRequest {
+  groupName: string;
+  selectedUsernames: string[];
+  defaultRole: string;
+}
+
+export interface ImportUsersFromGroupResponse {
+  message: string;
+  imported: number;
+  skipped: number;
+  errors: string[];
 }
 
 export const authApi = {
@@ -85,6 +115,26 @@ export const authApi = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(credentials),
+    });
+    const data = await handleResponse<LoginResponse>(response);
+    
+    // Guardar token en localStorage
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify({
+        domainUser: data.domainUser,
+        displayName: data.displayName,
+        roles: data.roles,
+      }));
+    }
+    
+    return data;
+  },
+
+  async windowsLogin(): Promise<LoginResponse> {
+    const response = await fetch(`${API_URL}/api/auth/windows-login`, {
+      method: 'GET',
+      credentials: 'include', // Importante: enviar credenciales de Windows
     });
     const data = await handleResponse<LoginResponse>(response);
     
@@ -163,33 +213,108 @@ export const authApi = {
       throw new Error(error.message);
     }
   },
+
+  async changePassword(request: ChangePasswordRequest): Promise<void> {
+    const response = await fetch(`${API_URL}/api/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<void>(response);
+  },
+
+  async refreshSession(): Promise<LoginResponse> {
+    const response = await fetch(`${API_URL}/api/auth/refresh-session`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    
+    // Si el servidor responde 401, es porque el token no es válido
+    // En ese caso, no es un error fatal, simplemente no refrescamos
+    if (response.status === 401) {
+      throw new Error('Token no válido para refresh');
+    }
+    
+    const data = await handleResponse<LoginResponse>(response);
+    
+    // Actualizar token en localStorage
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify({
+        domainUser: data.domainUser,
+        displayName: data.displayName,
+        roles: data.roles,
+      }));
+    }
+    
+    return data;
+  },
+
+  async getAdGroupMembers(groupName: string): Promise<GetGroupMembersResponse> {
+    const response = await fetch(`${API_URL}/api/auth/ad-group-members?groupName=${encodeURIComponent(groupName)}`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<GetGroupMembersResponse>(response);
+  },
+
+  async importFromAdGroup(request: ImportUsersFromGroupRequest): Promise<ImportUsersFromGroupResponse> {
+    const response = await fetch(`${API_URL}/api/auth/import-from-ad-group`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<ImportUsersFromGroupResponse>(response);
+  },
 };
 
 // ==================== JOBS API ====================
 
 export interface JobDto {
-  server: string;
-  job: string;
-  lastStart: string;
-  lastEnd: string;
-  durationSec: number;
-  state: 'Succeeded' | 'Failed' | 'Running' | 'Canceled';
-  message: string;
+  id: number; // long en backend, pero number en TypeScript
+  instanceName: string;
+  ambiente: string;
+  hosting: string;
+  jobName: string;
+  jobEnabled: string;
+  jobStart: string | null;
+  jobEnd: string | null;
+  jobDurationSeconds: number;
+  executionStatus: string;
+  captureDate: string;
+  insertedAtUtc: string;
 }
 
 export interface JobSummaryDto {
-  okPct: number;
-  fails24h: number;
-  avgDurationSec: number;
-  p95Sec: number;
-  lastCapture: string;
+  totalJobs: number;
+  jobsSucceeded: number;
+  jobsFailed: number;
+  jobsStopped: number;
+  avgDurationMinutes: number;
+}
+
+export interface JobFiltersDto {
+  ambientes: string[];
+  hostings: string[];
+  instances: string[];
 }
 
 export const jobsApi = {
-  async getJobs(ambiente?: string, hosting?: string): Promise<JobDto[]> {
+  async getJobs(ambiente?: string, hosting?: string, instance?: string): Promise<JobDto[]> {
     const params = new URLSearchParams();
     if (ambiente && ambiente !== 'All') params.append('ambiente', ambiente);
     if (hosting && hosting !== 'All') params.append('hosting', hosting);
+    if (instance && instance !== 'All') params.append('instance', instance);
     
     const url = `${API_URL}/api/jobs${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await fetch(url, {
@@ -200,8 +325,14 @@ export const jobsApi = {
     return handleResponse<JobDto[]>(response);
   },
 
-  async getJobsSummary(): Promise<JobSummaryDto> {
-    const response = await fetch(`${API_URL}/api/jobs/summary`, {
+  async getJobsSummary(ambiente?: string, hosting?: string, instance?: string): Promise<JobSummaryDto> {
+    const params = new URLSearchParams();
+    if (ambiente && ambiente !== 'All') params.append('ambiente', ambiente);
+    if (hosting && hosting !== 'All') params.append('hosting', hosting);
+    if (instance && instance !== 'All') params.append('instance', instance);
+    
+    const url = `${API_URL}/api/jobs/summary${params.toString() ? `?${params.toString()}` : ''}`;
+    const response = await fetch(url, {
       headers: {
         ...getAuthHeader(),
       },
@@ -209,13 +340,81 @@ export const jobsApi = {
     return handleResponse<JobSummaryDto>(response);
   },
 
-  async getFailedJobs(limit: number = 5): Promise<JobDto[]> {
-    const response = await fetch(`${API_URL}/api/jobs/failed?limit=${limit}`, {
+  async getFilters(): Promise<JobFiltersDto> {
+    const response = await fetch(`${API_URL}/api/jobs/filters`, {
       headers: {
         ...getAuthHeader(),
       },
     });
-    return handleResponse<JobDto[]>(response);
+    return handleResponse<JobFiltersDto>(response);
+  },
+};
+
+// ==================== PERMISSIONS API ====================
+
+export interface RolePermissionDto {
+  role: string;
+  permissions: Record<string, boolean>;
+}
+
+export interface AvailableViewsDto {
+  views: ViewInfo[];
+  roles: string[];
+}
+
+export interface ViewInfo {
+  viewName: string;
+  displayName: string;
+  description: string;
+}
+
+export const permissionsApi = {
+  async getAllPermissions(): Promise<RolePermissionDto[]> {
+    const response = await fetch(`${API_URL}/api/permissions`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<RolePermissionDto[]>(response);
+  },
+
+  async getRolePermissions(role: string): Promise<RolePermissionDto> {
+    const response = await fetch(`${API_URL}/api/permissions/${role}`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<RolePermissionDto>(response);
+  },
+
+  async updateRolePermissions(role: string, permissions: Record<string, boolean>): Promise<void> {
+    const response = await fetch(`${API_URL}/api/permissions/${role}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ role, permissions }),
+    });
+    return handleResponse<void>(response);
+  },
+
+  async getAvailableViews(): Promise<AvailableViewsDto> {
+    const response = await fetch(`${API_URL}/api/permissions/available`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<AvailableViewsDto>(response);
+  },
+
+  async getMyPermissions(): Promise<{ permissions: string[] }> {
+    const response = await fetch(`${API_URL}/api/permissions/my-permissions`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<{ permissions: string[] }>(response);
   },
 };
 

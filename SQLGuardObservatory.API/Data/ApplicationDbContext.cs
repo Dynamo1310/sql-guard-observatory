@@ -6,6 +6,8 @@ namespace SQLGuardObservatory.API.Data;
 
 public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 {
+    public DbSet<RolePermission> RolePermissions { get; set; }
+
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
     {
@@ -21,6 +23,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.DomainUser).HasMaxLength(100);
             entity.Property(e => e.DisplayName).HasMaxLength(200);
         });
+
+        // Índice único para evitar duplicados de Role + ViewName
+        builder.Entity<RolePermission>()
+            .HasIndex(rp => new { rp.Role, rp.ViewName })
+            .IsUnique();
     }
 }
 

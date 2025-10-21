@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ProtectedRoute } from "@/components/routing/ProtectedRoute";
+import { DefaultRoute } from "@/components/routing/DefaultRoute";
 import Overview from "./pages/Overview";
 import Jobs from "./pages/Jobs";
 import Disks from "./pages/Disks";
@@ -12,6 +14,7 @@ import Databases from "./pages/Databases";
 import Backups from "./pages/Backups";
 import Indexes from "./pages/Indexes";
 import AdminUsers from "./pages/AdminUsers";
+import AdminPermissions from "./pages/AdminPermissions";
 import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
@@ -56,13 +59,48 @@ const App = () => (
               <AuthGate>
                 <Routes>
                   <Route element={<AppLayout />}>
-                    <Route path="/" element={<Overview />} />
-                    <Route path="/jobs" element={<Jobs />} />
-                    <Route path="/disks" element={<Disks />} />
-                    <Route path="/databases" element={<Databases />} />
-                    <Route path="/backups" element={<Backups />} />
-                    <Route path="/indexes" element={<Indexes />} />
-                    <Route path="/admin/users" element={<AdminUsers />} />
+                    <Route path="/" element={<DefaultRoute />} />
+                    <Route path="/overview" element={
+                      <ProtectedRoute viewName="Overview">
+                        <Overview />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/jobs" element={
+                      <ProtectedRoute viewName="Jobs">
+                        <Jobs />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/disks" element={
+                      <ProtectedRoute viewName="Disks">
+                        <Disks />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/databases" element={
+                      <ProtectedRoute viewName="Databases">
+                        <Databases />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/backups" element={
+                      <ProtectedRoute viewName="Backups">
+                        <Backups />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/indexes" element={
+                      <ProtectedRoute viewName="Indexes">
+                        <Indexes />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/admin/users" element={
+                      <ProtectedRoute viewName="AdminUsers">
+                        <AdminUsers />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/admin/permissions" element={
+                      <ProtectedRoute viewName="AdminPermissions">
+                        <AdminPermissions />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/unauthorized" element={<Unauthorized />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
                 </Routes>

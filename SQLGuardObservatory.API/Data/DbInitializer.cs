@@ -14,7 +14,7 @@ public static class DbInitializer
         await context.Database.EnsureCreatedAsync();
 
         // Crear roles
-        string[] roles = { "Admin", "Reader" };
+        string[] roles = { "SuperAdmin", "Admin", "Reader" };
         foreach (var roleName in roles)
         {
             if (!await roleManager.RoleExistsAsync(roleName))
@@ -43,13 +43,19 @@ public static class DbInitializer
             
             if (result.Succeeded)
             {
-                await userManager.AddToRoleAsync(adminUser, "Admin");
+                await userManager.AddToRoleAsync(adminUser, "SuperAdmin");
             }
         }
-        else if (!await userManager.IsInRoleAsync(existingUser, "Admin"))
+        else
         {
-            // Asegurar que TB03260 siempre sea Admin
-            await userManager.AddToRoleAsync(existingUser, "Admin");
+            // Asegurar que TB03260 siempre sea SuperAdmin
+            var userRoles = await userManager.GetRolesAsync(existingUser);
+            if (!userRoles.Contains("SuperAdmin"))
+            {
+                // Eliminar roles anteriores y asignar SuperAdmin
+                await userManager.RemoveFromRolesAsync(existingUser, userRoles);
+                await userManager.AddToRoleAsync(existingUser, "SuperAdmin");
+            }
         }
     }
 }

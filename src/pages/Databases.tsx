@@ -3,20 +3,23 @@ import { KPICard } from '@/components/dashboard/KPICard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { mockDatabases } from '@/lib/mockData';
+import { useTableSort } from '@/hooks/use-table-sort';
 
 export default function Databases() {
   const totalSize = mockDatabases.reduce((sum, db) => sum + db.totalGb, 0);
   const totalGrowth = mockDatabases.reduce((sum, db) => sum + db.growth7dGb, 0);
   const largestDb = Math.max(...mockDatabases.map(db => db.totalGb));
 
+  const { sortedData, requestSort, getSortIndicator } = useTableSort(mockDatabases);
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
       <div>
-        <h1 className="text-3xl font-bold">Bases de Datos</h1>
-        <p className="text-muted-foreground mt-1">Tamaño y crecimiento de bases de datos</p>
+        <h1 className="text-2xl sm:text-3xl font-bold">Bases de Datos</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">Tamaño y crecimiento de bases de datos</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <KPICard
           title="Tamaño Total"
           value={`${totalSize.toFixed(0)} GB`}
@@ -42,27 +45,57 @@ export default function Databases() {
         <CardHeader>
           <CardTitle>Detalle de Bases de Datos</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Servidor</TableHead>
-                <TableHead>Base de Datos</TableHead>
-                <TableHead className="text-right">Total (GB)</TableHead>
-                <TableHead className="text-right">Data (GB)</TableHead>
-                <TableHead className="text-right">Log (GB)</TableHead>
-                <TableHead className="text-right">Crecimiento 7d (GB)</TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('server')}
+                >
+                  Servidor {getSortIndicator('server')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('database')}
+                >
+                  Base de Datos {getSortIndicator('database')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs text-right cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('totalGb')}
+                >
+                  Total (GB) {getSortIndicator('totalGb')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs text-right cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('dataGb')}
+                >
+                  Data (GB) {getSortIndicator('dataGb')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs text-right cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('logGb')}
+                >
+                  Log (GB) {getSortIndicator('logGb')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs text-right cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('growth7dGb')}
+                >
+                  Crecimiento 7d (GB) {getSortIndicator('growth7dGb')}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockDatabases.map((db, idx) => (
+              {sortedData.map((db, idx) => (
                 <TableRow key={idx}>
-                  <TableCell className="font-mono text-sm">{db.server}</TableCell>
-                  <TableCell className="font-mono text-sm font-medium">{db.database}</TableCell>
-                  <TableCell className="text-right font-mono font-bold">{db.totalGb.toFixed(1)}</TableCell>
-                  <TableCell className="text-right font-mono">{db.dataGb.toFixed(1)}</TableCell>
-                  <TableCell className="text-right font-mono">{db.logGb.toFixed(1)}</TableCell>
-                  <TableCell className="text-right font-mono text-info">
+                  <TableCell className="font-mono text-xs py-2">{db.server}</TableCell>
+                  <TableCell className="font-mono text-xs font-medium py-2">{db.database}</TableCell>
+                  <TableCell className="text-right font-mono text-xs font-bold py-2">{db.totalGb.toFixed(1)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs py-2">{db.dataGb.toFixed(1)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs py-2">{db.logGb.toFixed(1)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs text-info py-2">
                     +{db.growth7dGb.toFixed(1)}
                   </TableCell>
                 </TableRow>

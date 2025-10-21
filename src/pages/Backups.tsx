@@ -5,11 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { mockBackups } from '@/lib/mockData';
+import { useTableSort } from '@/hooks/use-table-sort';
 
 export default function Backups() {
   const healthyBackups = mockBackups.filter(b => b.severity === 'green').length;
   const warningBackups = mockBackups.filter(b => b.severity === 'amber').length;
   const criticalBackups = mockBackups.filter(b => b.severity === 'red').length;
+
+  const { sortedData, requestSort, getSortIndicator } = useTableSort(mockBackups);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
@@ -28,13 +31,13 @@ export default function Backups() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
       <div>
-        <h1 className="text-3xl font-bold">Estado de Backups</h1>
-        <p className="text-muted-foreground mt-1">Monitoreo de respaldos y cumplimiento de RPO</p>
+        <h1 className="text-2xl sm:text-3xl font-bold">Estado de Backups</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">Monitoreo de respaldos y cumplimiento de RPO</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <KPICard
           title="Backups OK"
           value={healthyBackups}
@@ -62,35 +65,75 @@ export default function Backups() {
         <CardHeader>
           <CardTitle>Estado de Backups por Base de Datos</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Servidor</TableHead>
-                <TableHead>Base de Datos</TableHead>
-                <TableHead>Modelo</TableHead>
-                <TableHead>Último FULL</TableHead>
-                <TableHead>Último DIFF</TableHead>
-                <TableHead>Último LOG</TableHead>
-                <TableHead>RPO (min)</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('server')}
+                >
+                  Servidor {getSortIndicator('server')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('database')}
+                >
+                  Base de Datos {getSortIndicator('database')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('recoveryModel')}
+                >
+                  Modelo {getSortIndicator('recoveryModel')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('lastFull')}
+                >
+                  Último FULL {getSortIndicator('lastFull')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('lastDiff')}
+                >
+                  Último DIFF {getSortIndicator('lastDiff')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('lastLog')}
+                >
+                  Último LOG {getSortIndicator('lastLog')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('rpoMinutes')}
+                >
+                  RPO (min) {getSortIndicator('rpoMinutes')}
+                </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('severity')}
+                >
+                  Estado {getSortIndicator('severity')}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockBackups.map((backup, idx) => (
+              {sortedData.map((backup, idx) => (
                 <TableRow key={idx}>
-                  <TableCell className="font-mono text-sm">{backup.server}</TableCell>
-                  <TableCell className="font-mono text-sm font-medium">{backup.database}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-mono text-xs py-2">{backup.server}</TableCell>
+                  <TableCell className="font-mono text-xs font-medium py-2">{backup.database}</TableCell>
+                  <TableCell className="py-2">
                     <Badge variant="outline" className="font-mono text-xs">
                       {backup.recoveryModel}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{formatDate(backup.lastFull)}</TableCell>
-                  <TableCell className="font-mono text-xs">{formatDate(backup.lastDiff)}</TableCell>
-                  <TableCell className="font-mono text-xs">{formatDate(backup.lastLog)}</TableCell>
-                  <TableCell className="font-mono font-bold">{backup.rpoMinutes}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-mono text-xs py-2">{formatDate(backup.lastFull)}</TableCell>
+                  <TableCell className="font-mono text-xs py-2">{formatDate(backup.lastDiff)}</TableCell>
+                  <TableCell className="font-mono text-xs py-2">{formatDate(backup.lastLog)}</TableCell>
+                  <TableCell className="font-mono text-xs font-bold py-2">{backup.rpoMinutes}</TableCell>
+                  <TableCell className="py-2">
                     <StatusBadge status={getSeverityStatus(backup.severity)}>
                       {backup.severity === 'green' ? 'OK' : backup.severity === 'amber' ? 'Advertencia' : 'Crítico'}
                     </StatusBadge>

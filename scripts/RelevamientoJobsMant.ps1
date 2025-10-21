@@ -15,6 +15,11 @@ $SqlSchema   = "dbo"
 $SqlTable    = "InventarioJobsSnapshot"
 $TimeoutSec  = 90
 
+# ========= MODO DE PRUEBA =========
+$TestMode = $false  # Cambiar a $true para pruebas
+$TestLimit = 5      # Número máximo de instancias a procesar en modo prueba
+$TestOnlyAws = $false  # Si es $true, solo procesa instancias AWS en modo prueba
+
 # ========= VERIFICAR DBATOOLS =========
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Host "dbatools no está instalado. Instalando..." -ForegroundColor Yellow
@@ -53,10 +58,11 @@ BEGIN
         [Ambiente]             NVARCHAR(50)   NULL,
         [Hosting]              NVARCHAR(50)   NULL,
         [JobName]              NVARCHAR(256)  NOT NULL,
+        [JobEnabled]           NVARCHAR(20)   NULL,
         [JobStart]             DATETIME2(0)   NULL,
         [JobEnd]               DATETIME2(0)   NULL,
         [JobDurationSeconds]   INT            NULL,
-        [JobStatus]            NVARCHAR(50)   NULL,
+        [ExecutionStatus]      NVARCHAR(50)   NULL,
         [CaptureDate]          DATETIME2(0)   NOT NULL,
         [InsertedAtUtc]        DATETIME2(0)   NOT NULL DEFAULT SYSUTCDATETIME()
     );
@@ -75,7 +81,20 @@ Write-Host ""
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host " Relevamiento Jobs de Mantenimiento" -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
+if ($TestMode) {
+    Write-Host ""
+    Write-Host "⚠️  MODO DE PRUEBA ACTIVADO" -ForegroundColor Yellow
+    Write-Host "   Límite: $TestLimit instancias" -ForegroundColor Gray
+    if ($TestOnlyAws) {
+        Write-Host "   Solo AWS: SÍ" -ForegroundColor Gray
+            } else {
+        Write-Host "   Solo AWS: NO (todas)" -ForegroundColor Gray
+    }
+}
 Write-Host ""
+
+# Iniciar cronómetro
+$startTime = Get-Date
 
 # 1. Obtener inventario desde API
 Write-Host "[1/4] Consultando API..." -ForegroundColor Cyan
@@ -87,19 +106,34 @@ try {
     exit 1
 }
 
-# 2. Filtrar instancias (excluir AWS y DMZ)
+# 2. Filtrar instancias (solo excluir DMZ, incluir AWS)
 Write-Host ""
 Write-Host "[2/4] Aplicando filtros..." -ForegroundColor Cyan
 $instancesFiltered = $instances | Where-Object {
-    $hosting = [string]($_.hostingSite)
     $name1 = [string]($_.NombreInstancia)
     $name2 = [string]($_.ServerName)
     
-    ($hosting -notmatch '^(?i)aws$') -and 
     ($name1 -notmatch '(?i)DMZ') -and 
     ($name2 -notmatch '(?i)DMZ')
 }
-Write-Host "      ✓ $($instancesFiltered.Count) instancias a procesar" -ForegroundColor Green
+
+# Aplicar filtros de modo de prueba
+if ($TestMode) {
+    if ($TestOnlyAws) {
+        # Solo AWS
+        $instancesFiltered = $instancesFiltered | Where-Object {
+            $hosting = [string]($_.hostingSite)
+            $hosting -match '^(?i)aws$'
+        } | Select-Object -First $TestLimit
+        Write-Host "      ✓ $($instancesFiltered.Count) instancias AWS a procesar (MODO PRUEBA)" -ForegroundColor Yellow
+    } else {
+        # Primeras N instancias (mezcla de AWS y on-premise)
+        $instancesFiltered = $instancesFiltered | Select-Object -First $TestLimit
+        Write-Host "      ✓ $($instancesFiltered.Count) instancias a procesar (MODO PRUEBA)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "      ✓ $($instancesFiltered.Count) instancias a procesar (incluye AWS)" -ForegroundColor Green
+}
 
 if ($instancesFiltered.Count -eq 0) {
     Write-Warning "No hay instancias para procesar después del filtro"
@@ -136,17 +170,30 @@ foreach ($inst in $instancesFiltered) {
         continue
     }
     
-    Write-Host "[$counter/$($instancesFiltered.Count)] $instanceName" -NoNewline
+    # Detectar si es AWS usando el campo hostingSite de la API
+    $isAws = ($hosting -match '^(?i)aws$')
+    if ($isAws) {
+        Write-Host "[$counter/$($instancesFiltered.Count)] $instanceName [AWS]" -NoNewline
+    } else {
+        Write-Host "[$counter/$($instancesFiltered.Count)] $instanceName" -NoNewline
+    }
     
     try {
-        # Obtener agent jobs usando dbatools
-        $jobs = Get-DbaAgentJob -SqlInstance $instanceName -EnableException | Where-Object {
+        # Usar dbatools para todos (AWS y on-premise)
+        # Para AWS: los jobs pueden pertenecer al usuario 'admin' o master user
+        # Get-DbaAgentJob sin filtros trae TODOS los jobs sin importar el owner
+        $jobs = Get-DbaAgentJob -SqlInstance $instanceName -EnableException -ExcludeDisabled:$false | Where-Object {
             $_.Name -like '*IndexOptimize*' -or 
             $_.Name -like '*DatabaseIntegrityCheck*' -or 
             $_.Name -like '*Actualizacion_estadisticas*' -or
             $_.Name -like '*Actualizacion_estadísticas*' -or
             $_.Name -like '*Actualización_estadisticas*' -or
             $_.Name -like '*Actualización_estadísticas*'
+        }
+        
+        if ($TestMode -and $isAws -and $jobs) {
+            Write-Host "`n  └─ [DEBUG] Jobs encontrados en AWS: $($jobs.Count)" -ForegroundColor DarkGray
+            $jobs | ForEach-Object { Write-Host "      - $($_.Name) (Owner: $($_.OwnerLoginName))" -ForegroundColor DarkGray }
         }
         
         if (-not $jobs -or $jobs.Count -eq 0) {
@@ -158,8 +205,9 @@ foreach ($inst in $instancesFiltered) {
         $jobCount = 0
         foreach ($job in $jobs) {
             # Obtener última ejecución del job - ordenar por fecha descendente para obtener la más reciente
+            # Incluye todos los estados posibles: Succeeded, Failed, Canceled, Retry, Running/In Progress
             $lastRun = $job | Get-DbaAgentJobHistory -ExcludeJobSteps | 
-                       Where-Object { $_.Status -in @('Succeeded', 'Failed') } |
+                       Where-Object { $_.Status -in @('Succeeded', 'Failed', 'Canceled', 'Retry', 'Running', 'In Progress', 'InProgress') } |
                        Sort-Object RunDate -Descending |
                        Select-Object -First 1
             
@@ -181,7 +229,7 @@ foreach ($inst in $instancesFiltered) {
                         # Intentar convertir a int directamente
                         try {
                             $durationSeconds = [int]$lastRun.RunDuration
-                        } catch {
+    } catch {
                             $durationSeconds = $null
                         }
                     }
@@ -198,15 +246,19 @@ foreach ($inst in $instancesFiltered) {
                     Ambiente           = if ($ambiente) { $ambiente } else { $null }
                     Hosting            = if ($hosting) { $hosting } else { $null }
                     JobName            = $job.Name
+                    JobEnabled         = if ($job.IsEnabled) { 'Enabled' } else { 'Disabled' }
                     JobStart           = $lastRun.RunDate
                     JobEnd             = $jobEnd
                     JobDurationSeconds = $durationSeconds
-                    JobStatus          = switch ($lastRun.Status) {
-                        'Succeeded' { 'Succeeded' }
-                        'Failed'    { 'Failed' }
-                        'Retry'     { 'Retry' }
-                        'Canceled'  { 'Canceled' }
-                        default     { $lastRun.Status }
+                    ExecutionStatus    = switch ($lastRun.Status) {
+                        'Succeeded'   { 'Succeeded' }
+                        'Failed'      { 'Failed' }
+                        'Retry'       { 'Retry' }
+                        'Canceled'    { 'Canceled' }
+                        'Running'     { 'Running' }
+                        'In Progress' { 'In Progress' }
+                        'InProgress'  { 'In Progress' }
+                        default       { $lastRun.Status }
                     }
                     CaptureDate        = $captureTime
                 }
@@ -248,6 +300,19 @@ Write-Host "Total jobs insertados:  $($allResults.Count)" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Timestamp: $captureTime" -ForegroundColor Gray
 Write-Host ""
+
+# Calcular tiempo de ejecución
+$endTime = Get-Date
+$duration = $endTime - $startTime
+$durationFormatted = "{0:00}:{1:00}:{2:00}" -f $duration.Hours, $duration.Minutes, $duration.Seconds
+
+Write-Host "Tiempo de ejecución: $durationFormatted" -ForegroundColor Cyan
+Write-Host ""
+
+if ($TestMode) {
+    Write-Host "⚠️  Ejecutado en MODO DE PRUEBA" -ForegroundColor Yellow
+    Write-Host ""
+}
 
 if ($errorCount -eq 0) {
     Write-Host "✅ Proceso completado exitosamente" -ForegroundColor Green
