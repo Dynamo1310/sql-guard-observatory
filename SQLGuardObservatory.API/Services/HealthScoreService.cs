@@ -143,7 +143,8 @@ namespace SQLGuardObservatory.API.Services
                         // Discos
                         DiskSummary = new DiskSummary
                         {
-                            WorstFreePct = reader["DiskWorstFreePct"] != DBNull.Value ? Convert.ToDecimal(reader["DiskWorstFreePct"]) : 100
+                            WorstFreePct = reader["DiskWorstFreePct"] != DBNull.Value ? Convert.ToDecimal(reader["DiskWorstFreePct"]) : 100,
+                            Volumes = ParseDiskDetails(reader["DiskDetails"]?.ToString())
                         },
                         
                         // Recursos (v2.0: Incluye nuevas métricas)
@@ -428,6 +429,40 @@ namespace SQLGuardObservatory.API.Services
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Error al parsear JSON: {Json}", json?.Substring(0, Math.Min(100, json.Length)));
+                return null;
+            }
+        }
+
+        private static List<VolumeInfo>? ParseDiskDetails(string? diskDetails)
+        {
+            if (string.IsNullOrWhiteSpace(diskDetails))
+                return null;
+
+            try
+            {
+                // Formato: C:\|500.5|125.2|25,D:\|1000|750|75
+                var volumes = new List<VolumeInfo>();
+                var diskEntries = diskDetails.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+                foreach (var entry in diskEntries)
+                {
+                    var parts = entry.Split('|', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 4)
+                    {
+                        volumes.Add(new VolumeInfo
+                        {
+                            Drive = parts[0].Trim(),
+                            TotalGB = decimal.TryParse(parts[1], out var total) ? total : 0,
+                            FreeGB = decimal.TryParse(parts[2], out var free) ? free : 0,
+                            FreePct = decimal.TryParse(parts[3], out var pct) ? pct : 0
+                        });
+                    }
+                }
+
+                return volumes.Count > 0 ? volumes : null;
+            }
+            catch
+            {
                 return null;
             }
         }

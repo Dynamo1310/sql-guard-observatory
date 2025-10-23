@@ -826,17 +826,17 @@ export default function HealthScore() {
                                   </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-2 text-sm">
-                                  {score.diskSummary && (
+                                  {score.diskSummary && score.diskSummary.worstFreePct !== null && score.diskSummary.worstFreePct !== undefined ? (
                                     <>
                                       <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground">Peor Volumen</span>
                                         <span className={cn(
                                           'font-mono font-bold',
-                                          (score.diskSummary.worstVolumeFreePct || 0) < 10 && 'text-destructive',
-                                          (score.diskSummary.worstVolumeFreePct || 0) >= 10 && (score.diskSummary.worstVolumeFreePct || 0) < 20 && 'text-warning',
-                                          (score.diskSummary.worstVolumeFreePct || 0) >= 20 && 'text-success'
+                                          (score.diskSummary.worstFreePct || 0) < 10 && 'text-destructive',
+                                          (score.diskSummary.worstFreePct || 0) >= 10 && (score.diskSummary.worstFreePct || 0) < 20 && 'text-warning',
+                                          (score.diskSummary.worstFreePct || 0) >= 20 && 'text-success'
                                         )}>
-                                          {score.diskSummary.worstVolumeFreePct?.toFixed(1)}% libre
+                                          {score.diskSummary.worstFreePct?.toFixed(1)}% libre
                                         </span>
                                       </div>
                                       {score.diskSummary.volumes && score.diskSummary.volumes.length > 0 && (
@@ -862,6 +862,8 @@ export default function HealthScore() {
                                         </div>
                                       )}
                                     </>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">Sin datos de discos</p>
                                   )}
                                 </CardContent>
                               </Card>

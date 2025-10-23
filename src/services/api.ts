@@ -502,7 +502,7 @@ export interface HealthScoreDto {
     lastIndexOptimize?: string;
   };
   diskSummary?: {
-    worstVolumeFreePct?: number;
+    worstFreePct?: number;
     volumes?: Array<{
       drive?: string;
       totalGB?: number;

@@ -84,7 +84,8 @@ ORDER BY FreePct;
         if ($data) {
             $result.WorstFreePct = ($data | Measure-Object -Property FreePct -Minimum).Minimum
             $result.Details = $data | ForEach-Object {
-                "$($_.Drive):$($_.FreePct)%"
+                # Formato: C:\|500.5|125.2|25
+                "$($_.Drive)|$([Math]::Round($_.TotalGB, 2))|$([Math]::Round($_.FreeGB, 2))|$($_.FreePct)"
             }
         }
         

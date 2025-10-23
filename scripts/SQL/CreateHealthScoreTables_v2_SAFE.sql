@@ -328,6 +328,7 @@ SELECT
     a.AlwaysOnWorstState,
     a.CollectedAtUtc AS AvailabilityCollectedAt,
     r.DiskWorstFreePct,
+    r.DiskDetails,
     r.AvgReadLatencyMs,
     r.AvgWriteLatencyMs,
     r.MaxReadLatencyMs,
