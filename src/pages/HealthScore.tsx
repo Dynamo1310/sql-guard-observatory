@@ -154,41 +154,36 @@ export default function HealthScore() {
             <CardContent className="pt-0 space-y-4">
               <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
                 <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">
-                  📊 ¿Qué es el Health Score v2.0?
+                  Health Score v2.0 - Metodología de Evaluación
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Es un número <span className="font-bold text-foreground">de 0 a 150 puntos</span> que mide qué tan saludable está tu instancia SQL Server. 
-                  Piénsalo como un <span className="font-semibold">examen médico</span>: revisa conectividad, backups, recursos, mantenimiento y más.
+                  Métrica de <span className="font-bold text-foreground">0 a 150 puntos</span> que evalúa la salud de instancias SQL Server mediante 
+                  análisis de disponibilidad, continuidad, recursos y mantenimiento.
                 </p>
               </div>
 
-              {/* Explicación simple de estados */}
+              {/* Umbrales de estado */}
               <Card className="bg-gradient-to-r from-green-500/5 via-yellow-500/5 to-red-500/5 border-dashed">
                 <CardContent className="p-4">
-                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                    🎯 ¿Cómo interpretar el puntaje?
-                  </h4>
+                  <h4 className="font-semibold text-sm mb-3">Umbrales de Estado</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="bg-success/10 border border-success/30 rounded-lg p-3">
                       <CheckCircle2 className="h-6 w-6 text-success mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-success">✅ HEALTHY</p>
+                      <p className="text-center text-xs font-bold text-success">HEALTHY</p>
                       <p className="text-center text-lg font-mono font-bold text-success">135-150 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">(≥90% del máximo)</p>
-                      <p className="text-center text-xs text-muted-foreground mt-2">Todo funciona bien</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">≥90%</p>
                     </div>
                     <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
                       <AlertTriangle className="h-6 w-6 text-warning mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-warning">⚠️ WARNING</p>
+                      <p className="text-center text-xs font-bold text-warning">WARNING</p>
                       <p className="text-center text-lg font-mono font-bold text-warning">105-134 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">(70-89% del máximo)</p>
-                      <p className="text-center text-xs text-muted-foreground mt-2">Requiere atención</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">70-89%</p>
                     </div>
                     <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
                       <XCircle className="h-6 w-6 text-destructive mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-destructive">🚨 CRITICAL</p>
+                      <p className="text-center text-xs font-bold text-destructive">CRITICAL</p>
                       <p className="text-center text-lg font-mono font-bold text-destructive">{'<'}105 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">({'<'}70% del máximo)</p>
-                      <p className="text-center text-xs text-muted-foreground mt-2">Acción inmediata</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">{'<'}70%</p>
                     </div>
                   </div>
                 </CardContent>
@@ -196,11 +191,9 @@ export default function HealthScore() {
 
               {/* Tiers explicados */}
               <div className="space-y-2">
-                <h4 className="font-semibold text-sm flex items-center gap-2">
-                  <span>🔍</span> ¿Cómo se calculan los 150 puntos?
-                </h4>
+                <h4 className="font-semibold text-sm">Distribución por Categorías (Tiers)</h4>
                 <p className="text-xs text-muted-foreground mb-3">
-                  El score se divide en <span className="font-semibold text-foreground">4 categorías (Tiers)</span> según su importancia:
+                  Ponderación basada en impacto operacional y criticidad.
                 </p>
               </div>
 
@@ -214,54 +207,42 @@ export default function HealthScore() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <div>
-                          <h4 className="font-semibold text-sm">🚨 Tier 1: Disponibilidad</h4>
-                          <p className="text-xs text-muted-foreground">Lo más crítico - sin esto, nada funciona</p>
+                          <h4 className="font-semibold text-sm">Tier 1: Disponibilidad</h4>
+                          <p className="text-xs text-muted-foreground">Métricas críticas de acceso y respuesta</p>
                         </div>
                         <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-lg px-3">50 pts</Badge>
                       </div>
-                      <div className="grid gap-2 mt-3">
+                      <div className="grid gap-2 mt-3 text-xs">
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">🔌 Conectividad (20 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Puedo conectarme? ¿Responde rápido?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">20 pts</span>: Conecta + latencia ≤10ms (excelente)</li>
-                            <li>• <span className="text-warning font-medium">15-18 pts</span>: Conecta + latencia 10-100ms</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: No conecta o {'>'} 100ms</li>
+                          <span className="font-medium">Conectividad (20 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 20 pts: Conecta + latencia ≤10ms</li>
+                            <li>• 15-18 pts: Conecta + latencia 10-100ms</li>
+                            <li>• 0 pts: Sin conexión o latencia {'>'}100ms</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">🚫 Blocking (10 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Hay usuarios esperando bloqueados?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">10 pts</span>: 0 queries bloqueados ✅</li>
-                            <li>• <span className="text-warning font-medium">7 pts</span>: 1-3 bloqueados (tolerable)</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: 10+ bloqueados 💥</li>
+                          <span className="font-medium">Blocking (10 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 10 pts: 0 sesiones bloqueadas</li>
+                            <li>• 7 pts: 1-3 sesiones bloqueadas</li>
+                            <li>• 0 pts: 10+ sesiones bloqueadas</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">🧠 Memoria / PLE (10 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Hay suficiente RAM? (Page Life Expectancy)</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">10 pts</span>: PLE ≥300 seg (5+ min = excelente)</li>
-                            <li>• <span className="text-warning font-medium">3-7 pts</span>: PLE 100-299 seg</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: PLE {'<'}100 seg (memory pressure!)</li>
+                          <span className="font-medium">Page Life Expectancy (10 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 10 pts: PLE ≥300 seg</li>
+                            <li>• 3-7 pts: PLE 100-299 seg</li>
+                            <li>• 0 pts: PLE {'<'}100 seg</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">🔄 AlwaysOn (10 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Los nodos del AG están sincronizados?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">10 pts</span>: Sin AG (N/A) o sincronizado</li>
-                            <li>• <span className="text-warning font-medium">5 pts</span>: Parcialmente sincronizado</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: No sincronizado</li>
+                          <span className="font-medium">AlwaysOn Availability Groups (10 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 10 pts: N/A o sincronizado</li>
+                            <li>• 5 pts: Sincronización parcial</li>
+                            <li>• 0 pts: Desincronizado</li>
                           </ul>
                         </div>
                       </div>
@@ -280,36 +261,26 @@ export default function HealthScore() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <div>
-                          <h4 className="font-semibold text-sm">💾 Tier 2: Continuidad</h4>
-                          <p className="text-xs text-muted-foreground">¿Puedo recuperarme de un desastre?</p>
+                          <h4 className="font-semibold text-sm">Tier 2: Continuidad</h4>
+                          <p className="text-xs text-muted-foreground">Estrategia de backup y recuperación</p>
                         </div>
                         <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/20 text-lg px-3">40 pts</Badge>
                       </div>
-                      <div className="grid gap-2 mt-3">
+                      <div className="grid gap-2 mt-3 text-xs">
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">💾 FULL Backup (15 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Tengo backup completo reciente?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">15 pts</span>: Todas las DBs con backup {'<'}24h</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: Alguna DB sin backup o {'>'} 24h</li>
+                          <span className="font-medium">FULL Backup (15 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 15 pts: Todas las bases con backup {'<'}24h</li>
+                            <li>• 0 pts: Al menos una base sin backup {'>'}24h</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">📝 LOG Backup (15 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Tengo backup de logs reciente? (solo DBs FULL recovery)</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">15 pts</span>: Todas las DBs FULL con LOG {'<'}2h</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: Alguna DB FULL sin LOG o {'>'} 2h</li>
+                          <span className="font-medium">LOG Backup (15 pts)</span>
+                          <p className="text-muted-foreground mt-1">Aplica solo a bases en modo FULL recovery</p>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 15 pts: Todas las bases FULL con LOG {'<'}2h</li>
+                            <li>• 0 pts: Al menos una base FULL sin LOG {'>'}2h</li>
                           </ul>
-                        </div>
-                        <div className="bg-background/50 rounded p-2">
-                          <p className="text-xs text-muted-foreground italic">
-                            💡 <span className="font-semibold">Tip para juniors:</span> Los backups son tu seguro de vida. Sin ellos, un disco roto = pérdida total de datos.
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -327,51 +298,37 @@ export default function HealthScore() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <div>
-                          <h4 className="font-semibold text-sm">💻 Tier 3: Recursos</h4>
-                          <p className="text-xs text-muted-foreground">¿Tengo suficiente espacio e I/O rápido?</p>
+                          <h4 className="font-semibold text-sm">Tier 3: Recursos</h4>
+                          <p className="text-xs text-muted-foreground">Almacenamiento y rendimiento I/O</p>
                         </div>
                         <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 text-lg px-3">40 pts</Badge>
                       </div>
-                      <div className="grid gap-2 mt-3">
+                      <div className="grid gap-2 mt-3 text-xs">
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">💿 Disk Space (15 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Hay espacio libre en los discos?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">15 pts</span>: Peor disco ≥30% libre</li>
-                            <li>• <span className="text-warning font-medium">10 pts</span>: Peor disco 20-29% libre</li>
-                            <li>• <span className="text-warning font-medium">5 pts</span>: Peor disco 10-19% libre</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: Peor disco {'<'}10% libre 💥</li>
+                          <span className="font-medium">Disk Space (15 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 15 pts: Volumen más crítico ≥30% libre</li>
+                            <li>• 10 pts: 20-29% libre</li>
+                            <li>• 5 pts: 10-19% libre</li>
+                            <li>• 0 pts: {'<'}10% libre</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">⚡ IOPS / Latencia (15 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Los discos responden rápido?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">15 pts</span>: Latencia ≤10ms (SSD excelente)</li>
-                            <li>• <span className="text-success font-medium">12 pts</span>: Latencia 11-20ms (SSD normal)</li>
-                            <li>• <span className="text-warning font-medium">7 pts</span>: Latencia 21-50ms (HDD o SSD lento)</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: Latencia {'>'} 50ms (muy lento)</li>
+                          <span className="font-medium">IOPS / Latencia (15 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 15 pts: Latencia ≤10ms</li>
+                            <li>• 12 pts: 11-20ms</li>
+                            <li>• 7 pts: 21-50ms</li>
+                            <li>• 0 pts: {'>'}50ms</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">🐌 Query Performance (10 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Hay queries lentos ejecutándose ahora?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">10 pts</span>: 0 queries {'>'} 30 segundos</li>
-                            <li>• <span className="text-warning font-medium">7 pts</span>: 1-3 queries lentos</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: 10+ queries lentos</li>
+                          <span className="font-medium">Query Performance (10 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 10 pts: 0 queries {'>'}30 seg</li>
+                            <li>• 7 pts: 1-3 queries lentos</li>
+                            <li>• 0 pts: 10+ queries lentos</li>
                           </ul>
-                        </div>
-                        <div className="bg-background/50 rounded p-2">
-                          <p className="text-xs text-muted-foreground italic">
-                            💡 <span className="font-semibold">Tip para juniors:</span> Latencia {'<'}10ms = SSD, {'>'}20ms = probablemente HDD. IOPS bajo = usuarios esperando.
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -389,47 +346,34 @@ export default function HealthScore() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <div>
-                          <h4 className="font-semibold text-sm">🔧 Tier 4: Mantenimiento</h4>
-                          <p className="text-xs text-muted-foreground">¿El mantenimiento está al día?</p>
+                          <h4 className="font-semibold text-sm">Tier 4: Mantenimiento</h4>
+                          <p className="text-xs text-muted-foreground">Tareas preventivas y monitoreo</p>
                         </div>
                         <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-lg px-3">20 pts</Badge>
                       </div>
-                      <div className="grid gap-2 mt-3">
+                      <div className="grid gap-2 mt-3 text-xs">
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">🔍 CHECKDB (10 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Revisé integridad de datos?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">10 pts</span>: IntegrityCheck OK en últimos 7 días</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: Falló o {'>'} 7 días sin ejecutar</li>
+                          <span className="font-medium">DBCC CHECKDB (10 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 10 pts: Ejecutado y exitoso en últimos 7 días</li>
+                            <li>• 0 pts: Falló o sin ejecutar {'>'}7 días</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">🔧 IndexOptimize (5 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Optimicé los índices?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">5 pts</span>: IndexOptimize OK en últimos 7 días</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: Falló o {'>'} 7 días sin ejecutar</li>
+                          <span className="font-medium">Index Optimize (5 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 5 pts: Ejecutado y exitoso en últimos 7 días</li>
+                            <li>• 0 pts: Falló o sin ejecutar {'>'}7 días</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">⚠️ Errorlog (5 pts)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">¿Hay errores críticos en las últimas 24h?</p>
-                          <ul className="text-xs space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• <span className="text-success font-medium">5 pts</span>: 0 errores severity ≥20</li>
-                            <li>• <span className="text-warning font-medium">3 pts</span>: 1-2 errores severity ≥20</li>
-                            <li>• <span className="text-destructive font-medium">0 pts</span>: 3+ errores severity ≥20</li>
+                          <span className="font-medium">Error Log (5 pts)</span>
+                          <p className="text-muted-foreground mt-1">Severity ≥20 en últimas 24h</p>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 5 pts: 0 errores</li>
+                            <li>• 3 pts: 1-2 errores</li>
+                            <li>• 0 pts: 3+ errores</li>
                           </ul>
-                        </div>
-                        <div className="bg-background/50 rounded p-2">
-                          <p className="text-xs text-muted-foreground italic">
-                            💡 <span className="font-semibold">Tip para juniors:</span> Severity 20+ = errores MUY graves (corrupción, crashes, etc.). Si ves uno, léelo!
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -440,56 +384,27 @@ export default function HealthScore() {
               {/* Resumen visual */}
               <Card className="bg-blue-500/5 border-blue-500/20">
                 <CardContent className="p-4">
-                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                    <span>📊</span> Resumen: ¿Cómo se suman los puntos?
-                  </h4>
+                  <h4 className="font-semibold text-sm mb-3">Distribución Total</h4>
                   <div className="space-y-2 text-xs">
                     <div className="flex items-center justify-between bg-red-500/5 p-2 rounded">
-                      <span className="font-medium">🚨 Tier 1: Disponibilidad</span>
+                      <span className="font-medium">Tier 1: Disponibilidad</span>
                       <span className="font-mono font-bold text-red-500">50 pts (33%)</span>
                     </div>
                     <div className="flex items-center justify-between bg-orange-500/5 p-2 rounded">
-                      <span className="font-medium">💾 Tier 2: Continuidad</span>
+                      <span className="font-medium">Tier 2: Continuidad</span>
                       <span className="font-mono font-bold text-orange-500">40 pts (27%)</span>
                     </div>
                     <div className="flex items-center justify-between bg-yellow-500/5 p-2 rounded">
-                      <span className="font-medium">💻 Tier 3: Recursos</span>
+                      <span className="font-medium">Tier 3: Recursos</span>
                       <span className="font-mono font-bold text-yellow-500">40 pts (27%)</span>
                     </div>
                     <div className="flex items-center justify-between bg-green-500/5 p-2 rounded">
-                      <span className="font-medium">🔧 Tier 4: Mantenimiento</span>
+                      <span className="font-medium">Tier 4: Mantenimiento</span>
                       <span className="font-mono font-bold text-green-500">20 pts (13%)</span>
                     </div>
                     <div className="flex items-center justify-between bg-blue-500/10 p-3 rounded border-2 border-blue-500/30 mt-3">
-                      <span className="font-bold">TOTAL HEALTH SCORE</span>
-                      <span className="font-mono text-xl font-bold text-blue-500">150 pts (100%)</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Guía rápida de acción */}
-              <Card className="bg-gradient-to-r from-red-500/10 via-yellow-500/10 to-green-500/10 border-dashed">
-                <CardContent className="p-4">
-                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                    <span>🚨</span> Guía Rápida: ¿Qué hago si veo...?
-                  </h4>
-                  <div className="grid gap-2 text-xs">
-                    <div className="flex items-start gap-2 bg-destructive/5 p-2 rounded">
-                      <span className="font-bold text-destructive">{'<'}105 pts:</span>
-                      <span className="text-muted-foreground">Problema SERIO → Escalar a senior inmediatamente</span>
-                    </div>
-                    <div className="flex items-start gap-2 bg-warning/5 p-2 rounded">
-                      <span className="font-bold text-warning">105-119 pts:</span>
-                      <span className="text-muted-foreground">Investigar HOY → Fix en próximas horas</span>
-                    </div>
-                    <div className="flex items-start gap-2 bg-warning/5 p-2 rounded">
-                      <span className="font-bold text-warning">120-134 pts:</span>
-                      <span className="text-muted-foreground">Revisar breakdown → Planear fix en próximos días</span>
-                    </div>
-                    <div className="flex items-start gap-2 bg-success/5 p-2 rounded">
-                      <span className="font-bold text-success">135-150 pts:</span>
-                      <span className="text-muted-foreground">Todo bien ✅ → Monitoreo normal</span>
+                      <span className="font-bold">TOTAL</span>
+                      <span className="font-mono text-xl font-bold text-blue-500">150 pts</span>
                     </div>
                   </div>
                 </CardContent>
