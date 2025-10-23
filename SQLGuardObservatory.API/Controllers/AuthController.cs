@@ -236,46 +236,6 @@ public class AuthController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Refresca el token del usuario actual con los roles actualizados
-    /// </summary>
-    [HttpPost("refresh-session")]
-    [Authorize]
-    public async Task<IActionResult> RefreshSession()
-    {
-        try
-        {
-            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(new { message = "Usuario no autenticado" });
-            }
-
-            var userDto = await _authService.GetUserByIdAsync(userId);
-            
-            if (userDto == null || !userDto.Active)
-            {
-                return Unauthorized(new { message = "Usuario no encontrado o inactivo" });
-            }
-
-            // Re-autenticar al usuario para obtener un nuevo token con roles actualizados
-            var result = await _authService.AuthenticateWindowsUserAsync(userDto.DomainUser);
-            
-            if (result == null)
-            {
-                return Unauthorized(new { message = "No se pudo refrescar la sesión" });
-            }
-
-            _logger.LogInformation($"Sesión refrescada para usuario {userDto.DomainUser}");
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al refrescar sesión");
-            return StatusCode(500, new { message = "Error al refrescar la sesión" });
-        }
-    }
 
     /// <summary>
     /// Obtiene los miembros de un grupo de Active Directory

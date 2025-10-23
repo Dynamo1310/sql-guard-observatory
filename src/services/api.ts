@@ -26,6 +26,18 @@ interface ApiError {
 // Helper para manejar errores de la API
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
+    // Si es 401 (Unauthorized), el token expiró o es inválido
+    if (response.status === 401) {
+      // Limpiar sesión
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
+      // Redirigir al login
+      window.location.href = '/login';
+      
+      throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+    }
+    
     const error: ApiError = await response.json().catch(() => ({
       message: 'Error en la comunicación con el servidor'
     }));
@@ -226,34 +238,6 @@ export const authApi = {
     return handleResponse<void>(response);
   },
 
-  async refreshSession(): Promise<LoginResponse> {
-    const response = await fetch(`${API_URL}/api/auth/refresh-session`, {
-      method: 'POST',
-      headers: {
-        ...getAuthHeader(),
-      },
-    });
-    
-    // Si el servidor responde 401, es porque el token no es válido
-    // En ese caso, no es un error fatal, simplemente no refrescamos
-    if (response.status === 401) {
-      throw new Error('Token no válido para refresh');
-    }
-    
-    const data = await handleResponse<LoginResponse>(response);
-    
-    // Actualizar token en localStorage
-    if (data.token) {
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify({
-        domainUser: data.domainUser,
-        displayName: data.displayName,
-        roles: data.roles,
-      }));
-    }
-    
-    return data;
-  },
 
   async getAdGroupMembers(groupName: string): Promise<GetGroupMembersResponse> {
     const response = await fetch(`${API_URL}/api/auth/ad-group-members?groupName=${encodeURIComponent(groupName)}`, {
@@ -350,6 +334,80 @@ export const jobsApi = {
   },
 };
 
+// ==================== DISKS API ====================
+
+export interface DiskDto {
+  id: number;
+  instanceName: string;
+  ambiente?: string;
+  hosting?: string;
+  servidor: string;
+  drive: string;
+  totalGB?: number;
+  libreGB?: number;
+  porcentajeLibre?: number;
+  estado?: string;
+  captureDate: string;
+}
+
+export interface DiskSummaryDto {
+  discosCriticos: number;
+  discosAdvertencia: number;
+  discosSaludables: number;
+  totalDiscos: number;
+  ultimaCaptura?: string;
+}
+
+export interface DiskFiltersDto {
+  ambientes: string[];
+  hostings: string[];
+  instancias: string[];
+  estados: string[];
+}
+
+export const disksApi = {
+  async getDisks(ambiente?: string, hosting?: string, instance?: string, estado?: string): Promise<DiskDto[]> {
+    const params = new URLSearchParams();
+    if (ambiente && ambiente !== 'All') params.append('ambiente', ambiente);
+    if (hosting && hosting !== 'All') params.append('hosting', hosting);
+    if (instance && instance !== 'All') params.append('instance', instance);
+    if (estado && estado !== 'All') params.append('estado', estado);
+    
+    const url = `${API_URL}/api/disks${params.toString() ? `?${params.toString()}` : ''}`;
+    const response = await fetch(url, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<DiskDto[]>(response);
+  },
+
+  async getDisksSummary(ambiente?: string, hosting?: string, instance?: string, estado?: string): Promise<DiskSummaryDto> {
+    const params = new URLSearchParams();
+    if (ambiente && ambiente !== 'All') params.append('ambiente', ambiente);
+    if (hosting && hosting !== 'All') params.append('hosting', hosting);
+    if (instance && instance !== 'All') params.append('instance', instance);
+    if (estado && estado !== 'All') params.append('estado', estado);
+    
+    const url = `${API_URL}/api/disks/summary${params.toString() ? `?${params.toString()}` : ''}`;
+    const response = await fetch(url, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<DiskSummaryDto>(response);
+  },
+
+  async getFilters(): Promise<DiskFiltersDto> {
+    const response = await fetch(`${API_URL}/api/disks/filters`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<DiskFiltersDto>(response);
+  },
+};
+
 // ==================== PERMISSIONS API ====================
 
 export interface RolePermissionDto {
@@ -415,6 +473,120 @@ export const permissionsApi = {
       },
     });
     return handleResponse<{ permissions: string[] }>(response);
+  },
+};
+
+// ==================== HEALTHSCORE API ====================
+
+export interface HealthScoreDto {
+  instanceName: string;
+  ambiente?: string;
+  hostingSite?: string;
+  version?: string;
+  connectSuccess: boolean;
+  connectLatencyMs?: number;
+  healthScore: number;
+  healthStatus: 'Healthy' | 'Warning' | 'Critical';
+  generatedAtUtc: string;
+  // Detalles completos de JSON
+  backupSummary?: {
+    lastFullBackup?: string;
+    lastDiffBackup?: string;
+    lastLogBackup?: string;
+    breaches?: string[];
+  };
+  maintenanceSummary?: {
+    checkdbOk?: boolean;
+    indexOptimizeOk?: boolean;
+    lastCheckdb?: string;
+    lastIndexOptimize?: string;
+  };
+  diskSummary?: {
+    worstVolumeFreePct?: number;
+    volumes?: Array<{
+      drive?: string;
+      totalGB?: number;
+      freeGB?: number;
+      freePct?: number;
+    }>;
+  };
+  resourceSummary?: {
+    cpuHighFlag?: boolean;
+    memoryPressureFlag?: boolean;
+    rawCounters?: Record<string, number>;
+  };
+  alwaysOnSummary?: {
+    enabled?: boolean;
+    worstState?: string;
+    issues?: string[];
+  };
+  errorlogSummary?: {
+    severity20PlusCount24h?: number;
+    skipped?: boolean;
+  };
+}
+
+export interface HealthScoreSummaryDto {
+  totalInstances: number;
+  healthyCount: number;
+  warningCount: number;
+  criticalCount: number;
+  avgScore: number;
+  lastUpdate?: string;
+}
+
+export interface OverviewDataDto {
+  healthSummary: HealthScoreSummaryDto;
+  criticalDisksCount: number;
+  backupsOverdueCount: number;
+  maintenanceOverdueCount: number;
+  failedJobsCount: number;
+  criticalInstances: CriticalInstanceDto[];
+  backupIssues: BackupIssueDto[];
+}
+
+export interface CriticalInstanceDto {
+  instanceName: string;
+  ambiente: string | null;
+  healthScore: number;
+  healthStatus: string;
+  issues: string[];
+}
+
+export interface BackupIssueDto {
+  instanceName: string;
+  ambiente: string | null;
+  breaches: string[];
+  lastFullBackup: string | null;
+  lastLogBackup: string | null;
+}
+
+export const healthScoreApi = {
+  async getHealthScores(): Promise<HealthScoreDto[]> {
+    const response = await fetch(`${API_URL}/api/healthscore`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthScoreDto[]>(response);
+  },
+
+  async getHealthScoreSummary(): Promise<HealthScoreSummaryDto> {
+    const response = await fetch(`${API_URL}/api/healthscore/summary`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthScoreSummaryDto>(response);
+  },
+
+  async getOverviewData(): Promise<OverviewDataDto> {
+    const response = await fetch(`${API_URL}/api/healthscore/overview`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<OverviewDataDto>(response);
   },
 };
 

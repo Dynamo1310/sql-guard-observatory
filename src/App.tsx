@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute";
 import { DefaultRoute } from "@/components/routing/DefaultRoute";
 import Overview from "./pages/Overview";
+import HealthScore from "./pages/HealthScore";
 import Jobs from "./pages/Jobs";
 import Disks from "./pages/Disks";
 import Databases from "./pages/Databases";
@@ -63,6 +64,11 @@ const App = () => (
                     <Route path="/overview" element={
                       <ProtectedRoute viewName="Overview">
                         <Overview />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/healthscore" element={
+                      <ProtectedRoute viewName="HealthScore">
+                        <HealthScore />
                       </ProtectedRoute>
                     } />
                     <Route path="/jobs" element={

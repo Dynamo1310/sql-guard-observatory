@@ -58,7 +58,8 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+        ClockSkew = TimeSpan.Zero // Sin tolerancia - expiración estricta
     };
 })
 .AddNegotiate(options =>
@@ -75,9 +76,11 @@ builder.Services.AddAuthorization(options =>
 
 // Registrar servicios personalizados
 builder.Services.AddScoped<IJobsService, JobsService>();
+builder.Services.AddScoped<IDisksService, DisksService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IActiveDirectoryService, ActiveDirectoryService>();
+builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
 
 // Configurar CORS
 builder.Services.AddCors(options =>

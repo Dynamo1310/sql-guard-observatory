@@ -9,9 +9,10 @@ interface KPICardProps {
   description?: string;
   trend?: 'up' | 'down' | 'neutral';
   variant?: 'default' | 'success' | 'warning' | 'critical';
+  onClick?: () => void;
 }
 
-export function KPICard({ title, value, icon: Icon, description, trend, variant = 'default' }: KPICardProps) {
+export function KPICard({ title, value, icon: Icon, description, trend, variant = 'default', onClick }: KPICardProps) {
   const variantStyles = {
     default: 'border-border',
     success: 'border-success/30 shadow-glow',
@@ -20,7 +21,14 @@ export function KPICard({ title, value, icon: Icon, description, trend, variant 
   };
 
   return (
-    <Card className={cn('gradient-card shadow-card transition-smooth hover:shadow-glow', variantStyles[variant])}>
+    <Card 
+      className={cn(
+        'gradient-card shadow-card transition-smooth hover:shadow-glow', 
+        variantStyles[variant],
+        onClick && 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]'
+      )}
+      onClick={onClick}
+    >
       <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6">
         <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</CardTitle>
         <Icon className={cn('h-4 w-4 sm:h-5 sm:w-5', {

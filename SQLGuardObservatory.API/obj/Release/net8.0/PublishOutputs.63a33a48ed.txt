@@ -56,6 +56,7 @@ C:\Temp\Backend\Swashbuckle.AspNetCore.Swagger.dll
 C:\Temp\Backend\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\Temp\Backend\Swashbuckle.AspNetCore.SwaggerUI.dll
 C:\Temp\Backend\System.Configuration.ConfigurationManager.dll
+C:\Temp\Backend\System.Data.SqlClient.dll
 C:\Temp\Backend\System.Diagnostics.EventLog.dll
 C:\Temp\Backend\System.DirectoryServices.dll
 C:\Temp\Backend\System.DirectoryServices.AccountManagement.dll
@@ -71,6 +72,11 @@ C:\Temp\Backend\runtimes\win-arm\native\Microsoft.Data.SqlClient.SNI.dll
 C:\Temp\Backend\runtimes\win-arm64\native\Microsoft.Data.SqlClient.SNI.dll
 C:\Temp\Backend\runtimes\win-x64\native\Microsoft.Data.SqlClient.SNI.dll
 C:\Temp\Backend\runtimes\win-x86\native\Microsoft.Data.SqlClient.SNI.dll
+C:\Temp\Backend\runtimes\win-arm64\native\sni.dll
+C:\Temp\Backend\runtimes\win-x64\native\sni.dll
+C:\Temp\Backend\runtimes\win-x86\native\sni.dll
+C:\Temp\Backend\runtimes\unix\lib\net8.0\System.Data.SqlClient.dll
+C:\Temp\Backend\runtimes\win\lib\net8.0\System.Data.SqlClient.dll
 C:\Temp\Backend\runtimes\win\lib\net8.0\System.Diagnostics.EventLog.dll
 C:\Temp\Backend\runtimes\win\lib\net8.0\System.DirectoryServices.dll
 C:\Temp\Backend\runtimes\win\lib\net8.0\System.DirectoryServices.AccountManagement.dll

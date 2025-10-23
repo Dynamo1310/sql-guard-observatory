@@ -23,7 +23,7 @@ BEGIN
         [Ambiente]             NVARCHAR(50)   NULL,
         [Hosting]              NVARCHAR(50)   NULL,
         [Servidor]             NVARCHAR(128)  NOT NULL,
-        [Drive]                NVARCHAR(10)   NOT NULL,
+        [Drive]                NVARCHAR(255)  NOT NULL,
         [TotalGB]              DECIMAL(18,2)  NULL,
         [LibreGB]              DECIMAL(18,2)  NULL,
         [PorcentajeLibre]      DECIMAL(5,2)   NULL,

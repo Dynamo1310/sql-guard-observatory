@@ -15,6 +15,7 @@ public class PermissionService : IPermissionService
     private readonly Dictionary<string, ViewInfo> _availableViews = new()
     {
         { "Overview", new ViewInfo { ViewName = "Overview", DisplayName = "Overview", Description = "Vista general del sistema" } },
+        { "HealthScore", new ViewInfo { ViewName = "HealthScore", DisplayName = "HealthScore", Description = "Puntaje de salud de instancias SQL" } },
         { "Jobs", new ViewInfo { ViewName = "Jobs", DisplayName = "Jobs", Description = "Gestión de SQL Agent Jobs" } },
         { "Disks", new ViewInfo { ViewName = "Disks", DisplayName = "Discos", Description = "Monitoreo de discos" } },
         { "Databases", new ViewInfo { ViewName = "Databases", DisplayName = "Bases de Datos", Description = "Información de bases de datos" } },
@@ -127,6 +128,16 @@ public class PermissionService : IPermissionService
 
         var roles = await _userManager.GetRolesAsync(user);
         var userRole = roles.FirstOrDefault() ?? "Reader";
+
+        // SuperAdmin tiene acceso a TODAS las vistas
+        if (userRole == "SuperAdmin")
+        {
+            var allViews = await _context.RolePermissions
+                .Select(p => p.ViewName)
+                .Distinct()
+                .ToListAsync();
+            return allViews;
+        }
 
         var permissions = await _context.RolePermissions
             .Where(p => p.Role == userRole && p.Enabled)

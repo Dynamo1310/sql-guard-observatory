@@ -1,30 +1,25 @@
 /**
  * @file AuthContext.tsx
- * @description Contexto de autenticación con estrategia Lazy Refresh
+ * @description Contexto de autenticación simple con JWT
  * 
- * Estrategia de Refresh (Opción 2 - Profesional):
- * - ✅ Carga inicial rápida desde localStorage (UX inmediata)
- * - ✅ Refresh automático en segundo plano al cargar la app (F5)
- * - ✅ Refresh al volver a la pestaña (visibilitychange)
- * - ✅ Refresh manual después de editar usuarios (solo si es necesario)
- * - ✅ Throttling de 3 segundos para evitar spam
- * - ❌ NO refresca en navegaciones entre páginas (performance)
- * - ❌ NO usa polling automático (ahorro de recursos)
+ * Estrategia:
+ * - ✅ Carga desde localStorage al iniciar
+ * - ✅ Carga permisos desde backend
+ * - ✅ JWT stateless (no renovación automática)
+ * - ℹ️ Cambios de roles requieren cerrar sesión manualmente
  * 
  * @author SQL Guard Observatory Team
- * @see {@link https://github.com/yourusername/sql-guard-observatory}
  */
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '@/types';
-import { permissionsApi, authApi } from '@/services/api';
+import { permissionsApi } from '@/services/api';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
   checkAuth: () => Promise<void>;
-  refreshSession: () => Promise<void>;
   logout: () => void;
   isAdmin: boolean;
   isSuperAdmin: boolean;
@@ -34,25 +29,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ==================== CONFIGURACIÓN ====================
-
-/** Tiempo mínimo entre refreshes consecutivos (throttling) */
-const REFRESH_THROTTLE_MS = 3000;
-
-/** Delay inicial para refresh en segundo plano (no bloquear render) */
-const INITIAL_REFRESH_DELAY_MS = 500;
-
-// ==================== PROVIDER ====================
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
-  
-  // Refs para control de refreshes
-  const isRefreshing = useRef(false);
-  const lastRefreshTime = useRef<number>(0);
 
   /**
    * Carga los permisos del usuario actual desde el backend.
@@ -113,64 +94,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  /**
-   * Refresca la sesión del usuario actual obteniendo roles y permisos actualizados desde el backend.
-   * Implementa throttling para evitar múltiples llamadas innecesarias.
-   * 
-   * @remarks
-   * - Solo se ejecuta si han pasado al menos REFRESH_THROTTLE_MS desde el último refresh
-   * - Evita llamadas concurrentes con flag isRefreshing
-   * - Falla silenciosamente manteniendo el estado actual del usuario
-   */
-  const refreshSession = async (): Promise<void> => {
-    // Guardia: Evitar llamadas concurrentes
-    if (isRefreshing.current) {
-      return;
-    }
-    
-    // Guardia: Throttling para evitar spam
-    const now = Date.now();
-    const timeSinceLastRefresh = now - lastRefreshTime.current;
-    if (timeSinceLastRefresh < REFRESH_THROTTLE_MS) {
-      return;
-    }
-    
-    // Guardia: Verificar que hay token
-    const token = localStorage.getItem('token');
-    if (!token) {
-      return;
-    }
-
-    try {
-      isRefreshing.current = true;
-      lastRefreshTime.current = now;
-
-      // Obtener datos actualizados del backend
-      const refreshedData = await authApi.refreshSession();
-      
-      // Actualizar estado del usuario
-      setUser({
-        domainUser: refreshedData.domainUser,
-        displayName: refreshedData.displayName,
-        allowed: refreshedData.allowed,
-        roles: refreshedData.roles
-      });
-      
-      // Recargar permisos
-      await loadPermissions();
-      
-      console.log('[AuthContext] ✅ Sesión refrescada exitosamente');
-      
-    } catch (error: any) {
-      // Fallo silencioso: mantener estado actual del usuario
-      // Esto es normal si el token expiró o el usuario no está autenticado
-      if (error?.message !== 'Token no válido para refresh') {
-        console.warn('[AuthContext] Error al refrescar sesión (se mantiene sesión actual):', error?.message);
-      }
-    } finally {
-      isRefreshing.current = false;
-    }
-  };
 
   const logout = () => {
     localStorage.removeItem('token');
@@ -188,7 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Efecto de inicialización: solo carga datos de localStorage
+   * Efecto de inicialización: carga usuario y permisos al montar
    */
   useEffect(() => {
     checkAuth();
@@ -202,10 +125,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user, 
       loading, 
       error, 
-      checkAuth,
-      refreshSession,
+      checkAuth, 
       logout, 
-      isAdmin,
+      isAdmin, 
       isSuperAdmin,
       permissions,
       hasPermission

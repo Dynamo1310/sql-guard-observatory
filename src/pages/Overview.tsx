@@ -1,23 +1,50 @@
-import { Activity, HardDrive, Save, TrendingUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Activity, HardDrive, Save, Wrench, Heart, AlertTriangle } from 'lucide-react';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { mockJobSummary, mockJobs, mockDisks, mockDatabases, mockBackups } from '@/lib/mockData';
 import { useTableSort } from '@/hooks/use-table-sort';
+import { healthScoreApi, OverviewDataDto } from '@/services/api';
+import { useNavigate } from 'react-router-dom';
 
 export default function Overview() {
-  const criticalDisks = mockDisks.filter(d => d.pctFree < 15).length;
-  const failedBackups = mockBackups.filter(b => b.severity === 'red').length;
+  const navigate = useNavigate();
+  const [overviewData, setOverviewData] = useState<OverviewDataDto | null>(null);
+  const [loading, setLoading] = useState(true);
   
-  const topFailedJobs = mockJobs.filter(j => j.state === 'Failed').slice(0, 5);
-  const topDatabases = [...mockDatabases].sort((a, b) => b.totalGb - a.totalGb).slice(0, 5);
-  const overdueBackups = mockBackups.filter(b => b.severity !== 'green').slice(0, 5);
+  useEffect(() => {
+    fetchOverviewData();
+  }, []);
+
+  const fetchOverviewData = async () => {
+    try {
+      setLoading(true);
+      const data = await healthScoreApi.getOverviewData();
+      setOverviewData(data);
+    } catch (error) {
+      console.error('Error al cargar datos del overview:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Ordenamiento para cada tabla
-  const { sortedData: sortedFailedJobs, requestSort: requestSortJobs, getSortIndicator: getSortIndicatorJobs } = useTableSort(topFailedJobs);
-  const { sortedData: sortedDatabases, requestSort: requestSortDatabases, getSortIndicator: getSortIndicatorDatabases } = useTableSort(topDatabases);
-  const { sortedData: sortedBackups, requestSort: requestSortBackups, getSortIndicator: getSortIndicatorBackups } = useTableSort(overdueBackups);
+  const { sortedData: sortedCriticalInstances, requestSort: requestSortCritical, getSortIndicator: getSortIndicatorCritical } = useTableSort(overviewData?.criticalInstances || []);
+  const { sortedData: sortedBackupIssues, requestSort: requestSortBackups, getSortIndicator: getSortIndicatorBackups } = useTableSort(overviewData?.backupIssues || []);
+
+  if (loading) {
+    return (
+      <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold">Overview</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Cargando datos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const healthSummary = overviewData?.healthSummary;
 
   return (
     <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
@@ -26,41 +53,87 @@ export default function Overview() {
         <p className="text-sm sm:text-base text-muted-foreground mt-1">Panel de control - Estado general del sistema</p>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
         <KPICard
-          title="Jobs OK (24h)"
-          value={`${mockJobSummary.okPct}%`}
-          icon={Activity}
-          description={`${mockJobSummary.fails24h} fallos registrados`}
-          variant={mockJobSummary.okPct > 95 ? 'success' : mockJobSummary.okPct > 85 ? 'warning' : 'critical'}
+          title="Health Score"
+          value={healthSummary ? `${healthSummary.avgScore}` : '-'}
+          icon={Heart}
+          description={
+            healthSummary 
+              ? `${healthSummary.healthyCount} Healthy, ${healthSummary.warningCount} Warning, ${healthSummary.criticalCount} Critical` 
+              : 'Sin datos'
+          }
+          variant={
+            healthSummary 
+              ? healthSummary.avgScore >= 90 
+                ? 'success' 
+                : healthSummary.avgScore >= 70 
+                  ? 'warning' 
+                  : 'critical'
+              : 'default'
+          }
+          onClick={() => navigate('/healthscore')}
+        />
+        <KPICard
+          title="Mantenimiento Atrasado"
+          value={overviewData?.maintenanceOverdueCount || 0}
+          icon={Wrench}
+          description="CHECKDB o IndexOptimize vencido"
+          variant={
+            (overviewData?.maintenanceOverdueCount || 0) === 0 
+              ? 'success' 
+              : (overviewData?.maintenanceOverdueCount || 0) < 5 
+                ? 'warning' 
+                : 'critical'
+          }
+          onClick={() => navigate('/jobs')}
         />
         <KPICard
           title="Discos Críticos"
-          value={criticalDisks}
+          value={overviewData?.criticalDisksCount || 0}
           icon={HardDrive}
           description="Menos de 15% libre"
-          variant={criticalDisks === 0 ? 'success' : criticalDisks < 3 ? 'warning' : 'critical'}
+          variant={
+            (overviewData?.criticalDisksCount || 0) === 0 
+              ? 'success' 
+              : (overviewData?.criticalDisksCount || 0) < 3 
+                ? 'warning' 
+                : 'critical'
+          }
+          onClick={() => navigate('/disks')}
         />
         <KPICard
           title="Backups Atrasados"
-          value={failedBackups}
+          value={overviewData?.backupsOverdueCount || 0}
           icon={Save}
           description="RPO violado"
-          variant={failedBackups === 0 ? 'success' : failedBackups < 3 ? 'warning' : 'critical'}
+          variant={
+            (overviewData?.backupsOverdueCount || 0) === 0 
+              ? 'success' 
+              : (overviewData?.backupsOverdueCount || 0) < 3 
+                ? 'warning' 
+                : 'critical'
+          }
         />
         <KPICard
-          title="Tiempo Promedio Jobs"
-          value={`${Math.round(mockJobSummary.avgDurationSec / 60)}m`}
-          icon={TrendingUp}
-          description={`P95: ${Math.round(mockJobSummary.p95Sec / 60)}m`}
-          variant="default"
+          title="Instancias Críticas"
+          value={healthSummary?.criticalCount || 0}
+          icon={AlertTriangle}
+          description="Health Score < 70"
+          variant={
+            (healthSummary?.criticalCount || 0) === 0 
+              ? 'success' 
+              : (healthSummary?.criticalCount || 0) < 5 
+                ? 'warning' 
+                : 'critical'
+          }
         />
       </div>
 
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         <Card className="gradient-card shadow-card">
           <CardHeader>
-            <CardTitle>Top Jobs con Fallas</CardTitle>
+            <CardTitle>Instancias con Problemas Críticos</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
@@ -68,39 +141,50 @@ export default function Overview() {
                 <TableRow>
                   <TableHead 
                     className="text-xs cursor-pointer hover:bg-accent"
-                    onClick={() => requestSortJobs('job')}
+                    onClick={() => requestSortCritical('instanceName')}
                   >
-                    Job {getSortIndicatorJobs('job')}
+                    Instancia {getSortIndicatorCritical('instanceName')}
+                  </TableHead>
+                  <TableHead className="text-xs">
+                    Ambiente
                   </TableHead>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent"
-                    onClick={() => requestSortJobs('server')}
+                    className="text-xs cursor-pointer hover:bg-accent text-center"
+                    onClick={() => requestSortCritical('healthScore')}
                   >
-                    Servidor {getSortIndicatorJobs('server')}
+                    Score {getSortIndicatorCritical('healthScore')}
                   </TableHead>
-                  <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent"
-                    onClick={() => requestSortJobs('state')}
-                  >
-                    Estado {getSortIndicatorJobs('state')}
+                  <TableHead className="text-xs">
+                    Problemas
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedFailedJobs.length > 0 ? (
-                  sortedFailedJobs.map((job, idx) => (
+                {sortedCriticalInstances.length > 0 ? (
+                  sortedCriticalInstances.map((instance, idx) => (
                     <TableRow key={idx}>
-                      <TableCell className="font-mono text-xs py-2">{job.job}</TableCell>
-                      <TableCell className="font-mono text-xs py-2">{job.server}</TableCell>
+                      <TableCell className="font-mono text-xs py-2">{instance.instanceName}</TableCell>
                       <TableCell className="py-2">
-                        <StatusBadge status="critical">{job.state}</StatusBadge>
+                        <StatusBadge status={
+                          instance.ambiente?.toLowerCase().includes('prod') ? 'critical' :
+                          instance.ambiente?.toLowerCase().includes('test') ? 'warning' :
+                          'default'
+                        }>
+                          {instance.ambiente || 'N/A'}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell className="py-2 text-center">
+                        <StatusBadge status="critical">{instance.healthScore}</StatusBadge>
+                      </TableCell>
+                      <TableCell className="text-xs py-2">
+                        {instance.issues.length > 0 ? instance.issues.join(', ') : 'Sin detalles'}
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground">
-                      No hay fallas recientes
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      ✅ No hay instancias críticas
                     </TableCell>
                   </TableRow>
                 )}
@@ -111,7 +195,7 @@ export default function Overview() {
 
         <Card className="gradient-card shadow-card">
           <CardHeader>
-            <CardTitle>Bases Más Grandes</CardTitle>
+            <CardTitle>Backups Atrasados</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
@@ -119,106 +203,51 @@ export default function Overview() {
                 <TableRow>
                   <TableHead 
                     className="text-xs cursor-pointer hover:bg-accent"
-                    onClick={() => requestSortDatabases('database')}
+                    onClick={() => requestSortBackups('instanceName')}
                   >
-                    Base de Datos {getSortIndicatorDatabases('database')}
+                    Instancia {getSortIndicatorBackups('instanceName')}
                   </TableHead>
-                  <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent"
-                    onClick={() => requestSortDatabases('server')}
-                  >
-                    Servidor {getSortIndicatorDatabases('server')}
+                  <TableHead className="text-xs">
+                    Problemas
                   </TableHead>
-                  <TableHead 
-                    className="text-xs text-right cursor-pointer hover:bg-accent"
-                    onClick={() => requestSortDatabases('totalGb')}
-                  >
-                    Tamaño {getSortIndicatorDatabases('totalGb')}
+                  <TableHead className="text-xs">
+                    Último FULL
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedDatabases.map((db, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="font-mono text-xs py-2">{db.database}</TableCell>
-                    <TableCell className="font-mono text-xs py-2">{db.server}</TableCell>
-                    <TableCell className="text-right font-mono text-xs py-2">{db.totalGb.toFixed(1)} GB</TableCell>
+                {sortedBackupIssues.length > 0 ? (
+                  sortedBackupIssues.map((issue, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell className="font-mono text-xs py-2">{issue.instanceName}</TableCell>
+                      <TableCell className="text-xs py-2">
+                        {issue.breaches.length > 0 ? issue.breaches.join(', ') : 'Sin detalles'}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs py-2">
+                        {issue.lastFullBackup 
+                          ? new Date(issue.lastFullBackup).toLocaleString('es-AR', { 
+                              year: 'numeric', 
+                              month: '2-digit', 
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                          : 'Sin backup'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground">
+                      ✅ Todos los backups están al día
+                    </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       </div>
-
-      <Card className="gradient-card shadow-card">
-        <CardHeader>
-          <CardTitle>Backups Atrasados</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-            <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead 
-                  className="text-xs cursor-pointer hover:bg-accent"
-                  onClick={() => requestSortBackups('database')}
-                >
-                  Base de Datos {getSortIndicatorBackups('database')}
-                </TableHead>
-                <TableHead 
-                  className="text-xs cursor-pointer hover:bg-accent"
-                  onClick={() => requestSortBackups('server')}
-                >
-                  Servidor {getSortIndicatorBackups('server')}
-                </TableHead>
-                <TableHead 
-                  className="text-xs cursor-pointer hover:bg-accent"
-                  onClick={() => requestSortBackups('recoveryModel')}
-                >
-                  Tipo Faltante {getSortIndicatorBackups('recoveryModel')}
-                </TableHead>
-                <TableHead 
-                  className="text-xs cursor-pointer hover:bg-accent"
-                  onClick={() => requestSortBackups('rpoMinutes')}
-                >
-                  Edad RPO {getSortIndicatorBackups('rpoMinutes')}
-                </TableHead>
-                <TableHead 
-                  className="text-xs cursor-pointer hover:bg-accent"
-                  onClick={() => requestSortBackups('severity')}
-                >
-                  Estado {getSortIndicatorBackups('severity')}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedBackups.length > 0 ? (
-                sortedBackups.map((backup, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="font-mono text-xs py-2">{backup.database}</TableCell>
-                    <TableCell className="font-mono text-xs py-2">{backup.server}</TableCell>
-                    <TableCell className="text-xs py-2">
-                      {backup.recoveryModel === 'FULL' ? 'LOG' : 'FULL'}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs py-2">{backup.rpoMinutes}m</TableCell>
-                    <TableCell className="py-2">
-                      <StatusBadge status={backup.severity === 'red' ? 'critical' : 'warning'}>
-                        {backup.severity === 'red' ? 'Crítico' : 'Advertencia'}
-                      </StatusBadge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    Todos los backups están al día
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
   );
 }

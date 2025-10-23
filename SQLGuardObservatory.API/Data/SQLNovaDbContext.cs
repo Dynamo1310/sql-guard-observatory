@@ -11,6 +11,8 @@ public class SQLNovaDbContext : DbContext
     }
 
     public DbSet<InventarioJobsSnapshot> InventarioJobsSnapshot { get; set; }
+    public DbSet<InventarioDiscosSnapshot> InventarioDiscosSnapshot { get; set; }
+    public DbSet<InstanceHealthSnapshot> InstanceHealthSnapshots { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +22,18 @@ public class SQLNovaDbContext : DbContext
         {
             entity.ToTable("InventarioJobsSnapshot", "dbo");
             entity.HasKey(e => e.Id);
+        });
+
+        modelBuilder.Entity<InventarioDiscosSnapshot>(entity =>
+        {
+            entity.ToTable("InventarioDiscosSnapshot", "dbo");
+            entity.HasKey(e => e.Id);
+        });
+
+        modelBuilder.Entity<InstanceHealthSnapshot>(entity =>
+        {
+            entity.ToTable("InstanceHealthSnapshot", "dbo");
+            entity.HasKey(e => new { e.InstanceName, e.GeneratedAtUtc });
         });
     }
 }

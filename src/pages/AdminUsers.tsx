@@ -40,7 +40,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
 
 export default function AdminUsers() {
-  const { user: currentUser, isSuperAdmin, refreshSession } = useAuth();
+  const { user: currentUser, isSuperAdmin } = useAuth();
   const [users, setUsers] = useState<UserDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -162,12 +162,15 @@ export default function AdminUsers() {
       };
 
       await authApi.updateUser(selectedUser.id, request);
-      toast.success('Usuario actualizado exitosamente');
       
-      // Si el usuario editado es el usuario actual, refrescar la sesión para actualizar roles
-      if (currentUser?.domainUser === selectedUser.domainUser) {
-        await refreshSession();
-        toast.info('Tu sesión ha sido actualizada');
+      // Si se cambió el rol del usuario, mostrar mensaje informativo
+      const roleChanged = selectedUser.role !== formData.role;
+      if (roleChanged) {
+        toast.success('Usuario actualizado exitosamente', {
+          description: 'El usuario deberá cerrar sesión para que los cambios surtan efecto'
+        });
+      } else {
+        toast.success('Usuario actualizado exitosamente');
       }
       
       setShowEditDialog(false);

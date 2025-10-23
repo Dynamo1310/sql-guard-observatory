@@ -43,12 +43,32 @@ export interface Job {
 }
 
 export interface Disk {
-  server: string;
+  id: number;
+  instanceName: string;
+  ambiente?: string;
+  hosting?: string;
+  servidor: string;
   drive: string;
-  totalGb: number;
-  freeGb: number;
-  pctFree: number;
-  capturedAt: string;
+  totalGB?: number;
+  libreGB?: number;
+  porcentajeLibre?: number;
+  estado?: string;
+  captureDate: string;
+}
+
+export interface DiskSummary {
+  discosCriticos: number;
+  discosAdvertencia: number;
+  discosSaludables: number;
+  totalDiscos: number;
+  ultimaCaptura?: string;
+}
+
+export interface DiskFilters {
+  ambientes: string[];
+  hostings: string[];
+  instancias: string[];
+  estados: string[];
 }
 
 export interface Database {
@@ -90,4 +110,29 @@ export interface AdminUser {
   role: UserRole;
   active: boolean;
   createdAt: string;
+}
+
+export interface HealthScoreDto {
+  instanceName: string;
+  ambiente?: string;
+  hostingSite?: string;
+  version?: string;
+  connectSuccess: boolean;
+  connectLatencyMs?: number;
+  healthScore: number;
+  healthStatus: 'Healthy' | 'Warning' | 'Critical';
+  generatedAtUtc: string;
+  worstVolumeFreePct?: number;
+  backupBreachesCount?: number;
+  alwaysOnIssuesCount?: number;
+  severity20PlusCount24h?: number;
+}
+
+export interface HealthScoreSummaryDto {
+  totalInstances: number;
+  healthyCount: number;
+  warningCount: number;
+  criticalCount: number;
+  avgScore: number;
+  lastUpdate?: string;
 }

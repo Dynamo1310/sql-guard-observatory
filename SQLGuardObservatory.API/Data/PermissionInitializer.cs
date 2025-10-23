@@ -23,6 +23,7 @@ public static class PermissionInitializer
         var views = new[]
         {
             "Overview",
+            "HealthScore",
             "Jobs",
             "Disks",
             "Databases",

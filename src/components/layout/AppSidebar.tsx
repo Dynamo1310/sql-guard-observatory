@@ -1,4 +1,4 @@
-import { Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield } from 'lucide-react';
+import { Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import supvLogo from '/SUPV.png';
 import {
@@ -10,12 +10,15 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
 
 const mainItems = [
   { title: 'Overview', url: '/overview', icon: Home, permission: 'Overview' },
+  { title: 'HealthScore', url: '/healthscore', icon: Heart, permission: 'HealthScore' },
   { title: 'Jobs', url: '/jobs', icon: Activity, permission: 'Jobs' },
   { title: 'Discos', url: '/disks', icon: HardDrive, permission: 'Disks' },
   { title: 'Bases de Datos', url: '/databases', icon: Database, permission: 'Databases' },
@@ -33,8 +36,14 @@ const superAdminItems = [
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { isAdmin, isSuperAdmin, hasPermission } = useAuth();
+  const { isAdmin, isSuperAdmin, hasPermission, logout } = useAuth();
   const isCollapsed = state === 'collapsed';
+
+  const handleLogout = () => {
+    logout();
+    // Forzar redirección a login
+    window.location.href = '/login';
+  };
 
   // Filtrar items principales según permisos
   const visibleMainItems = mainItems.filter(item => hasPermission(item.permission));
@@ -42,8 +51,8 @@ export function AppSidebar() {
   // Filtrar items de admin según permisos
   const visibleAdminItems = isAdmin ? adminItems.filter(item => hasPermission(item.permission)) : [];
   
-  // Items de SuperAdmin solo para SuperAdmin
-  const visibleSuperAdminItems = isSuperAdmin ? superAdminItems : [];
+  // Items de SuperAdmin - verificar TAMBIÉN con hasPermission
+  const visibleSuperAdminItems = isSuperAdmin ? superAdminItems.filter(item => hasPermission(item.permission)) : [];
 
   return (
     <Sidebar collapsible="icon">
@@ -137,6 +146,23 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
+      
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Button
+                onClick={handleLogout}
+                variant="ghost"
+                className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="h-4 w-4" />
+                {!isCollapsed && <span>Cerrar Sesión</span>}
+              </Button>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }

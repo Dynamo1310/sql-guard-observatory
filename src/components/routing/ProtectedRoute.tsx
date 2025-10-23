@@ -1,4 +1,5 @@
 import { Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface ProtectedRouteProps {
@@ -13,6 +14,9 @@ interface ProtectedRouteProps {
  */
 export function ProtectedRoute({ children, viewName, redirectTo }: ProtectedRouteProps) {
   const { hasPermission, loading } = useAuth();
+  
+  // Nota: refreshSession() se llama manualmente solo cuando un Admin actualiza su propio perfil
+  // No lo llamamos automáticamente aquí para evitar errores 401 si el token expiró
 
   // Mostrar loading mientras se cargan los permisos
   if (loading) {
