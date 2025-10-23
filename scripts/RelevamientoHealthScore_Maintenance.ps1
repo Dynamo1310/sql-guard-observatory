@@ -213,6 +213,7 @@ WHERE rn = 1 OR rn IS NULL;
                 $result.CheckdbJobs += @{
                     JobName = $job.JobName
                     LastRun = $lastRun
+                    LastRunStatus = $job.LastRunStatus  # Agregar para sincronización
                     IsSuccess = $isSuccess
                     IsRecent = $isRecent
                 }
@@ -275,6 +276,7 @@ WHERE rn = 1 OR rn IS NULL;
                 $result.IndexOptimizeJobs += @{
                     JobName = $job.JobName
                     LastRun = $lastRun
+                    LastRunStatus = $job.LastRunStatus  # Agregar para sincronización
                     IsSuccess = $isSuccess
                     IsRecent = $isRecent
                 }
@@ -506,81 +508,84 @@ function Sync-AlwaysOnMaintenance {
             $allIndexOptimizeJobs += $nodeResult.IndexOptimizeJobs
         }
         
-        # === ENCONTRAR EL MEJOR CHECKDB (LÓGICA ORIGINAL) ===
-        # Agrupar jobs por nombre para evaluar cada TIPO de job independientemente
-        # Ejemplo: "IntegrityCheck-SYSTEM" y "IntegrityCheck-USER" se evalúan por separado
+        # === ENCONTRAR EL MEJOR CHECKDB (LÓGICA ORIGINAL EXACTA) ===
+        $allCheckdbOk = $true
         $bestCheckdb = $null
-        $checkdbOk = $true  # Asumimos OK, luego cambiamos si algún job no está OK
         $cutoffDate = (Get-Date).AddDays(-7)
         
         if ($allCheckdbJobs.Count -gt 0) {
-            # Agrupar por nombre de job
+            # Agrupar jobs por nombre (para evaluar cada tipo de job independientemente)
             $checkdbByName = $allCheckdbJobs | Group-Object -Property JobName
             
             foreach ($jobGroup in $checkdbByName) {
-                # Encontrar el más reciente de este TIPO de job
-                # Ordenar por fecha DESC, luego por status (Succeeded > Failed > Canceled)
+                # Encontrar el más reciente de este tipo de job
+                # Ordenar por tiempo de finalización DESC, luego por status (Succeeded > Failed > Canceled)
                 $mostRecentJob = $jobGroup.Group | Sort-Object `
                     @{Expression={$_.LastRun}; Descending=$true}, `
                     @{Expression={
-                        if ($_.IsSuccess -eq $true) { 0 }      # Succeeded - máxima prioridad
-                        else { 1 }                              # Failed/otros - menor prioridad
+                        if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - máxima prioridad
+                        elseif ($_.LastRunStatus -eq 0) { 1 }  # Failed - segunda prioridad
+                        elseif ($_.LastRunStatus -eq 3) { 2 }  # Canceled - tercera prioridad
+                        else { 3 }                              # Otros/SinDatos - menor prioridad
                     }; Descending=$false} | Select-Object -First 1
                 
-                # Si el más reciente de este TIPO NO está OK, marcar grupo como no OK
+                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
                 if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
-                    $checkdbOk = $false
+                    $allCheckdbOk = $false
                 }
                 
-                # Actualizar el más reciente GLOBAL (de todos los tipos)
+                # Actualizar el más reciente global
                 if ($mostRecentJob.LastRun -and (-not $bestCheckdb -or $mostRecentJob.LastRun -gt $bestCheckdb)) {
                     $bestCheckdb = $mostRecentJob.LastRun
                 }
             }
         } else {
-            $checkdbOk = $false
+            $allCheckdbOk = $false
         }
         
-        # === ENCONTRAR EL MEJOR INDEX OPTIMIZE (LÓGICA ORIGINAL) ===
+        # === ENCONTRAR EL MEJOR INDEX OPTIMIZE (LÓGICA ORIGINAL EXACTA) ===
+        $allIndexOptimizeOk = $true
         $bestIndexOptimize = $null
-        $indexOptimizeOk = $true  # Asumimos OK, luego cambiamos si algún job no está OK
         
         if ($allIndexOptimizeJobs.Count -gt 0) {
-            # Agrupar por nombre de job
+            # Agrupar jobs por nombre (para evaluar cada tipo de job independientemente)
             $indexOptByName = $allIndexOptimizeJobs | Group-Object -Property JobName
             
             foreach ($jobGroup in $indexOptByName) {
-                # Encontrar el más reciente de este TIPO de job
+                # Encontrar el más reciente de este tipo de job
+                # Ordenar por tiempo de finalización DESC, luego por status (Succeeded > Failed > Canceled)
                 $mostRecentJob = $jobGroup.Group | Sort-Object `
                     @{Expression={$_.LastRun}; Descending=$true}, `
                     @{Expression={
-                        if ($_.IsSuccess -eq $true) { 0 }      # Succeeded - máxima prioridad
-                        else { 1 }                              # Failed/otros - menor prioridad
+                        if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - máxima prioridad
+                        elseif ($_.LastRunStatus -eq 0) { 1 }  # Failed - segunda prioridad
+                        elseif ($_.LastRunStatus -eq 3) { 2 }  # Canceled - tercera prioridad
+                        else { 3 }                              # Otros/SinDatos - menor prioridad
                     }; Descending=$false} | Select-Object -First 1
                 
-                # Si el más reciente de este TIPO NO está OK, marcar grupo como no OK
+                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
                 if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
-                    $indexOptimizeOk = $false
+                    $allIndexOptimizeOk = $false
                 }
                 
-                # Actualizar el más reciente GLOBAL
+                # Actualizar el más reciente global
                 if ($mostRecentJob.LastRun -and (-not $bestIndexOptimize -or $mostRecentJob.LastRun -gt $bestIndexOptimize)) {
                     $bestIndexOptimize = $mostRecentJob.LastRun
                 }
             }
         } else {
-            $indexOptimizeOk = $false
+            $allIndexOptimizeOk = $false
         }
         
-        Write-Host "    🔄 Mejor CHECKDB: $bestCheckdb (OK: $checkdbOk)" -ForegroundColor Gray
-        Write-Host "    🔄 Mejor IndexOptimize: $bestIndexOptimize (OK: $indexOptimizeOk)" -ForegroundColor Gray
+        Write-Host "    🔄 Mejor CHECKDB: $bestCheckdb (OK: $allCheckdbOk)" -ForegroundColor Gray
+        Write-Host "    🔄 Mejor IndexOptimize: $bestIndexOptimize (OK: $allIndexOptimizeOk)" -ForegroundColor Gray
         
         # === APLICAR LOS MEJORES VALORES A TODOS LOS NODOS ===
         foreach ($nodeResult in $groupResults) {
             $nodeResult.LastCheckdb = $bestCheckdb
-            $nodeResult.CheckdbOk = $checkdbOk
+            $nodeResult.CheckdbOk = $allCheckdbOk
             $nodeResult.LastIndexOptimize = $bestIndexOptimize
-            $nodeResult.IndexOptimizeOk = $indexOptimizeOk
+            $nodeResult.IndexOptimizeOk = $allIndexOptimizeOk
             
             $syncedCount++
         }
