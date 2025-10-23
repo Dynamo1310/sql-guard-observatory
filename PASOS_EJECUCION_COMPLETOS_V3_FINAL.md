@@ -311,7 +311,9 @@ $response | Select-Object -First 1 | Format-List
 ☑️ PASO 6.2: Sincronización AG Backups verificada
 ☑️ PASO 6.3: Sincronización AG Maintenance verificada
 ☑️ PASO 6.4: DiskDetails verificados
+☑️ PASO 6.5: AlwaysOn verificado (debe haber instancias con Enabled = 1)
 ☑️ PASO 7: Frontend verificado visualmente
+☑️ PASO 7 (Adicional): AlwaysOn muestra correctamente "Habilitado" para instancias con AG
 ```
 
 ---
