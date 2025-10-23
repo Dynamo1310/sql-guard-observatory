@@ -152,12 +152,12 @@ export function HealthScoreTrendChart({ instanceName, hours = 24 }: Props) {
               strokeWidth={2}
               dot={{ r: 4 }}
               activeDot={{ r: 6 }}
-              name="Health Score"
-            />
-            {/* Línea de referencia en 70 (warning threshold) */*/}
-            <Line y={70} stroke="#eab308" strokeDasharray="5 5" strokeWidth={1} />
-            {/* Línea de referencia en 90 (healthy threshold) */}
-            <Line y={90} stroke="#22c55e" strokeDasharray="5 5" strokeWidth={1} />
+            name="Health Score"
+          />
+          {/* Línea de referencia en 70 (warning threshold) */}
+          <Line y={70} stroke="#eab308" strokeDasharray="5 5" strokeWidth={1} />
+          {/* Línea de referencia en 90 (healthy threshold) */}
+          <Line y={90} stroke="#22c55e" strokeDasharray="5 5" strokeWidth={1} />
           </LineChart>
         </ResponsiveContainer>
 
