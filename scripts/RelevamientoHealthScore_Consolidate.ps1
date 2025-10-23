@@ -251,6 +251,10 @@ LatestMaintenance AS (
 )
 SELECT 
     '$InstanceName' AS InstanceName,
+    -- Metadata
+    COALESCE(a.Ambiente, r.Ambiente, b.Ambiente, m.Ambiente, 'N/A') AS Ambiente,
+    COALESCE(a.HostingSite, r.HostingSite, b.HostingSite, m.HostingSite, 'N/A') AS HostingSite,
+    COALESCE(a.SqlVersion, r.SqlVersion, b.SqlVersion, m.SqlVersion, 'N/A') AS SqlVersion,
     -- Availability
     a.ConnectSuccess,
     a.ConnectLatencyMs,
@@ -335,6 +339,9 @@ function Save-HealthScore {
         $query = @"
 INSERT INTO dbo.InstanceHealth_Score (
     InstanceName,
+    Ambiente,
+    HostingSite,
+    SqlVersion,
     CollectedAtUtc,
     HealthScore,
     HealthStatus,
@@ -357,6 +364,9 @@ INSERT INTO dbo.InstanceHealth_Score (
     ErrorlogScore
 ) VALUES (
     '$($ScoreData.InstanceName)',
+    '$($ScoreData.Ambiente)',
+    '$($ScoreData.HostingSite)',
+    '$($ScoreData.SqlVersion)',
     GETUTCDATE(),
     $($ScoreData.HealthScore),
     '$($ScoreData.HealthStatus)',
@@ -504,6 +514,9 @@ foreach ($instanceName in $instances) {
     # Crear objeto con todos los scores
     $scoreData = [PSCustomObject]@{
         InstanceName = $instanceName
+        Ambiente = $data.Ambiente
+        HostingSite = $data.HostingSite
+        SqlVersion = $data.SqlVersion
         HealthScore = $totalScore
         HealthStatus = $healthStatus
         Tier1 = $tier1

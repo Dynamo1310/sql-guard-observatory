@@ -164,8 +164,13 @@ WHERE object_name LIKE '%Buffer Manager%'
             -EnableException
         
         if ($data) {
-            $result.PageLifeExpectancy = [int]$data.PageLifeExpectancy
-            $result.BufferCacheHitRatio = [decimal]$data.BufferCacheHitRatio
+            # Manejar DBNull correctamente
+            if ($data.PageLifeExpectancy -ne [DBNull]::Value -and $data.PageLifeExpectancy -ne $null) {
+                $result.PageLifeExpectancy = [int]$data.PageLifeExpectancy
+            }
+            if ($data.BufferCacheHitRatio -ne [DBNull]::Value -and $data.BufferCacheHitRatio -ne $null) {
+                $result.BufferCacheHitRatio = [decimal]$data.BufferCacheHitRatio
+            }
         }
         
     } catch {
@@ -367,6 +372,13 @@ foreach ($instance in $instances) {
     # Capturar metadata de la instancia desde API
     $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
     $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+    $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+    
+    # Capturar AlwaysOn desde API (si está disponible)
+    $alwaysOnFromAPI = $false
+    if ($instance.PSObject.Properties.Name -contains "AlwaysOn" -and $instance.AlwaysOn -eq "Enabled") {
+        $alwaysOnFromAPI = $true
+    }
     
     # Conectividad
     $connTest = Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec
@@ -393,22 +405,20 @@ foreach ($instance in $instances) {
         continue
     }
     
-    # Capturar versión de SQL Server
-    $sqlVersion = "N/A"
-    try {
-        $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(100)) AS Version"
-        $versionResult = Invoke-DbaQuery -SqlInstance $instanceName -Query $versionQuery -QueryTimeout 5 -EnableException -ErrorAction SilentlyContinue
-        if ($versionResult) {
-            $sqlVersion = $versionResult.Version
-        }
-    } catch {
-        # Si falla, usar N/A
-    }
-    
     # Recolectar métricas (solo si conecta)
     $blocking = Get-BlockingInfo -InstanceName $instanceName -TimeoutSec $TimeoutSec
     $memory = Get-MemoryPressure -InstanceName $instanceName -TimeoutSec $TimeoutSec
-    $alwaysOn = Get-AlwaysOnStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    
+    # Si AlwaysOn viene de la API, usarlo. Si no, consultar SQL Server
+    $alwaysOn = if ($alwaysOnFromAPI) {
+        @{
+            Enabled = $true
+            WorstState = "N/A (from API)"
+            Details = @()
+        }
+    } else {
+        Get-AlwaysOnStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    }
     
     $status = "✅"
     if ($blocking.BlockingCount -gt 10) { $status = "🚨 BLOCKING!" }

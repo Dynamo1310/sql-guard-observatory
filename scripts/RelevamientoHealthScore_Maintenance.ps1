@@ -345,6 +345,9 @@ function Write-ToSqlServer {
             $query = @"
 INSERT INTO dbo.InstanceHealth_Maintenance (
     InstanceName,
+    Ambiente,
+    HostingSite,
+    SqlVersion,
     CollectedAtUtc,
     LastCheckdb,
     CheckdbOk,
@@ -356,6 +359,9 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
     ErrorlogDetails
 ) VALUES (
     '$($row.InstanceName)',
+    '$($row.Ambiente)',
+    '$($row.HostingSite)',
+    '$($row.SqlVersion)',
     GETUTCDATE(),
     $lastCheckdb,
     $(if ($row.CheckdbOk) {1} else {0}),
@@ -440,6 +446,11 @@ foreach ($instance in $instances) {
         -Status "$counter de $($instances.Count): $instanceName" `
         -PercentComplete (($counter / $instances.Count) * 100)
     
+    # Capturar metadata de la instancia desde API
+    $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
+    $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+    $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+    
     # Verificar conectividad primero
     if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
         Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
@@ -462,6 +473,9 @@ foreach ($instance in $instances) {
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
+        Ambiente = $ambiente
+        HostingSite = $hostingSite
+        SqlVersion = $sqlVersion
         LastCheckdb = $maintenance.LastCheckdb
         CheckdbOk = $maintenance.CheckdbOk
         LastIndexOptimize = $maintenance.LastIndexOptimize
