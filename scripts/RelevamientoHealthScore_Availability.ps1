@@ -146,11 +146,15 @@ function Get-MemoryPressure {
     try {
         $query = @"
 SELECT 
-    counter_name,
-    cntr_value
+    MAX(CASE WHEN counter_name = 'Page life expectancy' THEN cntr_value ELSE 0 END) AS PageLifeExpectancy,
+    CAST(
+        MAX(CASE WHEN counter_name = 'Buffer cache hit ratio' THEN cntr_value ELSE 0 END) * 1.0 
+        / NULLIF(MAX(CASE WHEN counter_name = 'Buffer cache hit ratio base' THEN cntr_value ELSE 1 END), 0) * 100.0
+        AS DECIMAL(5,2)
+    ) AS BufferCacheHitRatio
 FROM sys.dm_os_performance_counters
-WHERE (counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manager%')
-   OR (counter_name = 'Buffer cache hit ratio' AND object_name LIKE '%Buffer Manager%');
+WHERE object_name LIKE '%Buffer Manager%'
+  AND counter_name IN ('Page life expectancy', 'Buffer cache hit ratio', 'Buffer cache hit ratio base');
 "@
         
         # Usar dbatools para ejecutar queries
@@ -159,13 +163,9 @@ WHERE (counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manag
             -QueryTimeout $TimeoutSec `
             -EnableException
         
-        foreach ($row in $data) {
-            if ($row.counter_name -like '*Page life expectancy*') {
-                $result.PageLifeExpectancy = [int]$row.cntr_value
-            }
-            elseif ($row.counter_name -like '*Buffer cache hit ratio*') {
-                $result.BufferCacheHitRatio = [decimal]$row.cntr_value
-            }
+        if ($data) {
+            $result.PageLifeExpectancy = [int]$data.PageLifeExpectancy
+            $result.BufferCacheHitRatio = [decimal]$data.BufferCacheHitRatio
         }
         
     } catch {
