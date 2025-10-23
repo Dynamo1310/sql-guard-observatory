@@ -35,16 +35,13 @@ namespace SQLGuardObservatory.API.Services
                         Tier3_Resources,
                         Tier4_Maintenance,
                         
-                        -- Breakdown detallado
+                        -- Breakdown detallado (v3.0 - 100 puntos)
                         ConnectivityScore,
-                        BlockingScore,
                         MemoryScore,
                         AlwaysOnScore,
                         FullBackupScore,
                         LogBackupScore,
                         DiskSpaceScore,
-                        IOPSScore,
-                        QueryPerformanceScore,
                         CheckdbScore,
                         IndexOptimizeScore,
                         ErrorlogScore,
@@ -109,16 +106,13 @@ namespace SQLGuardObservatory.API.Services
                         Tier3_Resources = reader["Tier3_Resources"] != DBNull.Value ? Convert.ToInt32(reader["Tier3_Resources"]) : null,
                         Tier4_Maintenance = reader["Tier4_Maintenance"] != DBNull.Value ? Convert.ToInt32(reader["Tier4_Maintenance"]) : null,
                         
-                        // v2.0: Breakdown detallado
+                        // v3.0: Breakdown detallado (100 puntos)
                         ConnectivityScore = reader["ConnectivityScore"] != DBNull.Value ? Convert.ToInt32(reader["ConnectivityScore"]) : null,
-                        BlockingScore = reader["BlockingScore"] != DBNull.Value ? Convert.ToInt32(reader["BlockingScore"]) : null,
                         MemoryScore = reader["MemoryScore"] != DBNull.Value ? Convert.ToInt32(reader["MemoryScore"]) : null,
                         AlwaysOnScore = reader["AlwaysOnScore"] != DBNull.Value ? Convert.ToInt32(reader["AlwaysOnScore"]) : null,
                         FullBackupScore = reader["FullBackupScore"] != DBNull.Value ? Convert.ToInt32(reader["FullBackupScore"]) : null,
                         LogBackupScore = reader["LogBackupScore"] != DBNull.Value ? Convert.ToInt32(reader["LogBackupScore"]) : null,
                         DiskSpaceScore = reader["DiskSpaceScore"] != DBNull.Value ? Convert.ToInt32(reader["DiskSpaceScore"]) : null,
-                        IOPSScore = reader["IOPSScore"] != DBNull.Value ? Convert.ToInt32(reader["IOPSScore"]) : null,
-                        QueryPerformanceScore = reader["QueryPerformanceScore"] != DBNull.Value ? Convert.ToInt32(reader["QueryPerformanceScore"]) : null,
                         CheckdbScore = reader["CheckdbScore"] != DBNull.Value ? Convert.ToInt32(reader["CheckdbScore"]) : null,
                         IndexOptimizeScore = reader["IndexOptimizeScore"] != DBNull.Value ? Convert.ToInt32(reader["IndexOptimizeScore"]) : null,
                         ErrorlogScore = reader["ErrorlogScore"] != DBNull.Value ? Convert.ToInt32(reader["ErrorlogScore"]) : null,

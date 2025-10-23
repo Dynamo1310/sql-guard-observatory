@@ -12,22 +12,19 @@ namespace SQLGuardObservatory.API.DTOs
         public string HealthStatus { get; set; } = string.Empty;
         public DateTime GeneratedAtUtc { get; set; }
         
-        // v2.0: Breakdown por Tiers (150 puntos)
+        // v3.0: Breakdown por Tiers (100 puntos)
         public int? Tier1_Availability { get; set; }
         public int? Tier2_Continuity { get; set; }
         public int? Tier3_Resources { get; set; }
         public int? Tier4_Maintenance { get; set; }
         
-        // v2.0: Breakdown detallado
+        // v3.0: Breakdown detallado (100 puntos)
         public int? ConnectivityScore { get; set; }
-        public int? BlockingScore { get; set; }
         public int? MemoryScore { get; set; }
         public int? AlwaysOnScore { get; set; }
         public int? FullBackupScore { get; set; }
         public int? LogBackupScore { get; set; }
         public int? DiskSpaceScore { get; set; }
-        public int? IOPSScore { get; set; }
-        public int? QueryPerformanceScore { get; set; }
         public int? CheckdbScore { get; set; }
         public int? IndexOptimizeScore { get; set; }
         public int? ErrorlogScore { get; set; }

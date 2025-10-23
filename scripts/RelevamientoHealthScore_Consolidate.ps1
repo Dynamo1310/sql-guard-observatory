@@ -69,32 +69,28 @@ $TimeoutSec = 30
 function Calculate-ConnectivityScore {
     param(
         [bool]$ConnectSuccess,
-        [int]$ConnectLatencyMs
+        [int]$ConnectLatencyMs,
+        [int]$BlockingCount
     )
     
-    # 15 puntos máximo (v3.0)
+    # 15 puntos máximo (v3.0) - Incluye conectividad + latencia + blocking
     if (-not $ConnectSuccess) { return 0 }
     
-    # Base: 12 pts por conectar
-    # Bonus: hasta 3 pts por latencia
-    $baseScore = 12
-    $latencyBonus = 0
+    # Base: 10 pts por conectar exitosamente
+    $baseScore = 10
     
+    # Bonus por latencia (hasta 3 pts)
+    $latencyBonus = 0
     if ($ConnectLatencyMs -le 10) { $latencyBonus = 3 }
     elseif ($ConnectLatencyMs -le 50) { $latencyBonus = 2 }
     elseif ($ConnectLatencyMs -le 100) { $latencyBonus = 1 }
     
-    return $baseScore + $latencyBonus
-}
-
-function Calculate-BlockingScore {
-    param([int]$BlockingCount)
+    # Bonus por ausencia de blocking (hasta 2 pts)
+    $blockingBonus = 0
+    if ($BlockingCount -eq 0) { $blockingBonus = 2 }
+    elseif ($BlockingCount -le 3) { $blockingBonus = 1 }
     
-    # 10 puntos máximo
-    if ($BlockingCount -eq 0) { return 10 }
-    if ($BlockingCount -le 3) { return 7 }
-    if ($BlockingCount -le 10) { return 3 }
-    return 0
+    return $baseScore + $latencyBonus + $blockingBonus
 }
 
 function Calculate-MemoryScore {
@@ -113,70 +109,58 @@ function Calculate-AlwaysOnScore {
         [string]$AlwaysOnWorstState
     )
     
-    # 6 puntos máximo (v3.0)
-    if (-not $AlwaysOnEnabled) { return 6 }  # N/A = OK
+    # 15 puntos máximo (v3.0)
+    if (-not $AlwaysOnEnabled) { return 15 }  # N/A = OK
     
     switch ($AlwaysOnWorstState) {
-        "HEALTHY" { return 6 }
-        "WARNING" { return 3 }
+        "HEALTHY" { return 15 }
+        "WARNING" { return 7 }
         "CRITICAL" { return 0 }
-        default { return 6 }
+        default { return 15 }
     }
 }
 
 function Calculate-FullBackupScore {
     param([bool]$FullBackupBreached)
     
-    # 12 puntos máximo (v3.0)
-    if ($FullBackupBreached) { return 0 } else { return 12 }
+    # 15 puntos máximo (v3.0)
+    if ($FullBackupBreached) { return 0 } else { return 15 }
 }
 
 function Calculate-LogBackupScore {
     param([bool]$LogBackupBreached)
     
-    # 12 puntos máximo (v3.0)
-    if ($LogBackupBreached) { return 0 } else { return 12 }
+    # 15 puntos máximo (v3.0)
+    if ($LogBackupBreached) { return 0 } else { return 15 }
 }
 
 function Calculate-DiskSpaceScore {
-    param([int]$DiskWorstFreePct)
-    
-    # 10 puntos máximo (v3.0)
-    if ($DiskWorstFreePct -ge 30) { return 10 }
-    if ($DiskWorstFreePct -ge 20) { return 7 }
-    if ($DiskWorstFreePct -ge 10) { return 3 }
-    return 0  # Crítico
-}
-
-function Calculate-IOPSScore {
     param(
+        [int]$DiskWorstFreePct,
         [decimal]$AvgReadLatencyMs,
         [decimal]$AvgWriteLatencyMs
     )
     
-    # 8 puntos máximo (v3.0)
-    $avgLatency = ($AvgReadLatencyMs + $AvgWriteLatencyMs) / 2
+    # 20 puntos máximo (v3.0) - Incluye espacio en disco + IOPS/latencia
     
-    if ($avgLatency -eq 0) { return 8 }  # Sin datos = OK
-    if ($avgLatency -le 10) { return 8 }  # Excelente (SSD)
-    if ($avgLatency -le 20) { return 6 }  # Bueno
-    if ($avgLatency -le 50) { return 3 }  # Aceptable (HDD)
-    return 0  # Crítico
-}
-
-function Calculate-QueryPerformanceScore {
-    param(
-        [int]$SlowQueriesCount,
-        [int]$LongRunningCount
-    )
+    # Componente 1: Espacio en disco (hasta 12 pts)
+    $spaceScore = 0
+    if ($DiskWorstFreePct -ge 30) { $spaceScore = 12 }
+    elseif ($DiskWorstFreePct -ge 20) { $spaceScore = 9 }
+    elseif ($DiskWorstFreePct -ge 10) { $spaceScore = 4 }
     
-    # 7 puntos máximo (v3.0)
-    $totalSlow = $SlowQueriesCount + $LongRunningCount
+    # Componente 2: Latencia de I/O (hasta 8 pts)
+    $latencyScore = 0
+    if ($AvgReadLatencyMs -eq 0 -and $AvgWriteLatencyMs -eq 0) {
+        $latencyScore = 8  # Sin datos = OK
+    } else {
+        $avgLatency = ($AvgReadLatencyMs + $AvgWriteLatencyMs) / 2
+        if ($avgLatency -le 10) { $latencyScore = 8 }  # Excelente (SSD)
+        elseif ($avgLatency -le 20) { $latencyScore = 6 }  # Bueno
+        elseif ($avgLatency -le 50) { $latencyScore = 3 }  # Aceptable (HDD)
+    }
     
-    if ($totalSlow -eq 0) { return 7 }
-    if ($totalSlow -le 3) { return 5 }
-    if ($totalSlow -le 10) { return 2 }
-    return 0
+    return $spaceScore + $latencyScore
 }
 
 function Calculate-CheckdbScore {
@@ -350,14 +334,11 @@ INSERT INTO dbo.InstanceHealth_Score (
     Tier3_Resources,
     Tier4_Maintenance,
     ConnectivityScore,
-    BlockingScore,
     MemoryScore,
+    AlwaysOnScore,
     FullBackupScore,
     LogBackupScore,
-    AlwaysOnScore,
     DiskSpaceScore,
-    IOPSScore,
-    QueryPerformanceScore,
     CheckdbScore,
     IndexOptimizeScore,
     ErrorlogScore
@@ -374,14 +355,11 @@ INSERT INTO dbo.InstanceHealth_Score (
     $($ScoreData.Tier3),
     $($ScoreData.Tier4),
     $($ScoreData.ConnectivityScore),
-    $($ScoreData.BlockingScore),
     $($ScoreData.MemoryScore),
+    $($ScoreData.AlwaysOnScore),
     $($ScoreData.FullBackupScore),
     $($ScoreData.LogBackupScore),
-    $($ScoreData.AlwaysOnScore),
     $($ScoreData.DiskSpaceScore),
-    $($ScoreData.IOPSScore),
-    $($ScoreData.QueryPerformanceScore),
     $($ScoreData.CheckdbScore),
     $($ScoreData.IndexOptimizeScore),
     $($ScoreData.ErrorlogScore)
@@ -449,12 +427,14 @@ foreach ($instanceName in $instances) {
     }
     
     # Calcular scores individuales
+    # Calcular scores individuales (v3.0 - 100 puntos)
     $connectivityScore = Calculate-ConnectivityScore `
         -ConnectSuccess $data.ConnectSuccess `
-        -ConnectLatencyMs $data.ConnectLatencyMs
+        -ConnectLatencyMs $data.ConnectLatencyMs `
+        -BlockingCount $data.BlockingCount
     
-    $blockingScore = Calculate-BlockingScore -BlockingCount $data.BlockingCount
     $memoryScore = Calculate-MemoryScore -PageLifeExpectancy $data.PageLifeExpectancy
+    
     $alwaysOnScore = Calculate-AlwaysOnScore `
         -AlwaysOnEnabled $data.AlwaysOnEnabled `
         -AlwaysOnWorstState $data.AlwaysOnWorstState
@@ -462,27 +442,24 @@ foreach ($instanceName in $instances) {
     $fullBackupScore = Calculate-FullBackupScore -FullBackupBreached $data.FullBackupBreached
     $logBackupScore = Calculate-LogBackupScore -LogBackupBreached $data.LogBackupBreached
     
-    $diskScore = Calculate-DiskSpaceScore -DiskWorstFreePct $data.DiskWorstFreePct
-    $iopsScore = Calculate-IOPSScore `
+    $diskScore = Calculate-DiskSpaceScore `
+        -DiskWorstFreePct $data.DiskWorstFreePct `
         -AvgReadLatencyMs $data.AvgReadLatencyMs `
         -AvgWriteLatencyMs $data.AvgWriteLatencyMs
-    $queryScore = Calculate-QueryPerformanceScore `
-        -SlowQueriesCount $data.SlowQueriesCount `
-        -LongRunningCount $data.LongRunningQueriesCount
     
     $checkdbScore = Calculate-CheckdbScore -CheckdbOk $data.CheckdbOk
     $indexOptScore = Calculate-IndexOptimizeScore -IndexOptimizeOk $data.IndexOptimizeOk
     $errorlogScore = Calculate-ErrorlogScore -Severity20PlusCount $data.Severity20PlusCount
     
     # Calcular totales por tier (v3.0 - 100 puntos)
-    # Tier 1: Disponibilidad (35 pts) - Conectividad=15, Blocking=10, Memoria=10
-    $tier1 = $connectivityScore + $blockingScore + $memoryScore  # 35 pts max
+    # Tier 1: Disponibilidad (40 pts) - Conectividad=15, Memoria=10, AlwaysOn=15
+    $tier1 = $connectivityScore + $memoryScore + $alwaysOnScore  # 40 pts max
     
-    # Tier 2: Continuidad (30 pts) - FullBackup=12, LogBackup=12, AlwaysOn=6
-    $tier2 = $fullBackupScore + $logBackupScore + $alwaysOnScore  # 30 pts max
+    # Tier 2: Continuidad (30 pts) - FullBackup=15, LogBackup=15
+    $tier2 = $fullBackupScore + $logBackupScore  # 30 pts max
     
-    # Tier 3: Performance & Recursos (25 pts) - Disk=10, IOPS=8, Queries=7
-    $tier3 = $diskScore + $iopsScore + $queryScore  # 25 pts max
+    # Tier 3: Recursos (20 pts) - Discos=20 (incluye espacio + IOPS)
+    $tier3 = $diskScore  # 20 pts max
     
     # Tier 4: Mantenimiento (10 pts) - CHECKDB=4, Index=3, Errorlog=3
     $tier4 = $checkdbScore + $indexOptScore + $errorlogScore  # 10 pts max
@@ -499,7 +476,7 @@ foreach ($instanceName in $instances) {
     
     Write-Host "   $statusIcon $instanceName - Score: $totalScore/100 ($healthStatus) [T1:$tier1 T2:$tier2 T3:$tier3 T4:$tier4]" -ForegroundColor Gray
     
-    # Crear objeto con todos los scores
+    # Crear objeto con todos los scores (v3.0 - 100 puntos)
     $scoreData = [PSCustomObject]@{
         InstanceName = $instanceName
         Ambiente = $data.Ambiente
@@ -512,14 +489,11 @@ foreach ($instanceName in $instances) {
         Tier3 = $tier3
         Tier4 = $tier4
         ConnectivityScore = $connectivityScore
-        BlockingScore = $blockingScore
         MemoryScore = $memoryScore
         AlwaysOnScore = $alwaysOnScore
         FullBackupScore = $fullBackupScore
         LogBackupScore = $logBackupScore
         DiskSpaceScore = $diskScore
-        IOPSScore = $iopsScore
-        QueryPerformanceScore = $queryScore
         CheckdbScore = $checkdbScore
         IndexOptimizeScore = $indexOptScore
         ErrorlogScore = $errorlogScore
