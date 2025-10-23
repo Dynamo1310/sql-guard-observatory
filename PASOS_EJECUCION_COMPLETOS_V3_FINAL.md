@@ -11,6 +11,8 @@
 3. Scripts PowerShell:
    - Consolidación actualizada para 100 puntos
    - Sincronización AlwaysOn en Backups y Maintenance
+   - **Eliminada métrica de fragmentación** (redundante con estado del job)
+   - **Corregida detección de AlwaysOn** (ahora usa `SERVERPROPERTY('IsHadrEnabled')` directamente)
 
 ---
 
@@ -92,14 +94,40 @@ cd C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\scripts
 ```
 🔍 [PRE-PROCESO] Identificando grupos de AlwaysOn...
   ✅ X grupo(s) identificado(s)
+  
+2️⃣  Recolectando métricas de mantenimiento...
+   ✅ SQL01 - CHECKDB:2 days IndexOpt:1 days Errors:0
+   ✅ SQL02 - CHECKDB:3 days IndexOpt:2 days Errors:0
+   
 🔄 [POST-PROCESO] Sincronizando mantenimiento entre nodos AlwaysOn...
   ✅ Total: X nodos sincronizados
+  
+╔═══════════════════════════════════════════════════════╗
+║  RESUMEN - MAINTENANCE                                ║
+╠═══════════════════════════════════════════════════════╣
+║  Total instancias:         45                         ║
+║  CHECKDB OK:               42                         ║
+║  IndexOptimize OK:         40                         ║
+║  Con errores severity 20+: 2                          ║
+╚═══════════════════════════════════════════════════════╝
 ```
 
-### **5.3 - Availability:**
+**NOTA:** Ya NO muestra fragmentación (se eliminó porque era redundante con el estado del job).  
+Ver: `ELIMINACION_METRICA_FRAGMENTACION.md` para detalles.
+
+### **5.3 - Availability (con detección corregida de AlwaysOn):**
 ```powershell
 .\RelevamientoHealthScore_Availability.ps1
 ```
+
+**Esperado:**
+```
+   ✅ RSCRM365-01 - Latency:15ms Memory:OK AlwaysOn:Enabled(HEALTHY)
+   ✅ TQRSA-02 - Latency:12ms Memory:OK AlwaysOn:Disabled
+```
+
+**NOTA:** Ahora detecta correctamente AlwaysOn usando `SERVERPROPERTY('IsHadrEnabled')`.  
+Ver: `CORRECCION_ALWAYSON_DETECCION.md` para detalles.
 
 ### **5.4 - Resources:**
 ```powershell
@@ -193,6 +221,37 @@ ORDER BY CollectedAtUtc DESC;
 ```
 
 **Esperado:** `DiskDetails` debe tener formato: `C:\|500.5|125.2|25,D:\|1000|750|75`
+
+### **6.5 - Verificar AlwaysOn:**
+```sql
+-- Verificar que AlwaysOn se detecta correctamente
+SELECT 
+    CASE WHEN AlwaysOnEnabled = 1 THEN 'Habilitado' ELSE 'Deshabilitado' END AS Estado,
+    COUNT(*) AS Total
+FROM (
+    SELECT 
+        AlwaysOnEnabled,
+        ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
+    FROM dbo.InstanceHealth_Critical_Availability
+    WHERE CollectedAtUtc >= DATEADD(HOUR, -1, GETUTCDATE())
+) latest
+WHERE rn = 1
+GROUP BY AlwaysOnEnabled;
+
+-- Verificar instancias específicas
+SELECT 
+    InstanceName,
+    AlwaysOnEnabled,
+    AlwaysOnWorstState,
+    CollectedAtUtc
+FROM dbo.InstanceHealth_Critical_Availability
+WHERE InstanceName IN ('RSCRM365-01', 'TQRSA-02')  -- Reemplazar con tus instancias
+ORDER BY InstanceName, CollectedAtUtc DESC;
+```
+
+**Esperado:** 
+- Debería haber instancias con `AlwaysOnEnabled = 1` (habilitado)
+- RSCRM365-01 debería tener `AlwaysOnEnabled = 1` (según API)
 
 ---
 

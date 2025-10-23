@@ -716,10 +716,20 @@ foreach ($instance in $instances) {
     $maintenance = Get-MaintenanceJobs -InstanceName $instanceName -TimeoutSec $TimeoutSec
     $errorlog = Get-ErrorlogStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
+    # Determinar estado (priorizar AMBOS fallidos como más crítico)
     $status = "✅"
-    if (-not $maintenance.CheckdbOk) { $status = "⚠️ NO CHECKDB!" }
-    elseif (-not $maintenance.IndexOptimizeOk) { $status = "⚠️ NO INDEX OPT!" }
-    elseif ($errorlog.Severity20PlusCount -gt 0) { $status = "🚨 ERRORS!" }
+    if (-not $maintenance.CheckdbOk -and -not $maintenance.IndexOptimizeOk) { 
+        $status = "🚨 CRITICAL!" 
+    }
+    elseif (-not $maintenance.CheckdbOk) { 
+        $status = "⚠️ NO CHECKDB!" 
+    }
+    elseif (-not $maintenance.IndexOptimizeOk) { 
+        $status = "⚠️ NO INDEX OPT!" 
+    }
+    elseif ($errorlog.Severity20PlusCount -gt 0) { 
+        $status = "🚨 ERRORS!" 
+    }
     
     $checkdbAge = if ($maintenance.LastCheckdb) { ((Get-Date) - $maintenance.LastCheckdb).Days } else { "N/A" }
     $indexOptAge = if ($maintenance.LastIndexOptimize) { ((Get-Date) - $maintenance.LastIndexOptimize).Days } else { "N/A" }

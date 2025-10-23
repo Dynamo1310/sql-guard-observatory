@@ -193,35 +193,51 @@ function Get-AlwaysOnStatus {
     }
     
     try {
-        $query = @"
-IF SERVERPROPERTY('IsHadrEnabled') = 1
-BEGIN
-    SELECT 
-        ag.name AS AGName,
-        ar.replica_server_name AS ReplicaName,
-        ars.role_desc AS Role,
-        ars.synchronization_health_desc AS SyncHealth,
-        drs.synchronization_state_desc AS DBSyncState,
-        drs.database_name AS DatabaseName
-    FROM sys.availability_replicas ar
-    INNER JOIN sys.dm_hadr_availability_replica_states ars 
-        ON ar.replica_id = ars.replica_id
-    INNER JOIN sys.availability_groups ag 
-        ON ar.group_id = ag.group_id
-    LEFT JOIN sys.dm_hadr_database_replica_states drs 
-        ON ar.replica_id = drs.replica_id
-    WHERE ar.replica_server_name = @@SERVERNAME;
-END
-"@
+        # PASO 1: Verificar si AlwaysOn está habilitado a nivel de instancia
+        $checkHadrQuery = "SELECT SERVERPROPERTY('IsHadrEnabled') AS IsHadrEnabled;"
         
-        # Usar dbatools para ejecutar queries
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query $query `
+        $hadrCheck = Invoke-DbaQuery -SqlInstance $InstanceName `
+            -Query $checkHadrQuery `
             -QueryTimeout $TimeoutSec `
             -EnableException
         
-        if ($data) {
-            $result.Enabled = $true
+        $isHadrEnabled = $hadrCheck.IsHadrEnabled
+        
+        if ($isHadrEnabled -eq $null -or $isHadrEnabled -eq [DBNull]::Value -or $isHadrEnabled -eq 0) {
+            # AlwaysOn NO está habilitado a nivel de instancia
+            $result.Enabled = $false
+            $result.WorstState = "N/A"
+            return $result
+        }
+        
+        # PASO 2: AlwaysOn SÍ está habilitado, obtener estado de los AGs
+        $result.Enabled = $true  # ✅ Marcar como habilitado
+        
+        $agQuery = @"
+SELECT 
+    ag.name AS AGName,
+    ar.replica_server_name AS ReplicaName,
+    ars.role_desc AS Role,
+    ars.synchronization_health_desc AS SyncHealth,
+    drs.synchronization_state_desc AS DBSyncState,
+    drs.database_name AS DatabaseName
+FROM sys.availability_replicas ar
+INNER JOIN sys.dm_hadr_availability_replica_states ars 
+    ON ar.replica_id = ars.replica_id
+INNER JOIN sys.availability_groups ag 
+    ON ar.group_id = ag.group_id
+LEFT JOIN sys.dm_hadr_database_replica_states drs 
+    ON ar.replica_id = drs.replica_id
+WHERE ar.replica_server_name = @@SERVERNAME;
+"@
+        
+        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+            -Query $agQuery `
+            -QueryTimeout $TimeoutSec `
+            -EnableException
+        
+        if ($data -and $data.Count -gt 0) {
+            # Hay datos de AGs
             
             # Determinar peor estado
             $states = $data | Select-Object -ExpandProperty SyncHealth -Unique
@@ -238,6 +254,11 @@ END
             $result.Details = $data | ForEach-Object {
                 "$($_.AGName):$($_.DatabaseName):$($_.SyncHealth)"
             }
+        }
+        else {
+            # AlwaysOn está habilitado pero no hay AGs configurados (o no es parte de ningún AG)
+            $result.WorstState = "OK"
+            $result.Details = @("AlwaysOn habilitado pero sin AGs configurados")
         }
         
     } catch {
