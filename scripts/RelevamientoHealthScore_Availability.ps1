@@ -256,6 +256,9 @@ function Write-ToSqlServer {
             $query = @"
 INSERT INTO dbo.InstanceHealth_Critical_Availability (
     InstanceName,
+    Ambiente,
+    HostingSite,
+    SqlVersion,
     CollectedAtUtc,
     ConnectSuccess,
     ConnectLatencyMs,
@@ -269,6 +272,9 @@ INSERT INTO dbo.InstanceHealth_Critical_Availability (
     AlwaysOnDetails
 ) VALUES (
     '$($row.InstanceName)',
+    '$($row.Ambiente)',
+    '$($row.HostingSite)',
+    '$($row.SqlVersion)',
     GETUTCDATE(),
     $(if ($row.ConnectSuccess) {1} else {0}),
     $($row.ConnectLatencyMs),
@@ -353,6 +359,10 @@ foreach ($instance in $instances) {
         -Status "$counter de $($instances.Count): $instanceName" `
         -PercentComplete (($counter / $instances.Count) * 100)
     
+    # Capturar metadata de la instancia desde API
+    $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
+    $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+    
     # Conectividad
     $connTest = Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
@@ -361,6 +371,9 @@ foreach ($instance in $instances) {
         
         $results += [PSCustomObject]@{
             InstanceName = $instanceName
+            Ambiente = $ambiente
+            HostingSite = $hostingSite
+            SqlVersion = "N/A"
             ConnectSuccess = $false
             ConnectLatencyMs = 0
             BlockingCount = 0
@@ -373,6 +386,18 @@ foreach ($instance in $instances) {
             AlwaysOnDetails = @()
         }
         continue
+    }
+    
+    # Capturar versión de SQL Server
+    $sqlVersion = "N/A"
+    try {
+        $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(100)) AS Version"
+        $versionResult = Invoke-DbaQuery -SqlInstance $instanceName -Query $versionQuery -QueryTimeout 5 -EnableException -ErrorAction SilentlyContinue
+        if ($versionResult) {
+            $sqlVersion = $versionResult.Version
+        }
+    } catch {
+        # Si falla, usar N/A
     }
     
     # Recolectar métricas (solo si conecta)
@@ -388,6 +413,9 @@ foreach ($instance in $instances) {
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
+        Ambiente = $ambiente
+        HostingSite = $hostingSite
+        SqlVersion = $sqlVersion
         ConnectSuccess = $true
         ConnectLatencyMs = $connTest.LatencyMs
         BlockingCount = $blocking.BlockingCount
