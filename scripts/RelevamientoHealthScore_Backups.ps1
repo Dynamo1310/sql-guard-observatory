@@ -42,9 +42,10 @@ $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
 $SqlDatabase = "SQLNova"
 $TimeoutSec = 15
-$TestMode = $false
+$TestMode = $false    # $true = solo 5 instancias para testing
 $IncludeAWS = $false  # Cambiar a $true para incluir AWS
 $OnlyAWS = $false     # Cambiar a $true para SOLO AWS
+# NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
 
