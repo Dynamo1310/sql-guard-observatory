@@ -128,14 +128,14 @@ function Calculate-FullBackupScore {
     param([bool]$FullBackupBreached)
     
     # 12 puntos máximo (v3.0)
-    return if ($FullBackupBreached) { 0 } else { 12 }
+    if ($FullBackupBreached) { return 0 } else { return 12 }
 }
 
 function Calculate-LogBackupScore {
     param([bool]$LogBackupBreached)
     
     # 12 puntos máximo (v3.0)
-    return if ($LogBackupBreached) { 0 } else { 12 }
+    if ($LogBackupBreached) { return 0 } else { return 12 }
 }
 
 function Calculate-DiskSpaceScore {
@@ -183,14 +183,14 @@ function Calculate-CheckdbScore {
     param([bool]$CheckdbOk)
     
     # 4 puntos máximo (v3.0)
-    return if ($CheckdbOk) { 4 } else { 0 }
+    if ($CheckdbOk) { return 4 } else { return 0 }
 }
 
 function Calculate-IndexOptimizeScore {
     param([bool]$IndexOptimizeOk)
     
     # 3 puntos máximo (v3.0)
-    return if ($IndexOptimizeOk) { 3 } else { 0 }
+    if ($IndexOptimizeOk) { return 3 } else { return 0 }
 }
 
 function Calculate-ErrorlogScore {
@@ -350,7 +350,6 @@ INSERT INTO dbo.InstanceHealth_Score (
     Tier3_Resources,
     Tier4_Maintenance,
     ConnectivityScore,
-    LatencyScore,
     BlockingScore,
     MemoryScore,
     FullBackupScore,
@@ -375,7 +374,6 @@ INSERT INTO dbo.InstanceHealth_Score (
     $($ScoreData.Tier3),
     $($ScoreData.Tier4),
     $($ScoreData.ConnectivityScore),
-    NULL,
     $($ScoreData.BlockingScore),
     $($ScoreData.MemoryScore),
     $($ScoreData.FullBackupScore),
