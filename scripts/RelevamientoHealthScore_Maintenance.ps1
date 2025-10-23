@@ -4,15 +4,19 @@
     
 .DESCRIPTION
     Script de baja frecuencia (cada 1 hora) que recolecta:
-    - CHECKDB (10 pts)
-    - IndexOptimize (5 pts)
-    - Fragmentación de índices (nuevo)
-    - Errorlog severity 20+ (5 pts)
+    - CHECKDB status (basado en estado del job)
+    - IndexOptimize status (basado en estado del job)
+    - Errorlog severity 20+ (últimas 24 horas)
+    
+    Incluye sincronización AlwaysOn:
+    - Identifica grupos AG automáticamente
+    - Sincroniza CHECKDB/IndexOptimize entre nodos del mismo AG
+    - Aplica el MEJOR valor a todos los nodos
     
     Guarda en: InstanceHealth_Maintenance
     
 .NOTES
-    Versión: 2.0 (dbatools)
+    Versión: 2.0 (dbatools) + AlwaysOn Sync
     Frecuencia: Cada 1 hora
     Timeout: 30 segundos
     
@@ -294,47 +298,6 @@ WHERE rn = 1 OR rn IS NULL;
         
     } catch {
         Write-Warning "Error obteniendo maintenance jobs en ${InstanceName}: $($_.Exception.Message)"
-    }
-    
-    return $result
-}
-
-function Get-IndexFragmentation {
-    param(
-        [string]$InstanceName,
-        [int]$TimeoutSec = 30
-    )
-    
-    $result = @{
-        AvgFragmentation = 0
-        HighFragmentationCount = 0
-    }
-    
-    try {
-        # Query ligero que solo mira índices grandes (>1000 pages)
-        $query = @"
-SELECT 
-    AVG(ips.avg_fragmentation_in_percent) AS AvgFragmentation,
-    SUM(CASE WHEN ips.avg_fragmentation_in_percent > 30 THEN 1 ELSE 0 END) AS HighFragCount
-FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'LIMITED') ips
-WHERE ips.index_id > 0
-  AND ips.page_count > 1000
-  AND ips.avg_fragmentation_in_percent > 0;
-"@
-        
-        # Usar dbatools para ejecutar queries
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query $query `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
-        
-        if ($data -and $data.AvgFragmentation -ne [DBNull]::Value) {
-            $result.AvgFragmentation = [decimal]$data.AvgFragmentation
-            $result.HighFragmentationCount = [int]$data.HighFragCount
-        }
-        
-    } catch {
-        Write-Warning "Error obteniendo fragmentación en ${InstanceName}: $($_.Exception.Message)"
     }
     
     return $result
@@ -634,7 +597,6 @@ function Write-ToSqlServer {
             # Sanitizar valores NULL
             $lastCheckdb = if ($row.LastCheckdb) { "'$($row.LastCheckdb.ToString('yyyy-MM-dd HH:mm:ss'))'" } else { "NULL" }
             $lastIndexOpt = if ($row.LastIndexOptimize) { "'$($row.LastIndexOptimize.ToString('yyyy-MM-dd HH:mm:ss'))'" } else { "NULL" }
-            $avgFrag = if ($row.AvgFragmentation -ne $null) { $row.AvgFragmentation } else { "NULL" }
             
             $query = @"
 INSERT INTO dbo.InstanceHealth_Maintenance (
@@ -647,8 +609,6 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
     CheckdbOk,
     LastIndexOptimize,
     IndexOptimizeOk,
-    AvgIndexFragmentation,
-    HighFragmentationCount,
     Severity20PlusCount,
     ErrorlogDetails
 ) VALUES (
@@ -661,8 +621,6 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
     $(if ($row.CheckdbOk) {1} else {0}),
     $lastIndexOpt,
     $(if ($row.IndexOptimizeOk) {1} else {0}),
-    $avgFrag,
-    $($row.HighFragmentationCount),
     $($row.Severity20PlusCount),
     '$($row.ErrorlogDetails -join "|")'
 );
@@ -754,9 +712,8 @@ foreach ($instance in $instances) {
         continue
     }
     
-    # Recolectar métricas (estas son pesadas)
+    # Recolectar métricas
     $maintenance = Get-MaintenanceJobs -InstanceName $instanceName -TimeoutSec $TimeoutSec
-    $fragmentation = Get-IndexFragmentation -InstanceName $instanceName -TimeoutSec $TimeoutSec
     $errorlog = Get-ErrorlogStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
     $status = "✅"
@@ -765,8 +722,9 @@ foreach ($instance in $instances) {
     elseif ($errorlog.Severity20PlusCount -gt 0) { $status = "🚨 ERRORS!" }
     
     $checkdbAge = if ($maintenance.LastCheckdb) { ((Get-Date) - $maintenance.LastCheckdb).Days } else { "N/A" }
+    $indexOptAge = if ($maintenance.LastIndexOptimize) { ((Get-Date) - $maintenance.LastIndexOptimize).Days } else { "N/A" }
     
-    Write-Host "   $status $instanceName - CHECKDB:$checkdbAge days Frag:$([int]$fragmentation.AvgFragmentation)% Errors:$($errorlog.Severity20PlusCount)" -ForegroundColor Gray
+    Write-Host "   $status $instanceName - CHECKDB:$checkdbAge days IndexOpt:$indexOptAge days Errors:$($errorlog.Severity20PlusCount)" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -779,8 +737,6 @@ foreach ($instance in $instances) {
         IndexOptimizeOk = $maintenance.IndexOptimizeOk
         CheckdbJobs = $maintenance.CheckdbJobs  # Para sincronización AlwaysOn
         IndexOptimizeJobs = $maintenance.IndexOptimizeJobs  # Para sincronización AlwaysOn
-        AvgFragmentation = $fragmentation.AvgFragmentation
-        HighFragmentationCount = $fragmentation.HighFragmentationCount
         Severity20PlusCount = $errorlog.Severity20PlusCount
         ErrorlogDetails = $errorlog.Details
     }
@@ -802,10 +758,9 @@ Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "║  RESUMEN - MAINTENANCE                                ║" -ForegroundColor Green
 Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Total instancias:        $($results.Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  CHECKDB OK:              $(($results | Where-Object CheckdbOk).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  IndexOptimize OK:        $(($results | Where-Object IndexOptimizeOk).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Con fragmentación >30%:  $(($results | Where-Object {$_.AvgFragmentation -gt 30}).Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Total instancias:         $($results.Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  CHECKDB OK:               $(($results | Where-Object CheckdbOk).Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  IndexOptimize OK:         $(($results | Where-Object IndexOptimizeOk).Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  Con errores severity 20+: $(($results | Where-Object {$_.Severity20PlusCount -gt 0}).Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
