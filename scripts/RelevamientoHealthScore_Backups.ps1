@@ -166,6 +166,170 @@ function Test-SqlConnection {
     }
 }
 
+function Get-AlwaysOnGroups {
+    <#
+    .SYNOPSIS
+        Identifica grupos de AlwaysOn consultando sys.availability_replicas.
+    .DESCRIPTION
+        Pre-procesa las instancias para identificar qué nodos pertenecen al mismo AG.
+        Solo procesa instancias donde la API indica AlwaysOn = "Enabled".
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [array]$Instances,
+        [int]$TimeoutSec = 10
+    )
+    
+    $agGroups = @{}  # Key = AGName, Value = @{ Nodes = @() }
+    $nodeToGroup = @{}  # Key = NodeName, Value = AGName
+    
+    Write-Host ""
+    Write-Host "🔍 [PRE-PROCESO] Identificando grupos de AlwaysOn..." -ForegroundColor Cyan
+    
+    foreach ($instance in $Instances) {
+        $instanceName = $instance.NombreInstancia
+        
+        # Solo procesar si la API indica que AlwaysOn está habilitado
+        if ($instance.AlwaysOn -ne "Enabled") {
+            continue
+        }
+        
+        try {
+            $query = @"
+SELECT DISTINCT
+    ag.name AS AGName,
+    ar.replica_server_name AS ReplicaServer
+FROM sys.availability_groups ag
+INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
+ORDER BY ag.name, ar.replica_server_name
+"@
+            
+            $replicas = Invoke-DbaQuery -SqlInstance $instanceName `
+                -Query $query `
+                -QueryTimeout $TimeoutSec `
+                -EnableException
+            
+            foreach ($replica in $replicas) {
+                $agName = $replica.AGName
+                $replicaServer = $replica.ReplicaServer
+                
+                if (-not $agGroups.ContainsKey($agName)) {
+                    $agGroups[$agName] = @{ Nodes = @() }
+                }
+                
+                if ($agGroups[$agName].Nodes -notcontains $replicaServer) {
+                    $agGroups[$agName].Nodes += $replicaServer
+                }
+                
+                $nodeToGroup[$replicaServer] = $agName
+            }
+            
+        } catch {
+            Write-Verbose "No se pudo consultar AG en $instanceName : $_"
+        }
+    }
+    
+    # Mostrar resumen
+    if ($agGroups.Count -gt 0) {
+        Write-Host "  ✅ $($agGroups.Count) grupo(s) identificado(s):" -ForegroundColor Green
+        foreach ($agName in $agGroups.Keys) {
+            $nodes = $agGroups[$agName].Nodes -join ", "
+            Write-Host "    • $agName : $nodes" -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "  ℹ️  No se encontraron grupos AlwaysOn" -ForegroundColor Gray
+    }
+    
+    return @{
+        Groups = $agGroups
+        NodeToGroup = $nodeToGroup
+    }
+}
+
+function Sync-AlwaysOnBackups {
+    <#
+    .SYNOPSIS
+        Sincroniza datos de backups entre nodos de AlwaysOn.
+    .DESCRIPTION
+        Toma el MEJOR valor de cada grupo (backup más reciente) y lo aplica a TODOS los nodos.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [array]$AllResults,
+        [Parameter(Mandatory)]
+        [hashtable]$AGInfo
+    )
+    
+    Write-Host ""
+    Write-Host "🔄 [POST-PROCESO] Sincronizando backups entre nodos AlwaysOn..." -ForegroundColor Cyan
+    
+    $agGroups = $AGInfo.Groups
+    $syncedCount = 0
+    
+    foreach ($agName in $agGroups.Keys) {
+        $agGroup = $agGroups[$agName]
+        $nodeNames = $agGroup.Nodes
+        
+        Write-Host "  📦 Procesando AG: $agName" -ForegroundColor Yellow
+        Write-Host "    Nodos: $($nodeNames -join ', ')" -ForegroundColor Gray
+        
+        # Obtener resultados de todos los nodos del grupo
+        $groupResults = $AllResults | Where-Object { $nodeNames -contains $_.InstanceName }
+        
+        if ($groupResults.Count -eq 0) {
+            Write-Host "    ⚠️  Sin resultados para este grupo" -ForegroundColor Gray
+            continue
+        }
+        
+        # Encontrar el MEJOR LastFullBackup (más reciente)
+        $bestFull = $groupResults | 
+            Where-Object { $_.LastFullBackup -ne $null } | 
+            Sort-Object LastFullBackup -Descending | 
+            Select-Object -First 1
+        
+        # Encontrar el MEJOR LastLogBackup (más reciente)
+        $bestLog = $groupResults | 
+            Where-Object { $_.LastLogBackup -ne $null } | 
+            Sort-Object LastLogBackup -Descending | 
+            Select-Object -First 1
+        
+        $bestFullDate = if ($bestFull) { $bestFull.LastFullBackup } else { $null }
+        $bestLogDate = if ($bestLog) { $bestLog.LastLogBackup } else { $null }
+        
+        Write-Host "    🔄 Mejor FULL: $bestFullDate" -ForegroundColor Gray
+        Write-Host "    🔄 Mejor LOG:  $bestLogDate" -ForegroundColor Gray
+        
+        # Aplicar los MEJORES valores a TODOS los nodos del grupo
+        foreach ($nodeResult in $groupResults) {
+            $nodeResult.LastFullBackup = $bestFullDate
+            $nodeResult.LastLogBackup = $bestLogDate
+            
+            # Recalcular breaches con los valores sincronizados
+            if ($bestFullDate) {
+                $fullAge = (Get-Date) - $bestFullDate
+                $nodeResult.FullBackupBreached = $fullAge.TotalHours -gt 24
+            } else {
+                $nodeResult.FullBackupBreached = $true
+            }
+            
+            if ($bestLogDate) {
+                $logAge = (Get-Date) - $bestLogDate
+                $nodeResult.LogBackupBreached = $logAge.TotalHours -gt 2
+            } else {
+                $nodeResult.LogBackupBreached = $false  # Si no hay LOG backup, no se considera breach
+            }
+            
+            $syncedCount++
+        }
+        
+        Write-Host "    ✅ Sincronizados $($groupResults.Count) nodos" -ForegroundColor Green
+    }
+    
+    Write-Host "  ✅ Total: $syncedCount nodos sincronizados" -ForegroundColor Green
+    
+    return $AllResults
+}
+
 function Write-ToSqlServer {
     param(
         [array]$Data
@@ -263,7 +427,10 @@ try {
     exit 1
 }
 
-# 2. Procesar cada instancia
+# 2. Pre-procesamiento: Identificar grupos AlwaysOn
+$agInfo = Get-AlwaysOnGroups -Instances $instances -TimeoutSec $TimeoutSec
+
+# 3. Procesar cada instancia
 Write-Host ""
 Write-Host "2️⃣  Recolectando métricas de backups..." -ForegroundColor Yellow
 
@@ -329,7 +496,10 @@ foreach ($instance in $instances) {
 
 Write-Progress -Activity "Recolectando métricas" -Completed
 
-# 3. Guardar en SQL
+# 4. Post-procesamiento: Sincronizar backups de AlwaysOn
+$results = Sync-AlwaysOnBackups -AllResults $results -AGInfo $agInfo
+
+# 5. Guardar en SQL
 Write-Host ""
 Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
 

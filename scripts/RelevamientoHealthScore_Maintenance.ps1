@@ -417,6 +417,208 @@ function Test-SqlConnection {
     }
 }
 
+function Get-AlwaysOnGroups {
+    <#
+    .SYNOPSIS
+        Identifica grupos de AlwaysOn consultando sys.availability_replicas.
+    .DESCRIPTION
+        Pre-procesa las instancias para identificar qué nodos pertenecen al mismo AG.
+        Solo procesa instancias donde la API indica AlwaysOn = "Enabled".
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [array]$Instances,
+        [int]$TimeoutSec = 10
+    )
+    
+    $agGroups = @{}  # Key = AGName, Value = @{ Nodes = @() }
+    $nodeToGroup = @{}  # Key = NodeName, Value = AGName
+    
+    Write-Host ""
+    Write-Host "🔍 [PRE-PROCESO] Identificando grupos de AlwaysOn..." -ForegroundColor Cyan
+    
+    foreach ($instance in $Instances) {
+        $instanceName = $instance.NombreInstancia
+        
+        # Solo procesar si la API indica que AlwaysOn está habilitado
+        if ($instance.AlwaysOn -ne "Enabled") {
+            continue
+        }
+        
+        try {
+            $query = @"
+SELECT DISTINCT
+    ag.name AS AGName,
+    ar.replica_server_name AS ReplicaServer
+FROM sys.availability_groups ag
+INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
+ORDER BY ag.name, ar.replica_server_name
+"@
+            
+            $replicas = Invoke-DbaQuery -SqlInstance $instanceName `
+                -Query $query `
+                -QueryTimeout $TimeoutSec `
+                -EnableException
+            
+            foreach ($replica in $replicas) {
+                $agName = $replica.AGName
+                $replicaServer = $replica.ReplicaServer
+                
+                if (-not $agGroups.ContainsKey($agName)) {
+                    $agGroups[$agName] = @{ Nodes = @() }
+                }
+                
+                if ($agGroups[$agName].Nodes -notcontains $replicaServer) {
+                    $agGroups[$agName].Nodes += $replicaServer
+                }
+                
+                $nodeToGroup[$replicaServer] = $agName
+            }
+            
+        } catch {
+            Write-Verbose "No se pudo consultar AG en $instanceName : $_"
+        }
+    }
+    
+    # Mostrar resumen
+    if ($agGroups.Count -gt 0) {
+        Write-Host "  ✅ $($agGroups.Count) grupo(s) identificado(s):" -ForegroundColor Green
+        foreach ($agName in $agGroups.Keys) {
+            $nodes = $agGroups[$agName].Nodes -join ", "
+            Write-Host "    • $agName : $nodes" -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "  ℹ️  No se encontraron grupos AlwaysOn" -ForegroundColor Gray
+    }
+    
+    return @{
+        Groups = $agGroups
+        NodeToGroup = $nodeToGroup
+    }
+}
+
+function Sync-AlwaysOnMaintenance {
+    <#
+    .SYNOPSIS
+        Sincroniza datos de mantenimiento entre nodos de AlwaysOn.
+    .DESCRIPTION
+        Recopila TODOS los jobs de TODOS los nodos del grupo.
+        Para cada TIPO de job (IntegrityCheck, IndexOptimize), toma el ÚLTIMO run exitoso.
+        Aplica ese valor a TODOS los nodos del grupo.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [array]$AllResults,
+        [Parameter(Mandatory)]
+        [hashtable]$AGInfo
+    )
+    
+    Write-Host ""
+    Write-Host "🔄 [POST-PROCESO] Sincronizando mantenimiento entre nodos AlwaysOn..." -ForegroundColor Cyan
+    
+    $agGroups = $AGInfo.Groups
+    $syncedCount = 0
+    
+    foreach ($agName in $agGroups.Keys) {
+        $agGroup = $agGroups[$agName]
+        $nodeNames = $agGroup.Nodes
+        
+        Write-Host "  🔧 Procesando AG: $agName" -ForegroundColor Yellow
+        Write-Host "    Nodos: $($nodeNames -join ', ')" -ForegroundColor Gray
+        
+        # Obtener resultados de todos los nodos del grupo
+        $groupResults = $AllResults | Where-Object { $nodeNames -contains $_.InstanceName }
+        
+        if ($groupResults.Count -eq 0) {
+            Write-Host "    ⚠️  Sin resultados para este grupo" -ForegroundColor Gray
+            continue
+        }
+        
+        # === RECOPILAR TODOS LOS JOBS DE TODOS LOS NODOS ===
+        $allCheckdbJobs = @()
+        $allIndexOptimizeJobs = @()
+        
+        foreach ($nodeResult in $groupResults) {
+            $allCheckdbJobs += $nodeResult.CheckdbJobs
+            $allIndexOptimizeJobs += $nodeResult.IndexOptimizeJobs
+        }
+        
+        # === ENCONTRAR EL MEJOR CHECKDB (más reciente y exitoso) ===
+        $bestCheckdb = $null
+        $checkdbOk = $false
+        $cutoffDate = (Get-Date).AddDays(-7)
+        
+        if ($allCheckdbJobs.Count -gt 0) {
+            # Buscar el job más reciente exitoso
+            $successfulCheckdb = $allCheckdbJobs | 
+                Where-Object { $_.Status -eq 'Success' } | 
+                Sort-Object LastRunDate -Descending | 
+                Select-Object -First 1
+            
+            if ($successfulCheckdb) {
+                $bestCheckdb = $successfulCheckdb.LastRunDate
+                $checkdbOk = $bestCheckdb -ge $cutoffDate
+            } else {
+                # Si no hay exitosos, tomar el más reciente (aunque haya fallado)
+                $latestCheckdb = $allCheckdbJobs | 
+                    Sort-Object LastRunDate -Descending | 
+                    Select-Object -First 1
+                
+                if ($latestCheckdb) {
+                    $bestCheckdb = $latestCheckdb.LastRunDate
+                }
+                $checkdbOk = $false
+            }
+        }
+        
+        # === ENCONTRAR EL MEJOR INDEX OPTIMIZE (más reciente y exitoso) ===
+        $bestIndexOptimize = $null
+        $indexOptimizeOk = $false
+        
+        if ($allIndexOptimizeJobs.Count -gt 0) {
+            # Buscar el job más reciente exitoso
+            $successfulIndexOpt = $allIndexOptimizeJobs | 
+                Where-Object { $_.Status -eq 'Success' } | 
+                Sort-Object LastRunDate -Descending | 
+                Select-Object -First 1
+            
+            if ($successfulIndexOpt) {
+                $bestIndexOptimize = $successfulIndexOpt.LastRunDate
+                $indexOptimizeOk = $bestIndexOptimize -ge $cutoffDate
+            } else {
+                # Si no hay exitosos, tomar el más reciente (aunque haya fallado)
+                $latestIndexOpt = $allIndexOptimizeJobs | 
+                    Sort-Object LastRunDate -Descending | 
+                    Select-Object -First 1
+                
+                if ($latestIndexOpt) {
+                    $bestIndexOptimize = $latestIndexOpt.LastRunDate
+                }
+                $indexOptimizeOk = $false
+            }
+        }
+        
+        Write-Host "    🔄 Mejor CHECKDB: $bestCheckdb (OK: $checkdbOk)" -ForegroundColor Gray
+        Write-Host "    🔄 Mejor IndexOptimize: $bestIndexOptimize (OK: $indexOptimizeOk)" -ForegroundColor Gray
+        
+        # === APLICAR LOS MEJORES VALORES A TODOS LOS NODOS ===
+        foreach ($nodeResult in $groupResults) {
+            $nodeResult.LastCheckdb = $bestCheckdb
+            $nodeResult.CheckdbOk = $checkdbOk
+            $nodeResult.LastIndexOptimize = $bestIndexOptimize
+            $nodeResult.IndexOptimizeOk = $indexOptimizeOk
+            
+            $syncedCount++
+        }
+        
+        Write-Host "    ✅ Sincronizados $($groupResults.Count) nodos" -ForegroundColor Green
+    }
+    
+    Write-Host "  ✅ Total: $syncedCount nodos sincronizados" -ForegroundColor Green
+    
+    return $AllResults
+}
+
 function Write-ToSqlServer {
     param(
         [array]$Data
@@ -521,7 +723,10 @@ try {
     exit 1
 }
 
-# 2. Procesar cada instancia
+# 2. Pre-procesamiento: Identificar grupos AlwaysOn
+$agInfo = Get-AlwaysOnGroups -Instances $instances -TimeoutSec $TimeoutSec
+
+# 3. Procesar cada instancia
 Write-Host ""
 Write-Host "2️⃣  Recolectando métricas de mantenimiento..." -ForegroundColor Yellow
 Write-Host "   (Esto puede tardar varios minutos...)" -ForegroundColor Gray
@@ -572,6 +777,8 @@ foreach ($instance in $instances) {
         CheckdbOk = $maintenance.CheckdbOk
         LastIndexOptimize = $maintenance.LastIndexOptimize
         IndexOptimizeOk = $maintenance.IndexOptimizeOk
+        CheckdbJobs = $maintenance.CheckdbJobs  # Para sincronización AlwaysOn
+        IndexOptimizeJobs = $maintenance.IndexOptimizeJobs  # Para sincronización AlwaysOn
         AvgFragmentation = $fragmentation.AvgFragmentation
         HighFragmentationCount = $fragmentation.HighFragmentationCount
         Severity20PlusCount = $errorlog.Severity20PlusCount
@@ -581,7 +788,10 @@ foreach ($instance in $instances) {
 
 Write-Progress -Activity "Recolectando métricas" -Completed
 
-# 3. Guardar en SQL
+# 4. Post-procesamiento: Sincronizar mantenimiento de AlwaysOn
+$results = Sync-AlwaysOnMaintenance -AllResults $results -AGInfo $agInfo
+
+# 5. Guardar en SQL
 Write-Host ""
 Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
 
