@@ -402,13 +402,14 @@ Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
-    $instances = $response.message
+    # La API devuelve directamente un array, no un objeto con .message
+    $instances = $response
     
     if (-not $IncludeAWS) {
-        $instances = $instances | Where-Object { $_.Ambiente -notlike "*AWS*" }
+        $instances = $instances | Where-Object { $_.ambiente -notlike "*AWS*" }
     }
     if ($OnlyAWS) {
-        $instances = $instances | Where-Object { $_.Ambiente -like "*AWS*" }
+        $instances = $instances | Where-Object { $_.ambiente -like "*AWS*" }
     }
     if ($TestMode) {
         $instances = $instances | Select-Object -First 5
@@ -431,7 +432,8 @@ $counter = 0
 
 foreach ($instance in $instances) {
     $counter++
-    $instanceName = $instance.nombreInstancia
+    # La propiedad correcta es NombreInstancia (con mayúscula inicial)
+    $instanceName = $instance.NombreInstancia
     
     Write-Progress -Activity "Recolectando métricas" `
         -Status "$counter de $($instances.Count): $instanceName" `

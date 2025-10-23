@@ -46,9 +46,10 @@ Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
-    $instances = $response.message | Select-Object -First $Top
+    # La API devuelve directamente un array, no un objeto con .message
+    $instances = $response | Select-Object -First $Top
     
-    Write-Host "   Total en API: $($response.message.Count)" -ForegroundColor Gray
+    Write-Host "   Total en API: $($response.Count)" -ForegroundColor Gray
     Write-Host "   Probando primeras: $($instances.Count)" -ForegroundColor Green
     
 } catch {
@@ -66,7 +67,8 @@ $successCount = 0
 $failCount = 0
 
 foreach ($instance in $instances) {
-    $instanceName = $instance.nombreInstancia
+    # La propiedad correcta es NombreInstancia (con mayúscula inicial)
+    $instanceName = $instance.NombreInstancia
     
     Write-Host "   🔍 Probando: $instanceName" -ForegroundColor Gray -NoNewline
     
