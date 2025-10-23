@@ -67,8 +67,8 @@ function Test-SqlConnection {
     try {
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         
-        # Usar dbatools para test de conexión con TrustServerCertificate (no tiene ConnectTimeout)
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate -EnableException
+        # Usar dbatools para test de conexión (comando simple sin parámetros de certificado)
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         
         $stopwatch.Stop()
         

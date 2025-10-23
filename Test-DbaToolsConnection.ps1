@@ -75,8 +75,8 @@ foreach ($instance in $instances) {
     try {
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         
-        # Test con dbatools + TrustServerCertificate (no tiene ConnectTimeout)
-        $connection = Test-DbaConnection -SqlInstance $instanceName -TrustServerCertificate -EnableException
+        # Test con dbatools (comando simple sin parámetros de certificado)
+        $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
         
         $stopwatch.Stop()
         
