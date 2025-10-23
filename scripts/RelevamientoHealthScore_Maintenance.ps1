@@ -70,39 +70,97 @@ function Get-MaintenanceJobs {
     
     try {
         $query = @"
--- Query para obtener TODOS los jobs (IntegrityCheck e IndexOptimize)
-SELECT 
-    j.name AS JobName,
-    js.last_run_date AS LastRunDate,
-    js.last_run_time AS LastRunTime,
-    js.last_run_outcome AS LastRunStatus,  -- 1=Success
-    js.last_run_duration AS LastRunDuration,
-    jh.run_finish_time AS LastFinishTime
-FROM msdb.dbo.sysjobs j
-INNER JOIN msdb.dbo.sysjobsteps js 
-    ON j.job_id = js.job_id
-LEFT JOIN (
+-- TODOS los IntegrityCheck con su última ejecución (excluir STOP)
+-- Usa TIEMPO DE FINALIZACIÓN (run_date + run_time + run_duration) para ordenar
+WITH LastJobRuns AS (
     SELECT 
-        job_id,
-        step_id,
-        MAX(run_date * 1000000 + run_time) AS MaxRunDateTime,
-        MAX(CASE 
-            WHEN run_date > 0 AND run_time > 0 THEN
-                CONVERT(DATETIME, 
-                    CAST(run_date AS VARCHAR(8)) + ' ' + 
-                    STUFF(STUFF(RIGHT('000000' + CAST(run_time AS VARCHAR(6)), 6), 5, 0, ':'), 3, 0, ':'))
-            END) AS run_finish_time
-    FROM msdb.dbo.sysjobhistory
-    WHERE step_id > 0
-    GROUP BY job_id, step_id
-) jh ON j.job_id = jh.job_id AND js.step_id = jh.step_id
-WHERE (j.name LIKE '%IntegrityCheck%' 
-    OR j.name LIKE '%IndexOptimize%')
-  AND j.name NOT LIKE '%STOP%'
-  AND js.step_id = 1;
+        j.job_id,
+        j.name AS JobName,
+        jh.run_date AS HistoryRunDate,
+        jh.run_time AS HistoryRunTime,
+        jh.run_duration AS HistoryRunDuration,
+        jh.run_status AS HistoryRunStatus,
+        js.last_run_date AS ServerRunDate,
+        js.last_run_time AS ServerRunTime,
+        js.last_run_duration AS ServerRunDuration,
+        js.last_run_outcome AS ServerRunOutcome,
+        -- Calcular tiempo de finalización: run_date + run_time + run_duration
+        -- run_duration está en formato HHMMSS (int): 20107 = 2m 7s
+        DATEADD(SECOND, 
+            (jh.run_duration / 10000) * 3600 +  -- Horas
+            ((jh.run_duration / 100) % 100) * 60 + -- Minutos
+            (jh.run_duration % 100),  -- Segundos
+            CAST(CAST(jh.run_date AS VARCHAR) + ' ' + 
+                 STUFF(STUFF(RIGHT('000000' + CAST(jh.run_time AS VARCHAR), 6), 5, 0, ':'), 3, 0, ':') 
+                 AS DATETIME)
+        ) AS HistoryFinishTime,
+        ROW_NUMBER() OVER (PARTITION BY j.job_id ORDER BY 
+            DATEADD(SECOND, 
+                (jh.run_duration / 10000) * 3600 + ((jh.run_duration / 100) % 100) * 60 + (jh.run_duration % 100),
+                CAST(CAST(jh.run_date AS VARCHAR) + ' ' + STUFF(STUFF(RIGHT('000000' + CAST(jh.run_time AS VARCHAR), 6), 5, 0, ':'), 3, 0, ':') AS DATETIME)
+            ) DESC,
+            -- En caso de empate de tiempo, priorizar: Succeeded(1) > Failed(0) > Canceled(3)
+            CASE WHEN jh.run_status = 1 THEN 0 WHEN jh.run_status = 0 THEN 1 WHEN jh.run_status = 3 THEN 2 ELSE 3 END ASC
+        ) AS rn
+    FROM msdb.dbo.sysjobs j
+    LEFT JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
+    LEFT JOIN msdb.dbo.sysjobservers js ON j.job_id = js.job_id
+    WHERE j.name LIKE '%IntegrityCheck%'
+      AND j.name NOT LIKE '%STOP%'
+)
+SELECT 
+    JobName,
+    COALESCE(HistoryRunDate, ServerRunDate) AS LastRunDate,
+    COALESCE(HistoryRunTime, ServerRunTime) AS LastRunTime,
+    COALESCE(HistoryRunDuration, ServerRunDuration) AS LastRunDuration,
+    COALESCE(HistoryRunStatus, ServerRunOutcome) AS LastRunStatus,
+    HistoryFinishTime AS LastFinishTime
+FROM LastJobRuns
+WHERE rn = 1 OR rn IS NULL;
+
+-- TODOS los IndexOptimize con su última ejecución (excluir STOP)
+WITH LastJobRuns AS (
+    SELECT 
+        j.job_id,
+        j.name AS JobName,
+        jh.run_date AS HistoryRunDate,
+        jh.run_time AS HistoryRunTime,
+        jh.run_duration AS HistoryRunDuration,
+        jh.run_status AS HistoryRunStatus,
+        js.last_run_date AS ServerRunDate,
+        js.last_run_time AS ServerRunTime,
+        js.last_run_duration AS ServerRunDuration,
+        js.last_run_outcome AS ServerRunOutcome,
+        -- Calcular tiempo de finalización
+        DATEADD(SECOND, 
+            (jh.run_duration / 10000) * 3600 + ((jh.run_duration / 100) % 100) * 60 + (jh.run_duration % 100),
+            CAST(CAST(jh.run_date AS VARCHAR) + ' ' + STUFF(STUFF(RIGHT('000000' + CAST(jh.run_time AS VARCHAR), 6), 5, 0, ':'), 3, 0, ':') AS DATETIME)
+        ) AS HistoryFinishTime,
+        ROW_NUMBER() OVER (PARTITION BY j.job_id ORDER BY 
+            DATEADD(SECOND, 
+                (jh.run_duration / 10000) * 3600 + ((jh.run_duration / 100) % 100) * 60 + (jh.run_duration % 100),
+                CAST(CAST(jh.run_date AS VARCHAR) + ' ' + STUFF(STUFF(RIGHT('000000' + CAST(jh.run_time AS VARCHAR), 6), 5, 0, ':'), 3, 0, ':') AS DATETIME)
+            ) DESC,
+            CASE WHEN jh.run_status = 1 THEN 0 WHEN jh.run_status = 0 THEN 1 WHEN jh.run_status = 3 THEN 2 ELSE 3 END ASC
+        ) AS rn
+    FROM msdb.dbo.sysjobs j
+    LEFT JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
+    LEFT JOIN msdb.dbo.sysjobservers js ON j.job_id = js.job_id
+    WHERE j.name LIKE '%IndexOptimize%'
+      AND j.name NOT LIKE '%STOP%'
+)
+SELECT 
+    JobName,
+    COALESCE(HistoryRunDate, ServerRunDate) AS LastRunDate,
+    COALESCE(HistoryRunTime, ServerRunTime) AS LastRunTime,
+    COALESCE(HistoryRunDuration, ServerRunDuration) AS LastRunDuration,
+    COALESCE(HistoryRunStatus, ServerRunOutcome) AS LastRunStatus,
+    HistoryFinishTime AS LastFinishTime
+FROM LastJobRuns
+WHERE rn = 1 OR rn IS NULL;
 "@
         
-        # Usar dbatools para ejecutar queries
+        # Usar dbatools para ejecutar queries (devuelve array de 2 datasets)
         $datasets = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
@@ -110,20 +168,37 @@ WHERE (j.name LIKE '%IntegrityCheck%'
         
         $cutoffDate = (Get-Date).AddDays(-7)
         
-        # Procesar IntegrityCheck jobs
-        $checkdbJobs = $datasets | Where-Object { $_.JobName -like '*IntegrityCheck*' }
+        # Procesar IntegrityCheck jobs (primer resultset)
+        $checkdbJobs = if ($datasets -is [array] -and $datasets.Count -gt 0) { 
+            $datasets[0] 
+        } else { 
+            $datasets | Where-Object { $_.JobName -like '*IntegrityCheck*' } 
+        }
         $allCheckdbOk = $true
         $mostRecentCheckdb = $null
         
         foreach ($job in $checkdbJobs) {
             $lastRun = $null
             if ($job.LastFinishTime -and $job.LastFinishTime -ne [DBNull]::Value) {
+                # Usar tiempo de finalización calculado por SQL
                 $lastRun = [datetime]$job.LastFinishTime
             } elseif ($job.LastRunDate -and $job.LastRunDate -ne [DBNull]::Value) {
                 try {
+                    # Fallback: calcular tiempo de inicio + duración
                     $runDate = $job.LastRunDate.ToString()
                     $runTime = $job.LastRunTime.ToString().PadLeft(6, '0')
-                    $lastRun = [datetime]::ParseExact("$runDate$runTime", "yyyyMMddHHmmss", $null)
+                    $startTime = [datetime]::ParseExact("$runDate$runTime", "yyyyMMddHHmmss", $null)
+                    
+                    # Sumar duración si existe (formato HHMMSS)
+                    if ($job.LastRunDuration -and $job.LastRunDuration -ne [DBNull]::Value) {
+                        $duration = [int]$job.LastRunDuration
+                        $hours = [Math]::Floor($duration / 10000)
+                        $minutes = [Math]::Floor(($duration % 10000) / 100)
+                        $seconds = $duration % 100
+                        $lastRun = $startTime.AddHours($hours).AddMinutes($minutes).AddSeconds($seconds)
+                    } else {
+                        $lastRun = $startTime
+                    }
                 } catch {}
             }
             
@@ -155,20 +230,37 @@ WHERE (j.name LIKE '%IntegrityCheck%'
             $result.CheckdbOk = $allCheckdbOk
         }
         
-        # Procesar IndexOptimize jobs
-        $indexOptJobs = $datasets | Where-Object { $_.JobName -like '*IndexOptimize*' }
+        # Procesar IndexOptimize jobs (segundo resultset)
+        $indexOptJobs = if ($datasets -is [array] -and $datasets.Count -gt 1) { 
+            $datasets[1] 
+        } else { 
+            $datasets | Where-Object { $_.JobName -like '*IndexOptimize*' } 
+        }
         $allIndexOptOk = $true
         $mostRecentIndexOpt = $null
         
         foreach ($job in $indexOptJobs) {
             $lastRun = $null
             if ($job.LastFinishTime -and $job.LastFinishTime -ne [DBNull]::Value) {
+                # Usar tiempo de finalización calculado por SQL
                 $lastRun = [datetime]$job.LastFinishTime
             } elseif ($job.LastRunDate -and $job.LastRunDate -ne [DBNull]::Value) {
                 try {
+                    # Fallback: calcular tiempo de inicio + duración
                     $runDate = $job.LastRunDate.ToString()
                     $runTime = $job.LastRunTime.ToString().PadLeft(6, '0')
-                    $lastRun = [datetime]::ParseExact("$runDate$runTime", "yyyyMMddHHmmss", $null)
+                    $startTime = [datetime]::ParseExact("$runDate$runTime", "yyyyMMddHHmmss", $null)
+                    
+                    # Sumar duración si existe (formato HHMMSS)
+                    if ($job.LastRunDuration -and $job.LastRunDuration -ne [DBNull]::Value) {
+                        $duration = [int]$job.LastRunDuration
+                        $hours = [Math]::Floor($duration / 10000)
+                        $minutes = [Math]::Floor(($duration % 10000) / 100)
+                        $seconds = $duration % 100
+                        $lastRun = $startTime.AddHours($hours).AddMinutes($minutes).AddSeconds($seconds)
+                    } else {
+                        $lastRun = $startTime
+                    }
                 } catch {}
             }
             
