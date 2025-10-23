@@ -206,19 +206,23 @@ WHERE rn = 1 OR rn IS NULL;
                 } catch {}
             }
             
-            if ($lastRun) {
+            # AGREGAR job aunque no tenga fecha, si tiene status válido (como el script original)
+            $hasValidStatus = $job.LastRunStatus -ne $null -and $job.LastRunStatus -ne [DBNull]::Value
+            
+            if ($lastRun -or $hasValidStatus) {
                 $isSuccess = ($job.LastRunStatus -eq 1)
-                $isRecent = ($lastRun -ge $cutoffDate -and $isSuccess)
+                $isRecent = ($lastRun -and $lastRun -ge $cutoffDate -and $isSuccess)
                 
                 $result.CheckdbJobs += @{
                     JobName = $job.JobName
-                    LastRun = $lastRun
-                    LastRunStatus = $job.LastRunStatus  # Agregar para sincronización
+                    LastRun = $lastRun  # Puede ser $null si no tiene historial
+                    LastRunStatus = $job.LastRunStatus
                     IsSuccess = $isSuccess
                     IsRecent = $isRecent
                 }
                 
-                if (-not $mostRecentCheckdb -or $lastRun -gt $mostRecentCheckdb) {
+                # Solo actualizar el más reciente si tiene fecha válida
+                if ($lastRun -and (-not $mostRecentCheckdb -or $lastRun -gt $mostRecentCheckdb)) {
                     $mostRecentCheckdb = $lastRun
                 }
                 
@@ -226,6 +230,7 @@ WHERE rn = 1 OR rn IS NULL;
                     $allCheckdbOk = $false
                 }
             } else {
+                # Job sin fecha ni status válido
                 $allCheckdbOk = $false
             }
         }
@@ -269,19 +274,23 @@ WHERE rn = 1 OR rn IS NULL;
                 } catch {}
             }
             
-            if ($lastRun) {
+            # AGREGAR job aunque no tenga fecha, si tiene status válido (como el script original)
+            $hasValidStatus = $job.LastRunStatus -ne $null -and $job.LastRunStatus -ne [DBNull]::Value
+            
+            if ($lastRun -or $hasValidStatus) {
                 $isSuccess = ($job.LastRunStatus -eq 1)
-                $isRecent = ($lastRun -ge $cutoffDate -and $isSuccess)
+                $isRecent = ($lastRun -and $lastRun -ge $cutoffDate -and $isSuccess)
                 
                 $result.IndexOptimizeJobs += @{
                     JobName = $job.JobName
-                    LastRun = $lastRun
-                    LastRunStatus = $job.LastRunStatus  # Agregar para sincronización
+                    LastRun = $lastRun  # Puede ser $null si no tiene historial
+                    LastRunStatus = $job.LastRunStatus
                     IsSuccess = $isSuccess
                     IsRecent = $isRecent
                 }
                 
-                if (-not $mostRecentIndexOpt -or $lastRun -gt $mostRecentIndexOpt) {
+                # Solo actualizar el más reciente si tiene fecha válida
+                if ($lastRun -and (-not $mostRecentIndexOpt -or $lastRun -gt $mostRecentIndexOpt)) {
                     $mostRecentIndexOpt = $lastRun
                 }
                 
@@ -289,6 +298,7 @@ WHERE rn = 1 OR rn IS NULL;
                     $allIndexOptOk = $false
                 }
             } else {
+                # Job sin fecha ni status válido
                 $allIndexOptOk = $false
             }
         }
@@ -518,24 +528,27 @@ function Sync-AlwaysOnMaintenance {
             $checkdbByName = $allCheckdbJobs | Group-Object -Property JobName
             
             foreach ($jobGroup in $checkdbByName) {
-                # Encontrar el más reciente de este tipo de job
+                # Encontrar el más reciente de este tipo de job (solo jobs con fecha)
                 # Ordenar por tiempo de finalización DESC, luego por status (Succeeded > Failed > Canceled)
-                $mostRecentJob = $jobGroup.Group | Sort-Object `
-                    @{Expression={$_.LastRun}; Descending=$true}, `
-                    @{Expression={
-                        if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - máxima prioridad
-                        elseif ($_.LastRunStatus -eq 0) { 1 }  # Failed - segunda prioridad
-                        elseif ($_.LastRunStatus -eq 3) { 2 }  # Canceled - tercera prioridad
-                        else { 3 }                              # Otros/SinDatos - menor prioridad
-                    }; Descending=$false} | Select-Object -First 1
+                $mostRecentJob = $jobGroup.Group | 
+                    Where-Object { $_.LastRun -ne $null } |
+                    Sort-Object `
+                        @{Expression={$_.LastRun}; Descending=$true}, `
+                        @{Expression={
+                            if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - máxima prioridad
+                            elseif ($_.LastRunStatus -eq 0) { 1 }  # Failed - segunda prioridad
+                            elseif ($_.LastRunStatus -eq 3) { 2 }  # Canceled - tercera prioridad
+                            else { 3 }                              # Otros/SinDatos - menor prioridad
+                        }; Descending=$false} | 
+                    Select-Object -First 1
                 
-                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
-                if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
+                # Si NO hay jobs con fecha o el más reciente NO está OK, marcar grupo como no OK
+                if (-not $mostRecentJob -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
                     $allCheckdbOk = $false
                 }
                 
-                # Actualizar el más reciente global
-                if ($mostRecentJob.LastRun -and (-not $bestCheckdb -or $mostRecentJob.LastRun -gt $bestCheckdb)) {
+                # Actualizar el más reciente global (solo si tiene fecha)
+                if ($mostRecentJob -and $mostRecentJob.LastRun -and (-not $bestCheckdb -or $mostRecentJob.LastRun -gt $bestCheckdb)) {
                     $bestCheckdb = $mostRecentJob.LastRun
                 }
             }
@@ -552,24 +565,27 @@ function Sync-AlwaysOnMaintenance {
             $indexOptByName = $allIndexOptimizeJobs | Group-Object -Property JobName
             
             foreach ($jobGroup in $indexOptByName) {
-                # Encontrar el más reciente de este tipo de job
+                # Encontrar el más reciente de este tipo de job (solo jobs con fecha)
                 # Ordenar por tiempo de finalización DESC, luego por status (Succeeded > Failed > Canceled)
-                $mostRecentJob = $jobGroup.Group | Sort-Object `
-                    @{Expression={$_.LastRun}; Descending=$true}, `
-                    @{Expression={
-                        if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - máxima prioridad
-                        elseif ($_.LastRunStatus -eq 0) { 1 }  # Failed - segunda prioridad
-                        elseif ($_.LastRunStatus -eq 3) { 2 }  # Canceled - tercera prioridad
-                        else { 3 }                              # Otros/SinDatos - menor prioridad
-                    }; Descending=$false} | Select-Object -First 1
+                $mostRecentJob = $jobGroup.Group | 
+                    Where-Object { $_.LastRun -ne $null } |
+                    Sort-Object `
+                        @{Expression={$_.LastRun}; Descending=$true}, `
+                        @{Expression={
+                            if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - máxima prioridad
+                            elseif ($_.LastRunStatus -eq 0) { 1 }  # Failed - segunda prioridad
+                            elseif ($_.LastRunStatus -eq 3) { 2 }  # Canceled - tercera prioridad
+                            else { 3 }                              # Otros/SinDatos - menor prioridad
+                        }; Descending=$false} | 
+                    Select-Object -First 1
                 
-                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
-                if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
+                # Si NO hay jobs con fecha o el más reciente NO está OK, marcar grupo como no OK
+                if (-not $mostRecentJob -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
                     $allIndexOptimizeOk = $false
                 }
                 
-                # Actualizar el más reciente global
-                if ($mostRecentJob.LastRun -and (-not $bestIndexOptimize -or $mostRecentJob.LastRun -gt $bestIndexOptimize)) {
+                # Actualizar el más reciente global (solo si tiene fecha)
+                if ($mostRecentJob -and $mostRecentJob.LastRun -and (-not $bestIndexOptimize -or $mostRecentJob.LastRun -gt $bestIndexOptimize)) {
                     $bestIndexOptimize = $mostRecentJob.LastRun
                 }
             }
