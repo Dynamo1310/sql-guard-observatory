@@ -319,8 +319,8 @@ function Test-SqlConnection {
     )
     
     try {
-        # Usar dbatools para test de conexión con TrustServerCertificate
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -ConnectTimeout $TimeoutSec -TrustServerCertificate -EnableException
+        # Usar dbatools para test de conexión con TrustServerCertificate (no tiene ConnectTimeout)
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate -EnableException
         return $connection.IsPingable
     } catch {
         return $false
