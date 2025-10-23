@@ -58,6 +58,7 @@ namespace SQLGuardObservatory.API.Services
                         
                         -- Métricas raw - Resources
                         DiskWorstFreePct,
+                        DiskDetails,
                         AvgReadLatencyMs,
                         AvgWriteLatencyMs,
                         MaxReadLatencyMs,
