@@ -29,7 +29,7 @@ namespace SQLGuardObservatory.API.Services
                         HealthStatus,
                         ScoreCollectedAt,
                         
-                        -- Breakdown por Tiers (150 puntos)
+                        -- Breakdown por Tiers (100 puntos)
                         Tier1_Availability,
                         Tier2_Continuity,
                         Tier3_Resources,
@@ -193,13 +193,13 @@ namespace SQLGuardObservatory.API.Services
         {
             try
             {
-                // v2.0: Leer directamente de la vista consolidada (umbrales de 150 puntos)
+                // v3.0: Leer directamente de la vista consolidada (umbrales de 100 puntos)
                 var query = @"
                     SELECT 
                         COUNT(*) AS TotalInstances,
-                        SUM(CASE WHEN HealthScore >= 135 THEN 1 ELSE 0 END) AS HealthyCount,      -- 90% de 150
-                        SUM(CASE WHEN HealthScore >= 105 AND HealthScore < 135 THEN 1 ELSE 0 END) AS WarningCount, -- 70-89%
-                        SUM(CASE WHEN HealthScore < 105 THEN 1 ELSE 0 END) AS CriticalCount,      -- <70%
+                        SUM(CASE WHEN HealthScore >= 90 THEN 1 ELSE 0 END) AS HealthyCount,      -- 90% de 100
+                        SUM(CASE WHEN HealthScore >= 70 AND HealthScore < 90 THEN 1 ELSE 0 END) AS WarningCount, -- 70-89%
+                        SUM(CASE WHEN HealthScore < 70 THEN 1 ELSE 0 END) AS CriticalCount,      -- <70%
                         AVG(HealthScore) AS AvgScore,
                         MAX(ScoreCollectedAt) AS LastUpdate
                     FROM dbo.vw_InstanceHealth_Latest";
@@ -281,10 +281,10 @@ namespace SQLGuardObservatory.API.Services
                     var healthScore = Convert.ToInt32(reader["HealthScore"]);
                     totalScore += healthScore;
                     
-                    // v2.0: Umbrales de 150 puntos
-                    if (healthScore >= 135) healthyCount++;      // 90% de 150
-                    else if (healthScore >= 105) warningCount++; // 70-89% de 150
-                    else criticalCount++;                        // <70% de 150
+                    // v3.0: Umbrales de 100 puntos
+                    if (healthScore >= 90) healthyCount++;      // 90% de 100
+                    else if (healthScore >= 70) warningCount++; // 70-89% de 100
+                    else criticalCount++;                       // <70% de 100
                     
                     var diskWorstFreePct = reader["DiskWorstFreePct"] != DBNull.Value ? Convert.ToDecimal(reader["DiskWorstFreePct"]) : 100m;
                     var fullBackupBreached = reader["FullBackupBreached"] != DBNull.Value && Convert.ToBoolean(reader["FullBackupBreached"]);
@@ -322,8 +322,8 @@ namespace SQLGuardObservatory.API.Services
                         maintenanceOverdueCount++;
                     }
 
-                    // Instancias críticas (HealthScore < 105 = <70% de 150)
-                    if (healthScore < 105)
+                    // Instancias críticas (HealthScore < 70 = <70% de 100)
+                    if (healthScore < 70)
                     {
                         var issues = new List<string>();
                         

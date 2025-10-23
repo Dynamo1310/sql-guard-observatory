@@ -72,16 +72,16 @@ function Calculate-ConnectivityScore {
         [int]$ConnectLatencyMs
     )
     
-    # 20 puntos máximo
+    # 15 puntos máximo (v3.0)
     if (-not $ConnectSuccess) { return 0 }
     
-    # Base: 15 pts por conectar
-    # Bonus: hasta 5 pts por latencia
-    $baseScore = 15
+    # Base: 12 pts por conectar
+    # Bonus: hasta 3 pts por latencia
+    $baseScore = 12
     $latencyBonus = 0
     
-    if ($ConnectLatencyMs -le 10) { $latencyBonus = 5 }
-    elseif ($ConnectLatencyMs -le 50) { $latencyBonus = 3 }
+    if ($ConnectLatencyMs -le 10) { $latencyBonus = 3 }
+    elseif ($ConnectLatencyMs -le 50) { $latencyBonus = 2 }
     elseif ($ConnectLatencyMs -le 100) { $latencyBonus = 1 }
     
     return $baseScore + $latencyBonus
@@ -113,38 +113,38 @@ function Calculate-AlwaysOnScore {
         [string]$AlwaysOnWorstState
     )
     
-    # 10 puntos máximo
-    if (-not $AlwaysOnEnabled) { return 10 }  # N/A = OK
+    # 6 puntos máximo (v3.0)
+    if (-not $AlwaysOnEnabled) { return 6 }  # N/A = OK
     
     switch ($AlwaysOnWorstState) {
-        "HEALTHY" { return 10 }
-        "WARNING" { return 5 }
+        "HEALTHY" { return 6 }
+        "WARNING" { return 3 }
         "CRITICAL" { return 0 }
-        default { return 10 }
+        default { return 6 }
     }
 }
 
 function Calculate-FullBackupScore {
     param([bool]$FullBackupBreached)
     
-    # 15 puntos máximo
-    return if ($FullBackupBreached) { 0 } else { 15 }
+    # 12 puntos máximo (v3.0)
+    return if ($FullBackupBreached) { 0 } else { 12 }
 }
 
 function Calculate-LogBackupScore {
     param([bool]$LogBackupBreached)
     
-    # 15 puntos máximo
-    return if ($LogBackupBreached) { 0 } else { 15 }
+    # 12 puntos máximo (v3.0)
+    return if ($LogBackupBreached) { 0 } else { 12 }
 }
 
 function Calculate-DiskSpaceScore {
     param([int]$DiskWorstFreePct)
     
-    # 15 puntos máximo
-    if ($DiskWorstFreePct -ge 30) { return 15 }
-    if ($DiskWorstFreePct -ge 20) { return 10 }
-    if ($DiskWorstFreePct -ge 10) { return 5 }
+    # 10 puntos máximo (v3.0)
+    if ($DiskWorstFreePct -ge 30) { return 10 }
+    if ($DiskWorstFreePct -ge 20) { return 7 }
+    if ($DiskWorstFreePct -ge 10) { return 3 }
     return 0  # Crítico
 }
 
@@ -154,13 +154,13 @@ function Calculate-IOPSScore {
         [decimal]$AvgWriteLatencyMs
     )
     
-    # 15 puntos máximo
+    # 8 puntos máximo (v3.0)
     $avgLatency = ($AvgReadLatencyMs + $AvgWriteLatencyMs) / 2
     
-    if ($avgLatency -eq 0) { return 15 }  # Sin datos = OK
-    if ($avgLatency -le 10) { return 15 }  # Excelente (SSD)
-    if ($avgLatency -le 20) { return 12 }  # Bueno
-    if ($avgLatency -le 50) { return 7 }   # Aceptable (HDD)
+    if ($avgLatency -eq 0) { return 8 }  # Sin datos = OK
+    if ($avgLatency -le 10) { return 8 }  # Excelente (SSD)
+    if ($avgLatency -le 20) { return 6 }  # Bueno
+    if ($avgLatency -le 50) { return 3 }  # Aceptable (HDD)
     return 0  # Crítico
 }
 
@@ -170,48 +170,48 @@ function Calculate-QueryPerformanceScore {
         [int]$LongRunningCount
     )
     
-    # 10 puntos máximo
+    # 7 puntos máximo (v3.0)
     $totalSlow = $SlowQueriesCount + $LongRunningCount
     
-    if ($totalSlow -eq 0) { return 10 }
-    if ($totalSlow -le 3) { return 7 }
-    if ($totalSlow -le 10) { return 3 }
+    if ($totalSlow -eq 0) { return 7 }
+    if ($totalSlow -le 3) { return 5 }
+    if ($totalSlow -le 10) { return 2 }
     return 0
 }
 
 function Calculate-CheckdbScore {
     param([bool]$CheckdbOk)
     
-    # 10 puntos máximo
-    return if ($CheckdbOk) { 10 } else { 0 }
+    # 4 puntos máximo (v3.0)
+    return if ($CheckdbOk) { 4 } else { 0 }
 }
 
 function Calculate-IndexOptimizeScore {
     param([bool]$IndexOptimizeOk)
     
-    # 5 puntos máximo
-    return if ($IndexOptimizeOk) { 5 } else { 0 }
+    # 3 puntos máximo (v3.0)
+    return if ($IndexOptimizeOk) { 3 } else { 0 }
 }
 
 function Calculate-ErrorlogScore {
     param([int]$Severity20PlusCount)
     
-    # 5 puntos máximo
-    if ($Severity20PlusCount -eq 0) { return 5 }
-    if ($Severity20PlusCount -le 2) { return 3 }
+    # 3 puntos máximo (v3.0)
+    if ($Severity20PlusCount -eq 0) { return 3 }
+    if ($Severity20PlusCount -le 2) { return 2 }
     return 0
 }
 
 function Get-HealthStatus {
     param([int]$Score)
     
-    # Escala de 150 puntos:
-    # Healthy: ≥135 (90%)
-    # Warning: 105-134 (70-89%)
-    # Critical: <105 (<70%)
+    # Escala de 100 puntos (v3.0):
+    # Healthy: ≥90 (90%)
+    # Warning: 70-89 (70-89%)
+    # Critical: <70 (<70%)
     
-    if ($Score -ge 135) { return "Healthy" }
-    if ($Score -ge 105) { return "Warning" }
+    if ($Score -ge 90) { return "Healthy" }
+    if ($Score -ge 70) { return "Warning" }
     return "Critical"
 }
 
@@ -411,7 +411,7 @@ INSERT INTO dbo.InstanceHealth_Score (
 
 Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Health Score v2.0 - CONSOLIDATOR (150 puntos)       ║" -ForegroundColor Cyan
+Write-Host "║  Health Score v3.0 - CONSOLIDATOR (100 puntos)       ║" -ForegroundColor Cyan
 Write-Host "║  Frecuencia: 2 minutos                                ║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
@@ -476,30 +476,20 @@ foreach ($instanceName in $instances) {
     $indexOptScore = Calculate-IndexOptimizeScore -IndexOptimizeOk $data.IndexOptimizeOk
     $errorlogScore = Calculate-ErrorlogScore -Severity20PlusCount $data.Severity20PlusCount
     
-    # Calcular totales por tier
-    $tier1 = $connectivityScore + $blockingScore + $memoryScore + $alwaysOnScore  # 50 pts
-    $tier2 = $fullBackupScore + $logBackupScore  # 30 pts (moved AlwaysOn to Tier1)
-    $tier3 = $diskScore + $iopsScore + $queryScore  # 40 pts
-    $tier4 = $checkdbScore + $indexOptScore + $errorlogScore  # 20 pts
+    # Calcular totales por tier (v3.0 - 100 puntos)
+    # Tier 1: Disponibilidad (35 pts) - Conectividad=15, Blocking=10, Memoria=10
+    $tier1 = $connectivityScore + $blockingScore + $memoryScore  # 35 pts max
     
-    $totalScore = $tier1 + $tier2 + $tier3 + $tier4  # 140 pts max (need to adjust)
+    # Tier 2: Continuidad (30 pts) - FullBackup=12, LogBackup=12, AlwaysOn=6
+    $tier2 = $fullBackupScore + $logBackupScore + $alwaysOnScore  # 30 pts max
     
-    # Ajustar para que sea de 150 (adding 10 pts to Tier2 for AlwaysOn)
-    $tier1 = $connectivityScore + $blockingScore + $memoryScore + $alwaysOnScore  # 50 pts max
-    $tier2 = $fullBackupScore + $logBackupScore + $alwaysOnScore  # 40 pts max (15+15+10)
-    $tier3 = $diskScore + $iopsScore + $queryScore  # 40 pts max
-    $tier4 = $checkdbScore + $indexOptScore + $errorlogScore  # 20 pts max
+    # Tier 3: Performance & Recursos (25 pts) - Disk=10, IOPS=8, Queries=7
+    $tier3 = $diskScore + $iopsScore + $queryScore  # 25 pts max
     
-    # Recalcular sin duplicar AlwaysOn
-    $tier1 = $connectivityScore + $blockingScore + $memoryScore + $alwaysOnScore  # 50 pts
-    $tier2 = $fullBackupScore + $logBackupScore  # 30 pts
-    $tier3 = $diskScore + $iopsScore + $queryScore  # 40 pts
-    $tier4 = $checkdbScore + $indexOptScore + $errorlogScore  # 20 pts
+    # Tier 4: Mantenimiento (10 pts) - CHECKDB=4, Index=3, Errorlog=3
+    $tier4 = $checkdbScore + $indexOptScore + $errorlogScore  # 10 pts max
     
-    # Agregar 10 pts más a tier2 para llegar a 150
-    $tier2 = $tier2 + $alwaysOnScore  # Ahora es 40 pts (15+15+10)
-    
-    $totalScore = $tier1 + $tier2 + $tier3 + $tier4  # 150 pts max
+    $totalScore = $tier1 + $tier2 + $tier3 + $tier4  # 100 pts max
     
     $healthStatus = Get-HealthStatus -Score $totalScore
     
@@ -509,7 +499,7 @@ foreach ($instanceName in $instances) {
         "Critical" { "🚨" }
     }
     
-    Write-Host "   $statusIcon $instanceName - Score: $totalScore/150 ($healthStatus) [T1:$tier1 T2:$tier2 T3:$tier3 T4:$tier4]" -ForegroundColor Gray
+    Write-Host "   $statusIcon $instanceName - Score: $totalScore/100 ($healthStatus) [T1:$tier1 T2:$tier2 T3:$tier3 T4:$tier4]" -ForegroundColor Gray
     
     # Crear objeto con todos los scores
     $scoreData = [PSCustomObject]@{

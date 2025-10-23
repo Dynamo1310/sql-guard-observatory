@@ -157,7 +157,7 @@ export default function HealthScore() {
                   Health Score v2.0 - Metodología de Evaluación
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Métrica de <span className="font-bold text-foreground">0 a 150 puntos</span> que evalúa la salud de instancias SQL Server mediante 
+                  Métrica de <span className="font-bold text-foreground">0 a 100 puntos</span> que evalúa la salud de instancias SQL Server mediante 
                   análisis de disponibilidad, continuidad, recursos y mantenimiento.
                 </p>
               </div>
@@ -170,19 +170,19 @@ export default function HealthScore() {
                     <div className="bg-success/10 border border-success/30 rounded-lg p-3">
                       <CheckCircle2 className="h-6 w-6 text-success mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-success">HEALTHY</p>
-                      <p className="text-center text-lg font-mono font-bold text-success">135-150 pts</p>
+                      <p className="text-center text-lg font-mono font-bold text-success">90-100 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">≥90%</p>
                     </div>
                     <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
                       <AlertTriangle className="h-6 w-6 text-warning mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-warning">WARNING</p>
-                      <p className="text-center text-lg font-mono font-bold text-warning">105-134 pts</p>
+                      <p className="text-center text-lg font-mono font-bold text-warning">70-89 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">70-89%</p>
                     </div>
                     <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
                       <XCircle className="h-6 w-6 text-destructive mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-destructive">CRITICAL</p>
-                      <p className="text-center text-lg font-mono font-bold text-destructive">{'<'}105 pts</p>
+                      <p className="text-center text-lg font-mono font-bold text-destructive">{'<'}70 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">{'<'}70%</p>
                     </div>
                   </div>
@@ -210,14 +210,14 @@ export default function HealthScore() {
                           <h4 className="font-semibold text-sm">Tier 1: Disponibilidad</h4>
                           <p className="text-xs text-muted-foreground">Métricas críticas de acceso y respuesta</p>
                         </div>
-                        <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-lg px-3">50 pts</Badge>
+                        <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-lg px-3">35 pts</Badge>
                       </div>
                       <div className="grid gap-2 mt-3 text-xs">
                         <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Conectividad (20 pts)</span>
+                          <span className="font-medium">Conectividad (15 pts)</span>
                           <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 20 pts: Conecta + latencia ≤10ms</li>
-                            <li>• 15-18 pts: Conecta + latencia 10-100ms</li>
+                            <li>• 15 pts: Conecta + latencia ≤10ms</li>
+                            <li>• 12-14 pts: Conecta + latencia 10-100ms</li>
                             <li>• 0 pts: Sin conexión o latencia {'>'}100ms</li>
                           </ul>
                         </div>
@@ -235,14 +235,6 @@ export default function HealthScore() {
                             <li>• 10 pts: PLE ≥300 seg</li>
                             <li>• 3-7 pts: PLE 100-299 seg</li>
                             <li>• 0 pts: PLE {'<'}100 seg</li>
-                          </ul>
-                        </div>
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">AlwaysOn Availability Groups (10 pts)</span>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 10 pts: N/A o sincronizado</li>
-                            <li>• 5 pts: Sincronización parcial</li>
-                            <li>• 0 pts: Desincronizado</li>
                           </ul>
                         </div>
                       </div>
@@ -264,22 +256,30 @@ export default function HealthScore() {
                           <h4 className="font-semibold text-sm">Tier 2: Continuidad</h4>
                           <p className="text-xs text-muted-foreground">Estrategia de backup y recuperación</p>
                         </div>
-                        <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/20 text-lg px-3">40 pts</Badge>
+                        <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/20 text-lg px-3">30 pts</Badge>
                       </div>
                       <div className="grid gap-2 mt-3 text-xs">
                         <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">FULL Backup (15 pts)</span>
+                          <span className="font-medium">FULL Backup (12 pts)</span>
                           <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 15 pts: Todas las bases con backup {'<'}24h</li>
+                            <li>• 12 pts: Todas las bases con backup {'<'}24h</li>
                             <li>• 0 pts: Al menos una base sin backup {'>'}24h</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">LOG Backup (15 pts)</span>
+                          <span className="font-medium">LOG Backup (12 pts)</span>
                           <p className="text-muted-foreground mt-1">Aplica solo a bases en modo FULL recovery</p>
                           <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 15 pts: Todas las bases FULL con LOG {'<'}2h</li>
+                            <li>• 12 pts: Todas las bases FULL con LOG {'<'}2h</li>
                             <li>• 0 pts: Al menos una base FULL sin LOG {'>'}2h</li>
+                          </ul>
+                        </div>
+                        <div className="bg-background/50 rounded p-2">
+                          <span className="font-medium">AlwaysOn Availability Groups (6 pts)</span>
+                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
+                            <li>• 6 pts: N/A o sincronizado</li>
+                            <li>• 3 pts: Sincronización parcial</li>
+                            <li>• 0 pts: Desincronizado</li>
                           </ul>
                         </div>
                       </div>
@@ -301,32 +301,32 @@ export default function HealthScore() {
                           <h4 className="font-semibold text-sm">Tier 3: Recursos</h4>
                           <p className="text-xs text-muted-foreground">Almacenamiento y rendimiento I/O</p>
                         </div>
-                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 text-lg px-3">40 pts</Badge>
+                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 text-lg px-3">25 pts</Badge>
                       </div>
                       <div className="grid gap-2 mt-3 text-xs">
                         <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Disk Space (15 pts)</span>
+                          <span className="font-medium">Disk Space (10 pts)</span>
                           <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 15 pts: Volumen más crítico ≥30% libre</li>
-                            <li>• 10 pts: 20-29% libre</li>
-                            <li>• 5 pts: 10-19% libre</li>
+                            <li>• 10 pts: Volumen más crítico ≥30% libre</li>
+                            <li>• 7 pts: 20-29% libre</li>
+                            <li>• 3 pts: 10-19% libre</li>
                             <li>• 0 pts: {'<'}10% libre</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">IOPS / Latencia (15 pts)</span>
+                          <span className="font-medium">IOPS / Latencia (8 pts)</span>
                           <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 15 pts: Latencia ≤10ms</li>
-                            <li>• 12 pts: 11-20ms</li>
-                            <li>• 7 pts: 21-50ms</li>
+                            <li>• 8 pts: Latencia ≤10ms</li>
+                            <li>• 6 pts: 11-20ms</li>
+                            <li>• 3 pts: 21-50ms</li>
                             <li>• 0 pts: {'>'}50ms</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Query Performance (10 pts)</span>
+                          <span className="font-medium">Query Performance (7 pts)</span>
                           <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 10 pts: 0 queries {'>'}30 seg</li>
-                            <li>• 7 pts: 1-3 queries lentos</li>
+                            <li>• 7 pts: 0 queries {'>'}30 seg</li>
+                            <li>• 5 pts: 1-3 queries lentos</li>
                             <li>• 0 pts: 10+ queries lentos</li>
                           </ul>
                         </div>
@@ -349,29 +349,29 @@ export default function HealthScore() {
                           <h4 className="font-semibold text-sm">Tier 4: Mantenimiento</h4>
                           <p className="text-xs text-muted-foreground">Tareas preventivas y monitoreo</p>
                         </div>
-                        <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-lg px-3">20 pts</Badge>
+                        <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-lg px-3">10 pts</Badge>
                       </div>
                       <div className="grid gap-2 mt-3 text-xs">
                         <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">DBCC CHECKDB (10 pts)</span>
+                          <span className="font-medium">DBCC CHECKDB (4 pts)</span>
                           <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 10 pts: Ejecutado y exitoso en últimos 7 días</li>
+                            <li>• 4 pts: Ejecutado y exitoso en últimos 7 días</li>
                             <li>• 0 pts: Falló o sin ejecutar {'>'}7 días</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Index Optimize (5 pts)</span>
+                          <span className="font-medium">Index Optimize (3 pts)</span>
                           <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 5 pts: Ejecutado y exitoso en últimos 7 días</li>
+                            <li>• 3 pts: Ejecutado y exitoso en últimos 7 días</li>
                             <li>• 0 pts: Falló o sin ejecutar {'>'}7 días</li>
                           </ul>
                         </div>
                         <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Error Log (5 pts)</span>
+                          <span className="font-medium">Error Log (3 pts)</span>
                           <p className="text-muted-foreground mt-1">Severity ≥20 en últimas 24h</p>
                           <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 5 pts: 0 errores</li>
-                            <li>• 3 pts: 1-2 errores</li>
+                            <li>• 3 pts: 0 errores</li>
+                            <li>• 2 pts: 1-2 errores</li>
                             <li>• 0 pts: 3+ errores</li>
                           </ul>
                         </div>
@@ -388,23 +388,23 @@ export default function HealthScore() {
                   <div className="space-y-2 text-xs">
                     <div className="flex items-center justify-between bg-red-500/5 p-2 rounded">
                       <span className="font-medium">Tier 1: Disponibilidad</span>
-                      <span className="font-mono font-bold text-red-500">50 pts (33%)</span>
+                      <span className="font-mono font-bold text-red-500">35 pts (35%)</span>
                     </div>
                     <div className="flex items-center justify-between bg-orange-500/5 p-2 rounded">
                       <span className="font-medium">Tier 2: Continuidad</span>
-                      <span className="font-mono font-bold text-orange-500">40 pts (27%)</span>
+                      <span className="font-mono font-bold text-orange-500">30 pts (30%)</span>
                     </div>
                     <div className="flex items-center justify-between bg-yellow-500/5 p-2 rounded">
                       <span className="font-medium">Tier 3: Recursos</span>
-                      <span className="font-mono font-bold text-yellow-500">40 pts (27%)</span>
+                      <span className="font-mono font-bold text-yellow-500">25 pts (25%)</span>
                     </div>
                     <div className="flex items-center justify-between bg-green-500/5 p-2 rounded">
                       <span className="font-medium">Tier 4: Mantenimiento</span>
-                      <span className="font-mono font-bold text-green-500">20 pts (13%)</span>
+                      <span className="font-mono font-bold text-green-500">10 pts (10%)</span>
                     </div>
                     <div className="flex items-center justify-between bg-blue-500/10 p-3 rounded border-2 border-blue-500/30 mt-3">
                       <span className="font-bold">TOTAL</span>
-                      <span className="font-mono text-xl font-bold text-blue-500">150 pts</span>
+                      <span className="font-mono text-xl font-bold text-blue-500">100 pts</span>
                     </div>
                   </div>
                 </CardContent>
@@ -602,25 +602,25 @@ export default function HealthScore() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center py-2">
-                        <span className={cn(
+                        <span                         className={cn(
                           'font-mono text-sm font-bold',
-                          score.healthScore >= 135 && 'text-success',
-                          score.healthScore >= 105 && score.healthScore < 135 && 'text-warning',
-                          score.healthScore < 105 && 'text-destructive'
+                          score.healthScore >= 90 && 'text-success',
+                          score.healthScore >= 70 && score.healthScore < 90 && 'text-warning',
+                          score.healthScore < 70 && 'text-destructive'
                         )}>
                           {score.healthScore}
-                          <span className="text-xs text-muted-foreground">/150</span>
+                          <span className="text-xs text-muted-foreground">/100</span>
                         </span>
                       </TableCell>
                       <TableCell className="py-2">
                         <div className="flex items-center gap-2">
                           <Progress 
-                            value={(score.healthScore / 150) * 100} 
+                            value={(score.healthScore / 100) * 100} 
                             className={cn(
                               'h-2 w-24',
-                              score.healthScore >= 135 && '[&>div]:bg-success',
-                              score.healthScore >= 105 && score.healthScore < 135 && '[&>div]:bg-warning',
-                              score.healthScore < 105 && '[&>div]:bg-destructive'
+                              score.healthScore >= 90 && '[&>div]:bg-success',
+                              score.healthScore >= 70 && score.healthScore < 90 && '[&>div]:bg-warning',
+                              score.healthScore < 70 && '[&>div]:bg-destructive'
                             )}
                           />
                         </div>
@@ -677,8 +677,8 @@ export default function HealthScore() {
                               <Card className="bg-gradient-to-r from-red-500/5 via-orange-500/5 via-yellow-500/5 to-green-500/5">
                                 <CardHeader className="pb-3">
                                   <CardTitle className="text-sm flex items-center justify-between">
-                                    <span>📊 Breakdown por Tiers (150 pts)</span>
-                                    <span className="text-lg font-mono font-bold">{score.healthScore}/150</span>
+                                    <span>📊 Breakdown por Tiers (100 pts)</span>
+                                    <span className="text-lg font-mono font-bold">{score.healthScore}/100</span>
                                   </CardTitle>
                                 </CardHeader>
                                 <CardContent>
