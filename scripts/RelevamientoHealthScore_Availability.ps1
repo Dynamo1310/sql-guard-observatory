@@ -12,13 +12,24 @@
     Guarda en: InstanceHealth_Critical_Availability
     
 .NOTES
-    Versión: 2.0
+    Versión: 2.0 (dbatools)
     Frecuencia: Cada 1-2 minutos
     Timeout: 10 segundos
+    
+.REQUIRES
+    - dbatools (Install-Module -Name dbatools -Force)
+    - PowerShell 5.1 o superior
 #>
 
 [CmdletBinding()]
 param()
+
+# Verificar que dbatools está disponible
+if (-not (Get-Module -ListAvailable -Name dbatools)) {
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    exit 1
+}
+Import-Module dbatools -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
@@ -49,17 +60,15 @@ function Test-SqlConnection {
     try {
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         
-        $query = "SELECT @@SERVERNAME AS ServerName"
-        $null = Invoke-Sqlcmd -ServerInstance $InstanceName `
-            -Query $query `
-            -ConnectionTimeout $TimeoutSec `
-            -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+        # Usar dbatools para test de conexión
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -ConnectTimeout $TimeoutSec -EnableException
         
         $stopwatch.Stop()
-        $result.Success = $true
-        $result.LatencyMs = [int]$stopwatch.ElapsedMilliseconds
+        
+        if ($connection.IsPingable) {
+            $result.Success = $true
+            $result.LatencyMs = [int]$stopwatch.ElapsedMilliseconds
+        }
         
     } catch {
         $result.ErrorMessage = $_.Exception.Message
@@ -94,12 +103,11 @@ WHERE blocking_session_id > 0
 ORDER BY wait_time DESC;
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        # Usar dbatools para ejecutar queries
+        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
-            -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -EnableException
         
         if ($data) {
             $result.BlockingCount = $data.Count
@@ -137,12 +145,11 @@ WHERE (counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manag
    OR (counter_name = 'Buffer cache hit ratio' AND object_name LIKE '%Buffer Manager%');
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        # Usar dbatools para ejecutar queries
+        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
-            -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -EnableException
         
         foreach ($row in $data) {
             if ($row.counter_name -like '*Page life expectancy*') {
@@ -194,12 +201,11 @@ BEGIN
 END
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        # Usar dbatools para ejecutar queries
+        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
-            -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -EnableException
         
         if ($data) {
             $result.Enabled = $true
@@ -270,13 +276,12 @@ INSERT INTO dbo.InstanceHealth_Critical_Availability (
 );
 "@
             
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            # Usar dbatools para insertar datos
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
-                -ConnectionTimeout 30 `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
-                -ErrorAction Stop
+                -EnableException
         }
         
         Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

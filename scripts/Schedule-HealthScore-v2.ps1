@@ -12,8 +12,10 @@
     5. HealthScore_Consolidate   → Cada 2 minutos
     
 .NOTES
-    Requiere: Ejecutar como Administrador
-    Versión: 2.0
+    Requiere: 
+    - Ejecutar como Administrador
+    - dbatools instalado (.\scripts\Install-DbaTools.ps1)
+    Versión: 2.0 (dbatools)
 #>
 
 [CmdletBinding()]
@@ -32,11 +34,43 @@ Write-Host "║  Health Score v2.0 - Task Scheduler Setup            ║" -Foreg
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
-# Verificar que existe el directorio de scripts
-if (-not (Test-Path $ScriptsPath)) {
-    Write-Error "No existe el directorio: $ScriptsPath"
+# ===== VERIFICACIONES PREVIAS =====
+
+Write-Host "🔍 Verificando prerequisitos..." -ForegroundColor Yellow
+Write-Host ""
+
+# 1. Verificar dbatools
+Write-Host "1️⃣  Verificando dbatools..." -ForegroundColor Gray
+
+$dbaModule = Get-Module -ListAvailable -Name dbatools
+
+if (-not $dbaModule) {
+    Write-Error "❌ dbatools NO está instalado. Los scripts de Health Score v2.0 requieren dbatools."
+    Write-Host ""
+    Write-Host "Instala dbatools ejecutando:" -ForegroundColor Yellow
+    Write-Host "  .\scripts\Install-DbaTools.ps1" -ForegroundColor Cyan
+    Write-Host "  O manualmente:" -ForegroundColor Gray
+    Write-Host "  Install-Module -Name dbatools -Force -AllowClobber" -ForegroundColor Gray
+    Write-Host ""
     exit 1
 }
+
+$dbaVersion = $dbaModule.Version | Select-Object -First 1
+Write-Host "   ✅ dbatools instalado (Versión: $dbaVersion)" -ForegroundColor Green
+
+# 2. Verificar que existe el directorio de scripts
+Write-Host "2️⃣  Verificando directorio de scripts..." -ForegroundColor Gray
+
+if (-not (Test-Path $ScriptsPath)) {
+    Write-Error "❌ No existe el directorio: $ScriptsPath"
+    exit 1
+}
+
+Write-Host "   ✅ Directorio de scripts encontrado: $ScriptsPath" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "✅ Todos los prerequisitos verificados!" -ForegroundColor Green
+Write-Host ""
 
 # Crear directorio de logs si no existe
 if (-not (Test-Path $LogPath)) {

@@ -30,13 +30,24 @@
        └─ Errorlog: 5 pts
     
 .NOTES
-    Versión: 2.0
+    Versión: 2.0 (dbatools)
     Frecuencia: Cada 2 minutos
     Ejecutar DESPUÉS de los otros scripts
+    
+.REQUIRES
+    - dbatools (Install-Module -Name dbatools -Force)
+    - PowerShell 5.1 o superior
 #>
 
 [CmdletBinding()]
 param()
+
+# Verificar que dbatools está disponible
+if (-not (Get-Module -ListAvailable -Name dbatools)) {
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    exit 1
+}
+Import-Module dbatools -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
@@ -259,13 +270,12 @@ LEFT JOIN LatestBackups b ON 1=1
 LEFT JOIN LatestMaintenance m ON 1=1;
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $SqlServer `
+        # Usar dbatools para ejecutar queries
+        $data = Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
-            -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -EnableException
         
         return $data
         
@@ -291,13 +301,12 @@ FROM (
 ORDER BY InstanceName;
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $SqlServer `
+        # Usar dbatools para ejecutar queries
+        $data = Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
-            -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -EnableException
         
         return $data | Select-Object -ExpandProperty InstanceName
         
@@ -364,13 +373,12 @@ INSERT INTO dbo.InstanceHealth_Score (
 );
 "@
         
-        Invoke-Sqlcmd -ServerInstance $SqlServer `
+        # Usar dbatools para insertar datos
+        Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
-            -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -EnableException
         
         return $true
         

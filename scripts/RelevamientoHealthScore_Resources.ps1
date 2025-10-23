@@ -11,13 +11,24 @@
     Guarda en: InstanceHealth_Critical_Resources
     
 .NOTES
-    Versión: 2.0
+    Versión: 2.0 (dbatools)
     Frecuencia: Cada 5 minutos
     Timeout: 15 segundos
+    
+.REQUIRES
+    - dbatools (Install-Module -Name dbatools -Force)
+    - PowerShell 5.1 o superior
 #>
 
 [CmdletBinding()]
 param()
+
+# Verificar que dbatools está disponible
+if (-not (Get-Module -ListAvailable -Name dbatools)) {
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    exit 1
+}
+Import-Module dbatools -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
@@ -56,12 +67,11 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 ORDER BY FreePct;
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        # Usar dbatools para ejecutar queries
+        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
-            -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -EnableException
         
         if ($data) {
             $result.WorstFreePct = ($data | Measure-Object -Property FreePct -Minimum).Minimum
@@ -128,12 +138,11 @@ SELECT
 FROM IOStats;
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        # Usar dbatools para ejecutar queries
+        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
-            -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -EnableException
         
         if ($data) {
             $result.AvgReadLatencyMs = [decimal]$data.AvgReadLatency
@@ -182,12 +191,11 @@ WHERE session_id > 50
 ORDER BY total_elapsed_time DESC;
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        # Usar dbatools para ejecutar queries
+        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
-            -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -EnableException
         
         if ($data) {
             $result.SlowQueriesCount = ($data | Where-Object { $_.elapsed_seconds -lt 300 }).Count  # 30s-5min
@@ -212,14 +220,9 @@ function Test-SqlConnection {
     )
     
     try {
-        $query = "SELECT @@SERVERNAME"
-        $null = Invoke-Sqlcmd -ServerInstance $InstanceName `
-            -Query $query `
-            -ConnectionTimeout $TimeoutSec `
-            -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
-        return $true
+        # Usar dbatools para test de conexión
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -ConnectTimeout $TimeoutSec -EnableException
+        return $connection.IsPingable
     } catch {
         return $false
     }
@@ -276,13 +279,12 @@ INSERT INTO dbo.InstanceHealth_Critical_Resources (
 );
 "@
             
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            # Usar dbatools para insertar datos
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
-                -ConnectionTimeout 30 `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
-                -ErrorAction Stop
+                -EnableException
         }
         
         Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
