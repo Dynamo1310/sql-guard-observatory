@@ -277,12 +277,11 @@ LEFT JOIN LatestBackups b ON 1=1
 LEFT JOIN LatestMaintenance m ON 1=1;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         return $data
@@ -309,12 +308,11 @@ FROM (
 ORDER BY InstanceName;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         return $data | Select-Object -ExpandProperty InstanceName
@@ -382,12 +380,11 @@ INSERT INTO dbo.InstanceHealth_Score (
 );
 "@
         
-        # Usar dbatools para insertar datos con TrustServerCertificate
+        # Usar dbatools para insertar datos
         Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         return $true

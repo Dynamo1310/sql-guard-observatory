@@ -110,11 +110,10 @@ WHERE blocking_session_id > 0
 ORDER BY wait_time DESC;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -153,11 +152,10 @@ WHERE (counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manag
    OR (counter_name = 'Buffer cache hit ratio' AND object_name LIKE '%Buffer Manager%');
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         foreach ($row in $data) {
@@ -210,11 +208,10 @@ BEGIN
 END
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -286,12 +283,11 @@ INSERT INTO dbo.InstanceHealth_Critical_Availability (
 );
 "@
             
-            # Usar dbatools para insertar datos con TrustServerCertificate
+            # Usar dbatools para insertar datos
             Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
                 -EnableException
         }
         

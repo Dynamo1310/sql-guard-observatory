@@ -74,11 +74,10 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 ORDER BY FreePct;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -146,11 +145,10 @@ SELECT
 FROM IOStats;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -200,11 +198,10 @@ WHERE session_id > 50
 ORDER BY total_elapsed_time DESC;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -289,12 +286,11 @@ INSERT INTO dbo.InstanceHealth_Critical_Resources (
 );
 "@
             
-            # Usar dbatools para insertar datos con TrustServerCertificate
+            # Usar dbatools para insertar datos
             Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
                 -EnableException
         }
         

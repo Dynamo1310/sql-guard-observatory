@@ -101,11 +101,10 @@ WHERE (j.name LIKE '%IntegrityCheck%'
   AND js.step_id = 1;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $datasets = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         $cutoffDate = (Get-Date).AddDays(-7)
@@ -230,11 +229,10 @@ WHERE ips.index_id > 0
   AND ips.avg_fragmentation_in_percent > 0;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         if ($data -and $data.AvgFragmentation -ne [DBNull]::Value) {
@@ -288,11 +286,10 @@ ORDER BY LogDate DESC;
 DROP TABLE #ErrorLog;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -370,12 +367,11 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
 );
 "@
             
-            # Usar dbatools para insertar datos con TrustServerCertificate
+            # Usar dbatools para insertar datos
             Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
                 -EnableException
         }
         

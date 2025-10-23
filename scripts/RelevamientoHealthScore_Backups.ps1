@@ -80,11 +80,10 @@ WHERE d.state_desc = 'ONLINE'
 GROUP BY d.name, d.recovery_model_desc;
 "@
         
-        # Usar dbatools para ejecutar queries con TrustServerCertificate
+        # Usar dbatools para ejecutar queries
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -202,12 +201,11 @@ INSERT INTO dbo.InstanceHealth_Backups (
 );
 "@
             
-            # Usar dbatools para insertar datos con TrustServerCertificate
+            # Usar dbatools para insertar datos
             Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
                 -EnableException
         }
         
