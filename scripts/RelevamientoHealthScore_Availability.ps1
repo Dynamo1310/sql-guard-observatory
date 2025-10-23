@@ -406,25 +406,31 @@ foreach ($instance in $instances) {
     }
     
     # Recolectar métricas (solo si conecta)
-    $blocking = Get-BlockingInfo -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    # NOTA: Blocking deshabilitado por request del usuario
+    # $blocking = Get-BlockingInfo -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    $blocking = @{ BlockingCount = 0; MaxBlockTimeSeconds = 0; BlockedSessions = @() }
+    
     $memory = Get-MemoryPressure -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
-    # Si AlwaysOn viene de la API, usarlo. Si no, consultar SQL Server
+    # Si AlwaysOn viene de la API como "Enabled", consultar SQL para obtener el estado real
     $alwaysOn = if ($alwaysOnFromAPI) {
+        # AlwaysOn está habilitado según API, obtener estado real de SQL
+        Get-AlwaysOnStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    } else {
+        # No está habilitado
         @{
-            Enabled = $true
-            WorstState = "N/A (from API)"
+            Enabled = $false
+            WorstState = "N/A"
             Details = @()
         }
-    } else {
-        Get-AlwaysOnStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
     }
     
     $status = "✅"
-    if ($blocking.BlockingCount -gt 10) { $status = "🚨 BLOCKING!" }
-    elseif ($memory.PageLifeExpectancy -lt 100) { $status = "⚠️ MEMORY!" }
+    # Blocking check deshabilitado
+    # if ($blocking.BlockingCount -gt 10) { $status = "🚨 BLOCKING!" }
+    if ($memory.PageLifeExpectancy -lt 100) { $status = "⚠️ MEMORY!" }
     
-    Write-Host "   $status $instanceName - Lat:$($connTest.LatencyMs)ms Block:$($blocking.BlockingCount) PLE:$($memory.PageLifeExpectancy)" -ForegroundColor Gray
+    Write-Host "   $status $instanceName - Lat:$($connTest.LatencyMs)ms PLE:$($memory.PageLifeExpectancy)" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -459,7 +465,6 @@ Write-Host "║  RESUMEN - AVAILABILITY                               ║" -Fore
 Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
 Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  Conectadas:           $(($results | Where-Object ConnectSuccess).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Con blocking:         $(($results | Where-Object {$_.BlockingCount -gt 0}).Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  Memory pressure:      $(($results | Where-Object {$_.PageLifeExpectancy -lt 300}).Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  AlwaysOn enabled:     $(($results | Where-Object AlwaysOnEnabled).Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green

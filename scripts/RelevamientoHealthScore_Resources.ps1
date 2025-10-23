@@ -378,14 +378,17 @@ foreach ($instance in $instances) {
     # Recolectar métricas
     $disks = Get-DiskStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
     $io = Get-IOLatency -InstanceName $instanceName -TimeoutSec $TimeoutSec
-    $queries = Get-SlowQueries -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    # NOTA: Queries lentos deshabilitado por request del usuario
+    # $queries = Get-SlowQueries -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    $queries = @{ SlowQueriesCount = 0; LongRunningCount = 0; TopQueries = @() }
     
     $status = "✅"
     if ($disks.WorstFreePct -lt 10) { $status = "🚨 DISK!" }
     elseif ($io.AvgReadLatencyMs -gt 50) { $status = "⚠️ SLOW I/O!" }
-    elseif ($queries.SlowQueriesCount -gt 5) { $status = "⚠️ SLOW QUERIES!" }
+    # Queries check deshabilitado
+    # elseif ($queries.SlowQueriesCount -gt 5) { $status = "⚠️ SLOW QUERIES!" }
     
-    Write-Host "   $status $instanceName - Disk:$($disks.WorstFreePct)% IO:$([int]$io.AvgReadLatencyMs)ms Slow:$($queries.SlowQueriesCount)" -ForegroundColor Gray
+    Write-Host "   $status $instanceName - Disk:$($disks.WorstFreePct)% IO:$([int]$io.AvgReadLatencyMs)ms" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -422,7 +425,6 @@ Write-Host "╠═════════════════════�
 Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  Disk crítico (<10%):  $(($results | Where-Object {$_.DiskWorstFreePct -lt 10}).Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  I/O lento (>20ms):    $(($results | Where-Object {$_.AvgReadLatencyMs -gt 20}).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Con queries lentos:   $(($results | Where-Object {$_.SlowQueriesCount -gt 0}).Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
 Write-Host "✅ Script completado!" -ForegroundColor Green
