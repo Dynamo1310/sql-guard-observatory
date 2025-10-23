@@ -241,6 +241,10 @@ try {
     if ($OnlyAWS) {
         $instances = $instances | Where-Object { $_.hostingSite -eq "AWS" }
     }
+    
+    # Excluir instancias con DMZ en el nombre
+    $instances = $instances | Where-Object { $_.NombreInstancia -notlike "*DMZ*" }
+    
     if ($TestMode) {
         $instances = $instances | Select-Object -First 5
     }
