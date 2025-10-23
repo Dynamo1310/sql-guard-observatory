@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/components/routing/ProtectedRoute";
 import { DefaultRoute } from "@/components/routing/DefaultRoute";
 import Overview from "./pages/Overview";
 import HealthScore from "./pages/HealthScore";
+import InstanceTrends from "./pages/InstanceTrends";
 import Jobs from "./pages/Jobs";
 import Disks from "./pages/Disks";
 import Databases from "./pages/Databases";
@@ -69,6 +70,11 @@ const App = () => (
                     <Route path="/healthscore" element={
                       <ProtectedRoute viewName="HealthScore">
                         <HealthScore />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/instance-trends/:instanceName" element={
+                      <ProtectedRoute viewName="HealthScore">
+                        <InstanceTrends />
                       </ProtectedRoute>
                     } />
                     <Route path="/jobs" element={

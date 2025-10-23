@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Activity, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronRight, HardDrive, Database, AlertCircle, Info } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Activity, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronRight, HardDrive, Database, AlertCircle, Info, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 export default function HealthScore() {
+  const navigate = useNavigate();
   const [healthScores, setHealthScores] = useState<HealthScoreDto[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -670,6 +672,19 @@ export default function HealthScore() {
                                   </span>
                                 </div>
                               </div>
+                            </div>
+
+                            {/* Botón Ver Tendencias */}
+                            <div className="flex justify-end">
+                              <Button
+                                onClick={() => navigate(`/instance-trends/${encodeURIComponent(score.instanceName)}`)}
+                                className="flex items-center gap-2"
+                                variant="outline"
+                                size="sm"
+                              >
+                                <TrendingUp className="h-4 w-4" />
+                                Ver Tendencias Históricas
+                              </Button>
                             </div>
 
                             {/* v2.0: Breakdown por Tiers */}
