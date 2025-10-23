@@ -29,7 +29,14 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
-Import-Module dbatools -ErrorAction Stop
+
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+}
+
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
@@ -94,10 +101,11 @@ WHERE (j.name LIKE '%IntegrityCheck%'
   AND js.step_id = 1;
 "@
         
-        # Usar dbatools para ejecutar queries
+        # Usar dbatools para ejecutar queries con TrustServerCertificate
         $datasets = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -TrustServerCertificate `
             -EnableException
         
         $cutoffDate = (Get-Date).AddDays(-7)
@@ -222,10 +230,11 @@ WHERE ips.index_id > 0
   AND ips.avg_fragmentation_in_percent > 0;
 "@
         
-        # Usar dbatools para ejecutar queries
+        # Usar dbatools para ejecutar queries con TrustServerCertificate
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -TrustServerCertificate `
             -EnableException
         
         if ($data -and $data.AvgFragmentation -ne [DBNull]::Value) {
@@ -279,10 +288,11 @@ ORDER BY LogDate DESC;
 DROP TABLE #ErrorLog;
 "@
         
-        # Usar dbatools para ejecutar queries
+        # Usar dbatools para ejecutar queries con TrustServerCertificate
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -309,8 +319,8 @@ function Test-SqlConnection {
     )
     
     try {
-        # Usar dbatools para test de conexión
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -ConnectTimeout $TimeoutSec -EnableException
+        # Usar dbatools para test de conexión con TrustServerCertificate
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -ConnectTimeout $TimeoutSec -TrustServerCertificate -EnableException
         return $connection.IsPingable
     } catch {
         return $false
@@ -360,11 +370,12 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
 );
 "@
             
-            # Usar dbatools para insertar datos
+            # Usar dbatools para insertar datos con TrustServerCertificate
             Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
+                -TrustServerCertificate `
                 -EnableException
         }
         

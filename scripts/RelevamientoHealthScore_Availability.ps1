@@ -29,7 +29,14 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
-Import-Module dbatools -ErrorAction Stop
+
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+}
+
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
@@ -60,8 +67,8 @@ function Test-SqlConnection {
     try {
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         
-        # Usar dbatools para test de conexión
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -ConnectTimeout $TimeoutSec -EnableException
+        # Usar dbatools para test de conexión con TrustServerCertificate
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -ConnectTimeout $TimeoutSec -TrustServerCertificate -EnableException
         
         $stopwatch.Stop()
         
@@ -103,10 +110,11 @@ WHERE blocking_session_id > 0
 ORDER BY wait_time DESC;
 "@
         
-        # Usar dbatools para ejecutar queries
+        # Usar dbatools para ejecutar queries con TrustServerCertificate
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -145,10 +153,11 @@ WHERE (counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manag
    OR (counter_name = 'Buffer cache hit ratio' AND object_name LIKE '%Buffer Manager%');
 "@
         
-        # Usar dbatools para ejecutar queries
+        # Usar dbatools para ejecutar queries con TrustServerCertificate
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -TrustServerCertificate `
             -EnableException
         
         foreach ($row in $data) {
@@ -201,10 +210,11 @@ BEGIN
 END
 "@
         
-        # Usar dbatools para ejecutar queries
+        # Usar dbatools para ejecutar queries con TrustServerCertificate
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -TrustServerCertificate `
             -EnableException
         
         if ($data) {
@@ -276,11 +286,12 @@ INSERT INTO dbo.InstanceHealth_Critical_Availability (
 );
 "@
             
-            # Usar dbatools para insertar datos
+            # Usar dbatools para insertar datos con TrustServerCertificate
             Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
+                -TrustServerCertificate `
                 -EnableException
         }
         

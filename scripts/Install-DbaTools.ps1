@@ -86,12 +86,21 @@ if ($dbaModule) {
 Write-Host ""
 Write-Host "3️⃣  Verificando importación de dbatools..." -ForegroundColor Yellow
 
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Write-Host "   ⚠️  Módulo SqlServer detectado - descargando para evitar conflictos..." -ForegroundColor Yellow
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+}
+
 try {
-    Import-Module dbatools -ErrorAction Stop
+    Import-Module dbatools -Force -ErrorAction Stop
     $importedModule = Get-Module -Name dbatools
     Write-Host "   ✅ dbatools importado correctamente (Versión: $($importedModule.Version))" -ForegroundColor Green
 } catch {
     Write-Error "❌ Error importando dbatools: $($_.Exception.Message)"
+    Write-Host ""
+    Write-Host "💡 Solución: Cierra esta ventana de PowerShell y abre una nueva para evitar conflictos de módulos." -ForegroundColor Yellow
+    Write-Host ""
     exit 1
 }
 

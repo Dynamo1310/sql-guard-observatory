@@ -24,7 +24,13 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
     exit 1
 }
 
-Import-Module dbatools -ErrorAction Stop
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+}
+
+# Importar dbatools con force
+Import-Module dbatools -Force -ErrorAction Stop
 
 Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
@@ -67,8 +73,8 @@ foreach ($instance in $instances) {
     try {
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         
-        # Test con dbatools
-        $connection = Test-DbaConnection -SqlInstance $instanceName -ConnectTimeout 10 -EnableException
+        # Test con dbatools + TrustServerCertificate
+        $connection = Test-DbaConnection -SqlInstance $instanceName -ConnectTimeout 10 -TrustServerCertificate -EnableException
         
         $stopwatch.Stop()
         

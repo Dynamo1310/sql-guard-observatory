@@ -47,7 +47,14 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
-Import-Module dbatools -ErrorAction Stop
+
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+}
+
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
@@ -270,11 +277,12 @@ LEFT JOIN LatestBackups b ON 1=1
 LEFT JOIN LatestMaintenance m ON 1=1;
 "@
         
-        # Usar dbatools para ejecutar queries
+        # Usar dbatools para ejecutar queries con TrustServerCertificate
         $data = Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -TrustServerCertificate `
             -EnableException
         
         return $data
@@ -301,11 +309,12 @@ FROM (
 ORDER BY InstanceName;
 "@
         
-        # Usar dbatools para ejecutar queries
+        # Usar dbatools para ejecutar queries con TrustServerCertificate
         $data = Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -TrustServerCertificate `
             -EnableException
         
         return $data | Select-Object -ExpandProperty InstanceName
@@ -373,11 +382,12 @@ INSERT INTO dbo.InstanceHealth_Score (
 );
 "@
         
-        # Usar dbatools para insertar datos
+        # Usar dbatools para insertar datos con TrustServerCertificate
         Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -TrustServerCertificate `
             -EnableException
         
         return $true
