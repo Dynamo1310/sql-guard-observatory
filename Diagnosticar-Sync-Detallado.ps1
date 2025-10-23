@@ -2,18 +2,18 @@
 # ==================================================================
 
 param(
-    [string]$AGName = "SSPR17CRM365AG"
+    [string]$AGName = "SSPR17CRM365AG",
+    [string[]]$Nodes = @("SSPR17CRM365-01", "SSPR17CRM365-51")
 )
 
 Remove-Module SqlServer -ErrorAction SilentlyContinue
 Import-Module dbatools -ErrorAction Stop
 
-$apiUrl = "http://localhost:5001/api/instances"
-$response = (Invoke-RestMethod -Uri $apiUrl -Method Get -ContentType "application/json")
-
-# Identificar nodos del AG
-$agNodes = $response | Where-Object { 
-    $_.AlwaysOn -eq "Enabled" -and $_.NombreInstancia -like "SSPR17CRM365*"
+# Convertir a objetos
+$agNodes = $Nodes | ForEach-Object {
+    [PSCustomObject]@{
+        NombreInstancia = $_
+    }
 }
 
 Write-Host "`n═══════════════════════════════════════════════════════" -ForegroundColor Cyan
