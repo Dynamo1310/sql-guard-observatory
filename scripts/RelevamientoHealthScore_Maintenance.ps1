@@ -172,12 +172,8 @@ WHERE rn = 1 OR rn IS NULL;
         
         $cutoffDate = (Get-Date).AddDays(-7)
         
-        # Procesar IntegrityCheck jobs (primer resultset)
-        $checkdbJobs = if ($datasets -is [array] -and $datasets.Count -gt 0) { 
-            $datasets[0] 
-        } else { 
-            $datasets | Where-Object { $_.JobName -like '*IntegrityCheck*' } 
-        }
+        # Procesar IntegrityCheck jobs (filtrar por nombre)
+        $checkdbJobs = $datasets | Where-Object { $_.JobName -like '*IntegrityCheck*' }
         $allCheckdbOk = $true
         $mostRecentCheckdb = $null
         
@@ -240,12 +236,8 @@ WHERE rn = 1 OR rn IS NULL;
             $result.CheckdbOk = $allCheckdbOk
         }
         
-        # Procesar IndexOptimize jobs (segundo resultset)
-        $indexOptJobs = if ($datasets -is [array] -and $datasets.Count -gt 1) { 
-            $datasets[1] 
-        } else { 
-            $datasets | Where-Object { $_.JobName -like '*IndexOptimize*' } 
-        }
+        # Procesar IndexOptimize jobs (filtrar por nombre)
+        $indexOptJobs = $datasets | Where-Object { $_.JobName -like '*IndexOptimize*' }
         $allIndexOptOk = $true
         $mostRecentIndexOpt = $null
         
