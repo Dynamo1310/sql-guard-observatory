@@ -45,8 +45,8 @@ $SqlServer = "SSPR17MON-01"
 $SqlDatabase = "SQLNova"
 $TimeoutSec = 10
 $TestMode = $false  # $true = solo 5 instancias
-$IncludeAWS = $true
-$OnlyAWS = $false
+$IncludeAWS = $false  # Cambiar a $true para incluir AWS
+$OnlyAWS = $false     # Cambiar a $true para SOLO AWS
 
 #endregion
 
@@ -321,10 +321,10 @@ try {
     
     # Filtros
     if (-not $IncludeAWS) {
-        $instances = $instances | Where-Object { $_.ambiente -notlike "*AWS*" }
+        $instances = $instances | Where-Object { $_.hostingSite -ne "AWS" }
     }
     if ($OnlyAWS) {
-        $instances = $instances | Where-Object { $_.ambiente -like "*AWS*" }
+        $instances = $instances | Where-Object { $_.hostingSite -eq "AWS" }
     }
     if ($TestMode) {
         $instances = $instances | Select-Object -First 5
