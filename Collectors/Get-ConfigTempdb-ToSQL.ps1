@@ -102,7 +102,7 @@ DECLARE @MaxServerMemory_GB decimal(10,2) = (
 );
 
 -- Recomendado: RAM - 4GB (SO) - 2GB (buffer)
-DECLARE @MaxRecomendado_GB decimal(10,2) = GREATEST(@TotalRAM_GB - 6, @TotalRAM_GB * 0.85);
+DECLARE @MaxRecomendado_GB decimal(10,2) = CASE WHEN (@TotalRAM_GB - 6) >= (@TotalRAM_GB * 0.85) THEN (@TotalRAM_GB - 6) ELSE (@TotalRAM_GB * 0.85) END;
 
 -- ===== RESULTADO =====
 SELECT 

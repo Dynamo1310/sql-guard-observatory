@@ -149,9 +149,9 @@ SELECT
         WHEN Reachable = 0 THEN 0
         WHEN AuthOK = 0 THEN 20
         WHEN RTTms IS NULL THEN 50
-        WHEN RTTms <= 15 THEN GREATEST(100 - (FailedLogins15m * 5), 70)
-        WHEN RTTms <= 50 THEN GREATEST(70 - (FailedLogins15m * 5), 40)
-        ELSE GREATEST(40 - (FailedLogins15m * 5), 10)
+        WHEN RTTms <= 15 THEN CASE WHEN (100 - (FailedLogins15m * 5)) >= 70 THEN (100 - (FailedLogins15m * 5)) ELSE 70 END
+        WHEN RTTms <= 50 THEN CASE WHEN (70 - (FailedLogins15m * 5)) >= 40 THEN (70 - (FailedLogins15m * 5)) ELSE 40 END
+        ELSE CASE WHEN (40 - (FailedLogins15m * 5)) >= 10 THEN (40 - (FailedLogins15m * 5)) ELSE 10 END
     END AS Score_Conectividad,
     CASE
         WHEN Reachable = 0 THEN 'Instancia no alcanzable'
@@ -199,7 +199,7 @@ SELECT
     Instance,
     CASE
         WHEN ErroresPonderados IS NULL THEN 100
-        ELSE GREATEST(100 - CAST(ErroresPonderados * 10 AS int), 60)  -- -10 por error, mínimo 60
+        ELSE CASE WHEN (100 - CAST(ErroresPonderados * 10 AS int)) >= 60 THEN (100 - CAST(ErroresPonderados * 10 AS int)) ELSE 60 END
     END AS Score_ErroresSev,
     CASE
         WHEN ErroresPonderados IS NULL THEN 'Sin errores sev>=20 en 24h'
@@ -230,9 +230,9 @@ SELECT
     Instance,
     CASE
         WHEN CpuPct_p95 IS NULL THEN 100
-        WHEN CpuPct_p95 <= 80 THEN GREATEST(100 - CAST(RunnableTasksAvg * 5 AS int), 90)
-        WHEN CpuPct_p95 <= 90 THEN GREATEST(70 - CAST(RunnableTasksAvg * 5 AS int), 50)
-        ELSE GREATEST(40 - CAST(RunnableTasksAvg * 5 AS int), 20)
+        WHEN CpuPct_p95 <= 80 THEN CASE WHEN (100 - CAST(RunnableTasksAvg * 5 AS int)) >= 90 THEN (100 - CAST(RunnableTasksAvg * 5 AS int)) ELSE 90 END
+        WHEN CpuPct_p95 <= 90 THEN CASE WHEN (70 - CAST(RunnableTasksAvg * 5 AS int)) >= 50 THEN (70 - CAST(RunnableTasksAvg * 5 AS int)) ELSE 50 END
+        ELSE CASE WHEN (40 - CAST(RunnableTasksAvg * 5 AS int)) >= 20 THEN (40 - CAST(RunnableTasksAvg * 5 AS int)) ELSE 20 END
     END AS Score_CPU,
     'CPU p95=' + ISNULL(CAST(CAST(CpuPct_p95 AS decimal(5,1)) AS varchar), 'N/A') + '%, Runnable=' + ISNULL(CAST(CAST(RunnableTasksAvg AS decimal(5,1)) AS varchar), '0') AS Notes_CPU
 FROM RecentCPU
@@ -271,14 +271,14 @@ ScorePerType AS (
     SELECT
         Instance,
         FileType,
-        GREATEST(p95_Read, p95_Write) AS MaxLatency,
+        CASE WHEN p95_Read >= p95_Write THEN p95_Read ELSE p95_Write END AS MaxLatency,
         CASE
-            WHEN GREATEST(p95_Read, p95_Write) <= 5 THEN 100
-            WHEN GREATEST(p95_Read, p95_Write) <= 10 THEN 80
-            WHEN GREATEST(p95_Read, p95_Write) <= 20 THEN 60
+            WHEN CASE WHEN p95_Read >= p95_Write THEN p95_Read ELSE p95_Write END <= 5 THEN 100
+            WHEN CASE WHEN p95_Read >= p95_Write THEN p95_Read ELSE p95_Write END <= 10 THEN 80
+            WHEN CASE WHEN p95_Read >= p95_Write THEN p95_Read ELSE p95_Write END <= 20 THEN 60
             ELSE 40
         END AS Score,
-        'p95=' + CAST(CAST(GREATEST(p95_Read, p95_Write) AS decimal(5,1)) AS varchar) + 'ms' AS Note
+        'p95=' + CAST(CAST(CASE WHEN p95_Read >= p95_Write THEN p95_Read ELSE p95_Write END AS decimal(5,1)) AS varchar) + 'ms' AS Note
     FROM IOPercentiles
     WHERE rn = 1
 )
@@ -374,7 +374,7 @@ MemoriaCalc AS (
         -- Score PLE: 60% del total
         CASE
             WHEN PLE_Target_sec IS NULL OR PLE_Target_sec = 0 THEN 100
-            ELSE LEAST(CAST((PLE_MinNUMA * 1.0 / PLE_Target_sec) * 100 AS int), 100)
+            ELSE CASE WHEN CAST((PLE_MinNUMA * 1.0 / PLE_Target_sec) * 100 AS int) <= 100 THEN CAST((PLE_MinNUMA * 1.0 / PLE_Target_sec) * 100 AS int) ELSE 100 END
         END AS Score_PLE,
         -- Score Grants: 25%
         CASE
@@ -437,7 +437,9 @@ SELECT
     CASE
         WHEN TotalDBs = 0 THEN 100
         WHEN DBs_CheckDB_OK * 1.0 / TotalDBs >= 0.90 THEN 
-            70 + LEAST(CAST((DBs_Index_OK * 1.0 / TotalDBs) * 15 AS int), 15) + LEAST(CAST((DBs_Stats_OK * 1.0 / TotalDBs) * 15 AS int), 15)
+            70 + 
+            CASE WHEN CAST((DBs_Index_OK * 1.0 / TotalDBs) * 15 AS int) <= 15 THEN CAST((DBs_Index_OK * 1.0 / TotalDBs) * 15 AS int) ELSE 15 END + 
+            CASE WHEN CAST((DBs_Stats_OK * 1.0 / TotalDBs) * 15 AS int) <= 15 THEN CAST((DBs_Stats_OK * 1.0 / TotalDBs) * 15 AS int) ELSE 15 END
         WHEN DBs_CheckDB_OK * 1.0 / TotalDBs >= 0.70 THEN 60
         WHEN DBs_CheckDB_OK * 1.0 / TotalDBs >= 0.50 THEN 40
         ELSE 20

@@ -123,15 +123,37 @@ CapsApplied AS (
             WHEN Cap_PLE = 70 THEN 'PLE bajo (<30% objetivo)'
             ELSE NULL
         END AS CapReason,
-        LEAST(
-            HealthRaw,
-            ISNULL(Cap_LogChain, 999),
-            ISNULL(Cap_AG_Suspended, 999),
-            ISNULL(Cap_ErroresSev, 999),
-            ISNULL(Cap_PLE, 999),
-            ISNULL(Cap_LatenciaLog, 999),
-            ISNULL(Cap_Tempdb_Pagelatch, 999)
-        ) AS HealthFinal
+        -- Aplicar el mínimo cap (equivalente a LEAST)
+        CASE 
+            WHEN HealthRaw <= ISNULL(Cap_LogChain, 999) 
+                AND HealthRaw <= ISNULL(Cap_AG_Suspended, 999)
+                AND HealthRaw <= ISNULL(Cap_ErroresSev, 999)
+                AND HealthRaw <= ISNULL(Cap_PLE, 999)
+                AND HealthRaw <= ISNULL(Cap_LatenciaLog, 999)
+                AND HealthRaw <= ISNULL(Cap_Tempdb_Pagelatch, 999)
+            THEN HealthRaw
+            WHEN ISNULL(Cap_LogChain, 999) <= ISNULL(Cap_AG_Suspended, 999)
+                AND ISNULL(Cap_LogChain, 999) <= ISNULL(Cap_ErroresSev, 999)
+                AND ISNULL(Cap_LogChain, 999) <= ISNULL(Cap_PLE, 999)
+                AND ISNULL(Cap_LogChain, 999) <= ISNULL(Cap_LatenciaLog, 999)
+                AND ISNULL(Cap_LogChain, 999) <= ISNULL(Cap_Tempdb_Pagelatch, 999)
+            THEN Cap_LogChain
+            WHEN ISNULL(Cap_AG_Suspended, 999) <= ISNULL(Cap_ErroresSev, 999)
+                AND ISNULL(Cap_AG_Suspended, 999) <= ISNULL(Cap_PLE, 999)
+                AND ISNULL(Cap_AG_Suspended, 999) <= ISNULL(Cap_LatenciaLog, 999)
+                AND ISNULL(Cap_AG_Suspended, 999) <= ISNULL(Cap_Tempdb_Pagelatch, 999)
+            THEN Cap_AG_Suspended
+            WHEN ISNULL(Cap_PLE, 999) <= ISNULL(Cap_ErroresSev, 999)
+                AND ISNULL(Cap_PLE, 999) <= ISNULL(Cap_LatenciaLog, 999)
+                AND ISNULL(Cap_PLE, 999) <= ISNULL(Cap_Tempdb_Pagelatch, 999)
+            THEN Cap_PLE
+            WHEN ISNULL(Cap_Tempdb_Pagelatch, 999) <= ISNULL(Cap_ErroresSev, 999)
+                AND ISNULL(Cap_Tempdb_Pagelatch, 999) <= ISNULL(Cap_LatenciaLog, 999)
+            THEN Cap_Tempdb_Pagelatch
+            WHEN ISNULL(Cap_ErroresSev, 999) <= ISNULL(Cap_LatenciaLog, 999)
+            THEN Cap_ErroresSev
+            ELSE Cap_LatenciaLog
+        END AS HealthFinal
     FROM CapConditions
 ),
 -- Top 3 penalizaciones (categorías con menor score)
