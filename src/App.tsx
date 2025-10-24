@@ -9,8 +9,6 @@ import { ProtectedRoute } from "@/components/routing/ProtectedRoute";
 import { DefaultRoute } from "@/components/routing/DefaultRoute";
 import Overview from "./pages/Overview";
 import HealthScore from "./pages/HealthScore";
-import HealthScoreV2 from "./pages/HealthScoreV2";
-import HealthScoreV2Detail from "./pages/HealthScoreV2Detail";
 import InstanceTrends from "./pages/InstanceTrends";
 import Jobs from "./pages/Jobs";
 import Disks from "./pages/Disks";
@@ -72,16 +70,6 @@ const App = () => (
                     <Route path="/healthscore" element={
                       <ProtectedRoute viewName="HealthScore">
                         <HealthScore />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/healthscore-v2" element={
-                      <ProtectedRoute viewName="HealthScore">
-                        <HealthScoreV2 />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/healthscore-v2/:instance" element={
-                      <ProtectedRoute viewName="HealthScore">
-                        <HealthScoreV2Detail />
                       </ProtectedRoute>
                     } />
                     <Route path="/instance-trends/:instanceName" element={

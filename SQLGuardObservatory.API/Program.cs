@@ -81,7 +81,6 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IActiveDirectoryService, ActiveDirectoryService>();
 builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
-builder.Services.AddScoped<IHealthScoreV2Service, HealthScoreV2Service>(); // Health Score V2
 
 // Configurar CORS
 builder.Services.AddCors(options =>

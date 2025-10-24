@@ -1,4 +1,4 @@
-import { Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart, HeartPulse } from 'lucide-react';
+import { Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import supvLogo from '/SUPV.png';
 import {
@@ -19,7 +19,6 @@ import { Button } from '@/components/ui/button';
 const mainItems = [
   { title: 'Overview', url: '/overview', icon: Home, permission: 'Overview' },
   { title: 'HealthScore', url: '/healthscore', icon: Heart, permission: 'HealthScore' },
-  { title: 'HealthScore V2', url: '/healthscore-v2', icon: HeartPulse, permission: 'HealthScore' },
   { title: 'Jobs', url: '/jobs', icon: Activity, permission: 'Jobs' },
   { title: 'Discos', url: '/disks', icon: HardDrive, permission: 'Disks' },
   { title: 'Bases de Datos', url: '/databases', icon: Database, permission: 'Databases' },
