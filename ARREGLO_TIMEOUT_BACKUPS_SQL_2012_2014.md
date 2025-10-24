@@ -23,11 +23,17 @@ WARNING: Error obteniendo backups en SSPR12-01: The wait operation timed out.
    🚨 FULL+LOG! SSPR12-01 - FULL:999h LOG:999h
 ```
 
-### Causa Raíz
+### Causas Raíz
 
+**Problema 1 - Timeout:**
 - **Timeout muy corto**: 15 segundos era insuficiente para instancias con historiales grandes en `msdb`
 - **Sin retry**: No había segundo intento con timeout extendido
 - **Query no optimizada**: Escaneo completo de la tabla `backupset` sin filtros de fecha
+
+**Problema 2 - Display Confuso:**
+- **Lógica inconsistente**: Mostraba el backup MÁS RECIENTE pero evaluaba TODAS las DBs
+- Si una instancia tenía: DB1=LOG:1h (OK) y DB2=LOG:3h (breach)
+- Mostraba: "⚠️ LOG BACKUP! LOG:1h" (confuso, 1h está bajo el umbral)
 
 ## ✅ Solución Implementada
 
@@ -78,7 +84,14 @@ while ($attemptCount -lt 2 -and $data -eq $null) {
 La query ahora incluye:
 - **NOLOCK hint**: Para evitar bloqueos de lectura
 - **Filtro de fecha**: Solo busca backups de los últimos 7 días
+- **Filtro READ-ONLY**: Excluye bases de datos en modo solo lectura
+- **Filtros de sistema**: Excluye bases de sistema (master, model, msdb, tempdb)
 - Reduce drásticamente el escaneo de `msdb.dbo.backupset`
+
+**Filtros de LOG Backups:**
+- Solo evalúa bases en **FULL recovery model** (excluye SIMPLE y BULK_LOGGED)
+- No considera bases READ-ONLY
+- No considera bases de sistema
 
 ### 4. Lógica de Display Corregida
 
@@ -93,6 +106,22 @@ Ahora el script muestra el **PEOR backup** (el más antiguo con breach) en lugar
 - Si hay breach: muestra el PEOR backup (el que causa el problema)
 - Si no hay breach: muestra el MÁS RECIENTE (el mejor)
 - Ahora: ⚠️ LOG BACKUP! SSPR19MSV-01 - LOG:3h (claramente >2h)
+
+```powershell
+# Lógica implementada
+if ($result.LogBackupBreached) {
+    # Buscar el backup LOG más antiguo de las DBs con problema
+    $worstLogBackup = $breachedLogs | 
+        Where-Object { $_.LastLogBackup -ne [DBNull]::Value } | 
+        Sort-Object LastLogBackup | 
+        Select-Object -First 1 -ExpandProperty LastLogBackup
+    
+    $result.LastLogBackup = [datetime]$worstLogBackup
+} else {
+    # No hay breach, mostrar el más reciente
+    $result.LastLogBackup = ($logBackups | Measure-Object -Maximum).Maximum
+}
+```
 
 ```sql
 SELECT 
