@@ -216,3 +216,4 @@ Pero **NO es necesario** - la detección automática funciona perfectamente.
 ✅ Menos propenso a errores  
 
 
+

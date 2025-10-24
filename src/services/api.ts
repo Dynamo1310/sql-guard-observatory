@@ -590,6 +590,185 @@ export const healthScoreApi = {
   },
 };
 
+// ==================== HEALTHSCORE V2 API ====================
+
+export interface HealthScoreV2Dto {
+  instance: string;
+  healthRaw: number;
+  capApplied: string | null;
+  healthFinal: number;
+  top3Penalizaciones: string;
+  colorSemaforo: string;
+  calculadoAt: string;
+  statusText: string;
+  statusColor: string;
+}
+
+export interface CategoryScoreDto {
+  name: string;
+  displayName: string;
+  score: number;
+  notes: string;
+  weight: number;
+  icon: string;
+  statusColor: string;
+}
+
+export interface HealthTrendPointDto {
+  timestamp: string;
+  healthScore: number | null;
+}
+
+export interface HealthScoreDetailV2Dto {
+  instance: string;
+  healthFinal: number;
+  healthRaw: number;
+  capApplied: string | null;
+  colorSemaforo: string;
+  calculadoAt: string;
+  categories: CategoryScoreDto[];
+  trends24h: HealthTrendPointDto[];
+  trends7d: HealthTrendPointDto[];
+}
+
+export interface HealthScoreSummaryV2Dto {
+  totalInstances: number;
+  healthyInstances: number;
+  warningInstances: number;
+  criticalInstances: number;
+  emergencyInstances: number;
+  averageHealth: number;
+  instances: HealthScoreV2Dto[];
+  recentAlerts: AlertaRecienteDto[];
+}
+
+export interface AlertaRecienteDto {
+  alertaID: number;
+  instance: string;
+  estadoAnterior: string | null;
+  estadoNuevo: string;
+  healthScoreAnterior: number | null;
+  healthScoreNuevo: number;
+  causa: string | null;
+  detectadoAt: string;
+  timeSinceDetection: string;
+}
+
+export interface CollectorLogDto {
+  collectorName: string;
+  instance: string;
+  level: string;
+  message: string;
+  loggedAt: string;
+}
+
+export const healthScoreV2Api = {
+  /**
+   * Obtiene el Health Score V2 de todas las instancias
+   */
+  async getAllHealthScores(): Promise<HealthScoreV2Dto[]> {
+    const response = await fetch(`${API_URL}/api/v2/healthscore`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthScoreV2Dto[]>(response);
+  },
+
+  /**
+   * Obtiene el detalle completo de una instancia (categorías + tendencias)
+   */
+  async getHealthScoreDetail(instance: string): Promise<HealthScoreDetailV2Dto> {
+    const response = await fetch(`${API_URL}/api/v2/healthscore/${encodeURIComponent(instance)}`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthScoreDetailV2Dto>(response);
+  },
+
+  /**
+   * Obtiene solo las categorías de una instancia
+   */
+  async getCategoryScores(instance: string): Promise<CategoryScoreDto[]> {
+    const response = await fetch(`${API_URL}/api/v2/healthscore/${encodeURIComponent(instance)}/categories`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<CategoryScoreDto[]>(response);
+  },
+
+  /**
+   * Obtiene tendencias de las últimas 24 horas
+   */
+  async getTrends24h(instance: string): Promise<HealthTrendPointDto[]> {
+    const response = await fetch(`${API_URL}/api/v2/healthscore/${encodeURIComponent(instance)}/trends/24h`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthTrendPointDto[]>(response);
+  },
+
+  /**
+   * Obtiene tendencias de los últimos 7 días
+   */
+  async getTrends7d(instance: string): Promise<HealthTrendPointDto[]> {
+    const response = await fetch(`${API_URL}/api/v2/healthscore/${encodeURIComponent(instance)}/trends/7d`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthTrendPointDto[]>(response);
+  },
+
+  /**
+   * Obtiene resumen general para el dashboard
+   */
+  async getSummary(): Promise<HealthScoreSummaryV2Dto> {
+    const response = await fetch(`${API_URL}/api/v2/healthscore/summary`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthScoreSummaryV2Dto>(response);
+  },
+
+  /**
+   * Obtiene alertas recientes
+   */
+  async getAlerts(top: number = 10): Promise<AlertaRecienteDto[]> {
+    const response = await fetch(`${API_URL}/api/v2/healthscore/alerts?top=${top}`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<AlertaRecienteDto[]>(response);
+  },
+
+  /**
+   * Obtiene logs de collectors
+   */
+  async getCollectorLogs(
+    instance?: string,
+    level?: string,
+    top: number = 50
+  ): Promise<CollectorLogDto[]> {
+    const params = new URLSearchParams();
+    if (instance) params.append('instance', instance);
+    if (level) params.append('level', level);
+    params.append('top', top.toString());
+
+    const response = await fetch(`${API_URL}/api/v2/healthscore/collectors/logs?${params}`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<CollectorLogDto[]>(response);
+  },
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 export function isAuthenticated(): boolean {

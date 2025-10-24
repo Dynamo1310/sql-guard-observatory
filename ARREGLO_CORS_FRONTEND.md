@@ -327,3 +327,4 @@ Frontend recibe: TypeError: Failed to fetch
 ✅ Sin errores en DevTools Console  
 
 
+

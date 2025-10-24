@@ -115,3 +115,4 @@ npm run build
 - ✅ Ya no hay errores 401 (Unauthorized)
 - ✅ Los gráficos de tendencias cargan datos correctamente
 
+
