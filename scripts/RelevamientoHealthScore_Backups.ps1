@@ -131,43 +131,66 @@ GROUP BY d.name, d.recovery_model_desc;
         $fullThreshold = (Get-Date).AddDays(-1)   # 24 horas
         $logThreshold = (Get-Date).AddHours(-2)   # 2 horas
         
-        # Encontrar el backup FULL más reciente y más antiguo
-        $fullBackups = $data | Where-Object { $_.LastFullBackup -ne [DBNull]::Value } | 
-            Select-Object -ExpandProperty LastFullBackup
+        # Identificar DBs con FULL backup vencido PRIMERO
+        $breachedDbs = $data | Where-Object { 
+            $_.LastFullBackup -eq [DBNull]::Value -or 
+            ([datetime]$_.LastFullBackup -lt $fullThreshold)
+        }
         
-        if ($fullBackups) {
-            $result.LastFullBackup = ($fullBackups | Measure-Object -Maximum).Maximum
+        $result.FullBackupBreached = ($breachedDbs.Count -gt 0)
+        
+        # Si hay DBs con breach, mostrar el PEOR backup (más antiguo)
+        # Si no hay breach, mostrar el MÁS RECIENTE
+        if ($result.FullBackupBreached) {
+            # Buscar el backup FULL más antiguo de las DBs con problema
+            $worstFullBackup = $breachedDbs | 
+                Where-Object { $_.LastFullBackup -ne [DBNull]::Value } | 
+                Sort-Object LastFullBackup | 
+                Select-Object -First 1 -ExpandProperty LastFullBackup
             
-            # Si alguna DB está sin backup o vencido
-            $breachedDbs = $data | Where-Object { 
-                $_.LastFullBackup -eq [DBNull]::Value -or 
-                ([datetime]$_.LastFullBackup -lt $fullThreshold)
-            }
-            
-            $result.FullBackupBreached = ($breachedDbs.Count -gt 0)
+            $result.LastFullBackup = if ($worstFullBackup) { [datetime]$worstFullBackup } else { $null }
         } else {
-            $result.FullBackupBreached = $true
+            # No hay breach, mostrar el más reciente
+            $fullBackups = $data | 
+                Where-Object { $_.LastFullBackup -ne [DBNull]::Value } | 
+                Select-Object -ExpandProperty LastFullBackup
+            
+            if ($fullBackups) {
+                $result.LastFullBackup = ($fullBackups | Measure-Object -Maximum).Maximum
+            }
         }
         
         # LOG backups (solo para FULL recovery)
         $fullRecoveryDbs = $data | Where-Object { $_.RecoveryModel -eq 'FULL' }
         
         if ($fullRecoveryDbs) {
-            $logBackups = $fullRecoveryDbs | Where-Object { $_.LastLogBackup -ne [DBNull]::Value } | 
-                Select-Object -ExpandProperty LastLogBackup
+            # Identificar DBs con LOG backup vencido PRIMERO
+            $breachedLogs = $fullRecoveryDbs | Where-Object { 
+                $_.LastLogBackup -eq [DBNull]::Value -or 
+                ([datetime]$_.LastLogBackup -lt $logThreshold)
+            }
             
-            if ($logBackups) {
-                $result.LastLogBackup = ($logBackups | Measure-Object -Maximum).Maximum
+            $result.LogBackupBreached = ($breachedLogs.Count -gt 0)
+            
+            # Si hay DBs con breach, mostrar el PEOR backup (más antiguo)
+            # Si no hay breach, mostrar el MÁS RECIENTE
+            if ($result.LogBackupBreached) {
+                # Buscar el backup LOG más antiguo de las DBs con problema
+                $worstLogBackup = $breachedLogs | 
+                    Where-Object { $_.LastLogBackup -ne [DBNull]::Value } | 
+                    Sort-Object LastLogBackup | 
+                    Select-Object -First 1 -ExpandProperty LastLogBackup
                 
-                # Si alguna DB FULL está sin LOG backup o vencido
-                $breachedLogs = $fullRecoveryDbs | Where-Object { 
-                    $_.LastLogBackup -eq [DBNull]::Value -or 
-                    ([datetime]$_.LastLogBackup -lt $logThreshold)
-                }
-                
-                $result.LogBackupBreached = ($breachedLogs.Count -gt 0)
+                $result.LastLogBackup = if ($worstLogBackup) { [datetime]$worstLogBackup } else { $null }
             } else {
-                $result.LogBackupBreached = $true
+                # No hay breach, mostrar el más reciente
+                $logBackups = $fullRecoveryDbs | 
+                    Where-Object { $_.LastLogBackup -ne [DBNull]::Value } | 
+                    Select-Object -ExpandProperty LastLogBackup
+                
+                if ($logBackups) {
+                    $result.LastLogBackup = ($logBackups | Measure-Object -Maximum).Maximum
+                }
             }
         }
         
