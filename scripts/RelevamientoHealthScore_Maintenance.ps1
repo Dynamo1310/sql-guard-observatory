@@ -164,16 +164,22 @@ FROM LastJobRuns
 WHERE rn = 1 OR rn IS NULL;
 "@
         
-        # Usar dbatools para ejecutar queries (devuelve array de 2 datasets)
-        $datasets = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query $query `
+        # dbatools NO devuelve múltiples resultsets correctamente, ejecutar queries por separado
+        $checkdbJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
+            -Query ($query -split '; -- TODOS los IndexOptimize')[0] `
+            -QueryTimeout $TimeoutSec `
+            -EnableException
+        
+        $indexOptQuery = ($query -split '-- TODOS los IndexOptimize con su última ejecución \(excluir STOP\)')[1]
+        $indexOptJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
+            -Query $indexOptQuery `
             -QueryTimeout $TimeoutSec `
             -EnableException
         
         $cutoffDate = (Get-Date).AddDays(-7)
         
-        # Procesar IntegrityCheck jobs (filtrar por nombre)
-        $checkdbJobs = $datasets | Where-Object { $_.JobName -like '*IntegrityCheck*' }
+        # Procesar IntegrityCheck jobs
+        $checkdbJobs = $checkdbJobs  # Ya viene filtrado
         $allCheckdbOk = $true
         $mostRecentCheckdb = $null
         
@@ -232,8 +238,8 @@ WHERE rn = 1 OR rn IS NULL;
             $result.CheckdbOk = $allCheckdbOk
         }
         
-        # Procesar IndexOptimize jobs (filtrar por nombre)
-        $indexOptJobs = $datasets | Where-Object { $_.JobName -like '*IndexOptimize*' }
+        # Procesar IndexOptimize jobs
+        $indexOptJobs = $indexOptJobs  # Ya viene filtrado
         $allIndexOptOk = $true
         $mostRecentIndexOpt = $null
         
