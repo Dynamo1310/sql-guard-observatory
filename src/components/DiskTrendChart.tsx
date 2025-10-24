@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Loader2, HardDrive } from 'lucide-react';
+import { getApiUrl, getAuthHeader } from '@/services/api';
 
 interface DiskDataPoint {
   timestamp: string;
@@ -18,7 +19,7 @@ export function DiskTrendChart({ instanceName, hours = 24 }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+  const API_BASE_URL = getApiUrl();
 
   useEffect(() => {
     fetchTrendData();
@@ -27,7 +28,12 @@ export function DiskTrendChart({ instanceName, hours = 24 }: Props) {
   const fetchTrendData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/HealthScoreTrends/disk/${instanceName}?hours=${hours}`);
+      const response = await fetch(`${API_BASE_URL}/api/HealthScoreTrends/disk/${instanceName}?hours=${hours}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        }
+      });
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);

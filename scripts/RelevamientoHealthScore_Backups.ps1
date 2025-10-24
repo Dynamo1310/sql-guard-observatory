@@ -10,9 +10,9 @@
     Guarda en: InstanceHealth_Backups
     
 .NOTES
-    Versión: 2.0 (dbatools)
+    Versión: 2.1 (dbatools con retry)
     Frecuencia: Cada 15 minutos
-    Timeout: 15 segundos
+    Timeout: 30 segundos (60 segundos en retry para instancias lentas)
     
 .REQUIRES
     - dbatools (Install-Module -Name dbatools -Force)
@@ -41,10 +41,11 @@ Import-Module dbatools -Force -ErrorAction Stop
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
 $SqlDatabase = "SQLNova"
-$TimeoutSec = 15
-$TestMode = $false    # $true = solo 5 instancias para testing
-$IncludeAWS = $false  # Cambiar a $true para incluir AWS
-$OnlyAWS = $false     # Cambiar a $true para SOLO AWS
+$TimeoutSec = 30           # Aumentado de 15 a 30 segundos
+$TimeoutSecRetry = 60      # Timeout para retry en caso de fallo
+$TestMode = $false         # $true = solo 5 instancias para testing
+$IncludeAWS = $false       # Cambiar a $true para incluir AWS
+$OnlyAWS = $false          # Cambiar a $true para SOLO AWS
 # NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
@@ -54,7 +55,8 @@ $OnlyAWS = $false     # Cambiar a $true para SOLO AWS
 function Get-BackupStatus {
     param(
         [string]$InstanceName,
-        [int]$TimeoutSec = 15
+        [int]$TimeoutSec = 30,
+        [int]$RetryTimeoutSec = 60
     )
     
     $result = @{
@@ -65,87 +67,118 @@ function Get-BackupStatus {
         Details = @()
     }
     
-    try {
-        $query = @"
+    # Query optimizada con límite de fechas para reducir escaneo en msdb
+    $cutoffDate = (Get-Date).AddDays(-7).ToString('yyyy-MM-dd')
+    
+    $query = @"
 SELECT 
     d.name AS DatabaseName,
     d.recovery_model_desc AS RecoveryModel,
     MAX(CASE WHEN bs.type = 'D' THEN bs.backup_finish_date END) AS LastFullBackup,
     MAX(CASE WHEN bs.type = 'L' THEN bs.backup_finish_date END) AS LastLogBackup
 FROM sys.databases d
-LEFT JOIN msdb.dbo.backupset bs 
+LEFT JOIN msdb.dbo.backupset bs WITH (NOLOCK)
     ON d.name = bs.database_name
+    AND bs.backup_finish_date >= '$cutoffDate'
 WHERE d.state_desc = 'ONLINE'
   AND d.name NOT IN ('tempdb')
   AND d.database_id > 4
 GROUP BY d.name, d.recovery_model_desc;
 "@
+    
+    # Intentar con timeout normal
+    $data = $null
+    $attemptCount = 0
+    $lastError = $null
+    
+    while ($attemptCount -lt 2 -and $data -eq $null) {
+        $attemptCount++
+        $currentTimeout = if ($attemptCount -eq 1) { $TimeoutSec } else { $RetryTimeoutSec }
         
-        # Usar dbatools para ejecutar queries
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query $query `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
-        
-        if ($data) {
-            # Umbrales
-            $fullThreshold = (Get-Date).AddDays(-1)   # 24 horas
-            $logThreshold = (Get-Date).AddHours(-2)   # 2 horas
+        try {
+            if ($attemptCount -eq 2) {
+                Write-Verbose "Reintentando $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
+            }
             
-            # Encontrar el backup FULL más reciente y más antiguo
-            $fullBackups = $data | Where-Object { $_.LastFullBackup -ne [DBNull]::Value } | 
-                Select-Object -ExpandProperty LastFullBackup
-            
-            if ($fullBackups) {
-                $result.LastFullBackup = ($fullBackups | Measure-Object -Maximum).Maximum
+            # Usar dbatools para ejecutar queries
+            $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+                -Query $query `
+                -QueryTimeout $currentTimeout `
+                -EnableException
                 
-                # Si alguna DB está sin backup o vencido
-                $breachedDbs = $data | Where-Object { 
-                    $_.LastFullBackup -eq [DBNull]::Value -or 
-                    ([datetime]$_.LastFullBackup -lt $fullThreshold)
+            break  # Salir si fue exitoso
+            
+        } catch {
+            $lastError = $_
+            if ($attemptCount -eq 1) {
+                Write-Verbose "Timeout en $InstanceName (intento 1/${TimeoutSec}s), reintentando con timeout extendido..."
+                Start-Sleep -Milliseconds 500  # Pequeña pausa antes del retry
+            }
+        }
+    }
+    
+    # Si después de 2 intentos no hay datos, reportar error
+    if ($data -eq $null) {
+        Write-Warning "Error obteniendo backups en ${InstanceName}: $($lastError.Exception.Message)"
+        $result.FullBackupBreached = $true
+        $result.LogBackupBreached = $true
+        return $result
+    }
+    
+    # Procesar datos
+    if ($data) {
+        # Umbrales
+        $fullThreshold = (Get-Date).AddDays(-1)   # 24 horas
+        $logThreshold = (Get-Date).AddHours(-2)   # 2 horas
+        
+        # Encontrar el backup FULL más reciente y más antiguo
+        $fullBackups = $data | Where-Object { $_.LastFullBackup -ne [DBNull]::Value } | 
+            Select-Object -ExpandProperty LastFullBackup
+        
+        if ($fullBackups) {
+            $result.LastFullBackup = ($fullBackups | Measure-Object -Maximum).Maximum
+            
+            # Si alguna DB está sin backup o vencido
+            $breachedDbs = $data | Where-Object { 
+                $_.LastFullBackup -eq [DBNull]::Value -or 
+                ([datetime]$_.LastFullBackup -lt $fullThreshold)
+            }
+            
+            $result.FullBackupBreached = ($breachedDbs.Count -gt 0)
+        } else {
+            $result.FullBackupBreached = $true
+        }
+        
+        # LOG backups (solo para FULL recovery)
+        $fullRecoveryDbs = $data | Where-Object { $_.RecoveryModel -eq 'FULL' }
+        
+        if ($fullRecoveryDbs) {
+            $logBackups = $fullRecoveryDbs | Where-Object { $_.LastLogBackup -ne [DBNull]::Value } | 
+                Select-Object -ExpandProperty LastLogBackup
+            
+            if ($logBackups) {
+                $result.LastLogBackup = ($logBackups | Measure-Object -Maximum).Maximum
+                
+                # Si alguna DB FULL está sin LOG backup o vencido
+                $breachedLogs = $fullRecoveryDbs | Where-Object { 
+                    $_.LastLogBackup -eq [DBNull]::Value -or 
+                    ([datetime]$_.LastLogBackup -lt $logThreshold)
                 }
                 
-                $result.FullBackupBreached = ($breachedDbs.Count -gt 0)
+                $result.LogBackupBreached = ($breachedLogs.Count -gt 0)
             } else {
-                $result.FullBackupBreached = $true
-            }
-            
-            # LOG backups (solo para FULL recovery)
-            $fullRecoveryDbs = $data | Where-Object { $_.RecoveryModel -eq 'FULL' }
-            
-            if ($fullRecoveryDbs) {
-                $logBackups = $fullRecoveryDbs | Where-Object { $_.LastLogBackup -ne [DBNull]::Value } | 
-                    Select-Object -ExpandProperty LastLogBackup
-                
-                if ($logBackups) {
-                    $result.LastLogBackup = ($logBackups | Measure-Object -Maximum).Maximum
-                    
-                    # Si alguna DB FULL está sin LOG backup o vencido
-                    $breachedLogs = $fullRecoveryDbs | Where-Object { 
-                        $_.LastLogBackup -eq [DBNull]::Value -or 
-                        ([datetime]$_.LastLogBackup -lt $logThreshold)
-                    }
-                    
-                    $result.LogBackupBreached = ($breachedLogs.Count -gt 0)
-                } else {
-                    $result.LogBackupBreached = $true
-                }
-            }
-            
-            # Detalles
-            $result.Details = $data | ForEach-Object {
-                $fullAge = if ($_.LastFullBackup -ne [DBNull]::Value) { 
-                    ((Get-Date) - [datetime]$_.LastFullBackup).TotalHours 
-                } else { 999 }
-                
-                "$($_.DatabaseName):FULL=$([int]$fullAge)h"
+                $result.LogBackupBreached = $true
             }
         }
         
-    } catch {
-        Write-Warning "Error obteniendo backups en ${InstanceName}: $($_.Exception.Message)"
-        $result.FullBackupBreached = $true
-        $result.LogBackupBreached = $true
+        # Detalles
+        $result.Details = $data | ForEach-Object {
+            $fullAge = if ($_.LastFullBackup -ne [DBNull]::Value) { 
+                ((Get-Date) - [datetime]$_.LastFullBackup).TotalHours 
+            } else { 999 }
+            
+            "$($_.DatabaseName):FULL=$([int]$fullAge)h"
+        }
     }
     
     return $result
@@ -458,7 +491,7 @@ foreach ($instance in $instances) {
     }
     
     # Recolectar métricas
-    $backups = Get-BackupStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    $backups = Get-BackupStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry
     
     $status = "✅"
     if ($backups.FullBackupBreached -and $backups.LogBackupBreached) { 

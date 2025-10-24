@@ -88,12 +88,18 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(
+            // Desarrollo
             "http://localhost:5173",
             "http://localhost:5174",
             "http://localhost:3000",
             "http://localhost:4200",
             "http://localhost:8080",
-            "http://asprbm-nov-01:8080"
+            // Producción - Frontend en asprbm-nov-01
+            "http://asprbm-nov-01",           // Puerto 80 (default)
+            "http://asprbm-nov-01:80",        // Puerto 80 explícito
+            "http://asprbm-nov-01:8080",      // Puerto 8080 (frontend)
+            "https://asprbm-nov-01",          // HTTPS si aplica
+            "https://asprbm-nov-01:443"       // HTTPS puerto explícito
         )
         .AllowAnyMethod()
         .AllowAnyHeader()

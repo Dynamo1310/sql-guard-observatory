@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Activity, Database, HardDrive, Clock } from 'lucide-react';
+import { getApiUrl, getAuthHeader } from '@/services/api';
 
 interface HealthScoreData {
   instanceName: string;
@@ -41,12 +42,17 @@ export function HealthScoreRealtime() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+  const API_BASE_URL = getApiUrl();
 
   // Función para obtener datos (usada en polling)
   const fetchData = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/HealthScoreRealtime/latest`);
+      const response = await fetch(`${API_BASE_URL}/api/HealthScoreRealtime/latest`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        }
+      });
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);

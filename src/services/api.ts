@@ -1,6 +1,6 @@
 // API Service para conectar con el backend .NET
 // Detectar automáticamente si estamos en localhost o en el servidor
-const getApiUrl = () => {
+export const getApiUrl = () => {
   // Si hay variable de entorno, usarla
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
@@ -12,7 +12,7 @@ const getApiUrl = () => {
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'http://localhost:5000';
   } else {
-    // Si se accede por el nombre del servidor, usar el mismo servidor para el API
+    // Backend en producción: asprbm-nov-01 puerto 5000
     return `http://${hostname}:5000`;
   }
 };
@@ -47,7 +47,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 // Helper para obtener el token del localStorage
-function getAuthHeader(): HeadersInit {
+export function getAuthHeader(): HeadersInit {
   const token = localStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
