@@ -29,6 +29,11 @@ namespace SQLGuardObservatory.API.Services
                         HealthStatus,
                         ScoreCollectedAt,
                         
+                        -- Metadata de instancia
+                        Ambiente,
+                        HostingSite,
+                        SqlVersion,
+                        
                         -- Breakdown por Tiers (100 puntos)
                         Tier1_Availability,
                         Tier2_Continuity,
@@ -95,6 +100,9 @@ namespace SQLGuardObservatory.API.Services
                     var dto = new HealthScoreDto
                     {
                         InstanceName = reader["InstanceName"].ToString(),
+                        Ambiente = reader["Ambiente"]?.ToString(),
+                        HostingSite = reader["HostingSite"]?.ToString(),
+                        Version = reader["SqlVersion"]?.ToString(),
                         HealthScore = Convert.ToInt32(reader["HealthScore"]),
                         HealthStatus = reader["HealthStatus"].ToString(),
                         ConnectSuccess = reader["ConnectSuccess"] != DBNull.Value && Convert.ToBoolean(reader["ConnectSuccess"]),

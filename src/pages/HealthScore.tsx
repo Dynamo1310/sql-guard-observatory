@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { cn } from '@/lib/utils';
+import { cn, formatDateUTC3 } from '@/lib/utils';
 import { useTableSort } from '@/hooks/use-table-sort';
 import { healthScoreApi, HealthScoreDto } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
@@ -639,7 +639,7 @@ export default function HealthScore() {
                               <div>
                                 <p className="text-xs text-muted-foreground">Última Actualización</p>
                                 <p className="text-sm font-medium">
-                                  {new Date(score.generatedAtUtc).toLocaleString('es-AR')}
+                                  {formatDateUTC3(score.generatedAtUtc)}
                                 </p>
                               </div>
                               <div>
@@ -760,13 +760,7 @@ export default function HealthScore() {
                                         <div className="flex items-center justify-between text-xs">
                                           <span className="text-muted-foreground">FULL</span>
                                           <span className="font-mono">
-                                            {new Date(score.backupSummary.lastFullBackup).toLocaleString('es-AR', { 
-                                              year: 'numeric', 
-                                              month: '2-digit', 
-                                              day: '2-digit', 
-                                              hour: '2-digit', 
-                                              minute: '2-digit' 
-                                            })}
+                                            {formatDateUTC3(score.backupSummary.lastFullBackup)}
                                           </span>
                                         </div>
                                       )}
@@ -774,13 +768,7 @@ export default function HealthScore() {
                                         <div className="flex items-center justify-between text-xs">
                                           <span className="text-muted-foreground">DIFF</span>
                                           <span className="font-mono">
-                                            {new Date(score.backupSummary.lastDiffBackup).toLocaleString('es-AR', { 
-                                              year: 'numeric', 
-                                              month: '2-digit', 
-                                              day: '2-digit', 
-                                              hour: '2-digit', 
-                                              minute: '2-digit' 
-                                            })}
+                                            {formatDateUTC3(score.backupSummary.lastDiffBackup)}
                                           </span>
                                         </div>
                                       )}
@@ -788,13 +776,7 @@ export default function HealthScore() {
                                         <div className="flex items-center justify-between text-xs">
                                           <span className="text-muted-foreground">LOG</span>
                                           <span className="font-mono">
-                                            {new Date(score.backupSummary.lastLogBackup).toLocaleString('es-AR', { 
-                                              year: 'numeric', 
-                                              month: '2-digit', 
-                                              day: '2-digit', 
-                                              hour: '2-digit', 
-                                              minute: '2-digit' 
-                                            })}
+                                            {formatDateUTC3(score.backupSummary.lastLogBackup)}
                                           </span>
                                         </div>
                                       )}
