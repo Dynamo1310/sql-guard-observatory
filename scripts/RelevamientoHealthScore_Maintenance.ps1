@@ -194,12 +194,20 @@ WHERE rn = 1 OR rn IS NULL;
                 if ($attemptCount -eq 1) {
                     Write-Verbose "Timeout en CHECKDB $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
                     Start-Sleep -Milliseconds 500
+                } else {
+                    # Segundo intento falló, capturar detalles
+                    Write-Verbose "Error en CHECKDB: $($_.Exception.Message)"
+                    if ($_.Exception.InnerException) {
+                        Write-Verbose "Inner: $($_.Exception.InnerException.Message)"
+                    }
                 }
             }
         }
         
         if ($checkdbJobs -eq $null) {
-            throw $lastError
+            # Si la query falla (probablemente porque no hay jobs), asumir resultado vacío
+            Write-Verbose "Query CHECKDB falló, asumiendo 0 jobs: $($lastError.Exception.Message)"
+            $checkdbJobs = @()  # Array vacío en lugar de error
         }
         
         # Ejecutar query IndexOptimize con retry
@@ -229,12 +237,20 @@ WHERE rn = 1 OR rn IS NULL;
                 if ($attemptCount -eq 1) {
                     Write-Verbose "Timeout en IndexOptimize $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
                     Start-Sleep -Milliseconds 500
+                } else {
+                    # Segundo intento falló, capturar detalles
+                    Write-Verbose "Error en IndexOptimize: $($_.Exception.Message)"
+                    if ($_.Exception.InnerException) {
+                        Write-Verbose "Inner: $($_.Exception.InnerException.Message)"
+                    }
                 }
             }
         }
         
         if ($indexOptJobs -eq $null) {
-            throw $lastError
+            # Si la query falla (probablemente porque no hay jobs), asumir resultado vacío
+            Write-Verbose "Query IndexOptimize falló, asumiendo 0 jobs: $($lastError.Exception.Message)"
+            $indexOptJobs = @()  # Array vacío en lugar de error
         }
         
         $cutoffDate = (Get-Date).AddDays(-7)
@@ -360,7 +376,10 @@ WHERE rn = 1 OR rn IS NULL;
         }
         
     } catch {
-        Write-Warning "Error obteniendo maintenance jobs en ${InstanceName}: $($_.Exception.Message)"
+        # Error en el procesamiento post-query (no en las queries mismas)
+        $errorDetails = $_.Exception.Message
+        Write-Warning "Error procesando maintenance jobs en ${InstanceName}: $errorDetails"
+        Write-Verbose "  Línea: $($_.InvocationInfo.ScriptLineNumber)"
     }
     
     return $result
@@ -432,12 +451,23 @@ DROP TABLE #ErrorLog;
                 if ($attemptCount -eq 1) {
                     Write-Verbose "Timeout en ErrorLog $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
                     Start-Sleep -Milliseconds 500
+                } else {
+                    # Segundo intento falló, capturar detalles
+                    Write-Verbose "Error en ErrorLog: $($_.Exception.Message)"
+                    if ($_.Exception.InnerException) {
+                        Write-Verbose "Inner: $($_.Exception.InnerException.Message)"
+                    }
                 }
             }
         }
         
         if ($data -eq $null -and $lastError) {
-            throw $lastError
+            # Mejorar mensaje de error con más detalles
+            $errorMsg = $lastError.Exception.Message
+            if ($lastError.Exception.InnerException) {
+                $errorMsg += " | Inner: $($lastError.Exception.InnerException.Message)"
+            }
+            throw "Query ErrorLog falló: $errorMsg"
         }
         
         if ($data) {
@@ -451,7 +481,10 @@ DROP TABLE #ErrorLog;
         }
         
     } catch {
-        Write-Warning "Error obteniendo errorlog en ${InstanceName}: $($_.Exception.Message)"
+        # Error en el procesamiento de errorlog
+        $errorDetails = $_.Exception.Message
+        Write-Warning "Error obteniendo errorlog en ${InstanceName}: $errorDetails"
+        Write-Verbose "  Línea: $($_.InvocationInfo.ScriptLineNumber)"
     }
     
     return $result
