@@ -135,8 +135,12 @@ LEFT JOIN msdb.dbo.backupset bs WITH (NOLOCK)
     AND bs.backup_finish_date >= '2025-10-17'  -- 7 días atrás
 WHERE d.state_desc = 'ONLINE'
   AND d.name NOT IN ('tempdb')
-  AND d.database_id > 4
+  AND d.database_id > 4          -- Excluye bases de sistema
+  AND d.is_read_only = 0          -- Excluye bases READ-ONLY
 GROUP BY d.name, d.recovery_model_desc;
+
+-- Para LOG backups, PowerShell filtra adicionalmente:
+-- WHERE RecoveryModel = 'FULL'  (excluye SIMPLE y BULK_LOGGED)
 ```
 
 ## 🎯 Beneficios
@@ -147,6 +151,7 @@ GROUP BY d.name, d.recovery_model_desc;
 4. **Display consistente**: Ahora el tiempo mostrado coincide con el estado del warning
 5. **Mejor debugging**: Mensajes verbose indican cuándo se hace retry
 6. **Identificación clara**: Se muestra el backup problemático, no el mejor caso
+7. **Filtrado preciso**: Solo evalúa bases relevantes (excluye READ-ONLY, SIMPLE, y sistema)
 
 ## 📊 Impacto
 
@@ -177,6 +182,27 @@ Monitorear específicamente las instancias problemáticas:
 - SSPR12-01 (SQL 2012)
 
 ## 📝 Notas Adicionales
+
+### Filtros de Bases de Datos
+
+**Bases excluidas de validación:**
+
+1. **Bases de sistema** (`database_id <= 4`)
+   - master, model, msdb, tempdb
+   - Razón: Se gestionan automáticamente, no son responsabilidad del DBA aplicativo
+
+2. **Bases READ-ONLY** (`is_read_only = 1`)
+   - Razón: No generan transacciones, no requieren LOG backups frecuentes
+   - FULL backups ocasionales son suficientes
+
+3. **Bases en SIMPLE recovery** (solo para LOG backups)
+   - Razón: SIMPLE no genera/retiene logs de transacciones
+   - Solo requieren FULL backups
+
+4. **Bases OFFLINE o en otros estados**
+   - Solo se evalúan bases `ONLINE`
+
+### Otros Detalles
 
 - El filtro de 7 días es suficiente ya que:
   - Umbrales son: FULL = 24h, LOG = 2h

@@ -16,9 +16,9 @@
     Guarda en: InstanceHealth_Maintenance
     
 .NOTES
-    Versión: 2.0 (dbatools) + AlwaysOn Sync
+    Versión: 2.1 (dbatools con retry) + AlwaysOn Sync
     Frecuencia: Cada 1 hora
-    Timeout: 30 segundos
+    Timeout: 30 segundos (60 segundos en retry para instancias lentas)
     
 .REQUIRES
     - dbatools (Install-Module -Name dbatools -Force)
@@ -47,10 +47,11 @@ Import-Module dbatools -Force -ErrorAction Stop
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
 $SqlDatabase = "SQLNova"
-$TimeoutSec = 30
-$TestMode = $false    # $true = solo 5 instancias para testing
-$IncludeAWS = $false  # Cambiar a $true para incluir AWS
-$OnlyAWS = $false     # Cambiar a $true para SOLO AWS
+$TimeoutSec = 30           # Timeout inicial
+$TimeoutSecRetry = 60      # Timeout para retry en caso de fallo
+$TestMode = $false         # $true = solo 5 instancias para testing
+$IncludeAWS = $false       # Cambiar a $true para incluir AWS
+$OnlyAWS = $false          # Cambiar a $true para SOLO AWS
 # NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
@@ -60,7 +61,8 @@ $OnlyAWS = $false     # Cambiar a $true para SOLO AWS
 function Get-MaintenanceJobs {
     param(
         [string]$InstanceName,
-        [int]$TimeoutSec = 30
+        [int]$TimeoutSec = 30,
+        [int]$RetryTimeoutSec = 60
     )
     
     $result = @{
@@ -165,16 +167,75 @@ WHERE rn = 1 OR rn IS NULL;
 "@
         
         # dbatools NO devuelve múltiples resultsets correctamente, ejecutar queries por separado
-        $checkdbJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query ($query -split '; -- TODOS los IndexOptimize')[0] `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+        # Ejecutar query CHECKDB con retry
+        $checkdbQuery = ($query -split '; -- TODOS los IndexOptimize')[0]
+        $checkdbJobs = $null
+        $attemptCount = 0
+        $lastError = $null
         
+        while ($attemptCount -lt 2 -and $checkdbJobs -eq $null) {
+            $attemptCount++
+            $currentTimeout = if ($attemptCount -eq 1) { $TimeoutSec } else { $RetryTimeoutSec }
+            
+            try {
+                if ($attemptCount -eq 2) {
+                    Write-Verbose "Reintentando CHECKDB en $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
+                }
+                
+                $checkdbJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
+                    -Query $checkdbQuery `
+                    -QueryTimeout $currentTimeout `
+                    -EnableException
+                    
+                break
+                
+            } catch {
+                $lastError = $_
+                if ($attemptCount -eq 1) {
+                    Write-Verbose "Timeout en CHECKDB $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
+                    Start-Sleep -Milliseconds 500
+                }
+            }
+        }
+        
+        if ($checkdbJobs -eq $null) {
+            throw $lastError
+        }
+        
+        # Ejecutar query IndexOptimize con retry
         $indexOptQuery = ($query -split '-- TODOS los IndexOptimize con su última ejecución \(excluir STOP\)')[1]
-        $indexOptJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query $indexOptQuery `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+        $indexOptJobs = $null
+        $attemptCount = 0
+        $lastError = $null
+        
+        while ($attemptCount -lt 2 -and $indexOptJobs -eq $null) {
+            $attemptCount++
+            $currentTimeout = if ($attemptCount -eq 1) { $TimeoutSec } else { $RetryTimeoutSec }
+            
+            try {
+                if ($attemptCount -eq 2) {
+                    Write-Verbose "Reintentando IndexOptimize en $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
+                }
+                
+                $indexOptJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
+                    -Query $indexOptQuery `
+                    -QueryTimeout $currentTimeout `
+                    -EnableException
+                    
+                break
+                
+            } catch {
+                $lastError = $_
+                if ($attemptCount -eq 1) {
+                    Write-Verbose "Timeout en IndexOptimize $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
+                    Start-Sleep -Milliseconds 500
+                }
+            }
+        }
+        
+        if ($indexOptJobs -eq $null) {
+            throw $lastError
+        }
         
         $cutoffDate = (Get-Date).AddDays(-7)
         
@@ -308,7 +369,8 @@ WHERE rn = 1 OR rn IS NULL;
 function Get-ErrorlogStatus {
     param(
         [string]$InstanceName,
-        [int]$TimeoutSec = 30
+        [int]$TimeoutSec = 30,
+        [int]$RetryTimeoutSec = 60
     )
     
     $result = @{
@@ -344,11 +406,39 @@ ORDER BY LogDate DESC;
 DROP TABLE #ErrorLog;
 "@
         
-        # Usar dbatools para ejecutar queries
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query $query `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+        # Usar dbatools para ejecutar queries con retry
+        $data = $null
+        $attemptCount = 0
+        $lastError = $null
+        
+        while ($attemptCount -lt 2 -and $data -eq $null) {
+            $attemptCount++
+            $currentTimeout = if ($attemptCount -eq 1) { $TimeoutSec } else { $RetryTimeoutSec }
+            
+            try {
+                if ($attemptCount -eq 2) {
+                    Write-Verbose "Reintentando ErrorLog en $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
+                }
+                
+                $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+                    -Query $query `
+                    -QueryTimeout $currentTimeout `
+                    -EnableException
+                    
+                break
+                
+            } catch {
+                $lastError = $_
+                if ($attemptCount -eq 1) {
+                    Write-Verbose "Timeout en ErrorLog $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
+                    Start-Sleep -Milliseconds 500
+                }
+            }
+        }
+        
+        if ($data -eq $null -and $lastError) {
+            throw $lastError
+        }
         
         if ($data) {
             $countRow = $data | Select-Object -First 1
@@ -729,8 +819,8 @@ foreach ($instance in $instances) {
     }
     
     # Recolectar métricas
-    $maintenance = Get-MaintenanceJobs -InstanceName $instanceName -TimeoutSec $TimeoutSec
-    $errorlog = Get-ErrorlogStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    $maintenance = Get-MaintenanceJobs -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry
+    $errorlog = Get-ErrorlogStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry
     
     # Determinar estado (priorizar AMBOS fallidos como más crítico)
     $status = "✅"
