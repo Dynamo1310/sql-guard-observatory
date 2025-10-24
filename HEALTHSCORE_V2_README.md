@@ -134,19 +134,28 @@ GO
 # Desde el directorio raíz del proyecto
 cd SQLNova
 
-# 1. Crear tablas de snapshots
-sqlcmd -S <TuServidorCentral> -d SQLNova -i 01_Schema_HealthScore_V2.sql
+# 1. Migrar/Crear tablas de snapshots (preserva datos existentes)
+sqlcmd -S <TuServidorCentral> -d SQLNova -i 01c_Migrar_Tablas_Existentes_V2.sql
 
-# 2. Crear vistas de scores por categoría
+# 2. Crear tabla de histórico de scores (IMPORTANTE para tendencias)
+sqlcmd -S <TuServidorCentral> -d SQLNova -i 01d_Tabla_HealthScore_History.sql
+
+# 3. Crear vistas de scores por categoría
 sqlcmd -S <TuServidorCentral> -d SQLNova -i 02_Views_HealthScore_V2.sql
 
-# 3. Crear vista final con caps
+# 4. Crear vista final con caps
 sqlcmd -S <TuServidorCentral> -d SQLNova -i 03_Views_HealthFinal_V2.sql
 
-# 4. Configurar seguridad y permisos
+# 5. Configurar seguridad y permisos
 sqlcmd -S <TuServidorCentral> -d SQLNova -i 04_Security_V2.sql
 
-# 5. (Opcional) Insertar datos de prueba
+# 6. Crear SQL Agent Job para materializar scores cada 10 min
+sqlcmd -S <TuServidorCentral> -d msdb -i 06_SQLAgent_Job_Materializar.sql
+
+# 7. Ejecutar primera materialización manualmente
+sqlcmd -S <TuServidorCentral> -d SQLNova -Q "EXEC dbo.usp_MaterializarHealthScores_V2"
+
+# 8. (Opcional) Insertar datos de prueba
 sqlcmd -S <TuServidorCentral> -d SQLNova -i 05_Seed_Data_V2.sql
 ```
 
