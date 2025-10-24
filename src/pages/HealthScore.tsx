@@ -926,7 +926,18 @@ export default function HealthScore() {
                                       {score.alwaysOnSummary.enabled && (
                                         <div className="flex items-center justify-between">
                                           <span className="text-muted-foreground">Estado</span>
-                                          <Badge variant={score.alwaysOnSummary.worstState === 'OK' ? 'outline' : 'destructive'} className="text-xs">
+                                          <Badge 
+                                            variant={
+                                              score.alwaysOnSummary.worstState === 'OK' || score.alwaysOnSummary.worstState === 'HEALTHY' ? 'outline' : 
+                                              score.alwaysOnSummary.worstState === 'WARNING' || score.alwaysOnSummary.worstState === 'PARTIALLY_HEALTHY' ? 'default' :
+                                              'destructive'
+                                            } 
+                                            className={cn(
+                                              'text-xs',
+                                              (score.alwaysOnSummary.worstState === 'OK' || score.alwaysOnSummary.worstState === 'HEALTHY') && 'border-green-500 text-green-700',
+                                              (score.alwaysOnSummary.worstState === 'WARNING' || score.alwaysOnSummary.worstState === 'PARTIALLY_HEALTHY') && 'border-yellow-500 text-yellow-700 bg-yellow-50'
+                                            )}
+                                          >
                                             {score.alwaysOnSummary.worstState}
                                           </Badge>
                                         </div>

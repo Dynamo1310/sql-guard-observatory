@@ -213,7 +213,8 @@ function Get-AlwaysOnStatus {
         # PASO 2: AlwaysOn SÍ está habilitado, obtener estado de los AGs
         $result.Enabled = $true  # ✅ Marcar como habilitado
         
-        $agQuery = @"
+        try {
+            $agQuery = @"
 SELECT 
     ag.name AS AGName,
     ar.replica_server_name AS ReplicaName,
@@ -230,39 +231,48 @@ LEFT JOIN sys.dm_hadr_database_replica_states drs
     ON ar.replica_id = drs.replica_id
 WHERE ar.replica_server_name = @@SERVERNAME;
 "@
-        
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query $agQuery `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
-        
-        if ($data -and $data.Count -gt 0) {
-            # Hay datos de AGs
             
-            # Determinar peor estado
-            $states = $data | Select-Object -ExpandProperty SyncHealth -Unique
-            if ($states -contains "NOT_HEALTHY") {
-                $result.WorstState = "CRITICAL"
-            }
-            elseif ($states -contains "PARTIALLY_HEALTHY") {
-                $result.WorstState = "WARNING"
+            $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+                -Query $agQuery `
+                -QueryTimeout $TimeoutSec `
+                -EnableException
+            
+            if ($data -and $data.Count -gt 0) {
+                # Hay datos de AGs
+                
+                # Determinar peor estado
+                $states = $data | Select-Object -ExpandProperty SyncHealth -Unique
+                if ($states -contains "NOT_HEALTHY") {
+                    $result.WorstState = "CRITICAL"
+                }
+                elseif ($states -contains "PARTIALLY_HEALTHY") {
+                    $result.WorstState = "WARNING"
+                }
+                else {
+                    $result.WorstState = "HEALTHY"
+                }
+                
+                $result.Details = $data | ForEach-Object {
+                    "$($_.AGName):$($_.DatabaseName):$($_.SyncHealth)"
+                }
             }
             else {
-                $result.WorstState = "HEALTHY"
-            }
-            
-            $result.Details = $data | ForEach-Object {
-                "$($_.AGName):$($_.DatabaseName):$($_.SyncHealth)"
+                # AlwaysOn está habilitado pero no hay AGs configurados (o no es parte de ningún AG)
+                $result.WorstState = "OK"
+                $result.Details = @("AlwaysOn habilitado pero sin AGs configurados")
             }
         }
-        else {
-            # AlwaysOn está habilitado pero no hay AGs configurados (o no es parte de ningún AG)
+        catch {
+            # Error al consultar AGs, pero AlwaysOn está habilitado
+            # Establecer estado por defecto
             $result.WorstState = "OK"
-            $result.Details = @("AlwaysOn habilitado pero sin AGs configurados")
+            $result.Details = @("AlwaysOn habilitado - no se pudo consultar estado de AGs")
+            Write-Warning "Error obteniendo estado de AGs en ${InstanceName}: $($_.Exception.Message)"
         }
         
     } catch {
-        # Si falla, asumimos que no tiene AlwaysOn
+        # Error al verificar si AlwaysOn está habilitado
+        # Mantener valores por defecto (Enabled = false, WorstState = "N/A")
     }
     
     return $result
