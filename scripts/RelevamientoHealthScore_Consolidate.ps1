@@ -79,11 +79,12 @@ function Calculate-ConnectivityScore {
     # Base: 10 pts por conectar exitosamente
     $baseScore = 10
     
-    # Bonus por latencia (hasta 3 pts)
+    # Bonus por latencia (hasta 3 pts) - Umbrales ajustados para incluir WAN y conexiones remotas
     $latencyBonus = 0
-    if ($ConnectLatencyMs -le 10) { $latencyBonus = 3 }
-    elseif ($ConnectLatencyMs -le 50) { $latencyBonus = 2 }
-    elseif ($ConnectLatencyMs -le 100) { $latencyBonus = 1 }
+    if ($ConnectLatencyMs -le 2000) { $latencyBonus = 3 }      # Excelente (< 2 seg es aceptable para cualquier red)
+    elseif ($ConnectLatencyMs -le 5000) { $latencyBonus = 2 }  # Bueno (enlaces lentos pero funcionales)
+    elseif ($ConnectLatencyMs -le 10000) { $latencyBonus = 1 } # Aceptable (conexiones muy lentas)
+    # > 10 seg = 0 pts (problema serio de red o timeout)
     
     # Bonus por ausencia de blocking (hasta 2 pts)
     $blockingBonus = 0

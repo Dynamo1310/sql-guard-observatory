@@ -13,6 +13,61 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
+// Helper para identificar problemas de una instancia
+function identifyIssues(score: HealthScoreDto): { critical: string[]; warning: string[] } {
+  const critical: string[] = [];
+  const warning: string[] = [];
+
+  // Discos críticos
+  if (score.diskSummary?.worstFreePct !== undefined && score.diskSummary.worstFreePct < 10) {
+    critical.push(`Disco crítico (${score.diskSummary.worstFreePct.toFixed(1)}% libre)`);
+  } else if (score.diskSummary?.worstFreePct !== undefined && score.diskSummary.worstFreePct < 20) {
+    warning.push(`Poco espacio en disco (${score.diskSummary.worstFreePct.toFixed(1)}% libre)`);
+  }
+
+  // Backups
+  if (score.backupSummary?.breaches && score.backupSummary.breaches.length > 0) {
+    const hasFullBreach = score.backupSummary.breaches.some(b => b.toLowerCase().includes('full'));
+    const hasLogBreach = score.backupSummary.breaches.some(b => b.toLowerCase().includes('log'));
+    
+    if (hasFullBreach) critical.push('Backups FULL atrasados');
+    if (hasLogBreach) warning.push('Backups LOG atrasados');
+  }
+
+  // Mantenimiento
+  if (score.maintenanceSummary?.checkdbOk === false) {
+    critical.push('CHECKDB no ejecutado');
+  }
+  if (score.maintenanceSummary?.indexOptimizeOk === false) {
+    warning.push('Index Optimize pendiente');
+  }
+
+  // AlwaysOn
+  if (score.alwaysOnSummary?.enabled && 
+      score.alwaysOnSummary.worstState && 
+      !['OK', 'HEALTHY'].includes(score.alwaysOnSummary.worstState)) {
+    if (score.alwaysOnSummary.worstState === 'CRITICAL' || score.alwaysOnSummary.worstState === 'NOT_HEALTHY') {
+      critical.push(`AlwaysOn en estado ${score.alwaysOnSummary.worstState}`);
+    } else {
+      warning.push(`AlwaysOn: ${score.alwaysOnSummary.worstState}`);
+    }
+  }
+
+  // Memoria
+  if (score.resourceSummary?.pageLifeExpectancy !== undefined && score.resourceSummary.pageLifeExpectancy < 100) {
+    critical.push('Presión de memoria crítica (PLE muy bajo)');
+  } else if (score.resourceSummary?.pageLifeExpectancy !== undefined && score.resourceSummary.pageLifeExpectancy < 300) {
+    warning.push('Presión de memoria detectada');
+  }
+
+  // Errorlog
+  if (score.errorlogSummary?.severity20PlusCount24h && score.errorlogSummary.severity20PlusCount24h > 0) {
+    critical.push(`${score.errorlogSummary.severity20PlusCount24h} errores críticos en 24h`);
+  }
+
+  return { critical, warning };
+}
+
 export default function HealthScore() {
   const navigate = useNavigate();
   const [healthScores, setHealthScores] = useState<HealthScoreDto[]>([]);
@@ -20,6 +75,7 @@ export default function HealthScore() {
   const { toast } = useToast();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showExplanation, setShowExplanation] = useState(false);
+  const [expandedTechnical, setExpandedTechnical] = useState<Set<string>>(new Set());
   
   // Filtros
   const [filterStatus, setFilterStatus] = useState<string>('All');
@@ -81,6 +137,21 @@ export default function HealthScore() {
     return { total, healthy, warning, critical, avgScore };
   }, [filteredScores]);
 
+  // Instancias que requieren atención (críticas y warnings)
+  const needsAttention = useMemo(() => {
+    return filteredScores
+      .filter(s => s.healthStatus === 'Critical' || s.healthStatus === 'Warning')
+      .sort((a, b) => {
+        // Primero por status (Critical antes que Warning)
+        if (a.healthStatus !== b.healthStatus) {
+          return a.healthStatus === 'Critical' ? -1 : 1;
+        }
+        // Luego por score (menor primero)
+        return a.healthScore - b.healthScore;
+      })
+      .slice(0, 10); // Mostrar máximo 10
+  }, [filteredScores]);
+
   const toggleRow = (instanceName: string) => {
     const newExpanded = new Set(expandedRows);
     if (newExpanded.has(instanceName)) {
@@ -89,6 +160,16 @@ export default function HealthScore() {
       newExpanded.add(instanceName);
     }
     setExpandedRows(newExpanded);
+  };
+
+  const toggleTechnical = (instanceName: string) => {
+    const newExpanded = new Set(expandedTechnical);
+    if (newExpanded.has(instanceName)) {
+      newExpanded.delete(instanceName);
+    } else {
+      newExpanded.add(instanceName);
+    }
+    setExpandedTechnical(newExpanded);
   };
 
   const getStatusIcon = (status: string) => {
@@ -512,6 +593,118 @@ export default function HealthScore() {
         </CardContent>
       </Card>
 
+      {/* Sección: Requiere Atención */}
+      {needsAttention.length > 0 && (
+        <Card className="gradient-card shadow-card border-2 border-destructive/30 bg-destructive/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              🚨 Requiere Atención ({needsAttention.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
+              {needsAttention.map((score) => {
+                const issues = identifyIssues(score);
+                const allIssues = [...issues.critical, ...issues.warning];
+                
+                return (
+                  <Card 
+                    key={score.instanceName}
+                    className={cn(
+                      'border-2 shadow-md hover:shadow-lg transition-shadow cursor-pointer',
+                      score.healthStatus === 'Critical' 
+                        ? 'border-destructive/50 bg-destructive/5' 
+                        : 'border-warning/50 bg-warning/5'
+                    )}
+                    onClick={() => {
+                      toggleRow(score.instanceName);
+                      // Scroll a la fila en la tabla
+                      setTimeout(() => {
+                        const element = document.getElementById(`row-${score.instanceName}`);
+                        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {score.healthStatus === 'Critical' ? (
+                            <XCircle className="h-5 w-5 text-destructive" />
+                          ) : (
+                            <AlertTriangle className="h-5 w-5 text-warning" />
+                          )}
+                          <span className="font-mono font-bold text-lg">{score.instanceName}</span>
+                        </div>
+                        <Badge 
+                          variant={score.healthStatus === 'Critical' ? 'destructive' : 'default'}
+                          className="text-lg font-bold px-3 py-1"
+                        >
+                          {score.healthScore}/100
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>{score.ambiente || 'N/A'}</span>
+                        <span>•</span>
+                        <span>{score.hostingSite || 'N/A'}</span>
+                        <span>•</span>
+                        <span>{formatDateUTC3(score.generatedAtUtc)}</span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {issues.critical.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-destructive uppercase tracking-wide">🔴 Crítico:</p>
+                          {issues.critical.map((issue, idx) => (
+                            <p key={idx} className="text-sm pl-4">• {issue}</p>
+                          ))}
+                        </div>
+                      )}
+                      {issues.warning.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-warning uppercase tracking-wide">⚠️ Atención:</p>
+                          {issues.warning.map((issue, idx) => (
+                            <p key={idx} className="text-sm pl-4">• {issue}</p>
+                          ))}
+                        </div>
+                      )}
+                      {allIssues.length === 0 && (
+                        <p className="text-sm text-muted-foreground italic">
+                          Score bajo pero sin problemas específicos detectados
+                        </p>
+                      )}
+                      <div className="pt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/instance-trends/${encodeURIComponent(score.instanceName)}`);
+                          }}
+                        >
+                          <TrendingUp className="h-3 w-3 mr-1" />
+                          Ver Tendencias
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleRow(score.instanceName);
+                          }}
+                        >
+                          Ver Detalles
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabla de Instancias */}
       <Card className="gradient-card shadow-card">
         <CardHeader>
@@ -560,7 +753,11 @@ export default function HealthScore() {
               {filteredScores.length > 0 ? (
                 filteredScores.map((score) => (
                   <>
-                    <TableRow key={score.instanceName} className="cursor-pointer hover:bg-accent/50">
+                    <TableRow 
+                      key={score.instanceName} 
+                      id={`row-${score.instanceName}`}
+                      className="cursor-pointer hover:bg-accent/50"
+                    >
                       <TableCell>
                         <Button
                           variant="ghost"
