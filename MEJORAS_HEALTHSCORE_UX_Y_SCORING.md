@@ -54,6 +54,17 @@ elseif ($ConnectLatencyMs -le 10000) { $latencyBonus = 1 } # Aceptable (< 10 seg
 ✅ Umbrales realistas para infraestructura distribuida  
 ✅ Mantiene penalización solo para conexiones realmente problemáticas (> 10 seg)
 
+### Tabla de Referencia de Latencias
+
+| Latencia | Bonus | Tipo de Conexión | Ejemplos |
+|----------|-------|------------------|----------|
+| < 2 seg | +3 pts ✅ | Excelente | LAN, WAN, VPN, AWS, cualquier red normal |
+| 2-5 seg | +2 pts 👍 | Bueno | Enlaces saturados, redes lentas |
+| 5-10 seg | +1 pt ⚠️ | Aceptable | Conexiones muy lentas, satelital |
+| > 10 seg | 0 pts 🔴 | Problema | Timeout, red caída, problemas serios |
+
+**Nota:** El script tiene un timeout de 10 segundos, por lo que latencias > 10seg generalmente resultarán en falla de conexión (0 puntos totales).
+
 ---
 
 ## 🚨 Problema 2: Difícil Identificar Instancias Problemáticas

@@ -43,10 +43,18 @@ namespace SQLGuardObservatory.API.Controllers
                         CollectedAtUtc,
                         HealthScore,
                         HealthStatus,
-                        AvailabilityScore,
-                        BackupScore,
-                        DiskScore,
+                        Tier1_Availability,
+                        Tier2_Continuity,
+                        Tier3_Resources,
+                        Tier4_Maintenance,
+                        ConnectivityScore,
+                        MemoryScore,
                         AlwaysOnScore,
+                        FullBackupScore,
+                        LogBackupScore,
+                        DiskSpaceScore,
+                        CheckdbScore,
+                        IndexOptimizeScore,
                         ErrorlogScore
                     FROM SQLNova.dbo.InstanceHealth_Score
                     WHERE InstanceName = @InstanceName
@@ -67,12 +75,25 @@ namespace SQLGuardObservatory.API.Controllers
                         timestamp = reader["CollectedAtUtc"],
                         healthScore = Convert.ToInt32(reader["HealthScore"]),
                         healthStatus = reader["HealthStatus"].ToString(),
+                        // Breakdown por Tiers (v3.0 - 100 puntos)
+                        tiers = new
+                        {
+                            tier1_Availability = reader["Tier1_Availability"] != DBNull.Value ? Convert.ToInt32(reader["Tier1_Availability"]) : 0,
+                            tier2_Continuity = reader["Tier2_Continuity"] != DBNull.Value ? Convert.ToInt32(reader["Tier2_Continuity"]) : 0,
+                            tier3_Resources = reader["Tier3_Resources"] != DBNull.Value ? Convert.ToInt32(reader["Tier3_Resources"]) : 0,
+                            tier4_Maintenance = reader["Tier4_Maintenance"] != DBNull.Value ? Convert.ToInt32(reader["Tier4_Maintenance"]) : 0
+                        },
+                        // Breakdown detallado
                         breakdown = new
                         {
-                            availability = reader["AvailabilityScore"] != DBNull.Value ? Convert.ToInt32(reader["AvailabilityScore"]) : 0,
-                            backup = reader["BackupScore"] != DBNull.Value ? Convert.ToInt32(reader["BackupScore"]) : 0,
-                            disk = reader["DiskScore"] != DBNull.Value ? Convert.ToInt32(reader["DiskScore"]) : 0,
+                            connectivity = reader["ConnectivityScore"] != DBNull.Value ? Convert.ToInt32(reader["ConnectivityScore"]) : 0,
+                            memory = reader["MemoryScore"] != DBNull.Value ? Convert.ToInt32(reader["MemoryScore"]) : 0,
                             alwaysOn = reader["AlwaysOnScore"] != DBNull.Value ? Convert.ToInt32(reader["AlwaysOnScore"]) : 0,
+                            fullBackup = reader["FullBackupScore"] != DBNull.Value ? Convert.ToInt32(reader["FullBackupScore"]) : 0,
+                            logBackup = reader["LogBackupScore"] != DBNull.Value ? Convert.ToInt32(reader["LogBackupScore"]) : 0,
+                            diskSpace = reader["DiskSpaceScore"] != DBNull.Value ? Convert.ToInt32(reader["DiskSpaceScore"]) : 0,
+                            checkdb = reader["CheckdbScore"] != DBNull.Value ? Convert.ToInt32(reader["CheckdbScore"]) : 0,
+                            indexOptimize = reader["IndexOptimizeScore"] != DBNull.Value ? Convert.ToInt32(reader["IndexOptimizeScore"]) : 0,
                             errorlog = reader["ErrorlogScore"] != DBNull.Value ? Convert.ToInt32(reader["ErrorlogScore"]) : 0
                         }
                     });
@@ -113,7 +134,7 @@ namespace SQLGuardObservatory.API.Controllers
                         CollectedAtUtc,
                         ConnectSuccess,
                         ConnectLatencyMs
-                    FROM SQLNova.dbo.InstanceHealth_Critical
+                    FROM SQLNova.dbo.InstanceHealth_Critical_Availability
                     WHERE InstanceName = @InstanceName
                       AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
                     ORDER BY CollectedAtUtc ASC";
@@ -169,7 +190,7 @@ namespace SQLGuardObservatory.API.Controllers
                     SELECT 
                         CollectedAtUtc,
                         DiskWorstFreePct
-                    FROM SQLNova.dbo.InstanceHealth_Critical
+                    FROM SQLNova.dbo.InstanceHealth_Critical_Resources
                     WHERE InstanceName = @InstanceName
                       AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
                     ORDER BY CollectedAtUtc ASC";
