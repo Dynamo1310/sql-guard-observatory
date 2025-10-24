@@ -46,33 +46,29 @@ public class SQLNovaDbContext : DbContext
             entity.HasKey(e => new { e.InstanceName, e.GeneratedAtUtc });
         });
 
-        // Health Score V2
+        // Health Score V2 - Vistas (sin Primary Key, usar HasNoKey)
         modelBuilder.Entity<CategoryScoresV2>(entity =>
         {
             entity.ToTable("vw_CategoryScores_V2", "dbo");
-            entity.HasKey(e => e.Instance);
-            entity.HasNoKey(); // Es una vista, no tiene key real
+            entity.HasNoKey(); // Vista SQL sin PK
         });
 
         modelBuilder.Entity<HealthFinalV2>(entity =>
         {
             entity.ToTable("vw_HealthFinal_V2", "dbo");
-            entity.HasKey(e => e.Instance);
-            entity.HasNoKey(); // Es una vista
+            entity.HasNoKey(); // Vista SQL sin PK
         });
 
         modelBuilder.Entity<HealthTendencias24hV2>(entity =>
         {
             entity.ToTable("vw_HealthTendencias_24h_V2", "dbo");
-            entity.HasKey(e => new { e.Instance, e.HourBucket });
-            entity.HasNoKey();
+            entity.HasNoKey(); // Vista SQL sin PK
         });
 
         modelBuilder.Entity<HealthTendencias7dV2>(entity =>
         {
             entity.ToTable("vw_HealthTendencias_7d_V2", "dbo");
-            entity.HasKey(e => new { e.Instance, e.DayBucket });
-            entity.HasNoKey();
+            entity.HasNoKey(); // Vista SQL sin PK
         });
 
         modelBuilder.Entity<HealthScoreAlerta>(entity =>

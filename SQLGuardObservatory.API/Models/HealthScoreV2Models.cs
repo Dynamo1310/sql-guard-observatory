@@ -11,7 +11,6 @@ namespace SQLGuardObservatory.API.Models
     [Table("vw_CategoryScores_V2", Schema = "dbo")]
     public class CategoryScoresV2
     {
-        [Key]
         public string Instance { get; set; } = string.Empty;
         
         public int Score_Backups { get; set; }
@@ -52,7 +51,6 @@ namespace SQLGuardObservatory.API.Models
     [Table("vw_HealthFinal_V2", Schema = "dbo")]
     public class HealthFinalV2
     {
-        [Key]
         public string Instance { get; set; } = string.Empty;
         
         public int HealthRaw { get; set; }
@@ -70,12 +68,7 @@ namespace SQLGuardObservatory.API.Models
     [Table("vw_HealthTendencias_24h_V2", Schema = "dbo")]
     public class HealthTendencias24hV2
     {
-        [Key]
-        [Column(Order = 0)]
         public string Instance { get; set; } = string.Empty;
-        
-        [Key]
-        [Column(Order = 1)]
         public DateTime HourBucket { get; set; }
         
         public int? HealthScore { get; set; }
@@ -88,12 +81,7 @@ namespace SQLGuardObservatory.API.Models
     [Table("vw_HealthTendencias_7d_V2", Schema = "dbo")]
     public class HealthTendencias7dV2
     {
-        [Key]
-        [Column(Order = 0)]
         public string Instance { get; set; } = string.Empty;
-        
-        [Key]
-        [Column(Order = 1)]
         public DateTime DayBucket { get; set; }
         
         public int? HealthScore { get; set; }
