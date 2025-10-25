@@ -15,7 +15,41 @@ IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Instan
 BEGIN
     PRINT 'Modificando columnas existentes...';
     
-    -- Cambiar cada columna, permitiendo NULL temporalmente para facilitar la conversión
+    -- Paso 1: Eliminar DEFAULT constraints existentes
+    PRINT 'Eliminando DEFAULT constraints...';
+    
+    DECLARE @sql NVARCHAR(MAX) = '';
+    
+    SELECT @sql = @sql + 'ALTER TABLE [dbo].[InstanceHealth_Score] DROP CONSTRAINT ' + QUOTENAME(dc.name) + ';' + CHAR(13)
+    FROM sys.default_constraints dc
+    INNER JOIN sys.columns c ON dc.parent_column_id = c.column_id AND dc.parent_object_id = c.object_id
+    WHERE c.object_id = OBJECT_ID(N'[dbo].[InstanceHealth_Score]')
+      AND c.name IN (
+        'BackupsContribution',
+        'AlwaysOnContribution',
+        'ConectividadContribution',
+        'ErroresCriticosContribution',
+        'CPUContribution',
+        'IOContribution',
+        'DiscosContribution',
+        'MemoriaContribution',
+        'MantenimientosContribution',
+        'ConfiguracionTempdbContribution'
+      );
+    
+    IF LEN(@sql) > 0
+    BEGIN
+        EXEC sp_executesql @sql;
+        PRINT '✅ DEFAULT constraints eliminados';
+    END
+    ELSE
+    BEGIN
+        PRINT 'No hay DEFAULT constraints para eliminar';
+    END
+    
+    -- Paso 2: Cambiar tipo de columnas a INT NULL
+    PRINT 'Cambiando tipo de columnas a INT NULL...';
+    
     ALTER TABLE [dbo].[InstanceHealth_Score]
     ALTER COLUMN BackupsContribution INT NULL;
 
@@ -46,9 +80,11 @@ BEGIN
     ALTER TABLE [dbo].[InstanceHealth_Score]
     ALTER COLUMN ConfiguracionTempdbContribution INT NULL;
     
-    PRINT '✅ Columnas cambiadas a INT (NULL permitido temporalmente)';
+    PRINT '✅ Columnas cambiadas a INT NULL';
     
-    -- Actualizar valores NULL a 0 si existen
+    -- Paso 3: Actualizar valores NULL a 0 si existen
+    PRINT 'Actualizando valores NULL a 0...';
+    
     UPDATE [dbo].[InstanceHealth_Score]
     SET 
         BackupsContribution = ISNULL(BackupsContribution, 0),
@@ -73,7 +109,9 @@ BEGIN
         MantenimientosContribution IS NULL OR
         ConfiguracionTempdbContribution IS NULL;
     
-    -- Ahora aplicar NOT NULL
+    -- Paso 4: Aplicar NOT NULL
+    PRINT 'Aplicando constraint NOT NULL...';
+    
     ALTER TABLE [dbo].[InstanceHealth_Score]
     ALTER COLUMN BackupsContribution INT NOT NULL;
 
@@ -104,7 +142,41 @@ BEGIN
     ALTER TABLE [dbo].[InstanceHealth_Score]
     ALTER COLUMN ConfiguracionTempdbContribution INT NOT NULL;
     
-    PRINT '✅ Constraint NOT NULL aplicado a todas las columnas';
+    -- Paso 5: Recrear DEFAULT constraints con valor 0
+    PRINT 'Recreando DEFAULT constraints...';
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_BackupsContribution DEFAULT (0) FOR BackupsContribution;
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_AlwaysOnContribution DEFAULT (0) FOR AlwaysOnContribution;
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_ConectividadContribution DEFAULT (0) FOR ConectividadContribution;
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_ErroresCriticosContribution DEFAULT (0) FOR ErroresCriticosContribution;
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_CPUContribution DEFAULT (0) FOR CPUContribution;
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_IOContribution DEFAULT (0) FOR IOContribution;
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_DiscosContribution DEFAULT (0) FOR DiscosContribution;
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_MemoriaContribution DEFAULT (0) FOR MemoriaContribution;
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_MantenimientosContribution DEFAULT (0) FOR MantenimientosContribution;
+    
+    ALTER TABLE [dbo].[InstanceHealth_Score]
+    ADD CONSTRAINT DF_InstanceHealth_Score_ConfiguracionTempdbContribution DEFAULT (0) FOR ConfiguracionTempdbContribution;
+    
+    PRINT '✅ DEFAULT constraints recreados';
+    PRINT '✅ Todas las columnas actualizadas exitosamente!';
 END
 ELSE
 BEGIN
