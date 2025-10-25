@@ -11,8 +11,11 @@
     Guarda en: InstanceHealth_AlwaysOn
     
     Peso en scoring: 14%
-    Criterios: 100 si todas las bases están SYNCHRONIZED, penaliza send_queue y redo_queue altos
-    Cap: DB SUSPENDED o no sincronizada >2 min => cap 60
+    Criterios: 
+    - Réplicas SYNCHRONOUS_COMMIT: 100 si están SYNCHRONIZED
+    - Réplicas ASYNCHRONOUS_COMMIT: 100 si están SYNCHRONIZED o SYNCHRONIZING (no se penalizan)
+    - Penaliza send_queue y redo_queue altos
+    Cap: DB SUSPENDED o no sincronizada (sync mode) >2 min => cap 60
     
 .NOTES
     Versión: 3.0
@@ -99,11 +102,12 @@ function Get-AlwaysOnStatus {
         
         try {
             # Query mejorada que funciona tanto en primarios como secundarios
-            # y maneja mejor los nombres de servidor
+            # Incluye availability_mode_desc para distinguir SYNC vs ASYNC
             $agQuery = @"
 SELECT 
     ag.name AS AGName,
     ar.replica_server_name AS ReplicaName,
+    ar.availability_mode_desc AS AvailabilityMode,
     ars.role_desc AS Role,
     ars.synchronization_health_desc AS SyncHealth,
     drs.synchronization_state_desc AS DBSyncState,
@@ -133,9 +137,14 @@ WHERE ars.is_local = 1
                 # Hay datos de AGs - bases de datos participando en este nodo
                 $result.DatabaseCount = $data.Count
                 
-                # Contar bases sincronizadas
-                $synchronized = $data | Where-Object { $_.DBSyncState -eq 'SYNCHRONIZED' }
-                $result.SynchronizedCount = if ($synchronized) { $synchronized.Count } else { 0 }
+                # Contar bases "saludables" según su modo de disponibilidad:
+                # - SYNCHRONOUS_COMMIT: debe estar SYNCHRONIZED
+                # - ASYNCHRONOUS_COMMIT: puede estar SYNCHRONIZING (es normal y esperado)
+                $healthyDBs = $data | Where-Object { 
+                    ($_.AvailabilityMode -eq 'ASYNCHRONOUS_COMMIT' -and $_.DBSyncState -in @('SYNCHRONIZED', 'SYNCHRONIZING')) -or
+                    ($_.AvailabilityMode -eq 'SYNCHRONOUS_COMMIT' -and $_.DBSyncState -eq 'SYNCHRONIZED')
+                }
+                $result.SynchronizedCount = if ($healthyDBs) { $healthyDBs.Count } else { 0 }
                 
                 # Contar bases suspendidas
                 $suspended = $data | Where-Object { $_.IsSuspended -eq $true }
@@ -156,8 +165,16 @@ WHERE ars.is_local = 1
                     }
                 }
                 
-                # Determinar peor estado
+                # Determinar peor estado (considerando modo async)
                 $states = $data | Select-Object -ExpandProperty SyncHealth -Unique
+                
+                # Contar bases con problemas REALES (no incluir async SYNCHRONIZING como problema)
+                $problemDBs = $data | Where-Object { 
+                    $_.IsSuspended -eq $true -or
+                    ($_.AvailabilityMode -eq 'SYNCHRONOUS_COMMIT' -and $_.DBSyncState -ne 'SYNCHRONIZED') -or
+                    ($_.AvailabilityMode -eq 'ASYNCHRONOUS_COMMIT' -and $_.DBSyncState -notin @('SYNCHRONIZED', 'SYNCHRONIZING'))
+                }
+                
                 if ($result.SuspendedCount -gt 0) {
                     $result.WorstState = "SUSPENDED"
                 }
@@ -167,16 +184,16 @@ WHERE ars.is_local = 1
                 elseif ($states -contains "PARTIALLY_HEALTHY") {
                     $result.WorstState = "PARTIALLY_HEALTHY"
                 }
-                elseif ($result.SynchronizedCount -lt $result.DatabaseCount) {
+                elseif ($problemDBs -and $problemDBs.Count -gt 0) {
                     $result.WorstState = "NOT_SYNCHRONIZED"
                 }
                 else {
                     $result.WorstState = "HEALTHY"
                 }
                 
-                # Detalles (incluir rol para diagnóstico)
+                # Detalles (incluir rol y modo para diagnóstico)
                 $result.Details = $data | ForEach-Object {
-                    "$($_.AGName):$($_.DatabaseName):$($_.DBSyncState):$($_.Role)"
+                    "$($_.AGName):$($_.DatabaseName):$($_.DBSyncState):$($_.Role):$($_.AvailabilityMode)"
                 }
             }
             else {
@@ -368,12 +385,22 @@ foreach ($instance in $instancesWithAG) {
     
     # Determinar el rol de este nodo (PRIMARY o SECONDARY)
     $role = "UNKNOWN"
+    $availabilityMode = "N/A"
     if ($alwaysOn.Details -and $alwaysOn.Details.Count -gt 0) {
         $firstDetail = $alwaysOn.Details[0]
-        # El formato es: AGName:DatabaseName:DBSyncState:Role
+        # El formato es: AGName:DatabaseName:DBSyncState:Role:AvailabilityMode
         $parts = $firstDetail -split ":"
         if ($parts.Count -ge 4) {
             $role = $parts[3]
+        }
+        if ($parts.Count -ge 5) {
+            $availabilityMode = $parts[4]
+            # Abreviar para display
+            if ($availabilityMode -eq "ASYNCHRONOUS_COMMIT") {
+                $availabilityMode = "ASYNC"
+            } elseif ($availabilityMode -eq "SYNCHRONOUS_COMMIT") {
+                $availabilityMode = "SYNC"
+            }
         }
     }
     
@@ -391,7 +418,7 @@ foreach ($instance in $instancesWithAG) {
         $status = "⚠️ PARTIAL!" 
     }
     
-    Write-Host "   $status $instanceName [$role] - State:$($alwaysOn.WorstState) DBs:$($alwaysOn.DatabaseCount) Sync:$($alwaysOn.SynchronizedCount) SendQ:$($alwaysOn.MaxSendQueueKB)KB" -ForegroundColor Gray
+    Write-Host "   $status $instanceName [$role/$availabilityMode] - State:$($alwaysOn.WorstState) DBs:$($alwaysOn.DatabaseCount) Healthy:$($alwaysOn.SynchronizedCount) SendQ:$($alwaysOn.MaxSendQueueKB)KB" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -432,20 +459,27 @@ Write-Host "║  Not Healthy:          $(($results | Where-Object {$_.AlwaysOnWo
 Write-Host "║  Suspended:            $(($results | Where-Object {$_.AlwaysOnWorstState -eq 'SUSPENDED'}).Count)".PadRight(53) "║" -ForegroundColor White
 
 $totalDBs = ($results | Measure-Object -Property DatabaseCount -Sum).Sum
-$totalSynced = ($results | Measure-Object -Property SynchronizedCount -Sum).Sum
+$totalHealthy = ($results | Measure-Object -Property SynchronizedCount -Sum).Sum
 Write-Host "║  Total bases:          $totalDBs".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Sincronizadas:        $totalSynced".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Saludables:           $totalHealthy".PadRight(53) "║" -ForegroundColor White
 
-# Contar roles (basado en detalles)
+# Contar roles y modos (basado en detalles)
 $primaryCount = 0
 $secondaryCount = 0
+$syncCount = 0
+$asyncCount = 0
 foreach ($result in $results) {
     if ($result.AlwaysOnDetails -and $result.AlwaysOnDetails.Count -gt 0) {
         $firstDetail = $result.AlwaysOnDetails[0]
-        if ($firstDetail -like "*:PRIMARY") {
-            $primaryCount++
-        } elseif ($firstDetail -like "*:SECONDARY") {
-            $secondaryCount++
+        # Formato: AGName:DatabaseName:DBSyncState:Role:AvailabilityMode
+        $parts = $firstDetail -split ":"
+        if ($parts.Count -ge 4) {
+            if ($parts[3] -eq "PRIMARY") { $primaryCount++ }
+            elseif ($parts[3] -eq "SECONDARY") { $secondaryCount++ }
+        }
+        if ($parts.Count -ge 5) {
+            if ($parts[4] -eq "SYNCHRONOUS_COMMIT") { $syncCount++ }
+            elseif ($parts[4] -eq "ASYNCHRONOUS_COMMIT") { $asyncCount++ }
         }
     }
 }
@@ -453,6 +487,8 @@ foreach ($result in $results) {
 Write-Host "║".PadRight(56) "║" -ForegroundColor White
 Write-Host "║  Nodos PRIMARY:        $primaryCount".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  Nodos SECONDARY:      $secondaryCount".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Réplicas SYNC:        $syncCount".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Réplicas ASYNC:       $asyncCount".PadRight(53) "║" -ForegroundColor White
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
