@@ -725,17 +725,17 @@ INSERT INTO dbo.InstanceHealth_Score (
     $($ScoreData.MemoriaScore),
     $($ScoreData.MantenimientosScore),
     $($ScoreData.ConfiguracionTempdbScore),
-    -- Contribuciones Ponderadas (Score × Peso)
-    $([Math]::Round($ScoreData.BackupsScore * 0.18, 2)),
-    $([Math]::Round($ScoreData.AlwaysOnScore * 0.14, 2)),
-    $([Math]::Round($ScoreData.ConectividadScore * 0.10, 2)),
-    $([Math]::Round($ScoreData.ErroresCriticosScore * 0.07, 2)),
-    $([Math]::Round($ScoreData.CPUScore * 0.10, 2)),
-    $([Math]::Round($ScoreData.IOScore * 0.10, 2)),
-    $([Math]::Round($ScoreData.DiscosScore * 0.08, 2)),
-    $([Math]::Round($ScoreData.MemoriaScore * 0.07, 2)),
-    $([Math]::Round($ScoreData.MantenimientosScore * 0.06, 2)),
-    $([Math]::Round($ScoreData.ConfiguracionTempdbScore * 0.10, 2)),
+    -- Contribuciones Ponderadas (con caps aplicados)
+    $([Math]::Round($ScoreData.BackupsContribution, 2)),
+    $([Math]::Round($ScoreData.AlwaysOnContribution, 2)),
+    $([Math]::Round($ScoreData.ConectividadContribution, 2)),
+    $([Math]::Round($ScoreData.ErroresCriticosContribution, 2)),
+    $([Math]::Round($ScoreData.CPUContribution, 2)),
+    $([Math]::Round($ScoreData.IOContribution, 2)),
+    $([Math]::Round($ScoreData.DiscosContribution, 2)),
+    $([Math]::Round($ScoreData.MemoriaContribution, 2)),
+    $([Math]::Round($ScoreData.MantenimientosContribution, 2)),
+    $([Math]::Round($ScoreData.ConfiguracionTempdbContribution, 2)),
     $($ScoreData.GlobalCap)
 );
 "@
@@ -844,6 +844,18 @@ foreach ($instanceName in $instances) {
                  $mantenimientosResult.Cap, $configTempdbResult.Cap)
     $globalCap = ($allCaps | Measure-Object -Minimum).Minimum
     
+    # Calcular contribuciones reales (con caps aplicados)
+    $backupsContribution = [decimal]($backupsScore * $PESOS.Backups / 100)
+    $alwaysOnContribution = [decimal]($alwaysOnScore * $PESOS.AlwaysOn / 100)
+    $conectividadContribution = [decimal]($conectividadScore * $PESOS.Conectividad / 100)
+    $erroresContribution = [decimal]($erroresScore * $PESOS.ErroresCriticos / 100)
+    $cpuContribution = [decimal]($cpuScore * $PESOS.CPU / 100)
+    $ioContribution = [decimal]($ioScore * $PESOS.IO / 100)
+    $discosContribution = [decimal]($discosScore * $PESOS.Discos / 100)
+    $memoriaContribution = [decimal]($memoriaScore * $PESOS.Memoria / 100)
+    $mantenimientosContribution = [decimal]($mantenimientosScore * $PESOS.Mantenimientos / 100)
+    $configTempdbContribution = [decimal]($configTempdbScore * $PESOS.ConfiguracionTempdb / 100)
+    
     # Aplicar cap global
     if ($totalScore -gt $globalCap) {
         $totalScore = $globalCap
@@ -872,6 +884,16 @@ foreach ($instanceName in $instances) {
         MemoriaScore = $memoriaScore
         MantenimientosScore = $mantenimientosScore
         ConfiguracionTempdbScore = $configTempdbScore
+        BackupsContribution = $backupsContribution
+        AlwaysOnContribution = $alwaysOnContribution
+        ConectividadContribution = $conectividadContribution
+        ErroresCriticosContribution = $erroresContribution
+        CPUContribution = $cpuContribution
+        IOContribution = $ioContribution
+        DiscosContribution = $discosContribution
+        MemoriaContribution = $memoriaContribution
+        MantenimientosContribution = $mantenimientosContribution
+        ConfiguracionTempdbContribution = $configTempdbContribution
         GlobalCap = $globalCap
     }
     

@@ -82,16 +82,16 @@ namespace SQLGuardObservatory.API.Controllers
                         MemoriaScore AS Score_Memoria,
                         MantenimientosScore AS Score_Maintenance,
                         ConfiguracionTempdbScore AS Score_ConfiguracionTempdb,
-                        BackupsContribution,
-                        AlwaysOnContribution,
-                        ConectividadContribution,
-                        ErroresCriticosContribution,
-                        CPUContribution,
-                        IOContribution,
-                        DiscosContribution,
-                        MemoriaContribution,
-                        MantenimientosContribution,
-                        ConfiguracionTempdbContribution
+                        BackupsContribution AS BackupsContribution,
+                        AlwaysOnContribution AS AlwaysOnContribution,
+                        ConectividadContribution AS ConectividadContribution,
+                        ErroresCriticosContribution AS ErroresCriticosContribution,
+                        CPUContribution AS CPUContribution,
+                        IOContribution AS IOContribution,
+                        DiscosContribution AS DiscosContribution,
+                        MemoriaContribution AS MemoriaContribution,
+                        MantenimientosContribution AS MantenimientosContribution,
+                        ConfiguracionTempdbContribution AS ConfiguracionTempdbContribution
                     FROM RankedScores
                     WHERE rn = 1
                     ORDER BY HealthScore ASC, InstanceName;
@@ -284,7 +284,17 @@ namespace SQLGuardObservatory.API.Controllers
                         DiscosScore AS Score_Discos,
                         MemoriaScore AS Score_Memoria,
                         MantenimientosScore AS Score_Maintenance,
-                        ConfiguracionTempdbScore AS Score_ConfiguracionTempdb
+                        ConfiguracionTempdbScore AS Score_ConfiguracionTempdb,
+                        BackupsContribution,
+                        AlwaysOnContribution,
+                        ConectividadContribution,
+                        ErroresCriticosContribution,
+                        CPUContribution,
+                        IOContribution,
+                        DiscosContribution,
+                        MemoriaContribution,
+                        MantenimientosContribution,
+                        ConfiguracionTempdbContribution
                     FROM dbo.InstanceHealth_Score
                     WHERE InstanceName = {0}
                     ORDER BY CollectedAtUtc DESC";
@@ -317,7 +327,17 @@ namespace SQLGuardObservatory.API.Controllers
                     Score_Discos = score.Score_Discos,
                     Score_Memoria = score.Score_Memoria,
                     Score_Maintenance = score.Score_Maintenance,
-                    Score_ConfiguracionTempdb = score.Score_ConfiguracionTempdb
+                    Score_ConfiguracionTempdb = score.Score_ConfiguracionTempdb,
+                    BackupsContribution = score.BackupsContribution,
+                    AlwaysOnContribution = score.AlwaysOnContribution,
+                    ConectividadContribution = score.ConectividadContribution,
+                    ErroresCriticosContribution = score.ErroresCriticosContribution,
+                    CPUContribution = score.CPUContribution,
+                    IOContribution = score.IOContribution,
+                    DiscosContribution = score.DiscosContribution,
+                    MemoriaContribution = score.MemoriaContribution,
+                    MantenimientosContribution = score.MantenimientosContribution,
+                    ConfiguracionTempdbContribution = score.ConfiguracionTempdbContribution
                 };
 
                 // Backups
@@ -412,6 +432,18 @@ namespace SQLGuardObservatory.API.Controllers
         public int Score_Memoria { get; set; }
         public int Score_Maintenance { get; set; }
         public int Score_ConfiguracionTempdb { get; set; }
+        
+        // Contribuciones ponderadas (0-peso máximo)
+        public decimal BackupsContribution { get; set; }
+        public decimal AlwaysOnContribution { get; set; }
+        public decimal ConectividadContribution { get; set; }
+        public decimal ErroresCriticosContribution { get; set; }
+        public decimal CPUContribution { get; set; }
+        public decimal IOContribution { get; set; }
+        public decimal DiscosContribution { get; set; }
+        public decimal MemoriaContribution { get; set; }
+        public decimal MantenimientosContribution { get; set; }
+        public decimal ConfiguracionTempdbContribution { get; set; }
     }
 
     public class HealthScoreV3DetailDto : HealthScoreV3Dto
