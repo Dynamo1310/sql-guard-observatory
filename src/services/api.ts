@@ -777,19 +777,19 @@ export interface HealthScoreV3Dto {
   hostingSite?: string;
   version?: string;
   healthScore: number;
-  healthStatus: 'Verde' | 'Amarillo' | 'Naranja' | 'Rojo';
+  healthStatus: 'Healthy' | 'Warning' | 'Risk' | 'Critical';
   generatedAtUtc: string;
-  // Scores por categoría
-  score_Conectividad?: number;
-  score_AlwaysOn?: number;
-  score_Backups?: number;
-  score_ErroresCriticos?: number;
-  score_CPU?: number;
-  score_IO?: number;
-  score_Discos?: number;
-  score_Memoria?: number;
-  score_ConfiguracionTempdb?: number;
-  score_Maintenance?: number;
+  // Scores por categoría (cada uno sobre 100)
+  score_Backups?: number;           // 18%
+  score_AlwaysOn?: number;          // 14%
+  score_Conectividad?: number;      // 10%
+  score_ErroresCriticos?: number;   // 7%
+  score_CPU?: number;               // 10%
+  score_IO?: number;                // 10%
+  score_Discos?: number;            // 8%
+  score_Memoria?: number;           // 7%
+  score_Maintenance?: number;       // 6%
+  score_ConfiguracionTempdb?: number; // 10%
   // Detalles de cada categoría
   conectividadDetail?: any;
   alwaysOnDetail?: any;
@@ -805,10 +805,10 @@ export interface HealthScoreV3Dto {
 
 export interface HealthScoreV3SummaryDto {
   totalInstances: number;
-  verdeCount: number;
-  amarilloCount: number;
-  naranjaCount: number;
-  rojoCount: number;
+  healthyCount: number;
+  warningCount: number;
+  riskCount: number;
+  criticalCount: number;
   avgScore: number;
   lastUpdate?: string;
 }

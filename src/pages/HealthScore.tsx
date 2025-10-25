@@ -73,13 +73,13 @@ export default function HealthScore() {
   // Estadísticas
   const stats = useMemo(() => {
     const total = filteredScores.length;
-    const verde = filteredScores.filter(s => s.healthStatus === 'Verde').length;
-    const amarillo = filteredScores.filter(s => s.healthStatus === 'Amarillo').length;
-    const naranja = filteredScores.filter(s => s.healthStatus === 'Naranja').length;
-    const rojo = filteredScores.filter(s => s.healthStatus === 'Rojo').length;
+    const healthy = filteredScores.filter(s => s.healthStatus === 'Healthy').length;
+    const warning = filteredScores.filter(s => s.healthStatus === 'Warning').length;
+    const risk = filteredScores.filter(s => s.healthStatus === 'Risk').length;
+    const critical = filteredScores.filter(s => s.healthStatus === 'Critical').length;
     const avgScore = total > 0 ? Math.round(filteredScores.reduce((sum, s) => sum + s.healthScore, 0) / total) : 0;
 
-    return { total, verde, amarillo, naranja, rojo, avgScore };
+    return { total, healthy, warning, risk, critical, avgScore };
   }, [filteredScores]);
 
   const toggleRow = (instanceName: string) => {
@@ -94,20 +94,20 @@ export default function HealthScore() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'Verde': return <CheckCircle2 className="h-4 w-4 text-green-600" />;
-      case 'Amarillo': return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
-      case 'Naranja': return <AlertCircle className="h-4 w-4 text-orange-600" />;
-      case 'Rojo': return <XCircle className="h-4 w-4 text-red-600" />;
+      case 'Healthy': return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+      case 'Warning': return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+      case 'Risk': return <AlertCircle className="h-4 w-4 text-orange-600" />;
+      case 'Critical': return <XCircle className="h-4 w-4 text-red-600" />;
       default: return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
-      'Verde': 'bg-green-500/10 text-green-700 border-green-500/20',
-      'Amarillo': 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20',
-      'Naranja': 'bg-orange-500/10 text-orange-700 border-orange-500/20',
-      'Rojo': 'bg-red-500/10 text-red-700 border-red-500/20',
+      'Healthy': 'bg-green-500/10 text-green-700 border-green-500/20',
+      'Warning': 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20',
+      'Risk': 'bg-orange-500/10 text-orange-700 border-orange-500/20',
+      'Critical': 'bg-red-500/10 text-red-700 border-red-500/20',
     };
 
     return (
@@ -163,38 +163,38 @@ export default function HealthScore() {
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Métrica de <span className="font-bold text-foreground">0 a 100 puntos</span> que evalúa la salud de instancias SQL Server mediante 
-                  análisis de <span className="font-bold">10 categorías</span> clave de disponibilidad, continuidad, rendimiento y configuración.
+                  análisis de <span className="font-bold">10 categorías ponderadas</span> de disponibilidad, continuidad, rendimiento y configuración.
                 </p>
               </div>
 
               {/* Umbrales de estado */}
               <Card className="bg-gradient-to-r from-green-500/5 via-yellow-500/5 via-orange-500/5 to-red-500/5 border-dashed">
                 <CardContent className="p-4">
-                  <h4 className="font-semibold text-sm mb-3">Semáforo de 4 Colores</h4>
+                  <h4 className="font-semibold text-sm mb-3">Health Status Levels</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
                       <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-green-600">🟢 VERDE</p>
+                      <p className="text-center text-xs font-bold text-green-600">HEALTHY</p>
                       <p className="text-center text-lg font-mono font-bold text-green-600">≥85 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">Óptimo</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">Optimal performance</p>
                     </div>
                     <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
                       <AlertTriangle className="h-6 w-6 text-yellow-600 mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-yellow-600">🟡 AMARILLO</p>
+                      <p className="text-center text-xs font-bold text-yellow-600">WARNING</p>
                       <p className="text-center text-lg font-mono font-bold text-yellow-600">70-84 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">Advertencia</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">Requires attention</p>
                     </div>
                     <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
                       <AlertCircle className="h-6 w-6 text-orange-600 mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-orange-600">🟠 NARANJA</p>
+                      <p className="text-center text-xs font-bold text-orange-600">RISK</p>
                       <p className="text-center text-lg font-mono font-bold text-orange-600">50-69 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">Riesgo</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">Action required</p>
                     </div>
                     <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
                       <XCircle className="h-6 w-6 text-red-600 mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-red-600">🔴 ROJO</p>
+                      <p className="text-center text-xs font-bold text-red-600">CRITICAL</p>
                       <p className="text-center text-lg font-mono font-bold text-red-600">{'<'}50 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">Crítico</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">Immediate action</p>
                     </div>
                   </div>
                 </CardContent>
@@ -202,23 +202,23 @@ export default function HealthScore() {
 
               {/* Categorías explicadas */}
               <div className="space-y-2">
-                <h4 className="font-semibold text-sm">10 Categorías de Evaluación v3.0</h4>
+                <h4 className="font-semibold text-sm">10 Weighted Categories</h4>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Cada categoría aporta hasta 10 puntos (100 pts total). Ponderación basada en impacto operacional.
+                  Each category contributes to the total score based on operational impact. Scores are on a 0-100 scale per category.
                 </p>
               </div>
 
               {/* Grid de 10 categorías */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* 1. Conectividad */}
-                <Card className="bg-blue-500/5 border-blue-500/20">
+                {/* 1. Backups */}
+                <Card className="bg-green-500/5 border-green-500/20">
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
-                      <Activity className="h-4 w-4 text-blue-500" />
-                      <span className="font-semibold text-sm">1. Conectividad</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                      <Database className="h-4 w-4 text-green-500" />
+                      <span className="font-semibold text-sm">1. Backups (RPO/RTO)</span>
+                      <Badge variant="outline" className="ml-auto bg-green-500/10 text-green-700 border-green-500/30">18%</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">Latencia {'<'}200ms + sin blocking masivo</p>
+                    <p className="text-xs text-muted-foreground">FULL within SLA, LOG chain integrity</p>
                   </CardContent>
                 </Card>
 
@@ -227,22 +227,22 @@ export default function HealthScore() {
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <Shield className="h-4 w-4 text-purple-500" />
-                      <span className="font-semibold text-sm">2. AlwaysOn</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                      <span className="font-semibold text-sm">2. AlwaysOn (AG)</span>
+                      <Badge variant="outline" className="ml-auto bg-purple-500/10 text-purple-700 border-purple-500/30">14%</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">Si aplica: sincronización OK, lag {'<'}5 seg</p>
+                    <p className="text-xs text-muted-foreground">Synchronization state, queue sizes, lag</p>
                   </CardContent>
                 </Card>
 
-                {/* 3. Backups */}
-                <Card className="bg-green-500/5 border-green-500/20">
+                {/* 3. Conectividad */}
+                <Card className="bg-blue-500/5 border-blue-500/20">
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
-                      <Database className="h-4 w-4 text-green-500" />
-                      <span className="font-semibold text-sm">3. Backups</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                      <Activity className="h-4 w-4 text-blue-500" />
+                      <span className="font-semibold text-sm">3. Connectivity</span>
+                      <Badge variant="outline" className="ml-auto bg-blue-500/10 text-blue-700 border-blue-500/30">10%</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">FULL {'<'}24h + LOG {'<'}2h (si aplica)</p>
+                    <p className="text-xs text-muted-foreground">Response time, authentication, login failures</p>
                   </CardContent>
                 </Card>
 
@@ -251,10 +251,10 @@ export default function HealthScore() {
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <XCircle className="h-4 w-4 text-red-500" />
-                      <span className="font-semibold text-sm">4. Errores Críticos</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                      <span className="font-semibold text-sm">4. Critical Errors (sev≥20)</span>
+                      <Badge variant="outline" className="ml-auto bg-red-500/10 text-red-700 border-red-500/30">7%</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">Severity ≥20 en últimas 24h</p>
+                    <p className="text-xs text-muted-foreground">Severity 20+ events in last 24h</p>
                   </CardContent>
                 </Card>
 
@@ -264,9 +264,9 @@ export default function HealthScore() {
                     <div className="flex items-center gap-2 mb-2">
                       <Cpu className="h-4 w-4 text-orange-500" />
                       <span className="font-semibold text-sm">5. CPU</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                      <Badge variant="outline" className="ml-auto bg-orange-500/10 text-orange-700 border-orange-500/30">10%</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">Uso SQL {'<'}80% + sin runnable tasks</p>
+                    <p className="text-xs text-muted-foreground">p95 utilization, runnable tasks</p>
                   </CardContent>
                 </Card>
 
@@ -275,10 +275,10 @@ export default function HealthScore() {
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <Zap className="h-4 w-4 text-cyan-500" />
-                      <span className="font-semibold text-sm">6. I/O (Latencia / IOPS)</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                      <span className="font-semibold text-sm">6. I/O (Latency / IOPS)</span>
+                      <Badge variant="outline" className="ml-auto bg-cyan-500/10 text-cyan-700 border-cyan-500/30">10%</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">Latencia data {'<'}20ms + log {'<'}10ms</p>
+                    <p className="text-xs text-muted-foreground">Data/Log file latency, IOPS performance</p>
                   </CardContent>
                 </Card>
 
@@ -287,10 +287,10 @@ export default function HealthScore() {
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <HardDrive className="h-4 w-4 text-yellow-500" />
-                      <span className="font-semibold text-sm">7. Espacio en Discos</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                      <span className="font-semibold text-sm">7. Disk Space</span>
+                      <Badge variant="outline" className="ml-auto bg-yellow-500/10 text-yellow-700 border-yellow-500/30">8%</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">Volúmenes críticos con ≥20% libre</p>
+                    <p className="text-xs text-muted-foreground">Free space % weighted by role (Data/Log/Backup)</p>
                   </CardContent>
                 </Card>
 
@@ -299,34 +299,34 @@ export default function HealthScore() {
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <MemoryStick className="h-4 w-4 text-pink-500" />
-                      <span className="font-semibold text-sm">8. Memoria (PLE + Grants)</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                      <span className="font-semibold text-sm">8. Memory (PLE + Grants)</span>
+                      <Badge variant="outline" className="ml-auto bg-pink-500/10 text-pink-700 border-pink-500/30">7%</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">PLE ≥300 seg + grants sin pendientes</p>
+                    <p className="text-xs text-muted-foreground">Page Life Expectancy, memory grants, pressure</p>
                   </CardContent>
                 </Card>
 
-                {/* 9. Configuración & TempDB */}
-                <Card className="bg-indigo-500/5 border-indigo-500/20">
-                  <CardContent className="p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Settings className="h-4 w-4 text-indigo-500" />
-                      <span className="font-semibold text-sm">9. Configuración & TempDB</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">TempDB bien configurado + max memory óptimo</p>
-                  </CardContent>
-                </Card>
-
-                {/* 10. Maintenance */}
+                {/* 9. Maintenance */}
                 <Card className="bg-teal-500/5 border-teal-500/20">
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <Wrench className="h-4 w-4 text-teal-500" />
-                      <span className="font-semibold text-sm">10. Maintenance</span>
-                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                      <span className="font-semibold text-sm">9. Maintenance</span>
+                      <Badge variant="outline" className="ml-auto bg-teal-500/10 text-teal-700 border-teal-500/30">6%</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">CHECKDB + Index Optimize ({'<'}7 días)</p>
+                    <p className="text-xs text-muted-foreground">CHECKDB, Index Optimize, Statistics updates</p>
+                  </CardContent>
+                </Card>
+
+                {/* 10. Configuración & TempDB */}
+                <Card className="bg-indigo-500/5 border-indigo-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Settings className="h-4 w-4 text-indigo-500" />
+                      <span className="font-semibold text-sm">10. Configuration & TempDB</span>
+                      <Badge variant="outline" className="ml-auto bg-indigo-500/10 text-indigo-700 border-indigo-500/30">10%</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">TempDB setup, max memory config, contention</p>
                   </CardContent>
                 </Card>
               </div>
@@ -334,12 +334,20 @@ export default function HealthScore() {
               {/* Resumen visual */}
               <Card className="bg-blue-500/5 border-blue-500/20">
                 <CardContent className="p-4">
-                  <h4 className="font-semibold text-sm mb-3">Resumen de Puntuación</h4>
-                  <div className="text-center">
-                    <p className="text-2xl font-mono font-bold text-blue-500">10 categorías × 10 pts = 100 pts</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Todas las categorías tienen el mismo peso. El score final es la suma de todas.
-                    </p>
+                  <h4 className="font-semibold text-sm mb-3">Scoring Summary</h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span>Each category scored 0-100</span>
+                      <span className="font-mono text-muted-foreground">Individual scale</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Weighted average by importance</span>
+                      <span className="font-mono text-muted-foreground">18% + 14% + 10% ...</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-blue-500/10 p-2 rounded border border-blue-500/30 mt-3">
+                      <span className="font-bold">Final Health Score</span>
+                      <span className="font-mono text-lg font-bold text-blue-500">0-100 pts</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -354,10 +362,10 @@ export default function HealthScore() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Total</p>
+                <p className="text-xs text-muted-foreground">Total Instances</p>
                 <p className="text-2xl font-bold font-mono">{stats.total}</p>
               </div>
-              <Activity className="h-8 w-8 text-muted-foreground" />
+              <Server className="h-8 w-8 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -366,8 +374,8 @@ export default function HealthScore() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">🟢 Verde</p>
-                <p className="text-2xl font-bold font-mono text-green-600">{stats.verde}</p>
+                <p className="text-xs text-muted-foreground">Healthy</p>
+                <p className="text-2xl font-bold font-mono text-green-600">{stats.healthy}</p>
               </div>
               <CheckCircle2 className="h-8 w-8 text-green-600" />
             </div>
@@ -378,8 +386,8 @@ export default function HealthScore() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">🟡 Amarillo</p>
-                <p className="text-2xl font-bold font-mono text-yellow-600">{stats.amarillo}</p>
+                <p className="text-xs text-muted-foreground">Warning</p>
+                <p className="text-2xl font-bold font-mono text-yellow-600">{stats.warning}</p>
               </div>
               <AlertTriangle className="h-8 w-8 text-yellow-600" />
             </div>
@@ -390,8 +398,8 @@ export default function HealthScore() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">🟠 Naranja</p>
-                <p className="text-2xl font-bold font-mono text-orange-600">{stats.naranja}</p>
+                <p className="text-xs text-muted-foreground">Risk</p>
+                <p className="text-2xl font-bold font-mono text-orange-600">{stats.risk}</p>
               </div>
               <AlertCircle className="h-8 w-8 text-orange-600" />
             </div>
@@ -402,8 +410,8 @@ export default function HealthScore() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">🔴 Rojo</p>
-                <p className="text-2xl font-bold font-mono text-red-600">{stats.rojo}</p>
+                <p className="text-xs text-muted-foreground">Critical</p>
+                <p className="text-2xl font-bold font-mono text-red-600">{stats.critical}</p>
               </div>
               <XCircle className="h-8 w-8 text-red-600" />
             </div>
@@ -414,7 +422,7 @@ export default function HealthScore() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Score Promedio</p>
+                <p className="text-xs text-muted-foreground">Avg Score</p>
                 <p className="text-2xl font-bold font-mono">{stats.avgScore}</p>
               </div>
               <Activity className="h-8 w-8 text-muted-foreground" />
@@ -428,17 +436,17 @@ export default function HealthScore() {
         <CardContent className="p-4">
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
             <div>
-              <label className="text-xs text-muted-foreground mb-2 block">Estado</label>
+              <label className="text-xs text-muted-foreground mb-2 block">Status</label>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">Todos</SelectItem>
-                  <SelectItem value="Verde">🟢 Verde</SelectItem>
-                  <SelectItem value="Amarillo">🟡 Amarillo</SelectItem>
-                  <SelectItem value="Naranja">🟠 Naranja</SelectItem>
-                  <SelectItem value="Rojo">🔴 Rojo</SelectItem>
+                  <SelectItem value="All">All</SelectItem>
+                  <SelectItem value="Healthy">Healthy</SelectItem>
+                  <SelectItem value="Warning">Warning</SelectItem>
+                  <SelectItem value="Risk">Risk</SelectItem>
+                  <SelectItem value="Critical">Critical</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -638,81 +646,81 @@ export default function HealthScore() {
                             <Card className="bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-green-500/5">
                               <CardHeader className="pb-3">
                                 <CardTitle className="text-sm flex items-center justify-between">
-                                  <span>📊 Breakdown por Categorías v3.0</span>
+                                  <span>Category Breakdown v3.0</span>
                                   <span className="text-lg font-mono font-bold">{score.healthScore}/100</span>
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                  <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2">
+                                  <div className="bg-green-500/5 border border-green-500/20 rounded p-2">
                                     <div className="flex items-center gap-1 mb-1">
-                                      <Activity className="h-3 w-3 text-blue-500" />
-                                      <p className="text-xs text-muted-foreground">Conectividad</p>
+                                      <Database className="h-3 w-3 text-green-500" />
+                                      <p className="text-xs text-muted-foreground">Backups (18%)</p>
                                     </div>
-                                    <p className="text-base font-mono font-bold text-blue-500">{score.score_Conectividad || 0}/10</p>
+                                    <p className="text-base font-mono font-bold text-green-500">{score.score_Backups || 0}/100</p>
                                   </div>
                                   <div className="bg-purple-500/5 border border-purple-500/20 rounded p-2">
                                     <div className="flex items-center gap-1 mb-1">
                                       <Shield className="h-3 w-3 text-purple-500" />
-                                      <p className="text-xs text-muted-foreground">AlwaysOn</p>
+                                      <p className="text-xs text-muted-foreground">AlwaysOn (14%)</p>
                                     </div>
-                                    <p className="text-base font-mono font-bold text-purple-500">{score.score_AlwaysOn || 0}/10</p>
+                                    <p className="text-base font-mono font-bold text-purple-500">{score.score_AlwaysOn || 0}/100</p>
                                   </div>
-                                  <div className="bg-green-500/5 border border-green-500/20 rounded p-2">
+                                  <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2">
                                     <div className="flex items-center gap-1 mb-1">
-                                      <Database className="h-3 w-3 text-green-500" />
-                                      <p className="text-xs text-muted-foreground">Backups</p>
+                                      <Activity className="h-3 w-3 text-blue-500" />
+                                      <p className="text-xs text-muted-foreground">Connect (10%)</p>
                                     </div>
-                                    <p className="text-base font-mono font-bold text-green-500">{score.score_Backups || 0}/10</p>
+                                    <p className="text-base font-mono font-bold text-blue-500">{score.score_Conectividad || 0}/100</p>
                                   </div>
                                   <div className="bg-red-500/5 border border-red-500/20 rounded p-2">
                                     <div className="flex items-center gap-1 mb-1">
                                       <XCircle className="h-3 w-3 text-red-500" />
-                                      <p className="text-xs text-muted-foreground">Errores Crític.</p>
+                                      <p className="text-xs text-muted-foreground">Errors (7%)</p>
                                     </div>
-                                    <p className="text-base font-mono font-bold text-red-500">{score.score_ErroresCriticos || 0}/10</p>
+                                    <p className="text-base font-mono font-bold text-red-500">{score.score_ErroresCriticos || 0}/100</p>
                                   </div>
                                   <div className="bg-orange-500/5 border border-orange-500/20 rounded p-2">
                                     <div className="flex items-center gap-1 mb-1">
                                       <Cpu className="h-3 w-3 text-orange-500" />
-                                      <p className="text-xs text-muted-foreground">CPU</p>
+                                      <p className="text-xs text-muted-foreground">CPU (10%)</p>
                                     </div>
-                                    <p className="text-base font-mono font-bold text-orange-500">{score.score_CPU || 0}/10</p>
+                                    <p className="text-base font-mono font-bold text-orange-500">{score.score_CPU || 0}/100</p>
                                   </div>
                                   <div className="bg-cyan-500/5 border border-cyan-500/20 rounded p-2">
                                     <div className="flex items-center gap-1 mb-1">
                                       <Zap className="h-3 w-3 text-cyan-500" />
-                                      <p className="text-xs text-muted-foreground">I/O</p>
+                                      <p className="text-xs text-muted-foreground">I/O (10%)</p>
                                     </div>
-                                    <p className="text-base font-mono font-bold text-cyan-500">{score.score_IO || 0}/10</p>
+                                    <p className="text-base font-mono font-bold text-cyan-500">{score.score_IO || 0}/100</p>
                                   </div>
                                   <div className="bg-yellow-500/5 border border-yellow-500/20 rounded p-2">
                                     <div className="flex items-center gap-1 mb-1">
                                       <HardDrive className="h-3 w-3 text-yellow-500" />
-                                      <p className="text-xs text-muted-foreground">Discos</p>
+                                      <p className="text-xs text-muted-foreground">Disk (8%)</p>
                                     </div>
-                                    <p className="text-base font-mono font-bold text-yellow-500">{score.score_Discos || 0}/10</p>
+                                    <p className="text-base font-mono font-bold text-yellow-500">{score.score_Discos || 0}/100</p>
                                   </div>
                                   <div className="bg-pink-500/5 border border-pink-500/20 rounded p-2">
                                     <div className="flex items-center gap-1 mb-1">
                                       <MemoryStick className="h-3 w-3 text-pink-500" />
-                                      <p className="text-xs text-muted-foreground">Memoria</p>
+                                      <p className="text-xs text-muted-foreground">Memory (7%)</p>
                                     </div>
-                                    <p className="text-base font-mono font-bold text-pink-500">{score.score_Memoria || 0}/10</p>
-                                  </div>
-                                  <div className="bg-indigo-500/5 border border-indigo-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <Settings className="h-3 w-3 text-indigo-500" />
-                                      <p className="text-xs text-muted-foreground">Config / TempDB</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-indigo-500">{score.score_ConfiguracionTempdb || 0}/10</p>
+                                    <p className="text-base font-mono font-bold text-pink-500">{score.score_Memoria || 0}/100</p>
                                   </div>
                                   <div className="bg-teal-500/5 border border-teal-500/20 rounded p-2">
                                     <div className="flex items-center gap-1 mb-1">
                                       <Wrench className="h-3 w-3 text-teal-500" />
-                                      <p className="text-xs text-muted-foreground">Maintenance</p>
+                                      <p className="text-xs text-muted-foreground">Maint (6%)</p>
                                     </div>
-                                    <p className="text-base font-mono font-bold text-teal-500">{score.score_Maintenance || 0}/10</p>
+                                    <p className="text-base font-mono font-bold text-teal-500">{score.score_Maintenance || 0}/100</p>
+                                  </div>
+                                  <div className="bg-indigo-500/5 border border-indigo-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Settings className="h-3 w-3 text-indigo-500" />
+                                      <p className="text-xs text-muted-foreground">Config (10%)</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-indigo-500">{score.score_ConfiguracionTempdb || 0}/100</p>
                                   </div>
                                 </div>
                               </CardContent>
