@@ -6,7 +6,6 @@
     Script de baja frecuencia (cada 1 hora) que recolecta:
     - CHECKDB status (basado en estado del job)
     - IndexOptimize status (basado en estado del job)
-    - Errorlog severity 20+ (últimas 24 horas)
     
     Incluye sincronización AlwaysOn:
     - Identifica grupos AG automáticamente
@@ -385,110 +384,6 @@ WHERE rn = 1 OR rn IS NULL;
     return $result
 }
 
-function Get-ErrorlogStatus {
-    param(
-        [string]$InstanceName,
-        [int]$TimeoutSec = 30,
-        [int]$RetryTimeoutSec = 60
-    )
-    
-    $result = @{
-        Severity20PlusCount = 0
-        Details = @()
-    }
-    
-    try {
-        $query = @"
-CREATE TABLE #ErrorLog (
-    LogDate DATETIME,
-    ProcessInfo NVARCHAR(128),
-    [Text] NVARCHAR(MAX)
-);
-
-INSERT INTO #ErrorLog
-EXEC sp_readerrorlog 0;
-
-SELECT 
-    COUNT(*) AS Severity20Count
-FROM #ErrorLog
-WHERE [Text] LIKE '%Severity: 2[0-9]%'
-  AND LogDate >= DATEADD(HOUR, -24, GETDATE());
-
-SELECT TOP 5 
-    LogDate,
-    [Text]
-FROM #ErrorLog
-WHERE [Text] LIKE '%Severity: 2[0-9]%'
-  AND LogDate >= DATEADD(HOUR, -24, GETDATE())
-ORDER BY LogDate DESC;
-
-DROP TABLE #ErrorLog;
-"@
-        
-        # Usar dbatools para ejecutar queries con retry
-        $data = $null
-        $attemptCount = 0
-        $lastError = $null
-        
-        while ($attemptCount -lt 2 -and $data -eq $null) {
-            $attemptCount++
-            $currentTimeout = if ($attemptCount -eq 1) { $TimeoutSec } else { $RetryTimeoutSec }
-            
-            try {
-                if ($attemptCount -eq 2) {
-                    Write-Verbose "Reintentando ErrorLog en $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
-                }
-                
-                $data = Invoke-DbaQuery -SqlInstance $InstanceName `
-                    -Query $query `
-                    -QueryTimeout $currentTimeout `
-                    -EnableException
-                    
-                break
-                
-            } catch {
-                $lastError = $_
-                if ($attemptCount -eq 1) {
-                    Write-Verbose "Timeout en ErrorLog $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
-                    Start-Sleep -Milliseconds 500
-                } else {
-                    # Segundo intento falló, capturar detalles
-                    Write-Verbose "Error en ErrorLog: $($_.Exception.Message)"
-                    if ($_.Exception.InnerException) {
-                        Write-Verbose "Inner: $($_.Exception.InnerException.Message)"
-                    }
-                }
-            }
-        }
-        
-        if ($data -eq $null -and $lastError) {
-            # Mejorar mensaje de error con más detalles
-            $errorMsg = $lastError.Exception.Message
-            if ($lastError.Exception.InnerException) {
-                $errorMsg += " | Inner: $($lastError.Exception.InnerException.Message)"
-            }
-            throw "Query ErrorLog falló: $errorMsg"
-        }
-        
-        if ($data) {
-            $countRow = $data | Select-Object -First 1
-            $result.Severity20PlusCount = [int]$countRow.Severity20Count
-            
-            $detailRows = $data | Select-Object -Skip 1 -First 5
-            $result.Details = $detailRows | ForEach-Object {
-                "$($_.LogDate): $($_.Text.Substring(0, [Math]::Min(100, $_.Text.Length)))"
-            }
-        }
-        
-    } catch {
-        # Error en el procesamiento de errorlog
-        $errorDetails = $_.Exception.Message
-        Write-Warning "Error obteniendo errorlog en ${InstanceName}: $errorDetails"
-        Write-Verbose "  Línea: $($_.InvocationInfo.ScriptLineNumber)"
-    }
-    
-    return $result
-}
 
 function Test-SqlConnection {
     param(
@@ -747,9 +642,7 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
     LastCheckdb,
     CheckdbOk,
     LastIndexOptimize,
-    IndexOptimizeOk,
-    Severity20PlusCount,
-    ErrorlogDetails
+    IndexOptimizeOk
 ) VALUES (
     '$($row.InstanceName)',
     '$($row.Ambiente)',
@@ -759,9 +652,7 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
     $lastCheckdb,
     $(if ($row.CheckdbOk) {1} else {0}),
     $lastIndexOpt,
-    $(if ($row.IndexOptimizeOk) {1} else {0}),
-    $($row.Severity20PlusCount),
-    '$($row.ErrorlogDetails -join "|")'
+    $(if ($row.IndexOptimizeOk) {1} else {0})
 );
 "@
             
@@ -853,7 +744,6 @@ foreach ($instance in $instances) {
     
     # Recolectar métricas
     $maintenance = Get-MaintenanceJobs -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry
-    $errorlog = Get-ErrorlogStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry
     
     # Determinar estado (priorizar AMBOS fallidos como más crítico)
     $status = "✅"
@@ -866,14 +756,11 @@ foreach ($instance in $instances) {
     elseif (-not $maintenance.IndexOptimizeOk) { 
         $status = "⚠️ NO INDEX OPT!" 
     }
-    elseif ($errorlog.Severity20PlusCount -gt 0) { 
-        $status = "🚨 ERRORS!" 
-    }
     
     $checkdbAge = if ($maintenance.LastCheckdb) { ((Get-Date) - $maintenance.LastCheckdb).Days } else { "N/A" }
     $indexOptAge = if ($maintenance.LastIndexOptimize) { ((Get-Date) - $maintenance.LastIndexOptimize).Days } else { "N/A" }
     
-    Write-Host "   $status $instanceName - CHECKDB:$checkdbAge days IndexOpt:$indexOptAge days Errors:$($errorlog.Severity20PlusCount)" -ForegroundColor Gray
+    Write-Host "   $status $instanceName - CHECKDB:$checkdbAge days IndexOpt:$indexOptAge days" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -886,8 +773,6 @@ foreach ($instance in $instances) {
         IndexOptimizeOk = $maintenance.IndexOptimizeOk
         CheckdbJobs = $maintenance.CheckdbJobs  # Para sincronización AlwaysOn
         IndexOptimizeJobs = $maintenance.IndexOptimizeJobs  # Para sincronización AlwaysOn
-        Severity20PlusCount = $errorlog.Severity20PlusCount
-        ErrorlogDetails = $errorlog.Details
     }
 }
 
@@ -910,7 +795,6 @@ Write-Host "╠═════════════════════�
 Write-Host "║  Total instancias:         $($results.Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  CHECKDB OK:               $(($results | Where-Object CheckdbOk).Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  IndexOptimize OK:         $(($results | Where-Object IndexOptimizeOk).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Con errores severity 20+: $(($results | Where-Object {$_.Severity20PlusCount -gt 0}).Count)".PadRight(53) "║" -ForegroundColor White
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
 Write-Host "✅ Script completado!" -ForegroundColor Green

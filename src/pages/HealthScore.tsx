@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronRight, HardDrive, Database, AlertCircle, Info, TrendingUp, Shield, Server, Wrench } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronRight, HardDrive, Database, AlertCircle, Info, TrendingUp, Shield, Server, Wrench, Cpu, Zap, MemoryStick, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn, formatDateUTC3 } from '@/lib/utils';
 import { useTableSort } from '@/hooks/use-table-sort';
-import { healthScoreApi, HealthScoreDto } from '@/services/api';
+import { healthScoreV3Api, HealthScoreV3Dto } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 
 export default function HealthScore() {
   const navigate = useNavigate();
-  const [healthScores, setHealthScores] = useState<HealthScoreDto[]>([]);
+  const [healthScores, setHealthScores] = useState<HealthScoreV3Dto[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -35,7 +35,7 @@ export default function HealthScore() {
   const fetchHealthScores = async () => {
     setLoading(true);
     try {
-      const data = await healthScoreApi.getHealthScores();
+      const data = await healthScoreV3Api.getAllHealthScores();
       setHealthScores(data);
     } catch (error) {
       console.error('Error al cargar health scores:', error);
@@ -73,12 +73,13 @@ export default function HealthScore() {
   // Estadísticas
   const stats = useMemo(() => {
     const total = filteredScores.length;
-    const healthy = filteredScores.filter(s => s.healthStatus === 'Healthy').length;
-    const warning = filteredScores.filter(s => s.healthStatus === 'Warning').length;
-    const critical = filteredScores.filter(s => s.healthStatus === 'Critical').length;
+    const verde = filteredScores.filter(s => s.healthStatus === 'Verde').length;
+    const amarillo = filteredScores.filter(s => s.healthStatus === 'Amarillo').length;
+    const naranja = filteredScores.filter(s => s.healthStatus === 'Naranja').length;
+    const rojo = filteredScores.filter(s => s.healthStatus === 'Rojo').length;
     const avgScore = total > 0 ? Math.round(filteredScores.reduce((sum, s) => sum + s.healthScore, 0) / total) : 0;
 
-    return { total, healthy, warning, critical, avgScore };
+    return { total, verde, amarillo, naranja, rojo, avgScore };
   }, [filteredScores]);
 
   const toggleRow = (instanceName: string) => {
@@ -93,18 +94,20 @@ export default function HealthScore() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'Healthy': return <CheckCircle2 className="h-4 w-4 text-success" />;
-      case 'Warning': return <AlertTriangle className="h-4 w-4 text-warning" />;
-      case 'Critical': return <XCircle className="h-4 w-4 text-destructive" />;
+      case 'Verde': return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+      case 'Amarillo': return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+      case 'Naranja': return <AlertCircle className="h-4 w-4 text-orange-600" />;
+      case 'Rojo': return <XCircle className="h-4 w-4 text-red-600" />;
       default: return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
-      'Healthy': 'bg-success/10 text-success border-success/20',
-      'Warning': 'bg-warning/10 text-warning border-warning/20',
-      'Critical': 'bg-destructive/10 text-destructive border-destructive/20',
+      'Verde': 'bg-green-500/10 text-green-700 border-green-500/20',
+      'Amarillo': 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20',
+      'Naranja': 'bg-orange-500/10 text-orange-700 border-orange-500/20',
+      'Rojo': 'bg-red-500/10 text-red-700 border-red-500/20',
     };
 
     return (
@@ -156,241 +159,187 @@ export default function HealthScore() {
             <CardContent className="pt-0 space-y-4">
               <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
                 <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">
-                  Health Score v2.0 - Metodología de Evaluación
+                  Health Score v3.0 - Metodología de Evaluación
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Métrica de <span className="font-bold text-foreground">0 a 100 puntos</span> que evalúa la salud de instancias SQL Server mediante 
-                  análisis de disponibilidad, continuidad, recursos y mantenimiento.
+                  análisis de <span className="font-bold">10 categorías</span> clave de disponibilidad, continuidad, rendimiento y configuración.
                 </p>
               </div>
 
               {/* Umbrales de estado */}
-              <Card className="bg-gradient-to-r from-green-500/5 via-yellow-500/5 to-red-500/5 border-dashed">
+              <Card className="bg-gradient-to-r from-green-500/5 via-yellow-500/5 via-orange-500/5 to-red-500/5 border-dashed">
                 <CardContent className="p-4">
-                  <h4 className="font-semibold text-sm mb-3">Umbrales de Estado</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="bg-success/10 border border-success/30 rounded-lg p-3">
-                      <CheckCircle2 className="h-6 w-6 text-success mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-success">HEALTHY</p>
-                      <p className="text-center text-lg font-mono font-bold text-success">90-100 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">≥90%</p>
+                  <h4 className="font-semibold text-sm mb-3">Semáforo de 4 Colores</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+                      <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-2" />
+                      <p className="text-center text-xs font-bold text-green-600">🟢 VERDE</p>
+                      <p className="text-center text-lg font-mono font-bold text-green-600">≥85 pts</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">Óptimo</p>
                     </div>
-                    <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
-                      <AlertTriangle className="h-6 w-6 text-warning mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-warning">WARNING</p>
-                      <p className="text-center text-lg font-mono font-bold text-warning">70-89 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">70-89%</p>
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                      <AlertTriangle className="h-6 w-6 text-yellow-600 mx-auto mb-2" />
+                      <p className="text-center text-xs font-bold text-yellow-600">🟡 AMARILLO</p>
+                      <p className="text-center text-lg font-mono font-bold text-yellow-600">70-84 pts</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">Advertencia</p>
                     </div>
-                    <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
-                      <XCircle className="h-6 w-6 text-destructive mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-destructive">CRITICAL</p>
-                      <p className="text-center text-lg font-mono font-bold text-destructive">{'<'}70 pts</p>
-                      <p className="text-center text-xs text-muted-foreground mt-1">{'<'}70%</p>
+                    <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+                      <AlertCircle className="h-6 w-6 text-orange-600 mx-auto mb-2" />
+                      <p className="text-center text-xs font-bold text-orange-600">🟠 NARANJA</p>
+                      <p className="text-center text-lg font-mono font-bold text-orange-600">50-69 pts</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">Riesgo</p>
+                    </div>
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                      <XCircle className="h-6 w-6 text-red-600 mx-auto mb-2" />
+                      <p className="text-center text-xs font-bold text-red-600">🔴 ROJO</p>
+                      <p className="text-center text-lg font-mono font-bold text-red-600">{'<'}50 pts</p>
+                      <p className="text-center text-xs text-muted-foreground mt-1">Crítico</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Tiers explicados */}
+              {/* Categorías explicadas */}
               <div className="space-y-2">
-                <h4 className="font-semibold text-sm">Distribución por Categorías (Tiers)</h4>
+                <h4 className="font-semibold text-sm">10 Categorías de Evaluación v3.0</h4>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Ponderación basada en impacto operacional y criticidad.
+                  Cada categoría aporta hasta 10 puntos (100 pts total). Ponderación basada en impacto operacional.
                 </p>
               </div>
 
-              {/* Tier 1: Disponibilidad */}
-              <Card className="bg-red-500/5 border-red-500/20">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-red-500/10 flex items-center justify-center">
-                      <Activity className="h-6 w-6 text-red-500" />
+              {/* Grid de 10 categorías */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* 1. Conectividad */}
+                <Card className="bg-blue-500/5 border-blue-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity className="h-4 w-4 text-blue-500" />
+                      <span className="font-semibold text-sm">1. Conectividad</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <h4 className="font-semibold text-sm">Tier 1: Disponibilidad</h4>
-                          <p className="text-xs text-muted-foreground">Métricas críticas de acceso y respuesta</p>
-                        </div>
-                        <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-lg px-3">40 pts</Badge>
-                      </div>
-                      <div className="grid gap-2 mt-3 text-xs">
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Conectividad (15 pts)</span>
-                          <p className="text-muted-foreground mt-1">Incluye conectividad, latencia y ausencia de blocking</p>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 15 pts: Conecta + latencia ≤10ms + sin blocking</li>
-                            <li>• 12-14 pts: Conecta + latencia 10-100ms</li>
-                            <li>• 0 pts: Sin conexión o latencia {'>'}100ms</li>
-                          </ul>
-                        </div>
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Memoria (10 pts)</span>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 10 pts: PLE ≥300 seg</li>
-                            <li>• 3-7 pts: PLE 100-299 seg</li>
-                            <li>• 0 pts: PLE {'<'}100 seg</li>
-                          </ul>
-                        </div>
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">AlwaysOn (15 pts)</span>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 15 pts: N/A o completamente sincronizado</li>
-                            <li>• 7 pts: Sincronización parcial</li>
-                            <li>• 0 pts: Desincronizado o con problemas</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    <p className="text-xs text-muted-foreground">Latencia {'<'}200ms + sin blocking masivo</p>
+                  </CardContent>
+                </Card>
 
-              {/* Tier 2: Continuidad */}
-              <Card className="bg-orange-500/5 border-orange-500/20">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                      <Database className="h-6 w-6 text-orange-500" />
+                {/* 2. AlwaysOn */}
+                <Card className="bg-purple-500/5 border-purple-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield className="h-4 w-4 text-purple-500" />
+                      <span className="font-semibold text-sm">2. AlwaysOn</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <h4 className="font-semibold text-sm">Tier 2: Continuidad</h4>
-                          <p className="text-xs text-muted-foreground">Estrategia de backup y recuperación</p>
-                        </div>
-                        <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/20 text-lg px-3">30 pts</Badge>
-                      </div>
-                      <div className="grid gap-2 mt-3 text-xs">
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">FULL Backup (15 pts)</span>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 15 pts: Todas las bases con backup {'<'}24h</li>
-                            <li>• 0 pts: Al menos una base sin backup {'>'}24h</li>
-                          </ul>
-                        </div>
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">LOG Backup (15 pts)</span>
-                          <p className="text-muted-foreground mt-1">Aplica solo a bases en modo FULL recovery</p>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 15 pts: Todas las bases FULL con LOG {'<'}2h</li>
-                            <li>• 0 pts: Al menos una base FULL sin LOG {'>'}2h</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    <p className="text-xs text-muted-foreground">Si aplica: sincronización OK, lag {'<'}5 seg</p>
+                  </CardContent>
+                </Card>
 
-              {/* Tier 3: Recursos */}
-              <Card className="bg-yellow-500/5 border-yellow-500/20">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-yellow-500/10 flex items-center justify-center">
-                      <HardDrive className="h-6 w-6 text-yellow-500" />
+                {/* 3. Backups */}
+                <Card className="bg-green-500/5 border-green-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Database className="h-4 w-4 text-green-500" />
+                      <span className="font-semibold text-sm">3. Backups</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <h4 className="font-semibold text-sm">Tier 3: Recursos</h4>
-                          <p className="text-xs text-muted-foreground">Almacenamiento y rendimiento I/O</p>
-                        </div>
-                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 text-lg px-3">20 pts</Badge>
-                      </div>
-                      <div className="grid gap-2 mt-3 text-xs">
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Almacenamiento (20 pts)</span>
-                          <p className="text-muted-foreground mt-1">Incluye espacio en disco + rendimiento I/O</p>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li><strong>Espacio (hasta 12 pts):</strong></li>
-                            <li className="ml-2">• 12 pts: Volumen más crítico ≥30% libre</li>
-                            <li className="ml-2">• 9 pts: 20-29% libre</li>
-                            <li className="ml-2">• 4 pts: 10-19% libre</li>
-                            <li className="ml-2">• 0 pts: {'<'}10% libre</li>
-                            <li className="mt-2"><strong>IOPS (hasta 8 pts):</strong></li>
-                            <li className="ml-2">• 8 pts: Latencia ≤10ms (SSD)</li>
-                            <li className="ml-2">• 6 pts: 11-20ms</li>
-                            <li className="ml-2">• 3 pts: 21-50ms (HDD)</li>
-                            <li className="ml-2">• 0 pts: {'>'}50ms</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    <p className="text-xs text-muted-foreground">FULL {'<'}24h + LOG {'<'}2h (si aplica)</p>
+                  </CardContent>
+                </Card>
 
-              {/* Tier 4: Mantenimiento */}
-              <Card className="bg-green-500/5 border-green-500/20">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
-                      <AlertCircle className="h-6 w-6 text-green-500" />
+                {/* 4. Errores Críticos */}
+                <Card className="bg-red-500/5 border-red-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <XCircle className="h-4 w-4 text-red-500" />
+                      <span className="font-semibold text-sm">4. Errores Críticos</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <h4 className="font-semibold text-sm">Tier 4: Mantenimiento</h4>
-                          <p className="text-xs text-muted-foreground">Tareas preventivas y monitoreo</p>
-                        </div>
-                        <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-lg px-3">10 pts</Badge>
-                      </div>
-                      <div className="grid gap-2 mt-3 text-xs">
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">DBCC CHECKDB (4 pts)</span>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 4 pts: Ejecutado y exitoso en últimos 7 días</li>
-                            <li>• 0 pts: Falló o sin ejecutar {'>'}7 días</li>
-                          </ul>
-                        </div>
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Index Optimize (3 pts)</span>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 3 pts: Ejecutado y exitoso en últimos 7 días</li>
-                            <li>• 0 pts: Falló o sin ejecutar {'>'}7 días</li>
-                          </ul>
-                        </div>
-                        <div className="bg-background/50 rounded p-2">
-                          <span className="font-medium">Error Log (3 pts)</span>
-                          <p className="text-muted-foreground mt-1">Severity ≥20 en últimas 24h</p>
-                          <ul className="space-y-1 text-muted-foreground mt-1 ml-3">
-                            <li>• 3 pts: 0 errores</li>
-                            <li>• 2 pts: 1-2 errores</li>
-                            <li>• 0 pts: 3+ errores</li>
-                          </ul>
-                        </div>
-                      </div>
+                    <p className="text-xs text-muted-foreground">Severity ≥20 en últimas 24h</p>
+                  </CardContent>
+                </Card>
+
+                {/* 5. CPU */}
+                <Card className="bg-orange-500/5 border-orange-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Cpu className="h-4 w-4 text-orange-500" />
+                      <span className="font-semibold text-sm">5. CPU</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    <p className="text-xs text-muted-foreground">Uso SQL {'<'}80% + sin runnable tasks</p>
+                  </CardContent>
+                </Card>
+
+                {/* 6. I/O */}
+                <Card className="bg-cyan-500/5 border-cyan-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Zap className="h-4 w-4 text-cyan-500" />
+                      <span className="font-semibold text-sm">6. I/O (Latencia / IOPS)</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Latencia data {'<'}20ms + log {'<'}10ms</p>
+                  </CardContent>
+                </Card>
+
+                {/* 7. Discos */}
+                <Card className="bg-yellow-500/5 border-yellow-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <HardDrive className="h-4 w-4 text-yellow-500" />
+                      <span className="font-semibold text-sm">7. Espacio en Discos</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Volúmenes críticos con ≥20% libre</p>
+                  </CardContent>
+                </Card>
+
+                {/* 8. Memoria */}
+                <Card className="bg-pink-500/5 border-pink-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MemoryStick className="h-4 w-4 text-pink-500" />
+                      <span className="font-semibold text-sm">8. Memoria (PLE + Grants)</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">PLE ≥300 seg + grants sin pendientes</p>
+                  </CardContent>
+                </Card>
+
+                {/* 9. Configuración & TempDB */}
+                <Card className="bg-indigo-500/5 border-indigo-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Settings className="h-4 w-4 text-indigo-500" />
+                      <span className="font-semibold text-sm">9. Configuración & TempDB</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">TempDB bien configurado + max memory óptimo</p>
+                  </CardContent>
+                </Card>
+
+                {/* 10. Maintenance */}
+                <Card className="bg-teal-500/5 border-teal-500/20">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Wrench className="h-4 w-4 text-teal-500" />
+                      <span className="font-semibold text-sm">10. Maintenance</span>
+                      <Badge variant="outline" className="ml-auto">10 pts</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">CHECKDB + Index Optimize ({'<'}7 días)</p>
+                  </CardContent>
+                </Card>
+              </div>
 
               {/* Resumen visual */}
               <Card className="bg-blue-500/5 border-blue-500/20">
                 <CardContent className="p-4">
-                  <h4 className="font-semibold text-sm mb-3">Distribución Total</h4>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex items-center justify-between bg-red-500/5 p-2 rounded">
-                      <span className="font-medium">Tier 1: Disponibilidad</span>
-                      <span className="font-mono font-bold text-red-500">35 pts (35%)</span>
-                    </div>
-                    <div className="flex items-center justify-between bg-orange-500/5 p-2 rounded">
-                      <span className="font-medium">Tier 2: Continuidad</span>
-                      <span className="font-mono font-bold text-orange-500">30 pts (30%)</span>
-                    </div>
-                    <div className="flex items-center justify-between bg-yellow-500/5 p-2 rounded">
-                      <span className="font-medium">Tier 3: Recursos</span>
-                      <span className="font-mono font-bold text-yellow-500">25 pts (25%)</span>
-                    </div>
-                    <div className="flex items-center justify-between bg-green-500/5 p-2 rounded">
-                      <span className="font-medium">Tier 4: Mantenimiento</span>
-                      <span className="font-mono font-bold text-green-500">10 pts (10%)</span>
-                    </div>
-                    <div className="flex items-center justify-between bg-blue-500/10 p-3 rounded border-2 border-blue-500/30 mt-3">
-                      <span className="font-bold">TOTAL</span>
-                      <span className="font-mono text-xl font-bold text-blue-500">100 pts</span>
-                    </div>
+                  <h4 className="font-semibold text-sm mb-3">Resumen de Puntuación</h4>
+                  <div className="text-center">
+                    <p className="text-2xl font-mono font-bold text-blue-500">10 categorías × 10 pts = 100 pts</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Todas las categorías tienen el mismo peso. El score final es la suma de todas.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -400,7 +349,7 @@ export default function HealthScore() {
       </Collapsible>
 
       {/* Estadísticas Resumidas */}
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <Card className="gradient-card shadow-card">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -413,38 +362,50 @@ export default function HealthScore() {
           </CardContent>
         </Card>
 
-        <Card className="gradient-card shadow-card border-success/30">
+        <Card className="gradient-card shadow-card border-green-500/30">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Healthy</p>
-                <p className="text-2xl font-bold font-mono text-success">{stats.healthy}</p>
+                <p className="text-xs text-muted-foreground">🟢 Verde</p>
+                <p className="text-2xl font-bold font-mono text-green-600">{stats.verde}</p>
               </div>
-              <CheckCircle2 className="h-8 w-8 text-success" />
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="gradient-card shadow-card border-warning/30">
+        <Card className="gradient-card shadow-card border-yellow-500/30">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Warning</p>
-                <p className="text-2xl font-bold font-mono text-warning">{stats.warning}</p>
+                <p className="text-xs text-muted-foreground">🟡 Amarillo</p>
+                <p className="text-2xl font-bold font-mono text-yellow-600">{stats.amarillo}</p>
               </div>
-              <AlertTriangle className="h-8 w-8 text-warning" />
+              <AlertTriangle className="h-8 w-8 text-yellow-600" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="gradient-card shadow-card border-destructive/30">
+        <Card className="gradient-card shadow-card border-orange-500/30">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Critical</p>
-                <p className="text-2xl font-bold font-mono text-destructive">{stats.critical}</p>
+                <p className="text-xs text-muted-foreground">🟠 Naranja</p>
+                <p className="text-2xl font-bold font-mono text-orange-600">{stats.naranja}</p>
               </div>
-              <XCircle className="h-8 w-8 text-destructive" />
+              <AlertCircle className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="gradient-card shadow-card border-red-500/30">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">🔴 Rojo</p>
+                <p className="text-2xl font-bold font-mono text-red-600">{stats.rojo}</p>
+              </div>
+              <XCircle className="h-8 w-8 text-red-600" />
             </div>
           </CardContent>
         </Card>
@@ -474,9 +435,10 @@ export default function HealthScore() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">Todos</SelectItem>
-                  <SelectItem value="Healthy">Healthy</SelectItem>
-                  <SelectItem value="Warning">Warning</SelectItem>
-                  <SelectItem value="Critical">Critical</SelectItem>
+                  <SelectItem value="Verde">🟢 Verde</SelectItem>
+                  <SelectItem value="Amarillo">🟡 Amarillo</SelectItem>
+                  <SelectItem value="Naranja">🟠 Naranja</SelectItem>
+                  <SelectItem value="Rojo">🔴 Rojo</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -587,11 +549,12 @@ export default function HealthScore() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center py-2">
-                        <span                         className={cn(
+                        <span className={cn(
                           'font-mono text-sm font-bold',
-                          score.healthScore >= 90 && 'text-success',
-                          score.healthScore >= 70 && score.healthScore < 90 && 'text-warning',
-                          score.healthScore < 70 && 'text-destructive'
+                          score.healthScore >= 85 && 'text-green-600',
+                          score.healthScore >= 70 && score.healthScore < 85 && 'text-yellow-600',
+                          score.healthScore >= 50 && score.healthScore < 70 && 'text-orange-600',
+                          score.healthScore < 50 && 'text-red-600'
                         )}>
                           {score.healthScore}
                           <span className="text-xs text-muted-foreground">/100</span>
@@ -603,9 +566,10 @@ export default function HealthScore() {
                             value={(score.healthScore / 100) * 100} 
                             className={cn(
                               'h-2 w-24',
-                              score.healthScore >= 90 && '[&>div]:bg-success',
-                              score.healthScore >= 70 && score.healthScore < 90 && '[&>div]:bg-warning',
-                              score.healthScore < 70 && '[&>div]:bg-destructive'
+                              score.healthScore >= 85 && '[&>div]:bg-green-600',
+                              score.healthScore >= 70 && score.healthScore < 85 && '[&>div]:bg-yellow-600',
+                              score.healthScore >= 50 && score.healthScore < 70 && '[&>div]:bg-orange-600',
+                              score.healthScore < 50 && '[&>div]:bg-red-600'
                             )}
                           />
                         </div>
@@ -670,49 +634,89 @@ export default function HealthScore() {
                               </Button>
                             </div>
 
-                            {/* v2.0: Breakdown por Tiers */}
-                            {(score.tier1_Availability || score.tier2_Continuity || score.tier3_Resources || score.tier4_Maintenance) && (
-                              <Card className="bg-gradient-to-r from-red-500/5 via-orange-500/5 via-yellow-500/5 to-green-500/5">
-                                <CardHeader className="pb-3">
-                                  <CardTitle className="text-sm flex items-center justify-between">
-                                    <span>📊 Breakdown por Tiers (100 pts)</span>
-                                    <span className="text-lg font-mono font-bold">{score.healthScore}/100</span>
-                                  </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                    <div className="bg-red-500/5 border border-red-500/20 rounded p-2">
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <Shield className="h-3 w-3 text-red-500" />
-                                        <p className="text-xs text-muted-foreground">T1: Disponibilidad</p>
-                                      </div>
-                                      <p className="text-lg font-mono font-bold text-red-500">{score.tier1_Availability || 0}/40</p>
+                            {/* v3.0: Breakdown por 10 Categorías */}
+                            <Card className="bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-green-500/5">
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-sm flex items-center justify-between">
+                                  <span>📊 Breakdown por Categorías v3.0</span>
+                                  <span className="text-lg font-mono font-bold">{score.healthScore}/100</span>
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                  <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Activity className="h-3 w-3 text-blue-500" />
+                                      <p className="text-xs text-muted-foreground">Conectividad</p>
                                     </div>
-                                    <div className="bg-orange-500/5 border border-orange-500/20 rounded p-2">
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <Database className="h-3 w-3 text-orange-500" />
-                                        <p className="text-xs text-muted-foreground">T2: Continuidad</p>
-                                      </div>
-                                      <p className="text-lg font-mono font-bold text-orange-500">{score.tier2_Continuity || 0}/30</p>
-                                    </div>
-                                    <div className="bg-yellow-500/5 border border-yellow-500/20 rounded p-2">
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <Server className="h-3 w-3 text-yellow-500" />
-                                        <p className="text-xs text-muted-foreground">T3: Recursos</p>
-                                      </div>
-                                      <p className="text-lg font-mono font-bold text-yellow-500">{score.tier3_Resources || 0}/20</p>
-                                    </div>
-                                    <div className="bg-green-500/5 border border-green-500/20 rounded p-2">
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <Wrench className="h-3 w-3 text-green-500" />
-                                        <p className="text-xs text-muted-foreground">T4: Mantenimiento</p>
-                                      </div>
-                                      <p className="text-lg font-mono font-bold text-green-500">{score.tier4_Maintenance || 0}/10</p>
-                                    </div>
+                                    <p className="text-base font-mono font-bold text-blue-500">{score.score_Conectividad || 0}/10</p>
                                   </div>
-                                </CardContent>
-                              </Card>
-                            )}
+                                  <div className="bg-purple-500/5 border border-purple-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Shield className="h-3 w-3 text-purple-500" />
+                                      <p className="text-xs text-muted-foreground">AlwaysOn</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-purple-500">{score.score_AlwaysOn || 0}/10</p>
+                                  </div>
+                                  <div className="bg-green-500/5 border border-green-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Database className="h-3 w-3 text-green-500" />
+                                      <p className="text-xs text-muted-foreground">Backups</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-green-500">{score.score_Backups || 0}/10</p>
+                                  </div>
+                                  <div className="bg-red-500/5 border border-red-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <XCircle className="h-3 w-3 text-red-500" />
+                                      <p className="text-xs text-muted-foreground">Errores Crític.</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-red-500">{score.score_ErroresCriticos || 0}/10</p>
+                                  </div>
+                                  <div className="bg-orange-500/5 border border-orange-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Cpu className="h-3 w-3 text-orange-500" />
+                                      <p className="text-xs text-muted-foreground">CPU</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-orange-500">{score.score_CPU || 0}/10</p>
+                                  </div>
+                                  <div className="bg-cyan-500/5 border border-cyan-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Zap className="h-3 w-3 text-cyan-500" />
+                                      <p className="text-xs text-muted-foreground">I/O</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-cyan-500">{score.score_IO || 0}/10</p>
+                                  </div>
+                                  <div className="bg-yellow-500/5 border border-yellow-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <HardDrive className="h-3 w-3 text-yellow-500" />
+                                      <p className="text-xs text-muted-foreground">Discos</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-yellow-500">{score.score_Discos || 0}/10</p>
+                                  </div>
+                                  <div className="bg-pink-500/5 border border-pink-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <MemoryStick className="h-3 w-3 text-pink-500" />
+                                      <p className="text-xs text-muted-foreground">Memoria</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-pink-500">{score.score_Memoria || 0}/10</p>
+                                  </div>
+                                  <div className="bg-indigo-500/5 border border-indigo-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Settings className="h-3 w-3 text-indigo-500" />
+                                      <p className="text-xs text-muted-foreground">Config / TempDB</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-indigo-500">{score.score_ConfiguracionTempdb || 0}/10</p>
+                                  </div>
+                                  <div className="bg-teal-500/5 border border-teal-500/20 rounded p-2">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Wrench className="h-3 w-3 text-teal-500" />
+                                      <p className="text-xs text-muted-foreground">Maintenance</p>
+                                    </div>
+                                    <p className="text-base font-mono font-bold text-teal-500">{score.score_Maintenance || 0}/10</p>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
 
                             {/* Grids de Detalles */}
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

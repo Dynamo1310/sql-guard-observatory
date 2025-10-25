@@ -769,6 +769,88 @@ export const healthScoreV2Api = {
   },
 };
 
+// ==================== HEALTHSCORE V3 API ====================
+
+export interface HealthScoreV3Dto {
+  instanceName: string;
+  ambiente?: string;
+  hostingSite?: string;
+  version?: string;
+  healthScore: number;
+  healthStatus: 'Verde' | 'Amarillo' | 'Naranja' | 'Rojo';
+  generatedAtUtc: string;
+  // Scores por categoría
+  score_Conectividad?: number;
+  score_AlwaysOn?: number;
+  score_Backups?: number;
+  score_ErroresCriticos?: number;
+  score_CPU?: number;
+  score_IO?: number;
+  score_Discos?: number;
+  score_Memoria?: number;
+  score_ConfiguracionTempdb?: number;
+  score_Maintenance?: number;
+  // Detalles de cada categoría
+  conectividadDetail?: any;
+  alwaysOnDetail?: any;
+  backupsDetail?: any;
+  erroresDetail?: any;
+  cpuDetail?: any;
+  ioDetail?: any;
+  discosDetail?: any;
+  memoriaDetail?: any;
+  configuracionDetail?: any;
+  maintenanceDetail?: any;
+}
+
+export interface HealthScoreV3SummaryDto {
+  totalInstances: number;
+  verdeCount: number;
+  amarilloCount: number;
+  naranjaCount: number;
+  rojoCount: number;
+  avgScore: number;
+  lastUpdate?: string;
+}
+
+export const healthScoreV3Api = {
+  /**
+   * Obtiene el Health Score V3 de todas las instancias
+   */
+  async getAllHealthScores(): Promise<HealthScoreV3Dto[]> {
+    const response = await fetch(`${API_URL}/api/v3/healthscore`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthScoreV3Dto[]>(response);
+  },
+
+  /**
+   * Obtiene el detalle completo de una instancia
+   */
+  async getHealthScoreDetail(instance: string): Promise<HealthScoreV3Dto> {
+    const response = await fetch(`${API_URL}/api/v3/healthscore/${encodeURIComponent(instance)}`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthScoreV3Dto>(response);
+  },
+
+  /**
+   * Obtiene resumen general
+   */
+  async getSummary(): Promise<HealthScoreV3SummaryDto> {
+    const response = await fetch(`${API_URL}/api/v3/healthscore/summary`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthScoreV3SummaryDto>(response);
+  },
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 export function isAuthenticated(): boolean {

@@ -1,0 +1,370 @@
+<#
+.SYNOPSIS
+    Health Score v3.0 - Recolección de métricas de IO (Latencia / IOPS)
+    
+.DESCRIPTION
+    Script de frecuencia media (cada 5 minutos) que recolecta:
+    - Latencia de lectura/escritura (data y log)
+    - IOPS por disco
+    - Stalls (tiempo de espera en I/O)
+    
+    Guarda en: InstanceHealth_IO
+    
+    Peso en scoring: 10%
+    Criterios: Latencia data/log ≤5ms=100; 6–10=80; 11–20=60; >20=40
+    Cap: Log p95 >20ms => cap 70
+    
+.NOTES
+    Versión: 3.0
+    Frecuencia: Cada 5 minutos
+    Timeout: 15 segundos
+    
+.REQUIRES
+    - dbatools (Install-Module -Name dbatools -Force)
+    - PowerShell 5.1 o superior
+#>
+
+[CmdletBinding()]
+param()
+
+# Verificar que dbatools está disponible
+if (-not (Get-Module -ListAvailable -Name dbatools)) {
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    exit 1
+}
+
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+}
+
+Import-Module dbatools -Force -ErrorAction Stop
+
+#region ===== CONFIGURACIÓN =====
+
+$ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
+$SqlServer = "SSPR17MON-01"
+$SqlDatabase = "SQLNova"
+$TimeoutSec = 15
+$TestMode = $false
+$IncludeAWS = $false
+$OnlyAWS = $false
+
+#endregion
+
+#region ===== FUNCIONES =====
+
+function Get-IOMetrics {
+    param(
+        [string]$InstanceName,
+        [int]$TimeoutSec = 15
+    )
+    
+    $result = @{
+        AvgReadLatencyMs = 0
+        AvgWriteLatencyMs = 0
+        MaxReadLatencyMs = 0
+        MaxWriteLatencyMs = 0
+        DataFileAvgReadMs = 0
+        DataFileAvgWriteMs = 0
+        LogFileAvgWriteMs = 0
+        TotalIOPS = 0
+        ReadIOPS = 0
+        WriteIOPS = 0
+        Details = @()
+    }
+    
+    try {
+        $query = @"
+-- Latencias por archivo (data vs log)
+SELECT 
+    DB_NAME(vfs.database_id) AS DatabaseName,
+    mf.type_desc AS FileType,
+    mf.physical_name AS PhysicalName,
+    vfs.num_of_reads AS NumReads,
+    vfs.num_of_writes AS NumWrites,
+    CASE WHEN vfs.num_of_reads = 0 THEN 0 
+         ELSE (vfs.io_stall_read_ms / vfs.num_of_reads) 
+    END AS AvgReadLatencyMs,
+    CASE WHEN vfs.num_of_writes = 0 THEN 0 
+         ELSE (vfs.io_stall_write_ms / vfs.num_of_writes) 
+    END AS AvgWriteLatencyMs,
+    vfs.io_stall_read_ms AS TotalReadStallMs,
+    vfs.io_stall_write_ms AS TotalWriteStallMs
+FROM sys.dm_io_virtual_file_stats(NULL, NULL) vfs
+INNER JOIN sys.master_files mf 
+    ON vfs.database_id = mf.database_id 
+    AND vfs.file_id = mf.file_id
+WHERE vfs.num_of_reads > 0 OR vfs.num_of_writes > 0
+ORDER BY 
+    CASE WHEN vfs.num_of_reads > 0 THEN (vfs.io_stall_read_ms / vfs.num_of_reads) ELSE 0 END DESC,
+    CASE WHEN vfs.num_of_writes > 0 THEN (vfs.io_stall_write_ms / vfs.num_of_writes) ELSE 0 END DESC;
+"@
+        
+        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+            -Query $query `
+            -QueryTimeout $TimeoutSec `
+            -EnableException
+        
+        if ($data) {
+            # Calcular métricas agregadas
+            $allReads = $data | Where-Object { $_.NumReads -gt 0 }
+            $allWrites = $data | Where-Object { $_.NumWrites -gt 0 }
+            
+            if ($allReads) {
+                $result.AvgReadLatencyMs = [decimal](($allReads | Measure-Object -Property AvgReadLatencyMs -Average).Average)
+                $result.MaxReadLatencyMs = [decimal](($allReads | Measure-Object -Property AvgReadLatencyMs -Maximum).Maximum)
+                $result.ReadIOPS = [int](($allReads | Measure-Object -Property NumReads -Sum).Sum)
+            }
+            
+            if ($allWrites) {
+                $result.AvgWriteLatencyMs = [decimal](($allWrites | Measure-Object -Property AvgWriteLatencyMs -Average).Average)
+                $result.MaxWriteLatencyMs = [decimal](($allWrites | Measure-Object -Property AvgWriteLatencyMs -Maximum).Maximum)
+                $result.WriteIOPS = [int](($allWrites | Measure-Object -Property NumWrites -Sum).Sum)
+            }
+            
+            $result.TotalIOPS = $result.ReadIOPS + $result.WriteIOPS
+            
+            # Métricas específicas por tipo de archivo
+            $dataFiles = $data | Where-Object { $_.FileType -eq 'ROWS' }
+            $logFiles = $data | Where-Object { $_.FileType -eq 'LOG' }
+            
+            if ($dataFiles) {
+                $dataReads = $dataFiles | Where-Object { $_.NumReads -gt 0 }
+                $dataWrites = $dataFiles | Where-Object { $_.NumWrites -gt 0 }
+                
+                if ($dataReads) {
+                    $result.DataFileAvgReadMs = [decimal](($dataReads | Measure-Object -Property AvgReadLatencyMs -Average).Average)
+                }
+                if ($dataWrites) {
+                    $result.DataFileAvgWriteMs = [decimal](($dataWrites | Measure-Object -Property AvgWriteLatencyMs -Average).Average)
+                }
+            }
+            
+            if ($logFiles) {
+                $logWrites = $logFiles | Where-Object { $_.NumWrites -gt 0 }
+                if ($logWrites) {
+                    $result.LogFileAvgWriteMs = [decimal](($logWrites | Measure-Object -Property AvgWriteLatencyMs -Average).Average)
+                }
+            }
+            
+            # Top 5 archivos con mayor latencia
+            $result.Details = $data | Select-Object -First 5 | ForEach-Object {
+                "$($_.DatabaseName):$($_.FileType):Read=$([int]$_.AvgReadLatencyMs)ms:Write=$([int]$_.AvgWriteLatencyMs)ms"
+            }
+        }
+        
+    } catch {
+        Write-Warning "Error obteniendo IO metrics en ${InstanceName}: $($_.Exception.Message)"
+    }
+    
+    return $result
+}
+
+function Test-SqlConnection {
+    param(
+        [string]$InstanceName,
+        [int]$TimeoutSec = 10
+    )
+    
+    try {
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
+        return $connection.IsPingable
+    } catch {
+        return $false
+    }
+}
+
+function Write-ToSqlServer {
+    param(
+        [array]$Data
+    )
+    
+    if ($Data.Count -eq 0) {
+        Write-Host "No hay datos para guardar." -ForegroundColor Yellow
+        return
+    }
+    
+    try {
+        foreach ($row in $Data) {
+            $details = ($row.Details -join "|") -replace "'", "''"
+            
+            $query = @"
+INSERT INTO dbo.InstanceHealth_IO (
+    InstanceName,
+    Ambiente,
+    HostingSite,
+    SqlVersion,
+    CollectedAtUtc,
+    AvgReadLatencyMs,
+    AvgWriteLatencyMs,
+    MaxReadLatencyMs,
+    MaxWriteLatencyMs,
+    DataFileAvgReadMs,
+    DataFileAvgWriteMs,
+    LogFileAvgWriteMs,
+    TotalIOPS,
+    ReadIOPS,
+    WriteIOPS,
+    IODetails
+) VALUES (
+    '$($row.InstanceName)',
+    '$($row.Ambiente)',
+    '$($row.HostingSite)',
+    '$($row.SqlVersion)',
+    GETUTCDATE(),
+    $($row.AvgReadLatencyMs),
+    $($row.AvgWriteLatencyMs),
+    $($row.MaxReadLatencyMs),
+    $($row.MaxWriteLatencyMs),
+    $($row.DataFileAvgReadMs),
+    $($row.DataFileAvgWriteMs),
+    $($row.LogFileAvgWriteMs),
+    $($row.TotalIOPS),
+    $($row.ReadIOPS),
+    $($row.WriteIOPS),
+    '$details'
+);
+"@
+            
+            Invoke-DbaQuery -SqlInstance $SqlServer `
+                -Database $SqlDatabase `
+                -Query $query `
+                -QueryTimeout 30 `
+                -EnableException
+        }
+        
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        
+    } catch {
+        Write-Error "Error guardando en SQL: $($_.Exception.Message)"
+    }
+}
+
+#endregion
+
+#region ===== MAIN =====
+
+Write-Host ""
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  Health Score v3.0 - IO METRICS (Latencia / IOPS)    ║" -ForegroundColor Cyan
+Write-Host "║  Frecuencia: 5 minutos                                ║" -ForegroundColor Cyan
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host ""
+
+# 1. Obtener instancias
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
+
+try {
+    $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
+    $instances = $response
+    
+    if (-not $IncludeAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -ne "AWS" }
+    }
+    if ($OnlyAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -eq "AWS" }
+    }
+    
+    $instances = $instances | Where-Object { $_.NombreInstancia -notlike "*DMZ*" }
+    
+    if ($TestMode) {
+        $instances = $instances | Select-Object -First 5
+    }
+    
+    Write-Host "   Instancias a procesar: $($instances.Count)" -ForegroundColor Green
+    
+} catch {
+    Write-Error "Error obteniendo instancias: $($_.Exception.Message)"
+    exit 1
+}
+
+# 2. Procesar cada instancia
+Write-Host ""
+Write-Host "2️⃣  Recolectando métricas de IO..." -ForegroundColor Yellow
+
+$results = @()
+$counter = 0
+
+foreach ($instance in $instances) {
+    $counter++
+    $instanceName = $instance.NombreInstancia
+    
+    Write-Progress -Activity "Recolectando métricas" `
+        -Status "$counter de $($instances.Count): $instanceName" `
+        -PercentComplete (($counter / $instances.Count) * 100)
+    
+    $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
+    $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+    $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+    
+    if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
+        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+        continue
+    }
+    
+    $ioMetrics = Get-IOMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
+    
+    $status = "✅"
+    if ($ioMetrics.LogFileAvgWriteMs -gt 20) {
+        $status = "🚨 LOG SLOW!"
+    }
+    elseif ($ioMetrics.MaxReadLatencyMs -gt 50 -or $ioMetrics.MaxWriteLatencyMs -gt 50) {
+        $status = "⚠️ IO SLOW!"
+    }
+    elseif ($ioMetrics.AvgReadLatencyMs -gt 10 -or $ioMetrics.AvgWriteLatencyMs -gt 10) {
+        $status = "⚠️ IO WARN"
+    }
+    
+    Write-Host "   $status $instanceName - Read:$([int]$ioMetrics.AvgReadLatencyMs)ms Write:$([int]$ioMetrics.AvgWriteLatencyMs)ms Log:$([int]$ioMetrics.LogFileAvgWriteMs)ms" -ForegroundColor Gray
+    
+    $results += [PSCustomObject]@{
+        InstanceName = $instanceName
+        Ambiente = $ambiente
+        HostingSite = $hostingSite
+        SqlVersion = $sqlVersion
+        AvgReadLatencyMs = $ioMetrics.AvgReadLatencyMs
+        AvgWriteLatencyMs = $ioMetrics.AvgWriteLatencyMs
+        MaxReadLatencyMs = $ioMetrics.MaxReadLatencyMs
+        MaxWriteLatencyMs = $ioMetrics.MaxWriteLatencyMs
+        DataFileAvgReadMs = $ioMetrics.DataFileAvgReadMs
+        DataFileAvgWriteMs = $ioMetrics.DataFileAvgWriteMs
+        LogFileAvgWriteMs = $ioMetrics.LogFileAvgWriteMs
+        TotalIOPS = $ioMetrics.TotalIOPS
+        ReadIOPS = $ioMetrics.ReadIOPS
+        WriteIOPS = $ioMetrics.WriteIOPS
+        Details = $ioMetrics.Details
+    }
+}
+
+Write-Progress -Activity "Recolectando métricas" -Completed
+
+# 3. Guardar en SQL
+Write-Host ""
+Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
+
+Write-ToSqlServer -Data $results
+
+# 4. Resumen
+Write-Host ""
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  RESUMEN - IO                                         ║" -ForegroundColor Green
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+
+$avgReadLatency = ($results | Measure-Object -Property AvgReadLatencyMs -Average).Average
+$avgWriteLatency = ($results | Measure-Object -Property AvgWriteLatencyMs -Average).Average
+$avgLogLatency = ($results | Where-Object {$_.LogFileAvgWriteMs -gt 0} | Measure-Object -Property LogFileAvgWriteMs -Average).Average
+
+Write-Host "║  Read latency avg:     $([int]$avgReadLatency)ms".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Write latency avg:    $([int]$avgWriteLatency)ms".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Log latency avg:      $([int]$avgLogLatency)ms".PadRight(53) "║" -ForegroundColor White
+
+$slowIO = ($results | Where-Object {$_.MaxReadLatencyMs -gt 20 -or $_.MaxWriteLatencyMs -gt 20}).Count
+Write-Host "║  IO lento (>20ms):     $slowIO".PadRight(53) "║" -ForegroundColor White
+
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host ""
+Write-Host "✅ Script completado!" -ForegroundColor Green
+
+#endregion
+
