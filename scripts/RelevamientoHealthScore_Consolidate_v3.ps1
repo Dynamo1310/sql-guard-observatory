@@ -856,8 +856,8 @@ foreach ($instanceName in $instances) {
     $mantenimientosContribution = [int][Math]::Round($mantenimientosScore * $PESOS.Mantenimientos / 100)
     $configTempdbContribution = [int][Math]::Round($configTempdbScore * $PESOS.ConfiguracionTempdb / 100)
     
-    # Recalcular totalScore como la SUMA de contribuciones redondeadas (para que coincida exactamente)
-    $totalScore = [int](
+    # Calcular suma sin cap
+    $totalScoreBeforeCap = [int](
         $backupsContribution +
         $alwaysOnContribution +
         $conectividadContribution +
@@ -870,9 +870,62 @@ foreach ($instanceName in $instances) {
         $configTempdbContribution
     )
     
-    # Aplicar cap global
-    if ($totalScore -gt $globalCap) {
-        $totalScore = $globalCap
+    # Aplicar cap global y ajustar contribuciones proporcionalmente si es necesario
+    if ($totalScoreBeforeCap -gt $globalCap) {
+        # Calcular factor de ajuste
+        $adjustmentFactor = [decimal]$globalCap / [decimal]$totalScoreBeforeCap
+        
+        # Ajustar cada contribución proporcionalmente
+        $backupsContribution = [int][Math]::Round($backupsContribution * $adjustmentFactor)
+        $alwaysOnContribution = [int][Math]::Round($alwaysOnContribution * $adjustmentFactor)
+        $conectividadContribution = [int][Math]::Round($conectividadContribution * $adjustmentFactor)
+        $erroresContribution = [int][Math]::Round($erroresContribution * $adjustmentFactor)
+        $cpuContribution = [int][Math]::Round($cpuContribution * $adjustmentFactor)
+        $ioContribution = [int][Math]::Round($ioContribution * $adjustmentFactor)
+        $discosContribution = [int][Math]::Round($discosContribution * $adjustmentFactor)
+        $memoriaContribution = [int][Math]::Round($memoriaContribution * $adjustmentFactor)
+        $mantenimientosContribution = [int][Math]::Round($mantenimientosContribution * $adjustmentFactor)
+        $configTempdbContribution = [int][Math]::Round($configTempdbContribution * $adjustmentFactor)
+        
+        # Recalcular totalScore con contribuciones ajustadas
+        $totalScore = [int](
+            $backupsContribution +
+            $alwaysOnContribution +
+            $conectividadContribution +
+            $erroresContribution +
+            $cpuContribution +
+            $ioContribution +
+            $discosContribution +
+            $memoriaContribution +
+            $mantenimientosContribution +
+            $configTempdbContribution
+        )
+        
+        # Ajuste fino: si la suma no llega exactamente al cap por redondeos, ajustar la contribución mayor
+        if ($totalScore -lt $globalCap) {
+            $diff = $globalCap - $totalScore
+            # Determinar cuál es la contribución más grande y agregarle la diferencia
+            $maxValue = ($backupsContribution, $alwaysOnContribution, $conectividadContribution, 
+                        $erroresContribution, $cpuContribution, $ioContribution, 
+                        $discosContribution, $memoriaContribution, $mantenimientosContribution, 
+                        $configTempdbContribution | Measure-Object -Maximum).Maximum
+            
+            if ($backupsContribution -eq $maxValue) { $backupsContribution += $diff }
+            elseif ($alwaysOnContribution -eq $maxValue) { $alwaysOnContribution += $diff }
+            elseif ($conectividadContribution -eq $maxValue) { $conectividadContribution += $diff }
+            elseif ($erroresContribution -eq $maxValue) { $erroresContribution += $diff }
+            elseif ($cpuContribution -eq $maxValue) { $cpuContribution += $diff }
+            elseif ($ioContribution -eq $maxValue) { $ioContribution += $diff }
+            elseif ($discosContribution -eq $maxValue) { $discosContribution += $diff }
+            elseif ($memoriaContribution -eq $maxValue) { $memoriaContribution += $diff }
+            elseif ($mantenimientosContribution -eq $maxValue) { $mantenimientosContribution += $diff }
+            else { $configTempdbContribution += $diff }
+            
+            $totalScore = $globalCap
+        }
+    }
+    else {
+        $totalScore = $totalScoreBeforeCap
     }
     
     $healthStatus = Get-HealthStatus -Score $totalScore
