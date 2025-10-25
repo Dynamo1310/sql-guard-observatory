@@ -194,7 +194,13 @@ WHERE ars.is_local = 1
                 
                 # Detalles (incluir rol y modo para diagnóstico)
                 $result.Details = $data | ForEach-Object {
-                    "$($_.AGName):$($_.DatabaseName):$($_.DBSyncState):$($_.Role):$($_.AvailabilityMode)"
+                    $agName = if ($_.AGName) { $_.AGName } else { "NULL" }
+                    $dbName = if ($_.DatabaseName) { $_.DatabaseName } else { "NULL" }
+                    $syncState = if ($_.DBSyncState) { $_.DBSyncState } else { "NULL" }
+                    $role = if ($_.Role) { $_.Role } else { "NULL" }
+                    $mode = if ($_.AvailabilityMode) { $_.AvailabilityMode } else { "NULL" }
+                    
+                    "${agName}:${dbName}:${syncState}:${role}:${mode}"
                 }
             }
             else {
