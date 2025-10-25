@@ -53,6 +53,7 @@ $TimeoutSec = 15
 $TestMode = $false    # $true = solo 5 instancias para testing
 $IncludeAWS = $false  # Cambiar a $true para incluir AWS
 $OnlyAWS = $false     # Cambiar a $true para SOLO AWS
+$VerboseOutput = $false  # $true = mostrar detalles de cada nodo para diagnóstico
 # NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
@@ -388,19 +389,29 @@ foreach ($instance in $instancesWithAG) {
     $availabilityMode = "N/A"
     if ($alwaysOn.Details -and $alwaysOn.Details.Count -gt 0) {
         $firstDetail = $alwaysOn.Details[0]
-        # El formato es: AGName:DatabaseName:DBSyncState:Role:AvailabilityMode
-        $parts = $firstDetail -split ":"
-        if ($parts.Count -ge 4) {
-            $role = $parts[3]
-        }
-        if ($parts.Count -ge 5) {
-            $availabilityMode = $parts[4]
-            # Abreviar para display
-            if ($availabilityMode -eq "ASYNCHRONOUS_COMMIT") {
-                $availabilityMode = "ASYNC"
-            } elseif ($availabilityMode -eq "SYNCHRONOUS_COMMIT") {
-                $availabilityMode = "SYNC"
+        
+        # Verificar si es un mensaje de estado en lugar de datos reales
+        if ($firstDetail -notlike "AlwaysOn*" -and $firstDetail -like "*:*:*:*") {
+            # El formato es: AGName:DatabaseName:DBSyncState:Role:AvailabilityMode
+            $parts = $firstDetail -split ":"
+            if ($parts.Count -ge 4) {
+                $role = $parts[3].Trim()
             }
+            if ($parts.Count -ge 5) {
+                $availabilityMode = $parts[4].Trim()
+                # Abreviar para display
+                if ($availabilityMode -eq "ASYNCHRONOUS_COMMIT") {
+                    $availabilityMode = "ASYNC"
+                } elseif ($availabilityMode -eq "SYNCHRONOUS_COMMIT") {
+                    $availabilityMode = "SYNC"
+                }
+            }
+        }
+        else {
+            # Es un mensaje descriptivo (ej: "AlwaysOn habilitado pero sin AGs configurados")
+            # Marcar como configuración especial
+            $role = "NO_AG"
+            $availabilityMode = "N/A"
         }
     }
     
@@ -418,7 +429,17 @@ foreach ($instance in $instancesWithAG) {
         $status = "⚠️ PARTIAL!" 
     }
     
-    Write-Host "   $status $instanceName [$role/$availabilityMode] - State:$($alwaysOn.WorstState) DBs:$($alwaysOn.DatabaseCount) Healthy:$($alwaysOn.SynchronizedCount) SendQ:$($alwaysOn.MaxSendQueueKB)KB" -ForegroundColor Gray
+    $color = "Gray"
+    if ($role -in @("UNKNOWN", "NO_AG")) {
+        $color = "Yellow"
+    }
+    
+    Write-Host "   $status $instanceName [$role/$availabilityMode] - State:$($alwaysOn.WorstState) DBs:$($alwaysOn.DatabaseCount) Healthy:$($alwaysOn.SynchronizedCount) SendQ:$($alwaysOn.MaxSendQueueKB)KB" -ForegroundColor $color
+    
+    # Mostrar detalles si está en modo verbose Y hay algo inusual
+    if ($VerboseOutput -and $role -in @("UNKNOWN", "NO_AG") -and $alwaysOn.Details) {
+        Write-Host "      → Details: $($alwaysOn.Details -join ' | ')" -ForegroundColor DarkGray
+    }
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -468,18 +489,28 @@ $primaryCount = 0
 $secondaryCount = 0
 $syncCount = 0
 $asyncCount = 0
+$noAGCount = 0
 foreach ($result in $results) {
     if ($result.AlwaysOnDetails -and $result.AlwaysOnDetails.Count -gt 0) {
         $firstDetail = $result.AlwaysOnDetails[0]
-        # Formato: AGName:DatabaseName:DBSyncState:Role:AvailabilityMode
-        $parts = $firstDetail -split ":"
-        if ($parts.Count -ge 4) {
-            if ($parts[3] -eq "PRIMARY") { $primaryCount++ }
-            elseif ($parts[3] -eq "SECONDARY") { $secondaryCount++ }
+        
+        # Verificar si es un mensaje descriptivo
+        if ($firstDetail -like "AlwaysOn*") {
+            $noAGCount++
         }
-        if ($parts.Count -ge 5) {
-            if ($parts[4] -eq "SYNCHRONOUS_COMMIT") { $syncCount++ }
-            elseif ($parts[4] -eq "ASYNCHRONOUS_COMMIT") { $asyncCount++ }
+        else {
+            # Formato: AGName:DatabaseName:DBSyncState:Role:AvailabilityMode
+            $parts = $firstDetail -split ":"
+            if ($parts.Count -ge 4) {
+                $rolePart = $parts[3].Trim()
+                if ($rolePart -eq "PRIMARY") { $primaryCount++ }
+                elseif ($rolePart -eq "SECONDARY") { $secondaryCount++ }
+            }
+            if ($parts.Count -ge 5) {
+                $modePart = $parts[4].Trim()
+                if ($modePart -eq "SYNCHRONOUS_COMMIT") { $syncCount++ }
+                elseif ($modePart -eq "ASYNCHRONOUS_COMMIT") { $asyncCount++ }
+            }
         }
     }
 }
@@ -489,6 +520,9 @@ Write-Host "║  Nodos PRIMARY:        $primaryCount".PadRight(53) "║" -Foregr
 Write-Host "║  Nodos SECONDARY:      $secondaryCount".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  Réplicas SYNC:        $syncCount".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  Réplicas ASYNC:       $asyncCount".PadRight(53) "║" -ForegroundColor White
+if ($noAGCount -gt 0) {
+    Write-Host "║  Sin AG configurado:   $noAGCount".PadRight(53) "║" -ForegroundColor Yellow
+}
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
