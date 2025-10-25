@@ -725,17 +725,17 @@ INSERT INTO dbo.InstanceHealth_Score (
     $($ScoreData.MemoriaScore),
     $($ScoreData.MantenimientosScore),
     $($ScoreData.ConfiguracionTempdbScore),
-    -- Contribuciones Ponderadas (con caps aplicados, redondeadas a 1 decimal)
-    $([Math]::Round($ScoreData.BackupsContribution, 1)),
-    $([Math]::Round($ScoreData.AlwaysOnContribution, 1)),
-    $([Math]::Round($ScoreData.ConectividadContribution, 1)),
-    $([Math]::Round($ScoreData.ErroresCriticosContribution, 1)),
-    $([Math]::Round($ScoreData.CPUContribution, 1)),
-    $([Math]::Round($ScoreData.IOContribution, 1)),
-    $([Math]::Round($ScoreData.DiscosContribution, 1)),
-    $([Math]::Round($ScoreData.MemoriaContribution, 1)),
-    $([Math]::Round($ScoreData.MantenimientosContribution, 1)),
-    $([Math]::Round($ScoreData.ConfiguracionTempdbContribution, 1)),
+    -- Contribuciones Ponderadas (ya redondeadas a entero en el cálculo)
+    $($ScoreData.BackupsContribution),
+    $($ScoreData.AlwaysOnContribution),
+    $($ScoreData.ConectividadContribution),
+    $($ScoreData.ErroresCriticosContribution),
+    $($ScoreData.CPUContribution),
+    $($ScoreData.IOContribution),
+    $($ScoreData.DiscosContribution),
+    $($ScoreData.MemoriaContribution),
+    $($ScoreData.MantenimientosContribution),
+    $($ScoreData.ConfiguracionTempdbContribution),
     $($ScoreData.GlobalCap)
 );
 "@
@@ -844,17 +844,31 @@ foreach ($instanceName in $instances) {
                  $mantenimientosResult.Cap, $configTempdbResult.Cap)
     $globalCap = ($allCaps | Measure-Object -Minimum).Minimum
     
-    # Calcular contribuciones reales (con caps aplicados)
-    $backupsContribution = [decimal]($backupsScore * $PESOS.Backups / 100)
-    $alwaysOnContribution = [decimal]($alwaysOnScore * $PESOS.AlwaysOn / 100)
-    $conectividadContribution = [decimal]($conectividadScore * $PESOS.Conectividad / 100)
-    $erroresContribution = [decimal]($erroresScore * $PESOS.ErroresCriticos / 100)
-    $cpuContribution = [decimal]($cpuScore * $PESOS.CPU / 100)
-    $ioContribution = [decimal]($ioScore * $PESOS.IO / 100)
-    $discosContribution = [decimal]($discosScore * $PESOS.Discos / 100)
-    $memoriaContribution = [decimal]($memoriaScore * $PESOS.Memoria / 100)
-    $mantenimientosContribution = [decimal]($mantenimientosScore * $PESOS.Mantenimientos / 100)
-    $configTempdbContribution = [decimal]($configTempdbScore * $PESOS.ConfiguracionTempdb / 100)
+    # Calcular contribuciones reales redondeadas a entero (para que la suma coincida exactamente)
+    $backupsContribution = [int][Math]::Round($backupsScore * $PESOS.Backups / 100)
+    $alwaysOnContribution = [int][Math]::Round($alwaysOnScore * $PESOS.AlwaysOn / 100)
+    $conectividadContribution = [int][Math]::Round($conectividadScore * $PESOS.Conectividad / 100)
+    $erroresContribution = [int][Math]::Round($erroresScore * $PESOS.ErroresCriticos / 100)
+    $cpuContribution = [int][Math]::Round($cpuScore * $PESOS.CPU / 100)
+    $ioContribution = [int][Math]::Round($ioScore * $PESOS.IO / 100)
+    $discosContribution = [int][Math]::Round($discosScore * $PESOS.Discos / 100)
+    $memoriaContribution = [int][Math]::Round($memoriaScore * $PESOS.Memoria / 100)
+    $mantenimientosContribution = [int][Math]::Round($mantenimientosScore * $PESOS.Mantenimientos / 100)
+    $configTempdbContribution = [int][Math]::Round($configTempdbScore * $PESOS.ConfiguracionTempdb / 100)
+    
+    # Recalcular totalScore como la SUMA de contribuciones redondeadas (para que coincida exactamente)
+    $totalScore = [int](
+        $backupsContribution +
+        $alwaysOnContribution +
+        $conectividadContribution +
+        $erroresContribution +
+        $cpuContribution +
+        $ioContribution +
+        $discosContribution +
+        $memoriaContribution +
+        $mantenimientosContribution +
+        $configTempdbContribution
+    )
     
     # Aplicar cap global
     if ($totalScore -gt $globalCap) {

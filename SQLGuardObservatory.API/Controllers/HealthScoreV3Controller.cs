@@ -433,17 +433,17 @@ namespace SQLGuardObservatory.API.Controllers
         public int Score_Maintenance { get; set; }
         public int Score_ConfiguracionTempdb { get; set; }
         
-        // Contribuciones ponderadas (0-peso máximo)
-        public decimal BackupsContribution { get; set; }
-        public decimal AlwaysOnContribution { get; set; }
-        public decimal ConectividadContribution { get; set; }
-        public decimal ErroresCriticosContribution { get; set; }
-        public decimal CPUContribution { get; set; }
-        public decimal IOContribution { get; set; }
-        public decimal DiscosContribution { get; set; }
-        public decimal MemoriaContribution { get; set; }
-        public decimal MantenimientosContribution { get; set; }
-        public decimal ConfiguracionTempdbContribution { get; set; }
+        // Contribuciones ponderadas (0-peso máximo, redondeadas a entero)
+        public int BackupsContribution { get; set; }
+        public int AlwaysOnContribution { get; set; }
+        public int ConectividadContribution { get; set; }
+        public int ErroresCriticosContribution { get; set; }
+        public int CPUContribution { get; set; }
+        public int IOContribution { get; set; }
+        public int DiscosContribution { get; set; }
+        public int MemoriaContribution { get; set; }
+        public int MantenimientosContribution { get; set; }
+        public int ConfiguracionTempdbContribution { get; set; }
     }
 
     public class HealthScoreV3DetailDto : HealthScoreV3Dto

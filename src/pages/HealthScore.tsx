@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export default function HealthScore() {
   const navigate = useNavigate();
@@ -665,112 +664,60 @@ export default function HealthScore() {
                                 </span>
                                 <span className="text-xl font-mono font-bold">{score.healthScore}<span className="text-xs text-muted-foreground">/100</span></span>
                               </div>
-                              <TooltipProvider>
-                                <div className="grid grid-cols-5 gap-2">
-                                  {/* Fila 1 */}
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/30 rounded p-2 text-center cursor-help">
-                                        <Database className="h-3 w-3 text-green-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-green-600">{Math.floor(score.backupsContribution || 0)}<span className="text-xs">/18</span></p>
-                                        <p className="text-[10px] text-muted-foreground">Backups</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.backupsContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/30 rounded p-2 text-center cursor-help">
-                                        <Shield className="h-3 w-3 text-purple-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-purple-600">{Math.floor(score.alwaysOnContribution || 0)}<span className="text-xs">/14</span></p>
-                                        <p className="text-[10px] text-muted-foreground">AlwaysOn</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.alwaysOnContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/30 rounded p-2 text-center cursor-help">
-                                        <Activity className="h-3 w-3 text-blue-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-blue-600">{Math.floor(score.conectividadContribution || 0)}<span className="text-xs">/10</span></p>
-                                        <p className="text-[10px] text-muted-foreground">Connect</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.conectividadContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/30 rounded p-2 text-center cursor-help">
-                                        <XCircle className="h-3 w-3 text-red-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-red-600">{Math.floor(score.erroresCriticosContribution || 0)}<span className="text-xs">/7</span></p>
-                                        <p className="text-[10px] text-muted-foreground">Errors</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.erroresCriticosContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/30 rounded p-2 text-center cursor-help">
-                                        <Cpu className="h-3 w-3 text-orange-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-orange-600">{Math.floor(score.cpuContribution || 0)}<span className="text-xs">/10</span></p>
-                                        <p className="text-[10px] text-muted-foreground">CPU</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.cpuContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
-                                  {/* Fila 2 */}
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded p-2 text-center cursor-help">
-                                        <Zap className="h-3 w-3 text-cyan-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-cyan-600">{Math.floor(score.ioContribution || 0)}<span className="text-xs">/10</span></p>
-                                        <p className="text-[10px] text-muted-foreground">I/O</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.ioContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-yellow-500/10 to-yellow-500/5 border border-yellow-500/30 rounded p-2 text-center cursor-help">
-                                        <HardDrive className="h-3 w-3 text-yellow-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-yellow-600">{Math.floor(score.discosContribution || 0)}<span className="text-xs">/8</span></p>
-                                        <p className="text-[10px] text-muted-foreground">Disk</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.discosContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-pink-500/10 to-pink-500/5 border border-pink-500/30 rounded p-2 text-center cursor-help">
-                                        <MemoryStick className="h-3 w-3 text-pink-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-pink-600">{Math.floor(score.memoriaContribution || 0)}<span className="text-xs">/7</span></p>
-                                        <p className="text-[10px] text-muted-foreground">Memory</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.memoriaContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-teal-500/10 to-teal-500/5 border border-teal-500/30 rounded p-2 text-center cursor-help">
-                                        <Wrench className="h-3 w-3 text-teal-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-teal-600">{Math.floor(score.mantenimientosContribution || 0)}<span className="text-xs">/6</span></p>
-                                        <p className="text-[10px] text-muted-foreground">Maint</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.mantenimientosContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 border border-indigo-500/30 rounded p-2 text-center cursor-help">
-                                        <Settings className="h-3 w-3 text-indigo-600 mx-auto mb-1" />
-                                        <p className="text-lg font-mono font-bold text-indigo-600">{Math.floor(score.configuracionTempdbContribution || 0)}<span className="text-xs">/10</span></p>
-                                        <p className="text-[10px] text-muted-foreground">Config</p>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Exact: {(score.configuracionTempdbContribution || 0).toFixed(1)} pts</p></TooltipContent>
-                                  </Tooltip>
+                              <div className="grid grid-cols-5 gap-2">
+                                {/* Fila 1 */}
+                                <div className="bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/30 rounded p-2 text-center">
+                                  <Database className="h-3 w-3 text-green-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-green-600">{score.backupsContribution || 0}<span className="text-xs">/18</span></p>
+                                  <p className="text-[10px] text-muted-foreground">Backups</p>
                                 </div>
-                              </TooltipProvider>
+                                <div className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/30 rounded p-2 text-center">
+                                  <Shield className="h-3 w-3 text-purple-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-purple-600">{score.alwaysOnContribution || 0}<span className="text-xs">/14</span></p>
+                                  <p className="text-[10px] text-muted-foreground">AlwaysOn</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/30 rounded p-2 text-center">
+                                  <Activity className="h-3 w-3 text-blue-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-blue-600">{score.conectividadContribution || 0}<span className="text-xs">/10</span></p>
+                                  <p className="text-[10px] text-muted-foreground">Connect</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/30 rounded p-2 text-center">
+                                  <XCircle className="h-3 w-3 text-red-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-red-600">{score.erroresCriticosContribution || 0}<span className="text-xs">/7</span></p>
+                                  <p className="text-[10px] text-muted-foreground">Errors</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/30 rounded p-2 text-center">
+                                  <Cpu className="h-3 w-3 text-orange-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-orange-600">{score.cpuContribution || 0}<span className="text-xs">/10</span></p>
+                                  <p className="text-[10px] text-muted-foreground">CPU</p>
+                                </div>
+                                {/* Fila 2 */}
+                                <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded p-2 text-center">
+                                  <Zap className="h-3 w-3 text-cyan-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-cyan-600">{score.ioContribution || 0}<span className="text-xs">/10</span></p>
+                                  <p className="text-[10px] text-muted-foreground">I/O</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-yellow-500/10 to-yellow-500/5 border border-yellow-500/30 rounded p-2 text-center">
+                                  <HardDrive className="h-3 w-3 text-yellow-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-yellow-600">{score.discosContribution || 0}<span className="text-xs">/8</span></p>
+                                  <p className="text-[10px] text-muted-foreground">Disk</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-pink-500/10 to-pink-500/5 border border-pink-500/30 rounded p-2 text-center">
+                                  <MemoryStick className="h-3 w-3 text-pink-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-pink-600">{score.memoriaContribution || 0}<span className="text-xs">/7</span></p>
+                                  <p className="text-[10px] text-muted-foreground">Memory</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-teal-500/10 to-teal-500/5 border border-teal-500/30 rounded p-2 text-center">
+                                  <Wrench className="h-3 w-3 text-teal-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-teal-600">{score.mantenimientosContribution || 0}<span className="text-xs">/6</span></p>
+                                  <p className="text-[10px] text-muted-foreground">Maint</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 border border-indigo-500/30 rounded p-2 text-center">
+                                  <Settings className="h-3 w-3 text-indigo-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-indigo-600">{score.configuracionTempdbContribution || 0}<span className="text-xs">/10</span></p>
+                                  <p className="text-[10px] text-muted-foreground">Config</p>
+                                </div>
+                              </div>
                             </div>
 
                             {/* Tabs para organizar detalles */}

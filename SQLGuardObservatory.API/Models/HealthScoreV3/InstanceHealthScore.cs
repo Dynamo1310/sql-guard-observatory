@@ -43,36 +43,17 @@ public class InstanceHealthScore
     public int MantenimientosScore { get; set; }    // 6%
     public int ConfiguracionTempdbScore { get; set; } // 10%
     
-    // Contribuciones Ponderadas (0-peso máximo: Score × Peso)
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal BackupsContribution { get; set; }           // Max: 18.00
-    
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal AlwaysOnContribution { get; set; }          // Max: 14.00
-    
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal ConectividadContribution { get; set; }      // Max: 10.00
-    
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal ErroresCriticosContribution { get; set; }   // Max: 7.00
-    
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal CPUContribution { get; set; }               // Max: 10.00
-    
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal IOContribution { get; set; }                // Max: 10.00
-    
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal DiscosContribution { get; set; }            // Max: 8.00
-    
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal MemoriaContribution { get; set; }           // Max: 7.00
-    
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal MantenimientosContribution { get; set; }    // Max: 6.00
-    
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal ConfiguracionTempdbContribution { get; set; } // Max: 10.00
+    // Contribuciones Ponderadas (0-peso máximo: Score × Peso, redondeadas a entero)
+    public int BackupsContribution { get; set; }           // Max: 18
+    public int AlwaysOnContribution { get; set; }          // Max: 14
+    public int ConectividadContribution { get; set; }      // Max: 10
+    public int ErroresCriticosContribution { get; set; }   // Max: 7
+    public int CPUContribution { get; set; }               // Max: 10
+    public int IOContribution { get; set; }                // Max: 10
+    public int DiscosContribution { get; set; }            // Max: 8
+    public int MemoriaContribution { get; set; }           // Max: 7
+    public int MantenimientosContribution { get; set; }    // Max: 6
+    public int ConfiguracionTempdbContribution { get; set; } // Max: 10
     
     // Cap Global
     public int GlobalCap { get; set; } = 100;
