@@ -539,9 +539,9 @@ LatestConfig AS (
 SELECT 
     '$InstanceName' AS InstanceName,
     -- Metadata
-    COALESCE(b.Ambiente, ag.Ambiente, c.Ambiente, m.Ambiente, 'N/A') AS Ambiente,
-    COALESCE(b.HostingSite, ag.HostingSite, c.HostingSite, m.HostingSite, 'N/A') AS HostingSite,
-    COALESCE(b.SqlVersion, ag.SqlVersion, c.SqlVersion, m.SqlVersion, 'N/A') AS SqlVersion,
+    COALESCE(b.Ambiente, ag.Ambiente, c.Ambiente, mnt.Ambiente, 'N/A') AS Ambiente,
+    COALESCE(b.HostingSite, ag.HostingSite, c.HostingSite, mnt.HostingSite, 'N/A') AS HostingSite,
+    COALESCE(b.SqlVersion, ag.SqlVersion, c.SqlVersion, mnt.SqlVersion, 'N/A') AS SqlVersion,
     -- Backups
     b.FullBackupBreached,
     b.LogBackupBreached,
