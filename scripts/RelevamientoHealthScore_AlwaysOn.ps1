@@ -98,6 +98,8 @@ function Get-AlwaysOnStatus {
         $result.Enabled = $true  # ✅ Marcar como habilitado
         
         try {
+            # Query mejorada que funciona tanto en primarios como secundarios
+            # y maneja mejor los nombres de servidor
             $agQuery = @"
 SELECT 
     ag.name AS AGName,
@@ -110,7 +112,7 @@ SELECT
     drs.suspend_reason_desc AS SuspendReason,
     ISNULL(drs.log_send_queue_size, 0) AS SendQueueKB,
     ISNULL(drs.redo_queue_size, 0) AS RedoQueueKB,
-    DATEDIFF(SECOND, drs.last_commit_time, GETDATE()) AS SecondsBehind
+    ISNULL(DATEDIFF(SECOND, drs.last_commit_time, GETDATE()), 0) AS SecondsBehind
 FROM sys.availability_replicas ar
 INNER JOIN sys.dm_hadr_availability_replica_states ars 
     ON ar.replica_id = ars.replica_id
@@ -118,7 +120,7 @@ INNER JOIN sys.availability_groups ag
     ON ar.group_id = ag.group_id
 LEFT JOIN sys.dm_hadr_database_replica_states drs 
     ON ar.replica_id = drs.replica_id
-WHERE ar.replica_server_name = @@SERVERNAME
+WHERE ars.is_local = 1
   AND drs.database_id IS NOT NULL;
 "@
             
@@ -128,7 +130,7 @@ WHERE ar.replica_server_name = @@SERVERNAME
                 -EnableException
             
             if ($data -and $data.Count -gt 0) {
-                # Hay datos de AGs
+                # Hay datos de AGs - bases de datos participando en este nodo
                 $result.DatabaseCount = $data.Count
                 
                 # Contar bases sincronizadas
@@ -172,9 +174,9 @@ WHERE ar.replica_server_name = @@SERVERNAME
                     $result.WorstState = "HEALTHY"
                 }
                 
-                # Detalles
+                # Detalles (incluir rol para diagnóstico)
                 $result.Details = $data | ForEach-Object {
-                    "$($_.AGName):$($_.DatabaseName):$($_.DBSyncState)"
+                    "$($_.AGName):$($_.DatabaseName):$($_.DBSyncState):$($_.Role)"
                 }
             }
             else {
@@ -364,6 +366,17 @@ foreach ($instance in $instancesWithAG) {
     # Recolectar métricas de AlwaysOn
     $alwaysOn = Get-AlwaysOnStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
+    # Determinar el rol de este nodo (PRIMARY o SECONDARY)
+    $role = "UNKNOWN"
+    if ($alwaysOn.Details -and $alwaysOn.Details.Count -gt 0) {
+        $firstDetail = $alwaysOn.Details[0]
+        # El formato es: AGName:DatabaseName:DBSyncState:Role
+        $parts = $firstDetail -split ":"
+        if ($parts.Count -ge 4) {
+            $role = $parts[3]
+        }
+    }
+    
     $status = "✅"
     if ($alwaysOn.WorstState -eq "SUSPENDED") { 
         $status = "🚨 SUSPENDED!" 
@@ -378,7 +391,7 @@ foreach ($instance in $instancesWithAG) {
         $status = "⚠️ PARTIAL!" 
     }
     
-    Write-Host "   $status $instanceName - State:$($alwaysOn.WorstState) DBs:$($alwaysOn.DatabaseCount) Sync:$($alwaysOn.SynchronizedCount) SendQ:$($alwaysOn.MaxSendQueueKB)KB" -ForegroundColor Gray
+    Write-Host "   $status $instanceName [$role] - State:$($alwaysOn.WorstState) DBs:$($alwaysOn.DatabaseCount) Sync:$($alwaysOn.SynchronizedCount) SendQ:$($alwaysOn.MaxSendQueueKB)KB" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -422,6 +435,24 @@ $totalDBs = ($results | Measure-Object -Property DatabaseCount -Sum).Sum
 $totalSynced = ($results | Measure-Object -Property SynchronizedCount -Sum).Sum
 Write-Host "║  Total bases:          $totalDBs".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  Sincronizadas:        $totalSynced".PadRight(53) "║" -ForegroundColor White
+
+# Contar roles (basado en detalles)
+$primaryCount = 0
+$secondaryCount = 0
+foreach ($result in $results) {
+    if ($result.AlwaysOnDetails -and $result.AlwaysOnDetails.Count -gt 0) {
+        $firstDetail = $result.AlwaysOnDetails[0]
+        if ($firstDetail -like "*:PRIMARY") {
+            $primaryCount++
+        } elseif ($firstDetail -like "*:SECONDARY") {
+            $secondaryCount++
+        }
+    }
+}
+
+Write-Host "║".PadRight(56) "║" -ForegroundColor White
+Write-Host "║  Nodos PRIMARY:        $primaryCount".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Nodos SECONDARY:      $secondaryCount".PadRight(53) "║" -ForegroundColor White
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
