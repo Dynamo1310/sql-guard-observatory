@@ -23,10 +23,10 @@
     10. 🧩 Configuración & tempdb      10%
     
     SEMÁFORO:
-    🟢 Verde (85-100): Óptimo
-    🟡 Amarillo (75-84): Advertencia leve
-    🟠 Naranja (65-74): Riesgo alto
-    🔴 Rojo (<65): Crítico
+    🟢 Healthy (85-100): Optimal performance
+    🟡 Warning (70-84): Requires attention
+    🟠 Risk (50-69): Action required
+    🔴 Critical (<50): Immediate action
     
 .NOTES
     Versión: 3.0
@@ -483,10 +483,23 @@ function Apply-Cap {
 function Get-HealthStatus {
     param([decimal]$Score)
     
-    if ($Score -ge 85) { return "🟢 Óptimo" }
-    if ($Score -ge 75) { return "🟡 Advertencia" }
-    if ($Score -ge 65) { return "🟠 Riesgo" }
-    return "🔴 Crítico"
+    if ($Score -ge 85) { return "Healthy" }
+    if ($Score -ge 70) { return "Warning" }
+    if ($Score -ge 50) { return "Risk" }
+    return "Critical"
+}
+
+# Función para mostrar estado con emoji (solo para consola)
+function Get-HealthStatusDisplay {
+    param([string]$Status)
+    
+    switch ($Status) {
+        "Healthy" { return "🟢 Óptimo" }
+        "Warning" { return "🟡 Advertencia" }
+        "Risk" { return "🟠 Riesgo" }
+        "Critical" { return "🔴 Crítico" }
+        default { return $Status }
+    }
 }
 
 #endregion
@@ -813,8 +826,9 @@ foreach ($instanceName in $instances) {
     }
     
     $healthStatus = Get-HealthStatus -Score $totalScore
+    $healthStatusDisplay = Get-HealthStatusDisplay -Status $healthStatus
     
-    Write-Host "   $healthStatus $instanceName - Score: $([int]$totalScore)/100" -ForegroundColor Gray
+    Write-Host "   $healthStatusDisplay $instanceName - Score: $([int]$totalScore)/100" -ForegroundColor Gray
     
     # Crear objeto con todos los scores
     $scoreData = [PSCustomObject]@{
@@ -855,15 +869,15 @@ Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -Fo
 $avgScore = ($results | Measure-Object -Property HealthScore -Average).Average
 Write-Host "║  Score promedio:       $([int]$avgScore)/100".PadRight(53) "║" -ForegroundColor White
 
-$optimoCount = ($results | Where-Object { $_.HealthScore -ge 85 }).Count
-$advertenciaCount = ($results | Where-Object { $_.HealthScore -ge 75 -and $_.HealthScore -lt 85 }).Count
-$riesgoCount = ($results | Where-Object { $_.HealthScore -ge 65 -and $_.HealthScore -lt 75 }).Count
-$criticoCount = ($results | Where-Object { $_.HealthScore -lt 65 }).Count
+$healthyCount = ($results | Where-Object { $_.HealthStatus -eq 'Healthy' }).Count
+$warningCount = ($results | Where-Object { $_.HealthStatus -eq 'Warning' }).Count
+$riskCount = ($results | Where-Object { $_.HealthStatus -eq 'Risk' }).Count
+$criticalCount = ($results | Where-Object { $_.HealthStatus -eq 'Critical' }).Count
 
-Write-Host "║  🟢 Óptimo (85-100):    $optimoCount".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  🟡 Advertencia (75-84): $advertenciaCount".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  🟠 Riesgo (65-74):      $riesgoCount".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  🔴 Crítico (<65):       $criticoCount".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  🟢 Healthy (≥85):      $healthyCount".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  🟡 Warning (70-84):    $warningCount".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  🟠 Risk (50-69):       $riskCount".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  🔴 Critical (<50):     $criticalCount".PadRight(53) "║" -ForegroundColor White
 
 Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
 Write-Host "║  Promedios por Categoría:                             ║" -ForegroundColor Green

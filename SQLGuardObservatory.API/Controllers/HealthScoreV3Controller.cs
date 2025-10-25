@@ -4,421 +4,278 @@ using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
 
-namespace SQLGuardObservatory.API.Controllers;
-
-[Authorize]
-[ApiController]
-[Route("api/healthscore/v3")]
-public class HealthScoreV3Controller : ControllerBase
+namespace SQLGuardObservatory.API.Controllers
 {
-    private readonly SQLNovaDbContext _context;
-    private readonly ILogger<HealthScoreV3Controller> _logger;
-
-    public HealthScoreV3Controller(
-        SQLNovaDbContext context,
-        ILogger<HealthScoreV3Controller> logger)
+    [Authorize]
+    [ApiController]
+    [Route("api/v3/healthscore")]
+    public class HealthScoreV3Controller : ControllerBase
     {
-        _context = context;
-        _logger = logger;
-    }
+        private readonly SQLNovaDbContext _context;
+        private readonly ILogger<HealthScoreV3Controller> _logger;
 
-    #region Score General
-
-    /// <summary>
-    /// Obtiene el último Health Score para todas las instancias
-    /// </summary>
-    [HttpGet("scores/latest")]
-    public async Task<ActionResult> GetLatestScores()
-    {
-        try
+        public HealthScoreV3Controller(SQLNovaDbContext context, ILogger<HealthScoreV3Controller> logger)
         {
-            var latestScores = await _context.InstanceHealthScores
-                .GroupBy(x => x.InstanceName)
-                .Select(g => g.OrderByDescending(x => x.CollectedAtUtc).FirstOrDefault())
-                .Where(x => x != null)
-                .OrderBy(x => x.HealthScore)
-                .ToListAsync();
-
-            return Ok(latestScores);
+            _context = context;
+            _logger = logger;
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Obtiene el último Health Score v3.0 de todas las instancias
+        /// GET: api/v3/healthscore
+        /// </summary>
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<HealthScoreV3Dto>>> GetAllHealthScores()
         {
-            _logger.LogError(ex, "Error al obtener últimos scores");
-            return StatusCode(500, new { message = "Error al obtener scores" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene el Health Score de una instancia específica
-    /// </summary>
-    [HttpGet("scores/{instanceName}")]
-    public async Task<ActionResult> GetScoreByInstance(string instanceName)
-    {
-        try
-        {
-            var score = await _context.InstanceHealthScores
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            if (score == null)
-                return NotFound(new { message = "Instancia no encontrada" });
-
-            return Ok(score);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener score de instancia {Instance}", instanceName);
-            return StatusCode(500, new { message = "Error al obtener score" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene el historial de Health Score de una instancia
-    /// </summary>
-    [HttpGet("scores/{instanceName}/history")]
-    public async Task<ActionResult> GetScoreHistory(
-        string instanceName,
-        [FromQuery] int hours = 24)
-    {
-        try
-        {
-            var since = DateTime.UtcNow.AddHours(-hours);
-
-            var history = await _context.InstanceHealthScores
-                .Where(x => x.InstanceName == instanceName && x.CollectedAtUtc >= since)
-                .OrderBy(x => x.CollectedAtUtc)
-                .ToListAsync();
-
-            return Ok(history);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener historial de {Instance}", instanceName);
-            return StatusCode(500, new { message = "Error al obtener historial" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene resumen agregado por ambiente
-    /// </summary>
-    [HttpGet("scores/summary")]
-    public async Task<ActionResult> GetSummary()
-    {
-        try
-        {
-            var latestScores = await _context.InstanceHealthScores
-                .GroupBy(x => x.InstanceName)
-                .Select(g => g.OrderByDescending(x => x.CollectedAtUtc).FirstOrDefault())
-                .Where(x => x != null)
-                .ToListAsync();
-
-            var summary = latestScores
-                .GroupBy(x => x.Ambiente)
-                .Select(g => new
-                {
-                    Ambiente = g.Key,
-                    TotalInstances = g.Count(),
-                    AvgHealthScore = Math.Round(g.Average(x => x.HealthScore), 2),
-                    OptimoCount = g.Count(x => x.HealthScore >= 85),
-                    AdvertenciaCount = g.Count(x => x.HealthScore >= 75 && x.HealthScore < 85),
-                    RiesgoCount = g.Count(x => x.HealthScore >= 65 && x.HealthScore < 75),
-                    CriticoCount = g.Count(x => x.HealthScore < 65)
-                })
-                .ToList();
-
-            return Ok(summary);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener resumen");
-            return StatusCode(500, new { message = "Error al obtener resumen" });
-        }
-    }
-
-    #endregion
-
-    #region Categorías Individuales
-
-    /// <summary>
-    /// Obtiene métricas de Conectividad para una instancia
-    /// </summary>
-    [HttpGet("{instanceName}/conectividad")]
-    public async Task<ActionResult> GetConectividad(
-        string instanceName,
-        [FromQuery] int limit = 10)
-    {
-        try
-        {
-            var data = await _context.InstanceHealthConectividad
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .Take(limit)
-                .ToListAsync();
-
-            return Ok(data);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener conectividad");
-            return StatusCode(500, new { message = "Error al obtener datos" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene métricas de AlwaysOn para una instancia
-    /// </summary>
-    [HttpGet("{instanceName}/alwayson")]
-    public async Task<ActionResult> GetAlwaysOn(
-        string instanceName,
-        [FromQuery] int limit = 10)
-    {
-        try
-        {
-            var data = await _context.InstanceHealthAlwaysOn
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .Take(limit)
-                .ToListAsync();
-
-            return Ok(data);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener AlwaysOn");
-            return StatusCode(500, new { message = "Error al obtener datos" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene métricas de Errores Críticos para una instancia
-    /// </summary>
-    [HttpGet("{instanceName}/errores")]
-    public async Task<ActionResult> GetErroresCriticos(
-        string instanceName,
-        [FromQuery] int limit = 10)
-    {
-        try
-        {
-            var data = await _context.InstanceHealthErroresCriticos
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .Take(limit)
-                .ToListAsync();
-
-            return Ok(data);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener errores críticos");
-            return StatusCode(500, new { message = "Error al obtener datos" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene métricas de CPU para una instancia
-    /// </summary>
-    [HttpGet("{instanceName}/cpu")]
-    public async Task<ActionResult> GetCPU(
-        string instanceName,
-        [FromQuery] int limit = 10)
-    {
-        try
-        {
-            var data = await _context.InstanceHealthCPU
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .Take(limit)
-                .ToListAsync();
-
-            return Ok(data);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener CPU");
-            return StatusCode(500, new { message = "Error al obtener datos" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene métricas de IO para una instancia
-    /// </summary>
-    [HttpGet("{instanceName}/io")]
-    public async Task<ActionResult> GetIO(
-        string instanceName,
-        [FromQuery] int limit = 10)
-    {
-        try
-        {
-            var data = await _context.InstanceHealthIO
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .Take(limit)
-                .ToListAsync();
-
-            return Ok(data);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener IO");
-            return StatusCode(500, new { message = "Error al obtener datos" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene métricas de Discos para una instancia
-    /// </summary>
-    [HttpGet("{instanceName}/discos")]
-    public async Task<ActionResult> GetDiscos(
-        string instanceName,
-        [FromQuery] int limit = 10)
-    {
-        try
-        {
-            var data = await _context.InstanceHealthDiscos
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .Take(limit)
-                .ToListAsync();
-
-            return Ok(data);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener discos");
-            return StatusCode(500, new { message = "Error al obtener datos" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene métricas de Memoria para una instancia
-    /// </summary>
-    [HttpGet("{instanceName}/memoria")]
-    public async Task<ActionResult> GetMemoria(
-        string instanceName,
-        [FromQuery] int limit = 10)
-    {
-        try
-        {
-            var data = await _context.InstanceHealthMemoria
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .Take(limit)
-                .ToListAsync();
-
-            return Ok(data);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener memoria");
-            return StatusCode(500, new { message = "Error al obtener datos" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene métricas de Configuración & TempDB para una instancia
-    /// </summary>
-    [HttpGet("{instanceName}/configuracion")]
-    public async Task<ActionResult> GetConfiguracionTempdb(
-        string instanceName,
-        [FromQuery] int limit = 10)
-    {
-        try
-        {
-            var data = await _context.InstanceHealthConfiguracionTempdb
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .Take(limit)
-                .ToListAsync();
-
-            return Ok(data);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener configuración/tempdb");
-            return StatusCode(500, new { message = "Error al obtener datos" });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene vista completa detallada de una instancia (todas las categorías)
-    /// </summary>
-    [HttpGet("{instanceName}/complete")]
-    public async Task<ActionResult> GetCompleteView(string instanceName)
-    {
-        try
-        {
-            var score = await _context.InstanceHealthScores
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            if (score == null)
-                return NotFound(new { message = "Instancia no encontrada" });
-
-            var conectividad = await _context.InstanceHealthConectividad
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            var alwaysOn = await _context.InstanceHealthAlwaysOn
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            var errores = await _context.InstanceHealthErroresCriticos
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            var cpu = await _context.InstanceHealthCPU
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            var io = await _context.InstanceHealthIO
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            var discos = await _context.InstanceHealthDiscos
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            var memoria = await _context.InstanceHealthMemoria
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            var config = await _context.InstanceHealthConfiguracionTempdb
-                .Where(x => x.InstanceName == instanceName)
-                .OrderByDescending(x => x.CollectedAtUtc)
-                .FirstOrDefaultAsync();
-
-            var result = new
+            try
             {
-                InstanceName = instanceName,
-                Score = score,
-                Conectividad = conectividad,
-                AlwaysOn = alwaysOn,
-                ErroresCriticos = errores,
-                CPU = cpu,
-                IO = io,
-                Discos = discos,
-                Memoria = memoria,
-                ConfiguracionTempdb = config
-            };
+                // Obtener el último score por instancia usando window function
+                var query = @"
+                    WITH RankedScores AS (
+                        SELECT 
+                            InstanceName,
+                            Ambiente,
+                            HostingSite,
+                            SqlVersion,
+                            CollectedAtUtc,
+                            HealthScore,
+                            HealthStatus,
+                            BackupsScore,
+                            AlwaysOnScore,
+                            ConectividadScore,
+                            ErroresCriticosScore,
+                            CPUScore,
+                            IOScore,
+                            DiscosScore,
+                            MemoriaScore,
+                            MantenimientosScore,
+                            ConfiguracionTempdbScore,
+                            GlobalCap,
+                            ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
+                        FROM dbo.InstanceHealth_Score
+                    )
+                    SELECT 
+                        InstanceName,
+                        Ambiente,
+                        HostingSite,
+                        SqlVersion,
+                        CollectedAtUtc AS GeneratedAtUtc,
+                        HealthScore,
+                        HealthStatus,
+                        BackupsScore AS Score_Backups,
+                        AlwaysOnScore AS Score_AlwaysOn,
+                        ConectividadScore AS Score_Conectividad,
+                        ErroresCriticosScore AS Score_ErroresCriticos,
+                        CPUScore AS Score_CPU,
+                        IOScore AS Score_IO,
+                        DiscosScore AS Score_Discos,
+                        MemoriaScore AS Score_Memoria,
+                        MantenimientosScore AS Score_Maintenance,
+                        ConfiguracionTempdbScore AS Score_ConfiguracionTempdb
+                    FROM RankedScores
+                    WHERE rn = 1
+                    ORDER BY HealthScore ASC, InstanceName;
+                ";
 
-            return Ok(result);
+                var scores = await _context.Database
+                    .SqlQueryRaw<HealthScoreV3Dto>(query)
+                    .ToListAsync();
+
+                return Ok(scores);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener health scores v3");
+                return StatusCode(500, new { error = "Error al obtener health scores" });
+            }
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Obtiene el Health Score v3.0 de una instancia específica
+        /// GET: api/v3/healthscore/{instanceName}
+        /// </summary>
+        [HttpGet("{instanceName}")]
+        public async Task<ActionResult<HealthScoreV3Dto>> GetHealthScoreDetail(string instanceName)
         {
-            _logger.LogError(ex, "Error al obtener vista completa de {Instance}", instanceName);
-            return StatusCode(500, new { message = "Error al obtener datos completos" });
+            try
+            {
+                var query = @"
+                    SELECT TOP 1
+                        InstanceName,
+                        Ambiente,
+                        HostingSite,
+                        SqlVersion,
+                        CollectedAtUtc AS GeneratedAtUtc,
+                        HealthScore,
+                        HealthStatus,
+                        BackupsScore AS Score_Backups,
+                        AlwaysOnScore AS Score_AlwaysOn,
+                        ConectividadScore AS Score_Conectividad,
+                        ErroresCriticosScore AS Score_ErroresCriticos,
+                        CPUScore AS Score_CPU,
+                        IOScore AS Score_IO,
+                        DiscosScore AS Score_Discos,
+                        MemoriaScore AS Score_Memoria,
+                        MantenimientosScore AS Score_Maintenance,
+                        ConfiguracionTempdbScore AS Score_ConfiguracionTempdb
+                    FROM dbo.InstanceHealth_Score
+                    WHERE InstanceName = {0}
+                    ORDER BY CollectedAtUtc DESC;
+                ";
+
+                var score = await _context.Database
+                    .SqlQueryRaw<HealthScoreV3Dto>(query, instanceName)
+                    .FirstOrDefaultAsync();
+
+                if (score == null)
+                {
+                    return NotFound(new { error = $"No se encontró health score para la instancia {instanceName}" });
+                }
+
+                return Ok(score);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener health score para {InstanceName}", instanceName);
+                return StatusCode(500, new { error = "Error al obtener health score" });
+            }
+        }
+
+        /// <summary>
+        /// Obtiene resumen estadístico de Health Scores v3.0
+        /// GET: api/v3/healthscore/summary
+        /// </summary>
+        [HttpGet("summary")]
+        public async Task<ActionResult<HealthScoreV3SummaryDto>> GetSummary()
+        {
+            try
+            {
+                var query = @"
+                    WITH LatestScores AS (
+                        SELECT 
+                            InstanceName,
+                            HealthScore,
+                            HealthStatus,
+                            CollectedAtUtc,
+                            ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
+                        FROM dbo.InstanceHealth_Score
+                    )
+                    SELECT 
+                        COUNT(*) AS TotalInstances,
+                        SUM(CASE WHEN HealthStatus = 'Healthy' THEN 1 ELSE 0 END) AS HealthyCount,
+                        SUM(CASE WHEN HealthStatus = 'Warning' THEN 1 ELSE 0 END) AS WarningCount,
+                        SUM(CASE WHEN HealthStatus = 'Risk' THEN 1 ELSE 0 END) AS RiskCount,
+                        SUM(CASE WHEN HealthStatus = 'Critical' THEN 1 ELSE 0 END) AS CriticalCount,
+                        AVG(CAST(HealthScore AS FLOAT)) AS AvgScore,
+                        MAX(CollectedAtUtc) AS LastUpdate
+                    FROM LatestScores
+                    WHERE rn = 1;
+                ";
+
+                var summary = await _context.Database
+                    .SqlQueryRaw<HealthScoreV3SummaryDto>(query)
+                    .FirstOrDefaultAsync();
+
+                if (summary == null)
+                {
+                    return Ok(new HealthScoreV3SummaryDto
+                    {
+                        TotalInstances = 0,
+                        HealthyCount = 0,
+                        WarningCount = 0,
+                        RiskCount = 0,
+                        CriticalCount = 0,
+                        AvgScore = 0,
+                        LastUpdate = null
+                    });
+                }
+
+                return Ok(summary);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener resumen de health scores v3");
+                return StatusCode(500, new { error = "Error al obtener resumen" });
+            }
+        }
+
+        /// <summary>
+        /// Obtiene el historial de Health Score de una instancia
+        /// GET: api/v3/healthscore/{instanceName}/history?hours=24
+        /// </summary>
+        [HttpGet("{instanceName}/history")]
+        public async Task<ActionResult<IEnumerable<HealthScoreHistoryDto>>> GetHistory(
+            string instanceName,
+            [FromQuery] int hours = 24)
+        {
+            try
+            {
+                var cutoffDate = DateTime.UtcNow.AddHours(-hours);
+
+                var query = @"
+                    SELECT 
+                        CollectedAtUtc AS Timestamp,
+                        HealthScore,
+                        HealthStatus
+                    FROM dbo.InstanceHealth_Score
+                    WHERE InstanceName = {0}
+                        AND CollectedAtUtc >= {1}
+                    ORDER BY CollectedAtUtc ASC;
+                ";
+
+                var history = await _context.Database
+                    .SqlQueryRaw<HealthScoreHistoryDto>(query, instanceName, cutoffDate)
+                    .ToListAsync();
+
+                return Ok(history);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener historial para {InstanceName}", instanceName);
+                return StatusCode(500, new { error = "Error al obtener historial" });
+            }
         }
     }
 
-    #endregion
-}
+    // DTOs
+    public class HealthScoreV3Dto
+    {
+        public string InstanceName { get; set; } = string.Empty;
+        public string? Ambiente { get; set; }
+        public string? HostingSite { get; set; }
+        public string? SqlVersion { get; set; }
+        public DateTime GeneratedAtUtc { get; set; }
+        public int HealthScore { get; set; }
+        public string HealthStatus { get; set; } = string.Empty;
+        
+        // Scores por categoría (cada uno sobre 100)
+        public int Score_Backups { get; set; }
+        public int Score_AlwaysOn { get; set; }
+        public int Score_Conectividad { get; set; }
+        public int Score_ErroresCriticos { get; set; }
+        public int Score_CPU { get; set; }
+        public int Score_IO { get; set; }
+        public int Score_Discos { get; set; }
+        public int Score_Memoria { get; set; }
+        public int Score_Maintenance { get; set; }
+        public int Score_ConfiguracionTempdb { get; set; }
+    }
 
+    public class HealthScoreV3SummaryDto
+    {
+        public int TotalInstances { get; set; }
+        public int HealthyCount { get; set; }
+        public int WarningCount { get; set; }
+        public int RiskCount { get; set; }
+        public int CriticalCount { get; set; }
+        public double AvgScore { get; set; }
+        public DateTime? LastUpdate { get; set; }
+    }
+
+    public class HealthScoreHistoryDto
+    {
+        public DateTime Timestamp { get; set; }
+        public int HealthScore { get; set; }
+        public string HealthStatus { get; set; } = string.Empty;
+    }
+}

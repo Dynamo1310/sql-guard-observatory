@@ -365,24 +365,24 @@ CREATE TABLE [dbo].[InstanceHealth_Score] (
     -- Score Total (0-100 puntos)
     [HealthScore] INT NOT NULL,
     
-    -- Status (4 colores)
-    -- 🟢 Verde: ≥85 pts (Óptimo)
-    -- 🟡 Amarillo: 70-84 pts (Advertencia)
-    -- 🟠 Naranja: 50-69 pts (Riesgo)
-    -- 🔴 Rojo: <50 pts (Crítico)
+    -- Status (4 levels)
+    -- Healthy: ≥85 pts (Optimal)
+    -- Warning: 70-84 pts (Requires attention)
+    -- Risk: 50-69 pts (Action required)
+    -- Critical: <50 pts (Immediate action)
     [HealthStatus] NVARCHAR(50) NOT NULL,
     
-    -- Scores por Categoría (cada uno 0-10 pts)
-    [ConectividadScore] INT NOT NULL DEFAULT 0,           -- Cat 1: 10 pts
-    [AlwaysOnScore] INT NOT NULL DEFAULT 0,               -- Cat 2: 10 pts
-    [BackupsScore] INT NOT NULL DEFAULT 0,                -- Cat 3: 10 pts
-    [ErroresCriticosScore] INT NOT NULL DEFAULT 0,        -- Cat 4: 10 pts
-    [CPUScore] INT NOT NULL DEFAULT 0,                    -- Cat 5: 10 pts
-    [IOScore] INT NOT NULL DEFAULT 0,                     -- Cat 6: 10 pts
-    [DiscosScore] INT NOT NULL DEFAULT 0,                 -- Cat 7: 10 pts
-    [MemoriaScore] INT NOT NULL DEFAULT 0,                -- Cat 8: 10 pts
-    [ConfiguracionTempdbScore] INT NOT NULL DEFAULT 0,    -- Cat 9: 10 pts
-    [MantenimientosScore] INT NOT NULL DEFAULT 0,         -- Cat 10: 10 pts
+    -- Scores por Categoría (cada uno 0-100, luego ponderado por peso)
+    [ConectividadScore] INT NOT NULL DEFAULT 0,           -- 10% weight
+    [AlwaysOnScore] INT NOT NULL DEFAULT 0,               -- 14% weight
+    [BackupsScore] INT NOT NULL DEFAULT 0,                -- 18% weight
+    [ErroresCriticosScore] INT NOT NULL DEFAULT 0,        -- 7% weight
+    [CPUScore] INT NOT NULL DEFAULT 0,                    -- 10% weight
+    [IOScore] INT NOT NULL DEFAULT 0,                     -- 10% weight
+    [DiscosScore] INT NOT NULL DEFAULT 0,                 -- 8% weight
+    [MemoriaScore] INT NOT NULL DEFAULT 0,                -- 7% weight
+    [ConfiguracionTempdbScore] INT NOT NULL DEFAULT 0,    -- 10% weight
+    [MantenimientosScore] INT NOT NULL DEFAULT 0,         -- 6% weight
     
     -- Cap Global (si aplica)
     [GlobalCap] INT NOT NULL DEFAULT 100,
@@ -463,10 +463,10 @@ SELECT
     AVG(CAST(HealthScore AS FLOAT)) AS AvgHealthScore,
     
     -- Contadores por semáforo v3.0
-    SUM(CASE WHEN HealthScore >= 85 THEN 1 ELSE 0 END) AS VerdeCount,      -- 🟢 Óptimo
-    SUM(CASE WHEN HealthScore >= 70 AND HealthScore < 85 THEN 1 ELSE 0 END) AS AmarilloCount,  -- 🟡 Advertencia
-    SUM(CASE WHEN HealthScore >= 50 AND HealthScore < 70 THEN 1 ELSE 0 END) AS NaranjaCount,   -- 🟠 Riesgo
-    SUM(CASE WHEN HealthScore < 50 THEN 1 ELSE 0 END) AS RojoCount,        -- 🔴 Crítico
+    SUM(CASE WHEN HealthScore >= 85 THEN 1 ELSE 0 END) AS HealthyCount,      -- Healthy
+    SUM(CASE WHEN HealthScore >= 70 AND HealthScore < 85 THEN 1 ELSE 0 END) AS WarningCount,   -- Warning
+    SUM(CASE WHEN HealthScore >= 50 AND HealthScore < 70 THEN 1 ELSE 0 END) AS RiskCount,      -- Risk
+    SUM(CASE WHEN HealthScore < 50 THEN 1 ELSE 0 END) AS CriticalCount,    -- Critical
     
     -- Promedios por categoría
     AVG(CAST(ConectividadScore AS FLOAT)) AS AvgConectividadScore,
@@ -669,14 +669,16 @@ PRINT '   2. Ejecutar script Consolidate_v3.ps1';
 PRINT '   3. Configurar Schedule-HealthScore-v3.ps1';
 PRINT '   4. Verificar datos en vw_LatestHealthScore';
 PRINT '';
-PRINT '🚦 Sistema de semáforo v3.0:';
-PRINT '   🟢 Verde (≥85 pts): Óptimo';
-PRINT '   🟡 Amarillo (70-84 pts): Advertencia';
-PRINT '   🟠 Naranja (50-69 pts): Riesgo';
-PRINT '   🔴 Rojo (<50 pts): Crítico';
+PRINT '🚦 Health Status System:';
+PRINT '   🟢 Healthy (≥85 pts): Optimal performance';
+PRINT '   🟡 Warning (70-84 pts): Requires attention';
+PRINT '   🟠 Risk (50-69 pts): Action required';
+PRINT '   🔴 Critical (<50 pts): Immediate action';
 PRINT '';
-PRINT '💯 Sistema de puntuación:';
-PRINT '   10 categorías × 10 puntos = 100 puntos total';
+PRINT '💯 Scoring System:';
+PRINT '   Each category: 0-100 pts';
+PRINT '   Weighted by importance: 18% + 14% + 10% + ... = 100%';
+PRINT '   Final score: 0-100 pts';
 PRINT '';
 PRINT '════════════════════════════════════════════════════════';
 GO
