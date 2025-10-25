@@ -725,17 +725,17 @@ INSERT INTO dbo.InstanceHealth_Score (
     $($ScoreData.MemoriaScore),
     $($ScoreData.MantenimientosScore),
     $($ScoreData.ConfiguracionTempdbScore),
-    -- Contribuciones Ponderadas (con caps aplicados)
-    $([Math]::Round($ScoreData.BackupsContribution, 2)),
-    $([Math]::Round($ScoreData.AlwaysOnContribution, 2)),
-    $([Math]::Round($ScoreData.ConectividadContribution, 2)),
-    $([Math]::Round($ScoreData.ErroresCriticosContribution, 2)),
-    $([Math]::Round($ScoreData.CPUContribution, 2)),
-    $([Math]::Round($ScoreData.IOContribution, 2)),
-    $([Math]::Round($ScoreData.DiscosContribution, 2)),
-    $([Math]::Round($ScoreData.MemoriaContribution, 2)),
-    $([Math]::Round($ScoreData.MantenimientosContribution, 2)),
-    $([Math]::Round($ScoreData.ConfiguracionTempdbContribution, 2)),
+    -- Contribuciones Ponderadas (con caps aplicados, redondeadas a 1 decimal)
+    $([Math]::Round($ScoreData.BackupsContribution, 1)),
+    $([Math]::Round($ScoreData.AlwaysOnContribution, 1)),
+    $([Math]::Round($ScoreData.ConectividadContribution, 1)),
+    $([Math]::Round($ScoreData.ErroresCriticosContribution, 1)),
+    $([Math]::Round($ScoreData.CPUContribution, 1)),
+    $([Math]::Round($ScoreData.IOContribution, 1)),
+    $([Math]::Round($ScoreData.DiscosContribution, 1)),
+    $([Math]::Round($ScoreData.MemoriaContribution, 1)),
+    $([Math]::Round($ScoreData.MantenimientosContribution, 1)),
+    $([Math]::Round($ScoreData.ConfiguracionTempdbContribution, 1)),
     $($ScoreData.GlobalCap)
 );
 "@

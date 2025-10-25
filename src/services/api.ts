@@ -799,7 +799,7 @@ export interface HealthScoreV3Dto {
   ioContribution?: number;                // Max: 10.00
   discosContribution?: number;            // Max: 8.00
   memoriaContribution?: number;           // Max: 7.00
-  maintenanceContribution?: number;       // Max: 6.00
+  mantenimientosContribution?: number;    // Max: 6.00
   configuracionTempdbContribution?: number; // Max: 10.00
 }
 
