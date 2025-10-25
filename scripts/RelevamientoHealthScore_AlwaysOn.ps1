@@ -435,8 +435,13 @@ foreach ($instance in $instancesWithAG) {
     
     Write-Host "   $status $instanceName [$role/$availabilityMode] - State:$($alwaysOn.WorstState) DBs:$($alwaysOn.DatabaseCount) Healthy:$($alwaysOn.SynchronizedCount) SendQ:$($alwaysOn.MaxSendQueueKB)KB" -ForegroundColor $color
     
+    # Mostrar detalles SIEMPRE que hay UNKNOWN para diagnóstico
+    if ($role -eq "UNKNOWN" -and $alwaysOn.Details) {
+        Write-Host "      → DIAGNOSTICO: $($alwaysOn.Details[0])" -ForegroundColor Magenta
+        Write-Host "      → Parts count: $(($alwaysOn.Details[0] -split ':').Count)" -ForegroundColor Magenta
+    }
     # Mostrar detalles si está en modo verbose Y hay algo inusual
-    if ($VerboseOutput -and $role -in @("UNKNOWN", "NO_AG") -and $alwaysOn.Details) {
+    elseif ($VerboseOutput -and $role -eq "NO_AG" -and $alwaysOn.Details) {
         Write-Host "      → Details: $($alwaysOn.Details -join ' | ')" -ForegroundColor DarkGray
     }
     
