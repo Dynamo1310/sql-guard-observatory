@@ -235,6 +235,139 @@ namespace SQLGuardObservatory.API.Controllers
                 return StatusCode(500, new { error = "Error al obtener historial" });
             }
         }
+
+        /// <summary>
+        /// Obtiene todos los detalles de health score y sus métricas subyacentes
+        /// GET: api/v3/healthscore/{instanceName}/details
+        /// </summary>
+        [HttpGet("{instanceName}/details")]
+        public async Task<ActionResult<HealthScoreV3DetailDto>> GetHealthScoreDetails(string instanceName)
+        {
+            try
+            {
+                // Query para obtener el score principal
+                var scoreQuery = @"
+                    SELECT TOP 1
+                        InstanceName,
+                        Ambiente,
+                        HostingSite,
+                        SqlVersion,
+                        CollectedAtUtc AS GeneratedAtUtc,
+                        HealthScore,
+                        HealthStatus,
+                        BackupsScore AS Score_Backups,
+                        AlwaysOnScore AS Score_AlwaysOn,
+                        ConectividadScore AS Score_Conectividad,
+                        ErroresCriticosScore AS Score_ErroresCriticos,
+                        CPUScore AS Score_CPU,
+                        IOScore AS Score_IO,
+                        DiscosScore AS Score_Discos,
+                        MemoriaScore AS Score_Memoria,
+                        MantenimientosScore AS Score_Maintenance,
+                        ConfiguracionTempdbScore AS Score_ConfiguracionTempdb
+                    FROM dbo.InstanceHealth_Score
+                    WHERE InstanceName = {0}
+                    ORDER BY CollectedAtUtc DESC";
+
+                var score = await _context.Database
+                    .SqlQueryRaw<HealthScoreV3Dto>(scoreQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                if (score == null)
+                {
+                    return NotFound(new { error = $"No se encontró health score para la instancia {instanceName}" });
+                }
+
+                // Obtener detalles de cada categoría
+                var details = new HealthScoreV3DetailDto
+                {
+                    InstanceName = score.InstanceName,
+                    Ambiente = score.Ambiente,
+                    HostingSite = score.HostingSite,
+                    SqlVersion = score.SqlVersion,
+                    GeneratedAtUtc = score.GeneratedAtUtc,
+                    HealthScore = score.HealthScore,
+                    HealthStatus = score.HealthStatus,
+                    Score_Backups = score.Score_Backups,
+                    Score_AlwaysOn = score.Score_AlwaysOn,
+                    Score_Conectividad = score.Score_Conectividad,
+                    Score_ErroresCriticos = score.Score_ErroresCriticos,
+                    Score_CPU = score.Score_CPU,
+                    Score_IO = score.Score_IO,
+                    Score_Discos = score.Score_Discos,
+                    Score_Memoria = score.Score_Memoria,
+                    Score_Maintenance = score.Score_Maintenance,
+                    Score_ConfiguracionTempdb = score.Score_ConfiguracionTempdb
+                };
+
+                // Backups
+                var backupsQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Backups WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.BackupsDetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthBackups>(backupsQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // AlwaysOn
+                var alwaysOnQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_AlwaysOn WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.AlwaysOnDetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthAlwaysOn>(alwaysOnQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // Conectividad
+                var conectividadQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Conectividad WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.ConectividadDetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthConectividad>(conectividadQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // Errores Críticos
+                var erroresQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_ErroresCriticos WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.ErroresCriticosDetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthErroresCriticos>(erroresQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // CPU
+                var cpuQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_CPU WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.CPUDetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthCPU>(cpuQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // IO
+                var ioQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_IO WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.IODetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthIO>(ioQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // Discos
+                var discosQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Discos WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.DiscosDetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthDiscos>(discosQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // Memoria
+                var memoriaQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Memoria WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.MemoriaDetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthMemoria>(memoriaQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // Maintenance
+                var maintenanceQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Maintenance WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.MaintenanceDetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthMaintenance>(maintenanceQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // Configuracion & TempDB
+                var configQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_ConfiguracionTempdb WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.ConfiguracionTempdbDetails = await _context.Database
+                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthConfiguracionTempdb>(configQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                return Ok(details);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener detalles de health score para {InstanceName}", instanceName);
+                return StatusCode(500, new { error = "Error al obtener detalles de health score" });
+            }
+        }
     }
 
     // DTOs
@@ -259,6 +392,21 @@ namespace SQLGuardObservatory.API.Controllers
         public int Score_Memoria { get; set; }
         public int Score_Maintenance { get; set; }
         public int Score_ConfiguracionTempdb { get; set; }
+    }
+
+    public class HealthScoreV3DetailDto : HealthScoreV3Dto
+    {
+        // Detalles de cada categoría
+        public Models.HealthScoreV3.InstanceHealthBackups? BackupsDetails { get; set; }
+        public Models.HealthScoreV3.InstanceHealthAlwaysOn? AlwaysOnDetails { get; set; }
+        public Models.HealthScoreV3.InstanceHealthConectividad? ConectividadDetails { get; set; }
+        public Models.HealthScoreV3.InstanceHealthErroresCriticos? ErroresCriticosDetails { get; set; }
+        public Models.HealthScoreV3.InstanceHealthCPU? CPUDetails { get; set; }
+        public Models.HealthScoreV3.InstanceHealthIO? IODetails { get; set; }
+        public Models.HealthScoreV3.InstanceHealthDiscos? DiscosDetails { get; set; }
+        public Models.HealthScoreV3.InstanceHealthMemoria? MemoriaDetails { get; set; }
+        public Models.HealthScoreV3.InstanceHealthMaintenance? MaintenanceDetails { get; set; }
+        public Models.HealthScoreV3.InstanceHealthConfiguracionTempdb? ConfiguracionTempdbDetails { get; set; }
     }
 
     public class HealthScoreV3SummaryDto

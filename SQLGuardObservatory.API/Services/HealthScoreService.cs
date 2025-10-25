@@ -241,21 +241,60 @@ namespace SQLGuardObservatory.API.Services
         {
             try
             {
-                // v2.0: Leer directamente de la vista consolidada (ya tiene todo)
+                // v3.0: Leer directamente desde InstanceHealth_Score (versión actualizada)
                 var query = @"
+                    WITH LatestScores AS (
+                        SELECT 
+                            s.InstanceName,
+                            s.Ambiente,
+                            s.HealthScore,
+                            s.HealthStatus,
+                            s.CollectedAtUtc,
+                            ROW_NUMBER() OVER (PARTITION BY s.InstanceName ORDER BY s.CollectedAtUtc DESC) AS rn
+                        FROM dbo.InstanceHealth_Score s
+                    ),
+                    LatestDiscos AS (
+                        SELECT 
+                            InstanceName,
+                            WorstFreePct,
+                            ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
+                        FROM dbo.InstanceHealth_Discos
+                    ),
+                    LatestBackups AS (
+                        SELECT 
+                            InstanceName,
+                            FullBackupBreached,
+                            LogBackupBreached,
+                            LastFullBackup,
+                            LastLogBackup,
+                            ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
+                        FROM dbo.InstanceHealth_Backups
+                    ),
+                    LatestMaintenance AS (
+                        SELECT 
+                            InstanceName,
+                            CheckdbOk,
+                            IndexOptimizeOk,
+                            ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
+                        FROM dbo.InstanceHealth_Maintenance
+                    )
                     SELECT 
-                        InstanceName,
-                        NULL AS Ambiente,  -- TODO: agregar Ambiente a la vista si es necesario
-                        HealthScore,
-                        HealthStatus,
-                        DiskWorstFreePct,
-                        FullBackupBreached,
-                        LogBackupBreached,
-                        LastFullBackup,
-                        LastLogBackup,
-                        CheckdbOk,
-                        IndexOptimizeOk
-                    FROM dbo.vw_InstanceHealth_Latest";
+                        s.InstanceName,
+                        s.Ambiente,
+                        s.HealthScore,
+                        s.HealthStatus,
+                        ISNULL(d.WorstFreePct, 100) AS DiskWorstFreePct,
+                        ISNULL(b.FullBackupBreached, 0) AS FullBackupBreached,
+                        ISNULL(b.LogBackupBreached, 0) AS LogBackupBreached,
+                        b.LastFullBackup,
+                        b.LastLogBackup,
+                        ISNULL(m.CheckdbOk, 1) AS CheckdbOk,
+                        ISNULL(m.IndexOptimizeOk, 1) AS IndexOptimizeOk
+                    FROM LatestScores s
+                    LEFT JOIN LatestDiscos d ON s.InstanceName = d.InstanceName AND d.rn = 1
+                    LEFT JOIN LatestBackups b ON s.InstanceName = b.InstanceName AND b.rn = 1
+                    LEFT JOIN LatestMaintenance m ON s.InstanceName = m.InstanceName AND m.rn = 1
+                    WHERE s.rn = 1";
 
                 var connection = _context.Database.GetDbConnection();
                 await connection.OpenAsync();

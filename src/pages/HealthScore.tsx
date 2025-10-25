@@ -7,11 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn, formatDateUTC3 } from '@/lib/utils';
 import { useTableSort } from '@/hooks/use-table-sort';
-import { healthScoreV3Api, HealthScoreV3Dto } from '@/services/api';
+import { healthScoreV3Api, HealthScoreV3Dto, HealthScoreV3DetailDto } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function HealthScore() {
   const navigate = useNavigate();
@@ -19,6 +20,8 @@ export default function HealthScore() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [instanceDetails, setInstanceDetails] = useState<Record<string, HealthScoreV3DetailDto>>({});
+  const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({});
   const [showExplanation, setShowExplanation] = useState(false);
   
   // Filtros
@@ -82,12 +85,29 @@ export default function HealthScore() {
     return { total, healthy, warning, risk, critical, avgScore };
   }, [filteredScores]);
 
-  const toggleRow = (instanceName: string) => {
+  const toggleRow = async (instanceName: string) => {
     const newExpanded = new Set(expandedRows);
     if (newExpanded.has(instanceName)) {
       newExpanded.delete(instanceName);
     } else {
       newExpanded.add(instanceName);
+      // Cargar detalles si no los tenemos aún
+      if (!instanceDetails[instanceName] && !loadingDetails[instanceName]) {
+        setLoadingDetails(prev => ({ ...prev, [instanceName]: true }));
+        try {
+          const details = await healthScoreV3Api.getHealthScoreDetails(instanceName);
+          setInstanceDetails(prev => ({ ...prev, [instanceName]: details }));
+        } catch (error) {
+          console.error('Error al cargar detalles:', error);
+          toast({
+            title: 'Error',
+            description: 'No se pudieron cargar los detalles de la instancia',
+            variant: 'destructive',
+          });
+        } finally {
+          setLoadingDetails(prev => ({ ...prev, [instanceName]: false }));
+        }
+      }
     }
     setExpandedRows(newExpanded);
   };
@@ -229,7 +249,7 @@ export default function HealthScore() {
                       <Shield className="h-4 w-4 text-purple-500" />
                       <span className="font-semibold text-sm">2. AlwaysOn (AG)</span>
                       <Badge variant="outline" className="ml-auto bg-purple-500/10 text-purple-700 border-purple-500/30">14%</Badge>
-                    </div>
+                        </div>
                     <p className="text-xs text-muted-foreground">Synchronization state, queue sizes, lag</p>
                   </CardContent>
                 </Card>
@@ -241,7 +261,7 @@ export default function HealthScore() {
                       <Activity className="h-4 w-4 text-blue-500" />
                       <span className="font-semibold text-sm">3. Connectivity</span>
                       <Badge variant="outline" className="ml-auto bg-blue-500/10 text-blue-700 border-blue-500/30">10%</Badge>
-                    </div>
+                      </div>
                     <p className="text-xs text-muted-foreground">Response time, authentication, login failures</p>
                   </CardContent>
                 </Card>
@@ -253,13 +273,13 @@ export default function HealthScore() {
                       <XCircle className="h-4 w-4 text-red-500" />
                       <span className="font-semibold text-sm">4. Critical Errors (sev≥20)</span>
                       <Badge variant="outline" className="ml-auto bg-red-500/10 text-red-700 border-red-500/30">7%</Badge>
-                    </div>
+                        </div>
                     <p className="text-xs text-muted-foreground">Severity 20+ events in last 24h</p>
-                  </CardContent>
-                </Card>
+                </CardContent>
+              </Card>
 
                 {/* 5. CPU */}
-                <Card className="bg-orange-500/5 border-orange-500/20">
+              <Card className="bg-orange-500/5 border-orange-500/20">
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <Cpu className="h-4 w-4 text-orange-500" />
@@ -277,13 +297,13 @@ export default function HealthScore() {
                       <Zap className="h-4 w-4 text-cyan-500" />
                       <span className="font-semibold text-sm">6. I/O (Latency / IOPS)</span>
                       <Badge variant="outline" className="ml-auto bg-cyan-500/10 text-cyan-700 border-cyan-500/30">10%</Badge>
-                    </div>
+                        </div>
                     <p className="text-xs text-muted-foreground">Data/Log file latency, IOPS performance</p>
-                  </CardContent>
-                </Card>
+                </CardContent>
+              </Card>
 
                 {/* 7. Discos */}
-                <Card className="bg-yellow-500/5 border-yellow-500/20">
+              <Card className="bg-yellow-500/5 border-yellow-500/20">
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <HardDrive className="h-4 w-4 text-yellow-500" />
@@ -301,7 +321,7 @@ export default function HealthScore() {
                       <MemoryStick className="h-4 w-4 text-pink-500" />
                       <span className="font-semibold text-sm">8. Memory (PLE + Grants)</span>
                       <Badge variant="outline" className="ml-auto bg-pink-500/10 text-pink-700 border-pink-500/30">7%</Badge>
-                    </div>
+                        </div>
                     <p className="text-xs text-muted-foreground">Page Life Expectancy, memory grants, pressure</p>
                   </CardContent>
                 </Card>
@@ -313,10 +333,10 @@ export default function HealthScore() {
                       <Wrench className="h-4 w-4 text-teal-500" />
                       <span className="font-semibold text-sm">9. Maintenance</span>
                       <Badge variant="outline" className="ml-auto bg-teal-500/10 text-teal-700 border-teal-500/30">6%</Badge>
-                    </div>
+                      </div>
                     <p className="text-xs text-muted-foreground">CHECKDB, Index Optimize, Statistics updates</p>
-                  </CardContent>
-                </Card>
+                </CardContent>
+              </Card>
 
                 {/* 10. Configuración & TempDB */}
                 <Card className="bg-indigo-500/5 border-indigo-500/20">
@@ -327,8 +347,8 @@ export default function HealthScore() {
                       <Badge variant="outline" className="ml-auto bg-indigo-500/10 text-indigo-700 border-indigo-500/30">10%</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">TempDB setup, max memory config, contention</p>
-                  </CardContent>
-                </Card>
+                </CardContent>
+              </Card>
               </div>
 
               {/* Resumen visual */}
@@ -518,11 +538,8 @@ export default function HealthScore() {
                 </TableHead>
                 <TableHead className="text-xs">Score Visual</TableHead>
                 <TableHead className="text-xs">Estado</TableHead>
-                <TableHead 
-                  className="text-xs cursor-pointer hover:bg-accent text-right"
-                  onClick={() => requestSort('connectLatencyMs')}
-                >
-                  Latencia {getSortIndicator('connectLatencyMs')}
+                <TableHead className="text-xs text-right">
+                  Última Actualización
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -588,12 +605,13 @@ export default function HealthScore() {
                           {getStatusBadge(score.healthStatus)}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs py-2">
-                        {score.connectSuccess ? (
-                          `${score.connectLatencyMs || 0}ms`
-                        ) : (
-                          <span className="text-destructive">Failed</span>
-                        )}
+                      <TableCell className="text-right text-xs py-2 text-muted-foreground">
+                        {new Date(score.generatedAtUtc).toLocaleString('es-AR', { 
+                          day: '2-digit', 
+                          month: '2-digit', 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
                       </TableCell>
                     </TableRow>
                     
@@ -601,36 +619,31 @@ export default function HealthScore() {
                     {expandedRows.has(score.instanceName) && (
                       <TableRow>
                         <TableCell colSpan={8} className="bg-accent/20 p-6">
-                          <div className="space-y-6">
-                            {/* Header con Info General */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <div>
-                                <p className="text-xs text-muted-foreground">Versión</p>
-                                <p className="text-sm font-medium">{score.version || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground">Última Actualización</p>
-                                <p className="text-sm font-medium">
-                                  {formatDateUTC3(score.generatedAtUtc)}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground">Conectividad</p>
+                          {loadingDetails[score.instanceName] ? (
+                            <div className="flex items-center justify-center py-8">
+                              <div className="text-muted-foreground">Cargando detalles...</div>
+                            </div>
+                          ) : instanceDetails[score.instanceName] ? (
+                          <div className="space-y-4">
+                            {/* Header Compacto Inline */}
+                            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b">
+                              <div className="flex flex-wrap items-center gap-4">
                                 <div className="flex items-center gap-2">
-                                  {score.connectSuccess ? (
-                                    <CheckCircle2 className="h-4 w-4 text-success" />
+                                  <Server className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm font-medium">{instanceDetails[score.instanceName].sqlVersion || 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {instanceDetails[score.instanceName].conectividadDetails?.connectSuccess ? (
+                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
                                   ) : (
-                                    <XCircle className="h-4 w-4 text-destructive" />
+                                    <XCircle className="h-4 w-4 text-red-600" />
                                   )}
-                                  <span className="text-sm font-medium">
-                                    {score.connectSuccess ? 'Conectado' : 'Sin conexión'}
-                                  </span>
+                                  <span className="text-sm">{instanceDetails[score.instanceName].conectividadDetails?.connectSuccess ? 'Conectado' : 'Sin conexión'}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Actualizado: {formatDateUTC3(instanceDetails[score.instanceName].generatedAtUtc)}
                                 </div>
                               </div>
-                            </div>
-
-                            {/* Botón Ver Tendencias */}
-                            <div className="flex justify-end">
                               <Button
                                 onClick={() => navigate(`/instance-trends/${encodeURIComponent(score.instanceName)}`)}
                                 className="flex items-center gap-2"
@@ -638,346 +651,522 @@ export default function HealthScore() {
                                 size="sm"
                               >
                                 <TrendingUp className="h-4 w-4" />
-                                Ver Tendencias Históricas
+                                Ver Tendencias
                               </Button>
                             </div>
 
-                            {/* v3.0: Breakdown por 10 Categorías */}
-                            <Card className="bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-green-500/5">
-                              <CardHeader className="pb-3">
-                                <CardTitle className="text-sm flex items-center justify-between">
-                                  <span>Category Breakdown v3.0</span>
-                                  <span className="text-lg font-mono font-bold">{score.healthScore}/100</span>
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                  <div className="bg-green-500/5 border border-green-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <Database className="h-3 w-3 text-green-500" />
-                                      <p className="text-xs text-muted-foreground">Backups (18%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-green-500">{score.score_Backups || 0}/100</p>
-                                  </div>
-                                  <div className="bg-purple-500/5 border border-purple-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <Shield className="h-3 w-3 text-purple-500" />
-                                      <p className="text-xs text-muted-foreground">AlwaysOn (14%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-purple-500">{score.score_AlwaysOn || 0}/100</p>
-                                  </div>
-                                  <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <Activity className="h-3 w-3 text-blue-500" />
-                                      <p className="text-xs text-muted-foreground">Connect (10%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-blue-500">{score.score_Conectividad || 0}/100</p>
-                                  </div>
-                                  <div className="bg-red-500/5 border border-red-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <XCircle className="h-3 w-3 text-red-500" />
-                                      <p className="text-xs text-muted-foreground">Errors (7%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-red-500">{score.score_ErroresCriticos || 0}/100</p>
-                                  </div>
-                                  <div className="bg-orange-500/5 border border-orange-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <Cpu className="h-3 w-3 text-orange-500" />
-                                      <p className="text-xs text-muted-foreground">CPU (10%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-orange-500">{score.score_CPU || 0}/100</p>
-                                  </div>
-                                  <div className="bg-cyan-500/5 border border-cyan-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <Zap className="h-3 w-3 text-cyan-500" />
-                                      <p className="text-xs text-muted-foreground">I/O (10%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-cyan-500">{score.score_IO || 0}/100</p>
-                                  </div>
-                                  <div className="bg-yellow-500/5 border border-yellow-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <HardDrive className="h-3 w-3 text-yellow-500" />
-                                      <p className="text-xs text-muted-foreground">Disk (8%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-yellow-500">{score.score_Discos || 0}/100</p>
-                                  </div>
-                                  <div className="bg-pink-500/5 border border-pink-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <MemoryStick className="h-3 w-3 text-pink-500" />
-                                      <p className="text-xs text-muted-foreground">Memory (7%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-pink-500">{score.score_Memoria || 0}/100</p>
-                                  </div>
-                                  <div className="bg-teal-500/5 border border-teal-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <Wrench className="h-3 w-3 text-teal-500" />
-                                      <p className="text-xs text-muted-foreground">Maint (6%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-teal-500">{score.score_Maintenance || 0}/100</p>
-                                  </div>
-                                  <div className="bg-indigo-500/5 border border-indigo-500/20 rounded p-2">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <Settings className="h-3 w-3 text-indigo-500" />
-                                      <p className="text-xs text-muted-foreground">Config (10%)</p>
-                                    </div>
-                                    <p className="text-base font-mono font-bold text-indigo-500">{score.score_ConfiguracionTempdb || 0}/100</p>
-                                  </div>
+                            {/* Breakdown Compacto */}
+                            <div className="bg-gradient-to-r from-blue-500/5 to-purple-500/5 border rounded-lg p-3">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-sm font-semibold flex items-center gap-2">
+                                  <Activity className="h-4 w-4" />
+                                  Category Scores
+                                </span>
+                                <span className="text-xl font-mono font-bold">{score.healthScore}<span className="text-xs text-muted-foreground">/100</span></span>
+                              </div>
+                              <div className="grid grid-cols-5 gap-2">
+                                {/* Fila 1 */}
+                                <div className="bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/30 rounded p-2 text-center">
+                                  <Database className="h-3 w-3 text-green-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-green-600">{score.score_Backups || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">Backups 18%</p>
                                 </div>
-                              </CardContent>
-                            </Card>
+                                <div className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/30 rounded p-2 text-center">
+                                  <Shield className="h-3 w-3 text-purple-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-purple-600">{score.score_AlwaysOn || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">AlwaysOn 14%</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/30 rounded p-2 text-center">
+                                  <Activity className="h-3 w-3 text-blue-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-blue-600">{score.score_Conectividad || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">Connect 10%</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/30 rounded p-2 text-center">
+                                  <XCircle className="h-3 w-3 text-red-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-red-600">{score.score_ErroresCriticos || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">Errors 7%</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/30 rounded p-2 text-center">
+                                  <Cpu className="h-3 w-3 text-orange-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-orange-600">{score.score_CPU || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">CPU 10%</p>
+                                </div>
+                                {/* Fila 2 */}
+                                <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded p-2 text-center">
+                                  <Zap className="h-3 w-3 text-cyan-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-cyan-600">{score.score_IO || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">I/O 10%</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-yellow-500/10 to-yellow-500/5 border border-yellow-500/30 rounded p-2 text-center">
+                                  <HardDrive className="h-3 w-3 text-yellow-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-yellow-600">{score.score_Discos || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">Disk 8%</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-pink-500/10 to-pink-500/5 border border-pink-500/30 rounded p-2 text-center">
+                                  <MemoryStick className="h-3 w-3 text-pink-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-pink-600">{score.score_Memoria || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">Memory 7%</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-teal-500/10 to-teal-500/5 border border-teal-500/30 rounded p-2 text-center">
+                                  <Wrench className="h-3 w-3 text-teal-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-teal-600">{score.score_Maintenance || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">Maint 6%</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 border border-indigo-500/30 rounded p-2 text-center">
+                                  <Settings className="h-3 w-3 text-indigo-600 mx-auto mb-1" />
+                                  <p className="text-lg font-mono font-bold text-indigo-600">{score.score_ConfiguracionTempdb || 0}</p>
+                                  <p className="text-[10px] text-muted-foreground">Config 10%</p>
+                                </div>
+                              </div>
+                            </div>
 
-                            {/* Grids de Detalles */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                              {/* Backups & Maintenance */}
-                              <Card>
-                                <CardHeader className="pb-3">
+                            {/* Tabs para organizar detalles */}
+                            <Tabs defaultValue="availability" className="w-full">
+                              <TabsList className="grid w-full grid-cols-3">
+                                <TabsTrigger value="availability" className="text-xs sm:text-sm">
+                                  <Database className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                                  Availability
+                                </TabsTrigger>
+                                <TabsTrigger value="performance" className="text-xs sm:text-sm">
+                                  <Cpu className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                                  Performance
+                                </TabsTrigger>
+                                <TabsTrigger value="errors" className="text-xs sm:text-sm">
+                                  <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                                  Errors & Config
+                                </TabsTrigger>
+                              </TabsList>
+
+                              {/* Tab 1: Availability & Data Protection */}
+                              <TabsContent value="availability" className="mt-3">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                              {/* Backups */}
+                              <Card className="border-green-500/20">
+                                <CardHeader className="pb-2 bg-green-500/5 py-2">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <Database className="h-4 w-4" />
-                                    Backups & Mantenimiento
+                                    <Database className="h-4 w-4 text-green-600" />
+                                    <span>Backup Status</span>
+                                    <Badge variant="outline" className="ml-auto text-xs">
+                                      Score: {score.score_Backups || 0}/100
+                                    </Badge>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm">
-                                  {score.maintenanceSummary && (
+                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                  {instanceDetails[score.instanceName].backupsDetails ? (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">CHECKDB</span>
-                                        <Badge variant={score.maintenanceSummary.checkdbOk ? 'outline' : 'destructive'} className="text-xs">
-                                          {score.maintenanceSummary.checkdbOk ? '✓ OK' : '✗ Vencido'}
+                                        <span className="text-muted-foreground font-medium">Full Backup Status</span>
+                                        <Badge variant={instanceDetails[score.instanceName].backupsDetails.fullBackupBreached ? 'destructive' : 'outline'} className="text-xs">
+                                          {instanceDetails[score.instanceName].backupsDetails.fullBackupBreached ? 'Overdue' : 'OK'}
                                         </Badge>
                                       </div>
-                                      {score.maintenanceSummary.lastCheckdb && (
-                                        <p className="text-xs text-muted-foreground pl-4">
-                                          Último: {score.maintenanceSummary.lastCheckdb}
-                                        </p>
+                                      {instanceDetails[score.instanceName].backupsDetails.lastFullBackup && (
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Last FULL Backup</span>
+                                          <span className="font-mono">
+                                            {formatDateUTC3(instanceDetails[score.instanceName].backupsDetails.lastFullBackup)}
+                                          </span>
+                                        </div>
                                       )}
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Index Optimize</span>
-                                        <Badge variant={score.maintenanceSummary.indexOptimizeOk ? 'outline' : 'destructive'} className="text-xs">
-                                          {score.maintenanceSummary.indexOptimizeOk ? '✓ OK' : '✗ Vencido'}
+                                        <span className="text-muted-foreground font-medium">Log Backup Status</span>
+                                        <Badge variant={instanceDetails[score.instanceName].backupsDetails.logBackupBreached ? 'destructive' : 'outline'} className="text-xs">
+                                          {instanceDetails[score.instanceName].backupsDetails.logBackupBreached ? 'Overdue' : 'OK'}
                                         </Badge>
                                       </div>
-                                      {score.maintenanceSummary.lastIndexOptimize && (
-                                        <p className="text-xs text-muted-foreground pl-4">
-                                          Último: {score.maintenanceSummary.lastIndexOptimize}
-                                        </p>
+                                      {instanceDetails[score.instanceName].backupsDetails.lastLogBackup && (
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Last LOG Backup</span>
+                                          <span className="font-mono">
+                                            {formatDateUTC3(instanceDetails[score.instanceName].backupsDetails.lastLogBackup)}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">Sin datos de backups</p>
+                                  )}
+                                </CardContent>
+                              </Card>
+
+                                {/* AlwaysOn */}
+                                <Card className="border-purple-500/20">
+                                  <CardHeader className="pb-2 bg-purple-500/5 py-2">
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                      <Shield className="h-4 w-4 text-purple-600" />
+                                      <span>AlwaysOn AG</span>
+                                      <Badge variant="outline" className="ml-auto text-xs">
+                                        Score: {score.score_AlwaysOn || 0}/100
+                                      </Badge>
+                                    </CardTitle>
+                                  </CardHeader>
+                                  <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                    {instanceDetails[score.instanceName].alwaysOnDetails ? (
+                                      <>
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-muted-foreground font-medium">Status</span>
+                                          <Badge variant="outline" className="text-xs">
+                                            {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnEnabled ? 'Enabled' : 'Disabled'}
+                                          </Badge>
+                                        </div>
+                                        {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnEnabled && (
+                                          <>
+                                          <div className="flex items-center justify-between">
+                                              <span className="text-muted-foreground font-medium">Health State</span>
+                                            <Badge 
+                                              variant={
+                                                  instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState === 'HEALTHY' ? 'outline' : 
+                                                  instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState === 'WARNING' ? 'default' :
+                                                'destructive'
+                                              } 
+                                                className="text-xs"
+                                              >
+                                                {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState || 'N/A'}
+                                            </Badge>
+                                          </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-muted-foreground">Synchronized Databases</span>
+                                              <span className="font-mono font-medium">{instanceDetails[score.instanceName].alwaysOnDetails.synchronizedCount} / {instanceDetails[score.instanceName].alwaysOnDetails.databaseCount}</span>
+                                          </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-muted-foreground">Suspended</span>
+                                              <Badge variant={instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount > 0 ? 'destructive' : 'outline'} className="text-xs">
+                                                {instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount}
+                                              </Badge>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-muted-foreground">Max Lag</span>
+                                              <Badge variant={instanceDetails[score.instanceName].alwaysOnDetails.maxSecondsBehind > 30 ? 'default' : 'outline'} className="text-xs">
+                                                {instanceDetails[score.instanceName].alwaysOnDetails.maxSecondsBehind}s
+                                              </Badge>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-muted-foreground">Max Send Queue</span>
+                                              <span className="font-mono">{(instanceDetails[score.instanceName].alwaysOnDetails.maxSendQueueKB / 1024).toFixed(1)} MB</span>
+                                            </div>
+                                          </>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground">Sin datos de AlwaysOn</p>
+                                    )}
+                                  </CardContent>
+                                </Card>
+
+                              {/* Maintenance */}
+                              <Card className="border-teal-500/20">
+                                <CardHeader className="pb-2 bg-teal-500/5 py-2">
+                                  <CardTitle className="text-sm flex items-center gap-2">
+                                    <Wrench className="h-4 w-4 text-teal-600" />
+                                    <span>Maintenance</span>
+                                    <Badge variant="outline" className="ml-auto text-xs">
+                                      Score: {score.score_Maintenance || 0}/100
+                                    </Badge>
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                  {instanceDetails[score.instanceName].maintenanceDetails && (
+                                    <>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground font-medium">CHECKDB Status</span>
+                                        <Badge variant={instanceDetails[score.instanceName].maintenanceDetails.checkdbOk ? 'outline' : 'destructive'} className="text-xs">
+                                          {instanceDetails[score.instanceName].maintenanceDetails.checkdbOk ? 'OK' : 'Overdue'}
+                                        </Badge>
+                                      </div>
+                                      {instanceDetails[score.instanceName].maintenanceDetails.lastCheckdb && (
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Last CHECKDB</span>
+                                          <span className="font-mono">{formatDateUTC3(instanceDetails[score.instanceName].maintenanceDetails.lastCheckdb)}</span>
+                                        </div>
+                                      )}
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground font-medium">Index Optimize</span>
+                                        <Badge variant={instanceDetails[score.instanceName].maintenanceDetails.indexOptimizeOk ? 'outline' : 'destructive'} className="text-xs">
+                                          {instanceDetails[score.instanceName].maintenanceDetails.indexOptimizeOk ? 'OK' : 'Overdue'}
+                                        </Badge>
+                                    </div>
+                                      {instanceDetails[score.instanceName].maintenanceDetails.lastIndexOptimize && (
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Last Optimize</span>
+                                          <span className="font-mono">{formatDateUTC3(instanceDetails[score.instanceName].maintenanceDetails.lastIndexOptimize)}</span>
+                                    </div>
                                       )}
                                     </>
                                   )}
-                                  
-                                  {/* Backups - Información adicional */}
-                                  {score.backupSummary && (
-                                    <div className="mt-2 pt-2 border-t space-y-1">
-                                      <p className="text-xs font-semibold text-muted-foreground mb-1">Últimos Backups:</p>
-                                      {score.backupSummary.lastFullBackup && (
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">FULL</span>
-                                          <span className="font-mono">
-                                            {formatDateUTC3(score.backupSummary.lastFullBackup)}
-                                          </span>
-                                        </div>
-                                      )}
-                                      {score.backupSummary.lastDiffBackup && (
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">DIFF</span>
-                                          <span className="font-mono">
-                                            {formatDateUTC3(score.backupSummary.lastDiffBackup)}
-                                          </span>
-                                        </div>
-                                      )}
-                                      {score.backupSummary.lastLogBackup && (
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">LOG</span>
-                                          <span className="font-mono">
-                                            {formatDateUTC3(score.backupSummary.lastLogBackup)}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
+                                </CardContent>
+                              </Card>
+                                </div>
+                              </TabsContent>
+
+                              {/* Tab 2: Performance & Resources */}
+                              <TabsContent value="performance" className="mt-3">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+
+                              {/* CPU */}
+                              <Card className="border-orange-500/20">
+                                <CardHeader className="pb-2 bg-orange-500/5 py-2">
+                                  <CardTitle className="text-sm flex items-center gap-2">
+                                    <Cpu className="h-4 w-4 text-orange-600" />
+                                    <span>CPU</span>
+                                    <Badge variant="outline" className="ml-auto text-xs">
+                                      {score.score_CPU || 0}/100
+                                    </Badge>
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                  {instanceDetails[score.instanceName].cpuDetails ? (
+                                    <>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground font-medium">SQL Process Utilization</span>
+                                        <Badge 
+                                          variant={instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization > 80 ? 'destructive' : instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization > 60 ? 'default' : 'outline'} 
+                                          className="text-xs font-mono"
+                                        >
+                                          {instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization}%
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">P95 CPU Utilization</span>
+                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].cpuDetails.p95CPUPercent}%</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Runnable Tasks</span>
+                                        <Badge variant={instanceDetails[score.instanceName].cpuDetails.runnableTasks > 5 ? 'destructive' : 'outline'} className="text-xs">
+                                          {instanceDetails[score.instanceName].cpuDetails.runnableTasks}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Avg CPU (10min)</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].cpuDetails.avgCPUPercentLast10Min}%</span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">Sin datos de CPU</p>
                                   )}
-                                  
-                                  {score.backupSummary?.breaches && score.backupSummary.breaches.length > 0 && (
-                                    <div className="mt-2 pt-2 border-t">
-                                      <p className="text-xs font-medium text-destructive mb-1">Problemas de Backup:</p>
-                                      {score.backupSummary.breaches.map((breach, idx) => (
-                                        <p key={idx} className="text-xs text-muted-foreground pl-2">• {breach}</p>
-                                      ))}
-                                    </div>
+                                </CardContent>
+                              </Card>
+                              
+                              {/* Memoria */}
+                              <Card className="border-pink-500/20">
+                                <CardHeader className="pb-2 bg-pink-500/5 py-2">
+                                  <CardTitle className="text-sm flex items-center gap-2">
+                                    <MemoryStick className="h-4 w-4 text-pink-600" />
+                                    <span>Memory</span>
+                                    <Badge variant="outline" className="ml-auto text-xs">
+                                      {score.score_Memoria || 0}/100
+                                    </Badge>
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                  {instanceDetails[score.instanceName].memoriaDetails ? (
+                                    <>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground font-medium">Page Life Expectancy</span>
+                                        <Badge 
+                                          variant={
+                                            instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy >= 300 ? 'outline' : 
+                                            instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy >= 100 ? 'default' : 
+                                            'destructive'
+                                          } 
+                                          className="text-xs font-mono"
+                                        >
+                                          {instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy}s
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Buffer Cache Hit Ratio</span>
+                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].memoriaDetails.bufferCacheHitRatio.toFixed(2)}%</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Memory Pressure</span>
+                                        <Badge variant={instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? 'destructive' : 'outline'} className="text-xs">
+                                          {instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? 'Detected' : 'Normal'}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Memory Grants Pending</span>
+                                        <Badge variant={instanceDetails[score.instanceName].memoriaDetails.memoryGrantsPending > 0 ? 'default' : 'outline'} className="text-xs">
+                                          {instanceDetails[score.instanceName].memoriaDetails.memoryGrantsPending}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Target / Total Memory</span>
+                                        <span className="font-mono">{(instanceDetails[score.instanceName].memoriaDetails.targetServerMemoryMB / 1024).toFixed(1)} / {(instanceDetails[score.instanceName].memoriaDetails.totalServerMemoryMB / 1024).toFixed(1)} GB</span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">Sin datos de memoria</p>
+                                  )}
+                                </CardContent>
+                              </Card>
+                              
+                              {/* I/O Performance */}
+                              <Card className="border-cyan-500/20">
+                                <CardHeader className="pb-2 bg-cyan-500/5 py-2">
+                                  <CardTitle className="text-sm flex items-center gap-2">
+                                    <Zap className="h-4 w-4 text-cyan-600" />
+                                    <span>I/O</span>
+                                    <Badge variant="outline" className="ml-auto text-xs">
+                                      {score.score_IO || 0}/100
+                                    </Badge>
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                  {instanceDetails[score.instanceName].ioDetails ? (
+                                    <>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground font-medium">Avg Read Latency</span>
+                                        <Badge 
+                                          variant={
+                                            instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs <= 10 ? 'outline' : 
+                                            instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs <= 20 ? 'default' : 
+                                            'destructive'
+                                          } 
+                                          className="text-xs font-mono"
+                                        >
+                                          {instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs.toFixed(1)} ms
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Avg Write Latency</span>
+                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].ioDetails.avgWriteLatencyMs.toFixed(1)} ms</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Total IOPS</span>
+                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].ioDetails.totalIOPS}</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Data File Read</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.dataFileAvgReadMs.toFixed(1)} ms</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Log File Write</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.logFileAvgWriteMs.toFixed(1)} ms</span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">Sin datos de I/O</p>
                                   )}
                                 </CardContent>
                               </Card>
 
                               {/* Discos */}
-                              <Card>
-                                <CardHeader className="pb-3">
+                              <Card className="border-yellow-500/20">
+                                <CardHeader className="pb-2 bg-yellow-500/5 py-2">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <HardDrive className="h-4 w-4" />
-                                    Almacenamiento
+                                    <HardDrive className="h-4 w-4 text-yellow-600" />
+                                    <span>Disk Space</span>
+                                    <Badge variant="outline" className="ml-auto text-xs">
+                                      {score.score_Discos || 0}/100
+                                    </Badge>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm">
-                                  {score.diskSummary && score.diskSummary.worstFreePct !== null && score.diskSummary.worstFreePct !== undefined ? (
+                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                  {instanceDetails[score.instanceName].discosDetails ? (
                                     <>
                                       <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground">Peor Volumen</span>
                                         <span className={cn(
                                           'font-mono font-bold',
-                                          (score.diskSummary.worstFreePct || 0) < 10 && 'text-destructive',
-                                          (score.diskSummary.worstFreePct || 0) >= 10 && (score.diskSummary.worstFreePct || 0) < 20 && 'text-warning',
-                                          (score.diskSummary.worstFreePct || 0) >= 20 && 'text-success'
+                                          instanceDetails[score.instanceName].discosDetails.worstFreePct < 10 && 'text-destructive',
+                                          instanceDetails[score.instanceName].discosDetails.worstFreePct >= 10 && instanceDetails[score.instanceName].discosDetails.worstFreePct < 20 && 'text-warning',
+                                          instanceDetails[score.instanceName].discosDetails.worstFreePct >= 20 && 'text-success'
                                         )}>
-                                          {score.diskSummary.worstFreePct?.toFixed(1)}% libre
+                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct.toFixed(1)}% libre
                                         </span>
                                       </div>
-                                      {score.diskSummary.volumes && score.diskSummary.volumes.length > 0 && (
-                                        <div className="mt-2 pt-2 border-t space-y-1">
-                                          {score.diskSummary.volumes.map((vol, idx) => (
-                                            <div key={idx} className="flex items-center justify-between text-xs">
-                                              <span className="font-mono">{vol.drive}</span>
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-muted-foreground">
-                                                  {vol.freeGB?.toFixed(1)} / {vol.totalGB?.toFixed(1)} GB
-                                                </span>
-                                                <span className={cn(
-                                                  'font-mono font-bold',
-                                                  (vol.freePct || 0) < 10 && 'text-destructive',
-                                                  (vol.freePct || 0) >= 10 && (vol.freePct || 0) < 20 && 'text-warning',
-                                                  (vol.freePct || 0) >= 20 && 'text-success'
-                                                )}>
-                                                  {vol.freePct?.toFixed(1)}%
-                                                </span>
+                                      <div className="flex items-center justify-between text-xs mt-2">
+                                        <span className="text-muted-foreground">Data disks avg</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].discosDetails.dataDiskAvgFreePct.toFixed(1)}%</span>
                                               </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Log disks avg</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].discosDetails.logDiskAvgFreePct.toFixed(1)}%</span>
                                             </div>
-                                          ))}
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">TempDB disk</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].discosDetails.tempDBDiskFreePct.toFixed(1)}%</span>
                                         </div>
-                                      )}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de discos</p>
                                   )}
                                 </CardContent>
                               </Card>
+                                </div>
+                              </TabsContent>
 
-                              {/* Recursos v2.0: Nuevas métricas */}
-                              <Card>
-                                <CardHeader className="pb-3">
+                              {/* Tab 3: Critical Errors & Configuration */}
+                              <TabsContent value="errors" className="mt-3">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+
+                              {/* Errores Críticos */}
+                              <Card className="border-red-500/20">
+                                <CardHeader className="pb-2 bg-red-500/5 py-2">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <Activity className="h-4 w-4" />
-                                    Performance & Recursos (v2.0)
+                                    <AlertCircle className="h-4 w-4 text-red-600" />
+                                    <span>Errors & Config</span>
+                                    <Badge variant="outline" className="ml-auto text-xs">
+                                      {score.score_ErroresCriticos || 0}/100
+                                    </Badge>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm">
-                                  {score.resourceSummary && (
-                                    <>
-                                      {/* Memory / PLE */}
-                                      <div className="flex items-center justify-between mt-2">
-                                        <span className="text-muted-foreground">🧠 Page Life Exp</span>
-                                        <Badge 
-                                          variant={
-                                            (score.resourceSummary.pageLifeExpectancy || 0) >= 300 ? 'outline' : 
-                                            (score.resourceSummary.pageLifeExpectancy || 0) >= 100 ? 'default' : 
-                                            'destructive'
-                                          } 
-                                          className="text-xs"
-                                        >
-                                          {score.resourceSummary.pageLifeExpectancy || 0} seg
-                                        </Badge>
-                                      </div>
-                                      {(score.resourceSummary.pageLifeExpectancy || 0) < 300 && (
-                                        <p className="text-xs text-warning pl-4">
-                                          {(score.resourceSummary.pageLifeExpectancy || 0) < 100 ? '⚠️ Memory pressure crítica!' : '⚠️ Memory pressure'}
-                                        </p>
-                                      )}
-                                      
-                                      {/* IOPS / Latencia */}
-                                      <div className="flex items-center justify-between mt-2">
-                                        <span className="text-muted-foreground">⚡ I/O Latencia</span>
-                                        <Badge 
-                                          variant={
-                                            (score.resourceSummary.avgReadLatencyMs || 0) <= 10 ? 'outline' : 
-                                            (score.resourceSummary.avgReadLatencyMs || 0) <= 20 ? 'default' : 
-                                            'destructive'
-                                          } 
-                                          className="text-xs"
-                                        >
-                                          {score.resourceSummary.avgReadLatencyMs?.toFixed(1) || 0}ms read
-                                        </Badge>
-                                      </div>
-                                      {(score.resourceSummary.avgWriteLatencyMs || 0) > 0 && (
-                                        <p className="text-xs text-muted-foreground pl-4">
-                                          Write: {score.resourceSummary.avgWriteLatencyMs?.toFixed(1)}ms
-                                        </p>
-                                      )}
-                                      {(score.resourceSummary.avgReadLatencyMs || 0) <= 10 && (
-                                        <p className="text-xs text-success pl-4">✅ SSD excelente</p>
-                                      )}
-                                      {(score.resourceSummary.avgReadLatencyMs || 0) > 20 && (
-                                        <p className="text-xs text-warning pl-4">⚠️ Disco lento (HDD o SSD saturado)</p>
-                                      )}
-                                    </>
-                                  )}
-                                </CardContent>
-                              </Card>
-
-                              {/* AlwaysOn & Errorlog */}
-                              <Card>
-                                <CardHeader className="pb-3">
-                                  <CardTitle className="text-sm flex items-center gap-2">
-                                    <AlertCircle className="h-4 w-4" />
-                                    AlwaysOn & Errores
-                                  </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-2 text-sm">
-                                  {score.alwaysOnSummary && (
+                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                  {instanceDetails[score.instanceName].erroresCriticosDetails && (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">AlwaysOn</span>
-                                        <Badge variant="outline" className="text-xs">
-                                          {score.alwaysOnSummary.enabled ? 'Habilitado' : 'Deshabilitado'}
+                                        <span className="text-muted-foreground font-medium">Severity 20+ (24h)</span>
+                                        <Badge variant={instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0 ? 'destructive' : 'outline'} className="text-xs font-mono">
+                                          {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount}
                                         </Badge>
                                       </div>
-                                      {score.alwaysOnSummary.enabled && (
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-muted-foreground">Estado</span>
-                                          <Badge 
-                                            variant={
-                                              score.alwaysOnSummary.worstState === 'OK' || score.alwaysOnSummary.worstState === 'HEALTHY' ? 'outline' : 
-                                              score.alwaysOnSummary.worstState === 'WARNING' || score.alwaysOnSummary.worstState === 'PARTIALLY_HEALTHY' ? 'default' :
-                                              'destructive'
-                                            } 
-                                            className={cn(
-                                              'text-xs',
-                                              (score.alwaysOnSummary.worstState === 'OK' || score.alwaysOnSummary.worstState === 'HEALTHY') && 'border-green-500 text-green-700',
-                                              (score.alwaysOnSummary.worstState === 'WARNING' || score.alwaysOnSummary.worstState === 'PARTIALLY_HEALTHY') && 'border-yellow-500 text-yellow-700 bg-yellow-50'
-                                            )}
-                                          >
-                                            {score.alwaysOnSummary.worstState}
-                                          </Badge>
-                                        </div>
-                                      )}
-                                      {score.alwaysOnSummary.issues && score.alwaysOnSummary.issues.length > 0 && (
-                                        <div className="mt-2 pt-2 border-t">
-                                          <p className="text-xs font-medium text-destructive mb-1">Issues:</p>
-                                          {score.alwaysOnSummary.issues.map((issue, idx) => (
-                                            <p key={idx} className="text-xs text-muted-foreground pl-2">• {issue}</p>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                  <div className="pt-2 border-t">
-                                    {score.errorlogSummary && (
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Errores Críticos (24h)</span>
-                                        <Badge variant={(score.errorlogSummary.severity20PlusCount24h || 0) > 0 ? 'destructive' : 'outline'} className="text-xs">
-                                          {score.errorlogSummary.severity20PlusCount24h || 0}
-                                        </Badge>
+                                      {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0 && instanceDetails[score.instanceName].erroresCriticosDetails.mostRecentError && (
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Most Recent</span>
+                                          <span className="font-mono">{formatDateUTC3(instanceDetails[score.instanceName].erroresCriticosDetails.mostRecentError)}</span>
                                       </div>
                                     )}
+                                    </>
+                                  )}
+                                  
+                                  {instanceDetails[score.instanceName].configuracionTempdbDetails && (
+                                    <>
+                                      <div className="pt-3 border-t">
+                                        <p className="text-xs font-semibold text-muted-foreground mb-2">Configuration & TempDB:</p>
                                   </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">TempDB Files</span>
+                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount}</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Max Server Memory</span>
+                                        <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.maxMemoryWithinOptimal ? 'outline' : 'default'} className="text-xs">
+                                          {(instanceDetails[score.instanceName].configuracionTempdbDetails.maxServerMemoryMB / 1024).toFixed(1)} GB
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Memory % of Physical</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].configuracionTempdbDetails.maxMemoryPctOfPhysical.toFixed(1)}%</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">TempDB Contention</span>
+                                        <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore > 50 ? 'default' : 'outline'} className="text-xs">
+                                          Score: {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore}
+                                        </Badge>
+                                      </div>
+                                    </>
+                                  )}
                                 </CardContent>
                               </Card>
-                            </div>
+                                </div>
+                              </TabsContent>
+                            </Tabs>
                           </div>
+                          ) : (
+                            <div className="flex items-center justify-center py-8">
+                              <div className="text-muted-foreground">No hay detalles disponibles</div>
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     )}

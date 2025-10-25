@@ -775,7 +775,7 @@ export interface HealthScoreV3Dto {
   instanceName: string;
   ambiente?: string;
   hostingSite?: string;
-  version?: string;
+  sqlVersion?: string;
   healthScore: number;
   healthStatus: 'Healthy' | 'Warning' | 'Risk' | 'Critical';
   generatedAtUtc: string;
@@ -790,17 +790,152 @@ export interface HealthScoreV3Dto {
   score_Memoria?: number;           // 7%
   score_Maintenance?: number;       // 6%
   score_ConfiguracionTempdb?: number; // 10%
-  // Detalles de cada categoría
-  conectividadDetail?: any;
-  alwaysOnDetail?: any;
-  backupsDetail?: any;
-  erroresDetail?: any;
-  cpuDetail?: any;
-  ioDetail?: any;
-  discosDetail?: any;
-  memoriaDetail?: any;
-  configuracionDetail?: any;
-  maintenanceDetail?: any;
+}
+
+export interface BackupsDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  lastFullBackup?: string;
+  lastLogBackup?: string;
+  fullBackupBreached: boolean;
+  logBackupBreached: boolean;
+}
+
+export interface AlwaysOnDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  alwaysOnEnabled: boolean;
+  alwaysOnWorstState?: string;
+  databaseCount: number;
+  synchronizedCount: number;
+  suspendedCount: number;
+  avgSendQueueKB: number;
+  maxSendQueueKB: number;
+  avgRedoQueueKB: number;
+  maxRedoQueueKB: number;
+  maxSecondsBehind: number;
+  alwaysOnDetails?: string;
+}
+
+export interface ConectividadDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  connectSuccess: boolean;
+  connectLatencyMs: number;
+  authType?: string;
+  loginFailuresLast1h: number;
+  errorMessage?: string;
+}
+
+export interface ErroresCriticosDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  severity20PlusCount: number;
+  severity20PlusLast1h: number;
+  mostRecentError?: string;
+  errorDetails?: string;
+}
+
+export interface CPUDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  sqlProcessUtilization: number;
+  systemIdleProcess: number;
+  otherProcessUtilization: number;
+  runnableTasks: number;
+  pendingDiskIOCount: number;
+  avgCPUPercentLast10Min: number;
+  p95CPUPercent: number;
+}
+
+export interface IODetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  avgReadLatencyMs: number;
+  avgWriteLatencyMs: number;
+  maxReadLatencyMs: number;
+  maxWriteLatencyMs: number;
+  dataFileAvgReadMs: number;
+  dataFileAvgWriteMs: number;
+  logFileAvgWriteMs: number;
+  totalIOPS: number;
+  readIOPS: number;
+  writeIOPS: number;
+  ioDetails?: string;
+}
+
+export interface DiscosDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  worstFreePct: number;
+  dataDiskAvgFreePct: number;
+  logDiskAvgFreePct: number;
+  tempDBDiskFreePct: number;
+  volumesJson?: string;
+}
+
+export interface MemoriaDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  pageLifeExpectancy: number;
+  bufferCacheHitRatio: number;
+  totalServerMemoryMB: number;
+  targetServerMemoryMB: number;
+  maxServerMemoryMB: number;
+  bufferPoolSizeMB: number;
+  memoryGrantsPending: number;
+  memoryGrantsActive: number;
+  pleTarget: number;
+  memoryPressure: boolean;
+}
+
+export interface MaintenanceDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  lastCheckdb?: string;
+  lastIndexOptimize?: string;
+  checkdbOk: boolean;
+  indexOptimizeOk: boolean;
+}
+
+export interface ConfiguracionTempdbDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  tempDBFileCount: number;
+  tempDBAllSameSize: boolean;
+  tempDBAllSameGrowth: boolean;
+  tempDBAvgLatencyMs: number;
+  tempDBPageLatchWaits: number;
+  tempDBContentionScore: number;
+  maxServerMemoryMB: number;
+  totalPhysicalMemoryMB: number;
+  maxMemoryPctOfPhysical: number;
+  maxMemoryWithinOptimal: boolean;
+  cpuCount: number;
+  configDetails?: string;
+}
+
+export interface HealthScoreV3DetailDto extends HealthScoreV3Dto {
+  backupsDetails?: BackupsDetails;
+  alwaysOnDetails?: AlwaysOnDetails;
+  conectividadDetails?: ConectividadDetails;
+  erroresCriticosDetails?: ErroresCriticosDetails;
+  cpuDetails?: CPUDetails;
+  ioDetails?: IODetails;
+  discosDetails?: DiscosDetails;
+  memoriaDetails?: MemoriaDetails;
+  maintenanceDetails?: MaintenanceDetails;
+  configuracionTempdbDetails?: ConfiguracionTempdbDetails;
 }
 
 export interface HealthScoreV3SummaryDto {
@@ -836,6 +971,18 @@ export const healthScoreV3Api = {
       },
     });
     return handleResponse<HealthScoreV3Dto>(response);
+  },
+
+  /**
+   * Obtiene todos los detalles de una instancia con métricas subyacentes
+   */
+  async getHealthScoreDetails(instance: string): Promise<HealthScoreV3DetailDto> {
+    const response = await fetch(`${API_URL}/api/v3/healthscore/${encodeURIComponent(instance)}/details`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<HealthScoreV3DetailDto>(response);
   },
 
   /**
