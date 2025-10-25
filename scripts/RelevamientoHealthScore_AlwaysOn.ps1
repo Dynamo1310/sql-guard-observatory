@@ -105,7 +105,7 @@ SELECT
     ars.role_desc AS Role,
     ars.synchronization_health_desc AS SyncHealth,
     drs.synchronization_state_desc AS DBSyncState,
-    drs.database_name AS DatabaseName,
+    DB_NAME(drs.database_id) AS DatabaseName,
     drs.is_suspended AS IsSuspended,
     drs.suspend_reason_desc AS SuspendReason,
     ISNULL(drs.log_send_queue_size, 0) AS SendQueueKB,
