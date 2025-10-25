@@ -370,23 +370,36 @@ function Calculate-MantenimientosScore {
     $cap = 100
     
     # 100 si CHECKDB ≤7 días
-    if ($Data.LastCheckdb -eq $null) {
+    if ($Data.LastCheckdb -eq $null -or [string]::IsNullOrWhiteSpace($Data.LastCheckdb)) {
         $score = 0
     }
     else {
-        $checkdbAge = ((Get-Date) - $Data.LastCheckdb).Days
-        
-        if ($checkdbAge -le 7) {
-            $score = 100
+        try {
+            # Convertir a DateTime si viene como string
+            $lastCheckdbDate = if ($Data.LastCheckdb -is [DateTime]) {
+                $Data.LastCheckdb
+            } else {
+                [DateTime]::Parse($Data.LastCheckdb)
+            }
+            
+            $checkdbAge = ((Get-Date) - $lastCheckdbDate).Days
+            
+            if ($checkdbAge -le 7) {
+                $score = 100
+            }
+            elseif ($checkdbAge -le 14) {
+                $score = 80
+            }
+            elseif ($checkdbAge -le 30) {
+                $score = 50
+            }
+            else {
+                $score = 0  # >30 días => 0 pts
+            }
         }
-        elseif ($checkdbAge -le 14) {
-            $score = 80
-        }
-        elseif ($checkdbAge -le 30) {
-            $score = 50
-        }
-        else {
-            $score = 0  # >30 días => 0 pts
+        catch {
+            # Si no se puede parsear la fecha, asumir sin datos
+            $score = 0
         }
     }
     
