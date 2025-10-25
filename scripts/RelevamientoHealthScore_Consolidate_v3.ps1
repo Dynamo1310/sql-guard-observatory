@@ -683,6 +683,7 @@ INSERT INTO dbo.InstanceHealth_Score (
     CollectedAtUtc,
     HealthScore,
     HealthStatus,
+    -- Scores Individuales (0-100)
     BackupsScore,
     AlwaysOnScore,
     ConectividadScore,
@@ -693,6 +694,17 @@ INSERT INTO dbo.InstanceHealth_Score (
     MemoriaScore,
     MantenimientosScore,
     ConfiguracionTempdbScore,
+    -- Contribuciones Ponderadas (0-peso máximo)
+    BackupsContribution,
+    AlwaysOnContribution,
+    ConectividadContribution,
+    ErroresCriticosContribution,
+    CPUContribution,
+    IOContribution,
+    DiscosContribution,
+    MemoriaContribution,
+    MantenimientosContribution,
+    ConfiguracionTempdbContribution,
     GlobalCap
 ) VALUES (
     '$($ScoreData.InstanceName)',
@@ -702,6 +714,7 @@ INSERT INTO dbo.InstanceHealth_Score (
     GETUTCDATE(),
     $($ScoreData.HealthScore),
     '$($ScoreData.HealthStatus)',
+    -- Scores Individuales (0-100)
     $($ScoreData.BackupsScore),
     $($ScoreData.AlwaysOnScore),
     $($ScoreData.ConectividadScore),
@@ -712,6 +725,17 @@ INSERT INTO dbo.InstanceHealth_Score (
     $($ScoreData.MemoriaScore),
     $($ScoreData.MantenimientosScore),
     $($ScoreData.ConfiguracionTempdbScore),
+    -- Contribuciones Ponderadas (Score × Peso)
+    $([Math]::Round($ScoreData.BackupsScore * 0.18, 2)),
+    $([Math]::Round($ScoreData.AlwaysOnScore * 0.14, 2)),
+    $([Math]::Round($ScoreData.ConectividadScore * 0.10, 2)),
+    $([Math]::Round($ScoreData.ErroresCriticosScore * 0.07, 2)),
+    $([Math]::Round($ScoreData.CPUScore * 0.10, 2)),
+    $([Math]::Round($ScoreData.IOScore * 0.10, 2)),
+    $([Math]::Round($ScoreData.DiscosScore * 0.08, 2)),
+    $([Math]::Round($ScoreData.MemoriaScore * 0.07, 2)),
+    $([Math]::Round($ScoreData.MantenimientosScore * 0.06, 2)),
+    $([Math]::Round($ScoreData.ConfiguracionTempdbScore * 0.10, 2)),
     $($ScoreData.GlobalCap)
 );
 "@

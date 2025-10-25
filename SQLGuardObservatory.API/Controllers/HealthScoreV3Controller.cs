@@ -50,6 +50,16 @@ namespace SQLGuardObservatory.API.Controllers
                             MemoriaScore,
                             MantenimientosScore,
                             ConfiguracionTempdbScore,
+                            BackupsContribution,
+                            AlwaysOnContribution,
+                            ConectividadContribution,
+                            ErroresCriticosContribution,
+                            CPUContribution,
+                            IOContribution,
+                            DiscosContribution,
+                            MemoriaContribution,
+                            MantenimientosContribution,
+                            ConfiguracionTempdbContribution,
                             GlobalCap,
                             ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
                         FROM dbo.InstanceHealth_Score
@@ -71,7 +81,17 @@ namespace SQLGuardObservatory.API.Controllers
                         DiscosScore AS Score_Discos,
                         MemoriaScore AS Score_Memoria,
                         MantenimientosScore AS Score_Maintenance,
-                        ConfiguracionTempdbScore AS Score_ConfiguracionTempdb
+                        ConfiguracionTempdbScore AS Score_ConfiguracionTempdb,
+                        BackupsContribution,
+                        AlwaysOnContribution,
+                        ConectividadContribution,
+                        ErroresCriticosContribution,
+                        CPUContribution,
+                        IOContribution,
+                        DiscosContribution,
+                        MemoriaContribution,
+                        MantenimientosContribution,
+                        ConfiguracionTempdbContribution
                     FROM RankedScores
                     WHERE rn = 1
                     ORDER BY HealthScore ASC, InstanceName;

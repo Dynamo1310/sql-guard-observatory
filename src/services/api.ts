@@ -790,6 +790,17 @@ export interface HealthScoreV3Dto {
   score_Memoria?: number;           // 7%
   score_Maintenance?: number;       // 6%
   score_ConfiguracionTempdb?: number; // 10%
+  // Contribuciones ponderadas (0-peso máximo)
+  backupsContribution?: number;           // Max: 18.00
+  alwaysOnContribution?: number;          // Max: 14.00
+  conectividadContribution?: number;      // Max: 10.00
+  erroresCriticosContribution?: number;   // Max: 7.00
+  cpuContribution?: number;               // Max: 10.00
+  ioContribution?: number;                // Max: 10.00
+  discosContribution?: number;            // Max: 8.00
+  memoriaContribution?: number;           // Max: 7.00
+  maintenanceContribution?: number;       // Max: 6.00
+  configuracionTempdbContribution?: number; // Max: 10.00
 }
 
 export interface BackupsDetails {
