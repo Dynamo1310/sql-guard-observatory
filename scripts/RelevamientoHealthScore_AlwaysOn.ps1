@@ -202,15 +202,18 @@ WHERE ars.is_local = 1
                 }
                 
                 # Detalles (incluir rol y modo para diagnóstico)
-                $result.Details = $data | ForEach-Object {
-                    $agName = if ($_.AGName) { $_.AGName } else { "NULL" }
-                    $dbName = if ($_.DatabaseName) { $_.DatabaseName } else { "NULL" }
-                    $syncState = if ($_.DBSyncState) { $_.DBSyncState } else { "NULL" }
-                    $role = if ($_.Role) { $_.Role } else { "NULL" }
-                    $mode = if ($_.AvailabilityMode) { $_.AvailabilityMode } else { "NULL" }
+                # Forzar array con @() para evitar que PowerShell lo convierta en string cuando hay 1 solo elemento
+                $result.Details = @($data | ForEach-Object {
+                    $agName = if ($_.PSObject.Properties['AGName']) { $_.AGName } else { "NULL" }
+                    $dbName = if ($_.PSObject.Properties['DatabaseName']) { $_.DatabaseName } else { "NULL" }
+                    $syncState = if ($_.PSObject.Properties['DBSyncState']) { $_.DBSyncState } else { "NULL" }
                     
-                    "${agName}:${dbName}:${syncState}:${role}:${mode}"
-                }
+                    # Para versiones antiguas de SQL que no tienen estas columnas en la DMV
+                    $roleValue = if ($_.PSObject.Properties['Role']) { $_.Role } else { "NULL" }
+                    $modeValue = if ($_.PSObject.Properties['AvailabilityMode']) { $_.AvailabilityMode } else { "NULL" }
+                    
+                    "${agName}:${dbName}:${syncState}:${roleValue}:${modeValue}"
+                })
             }
             else {
                 # AlwaysOn está habilitado pero no hay AGs configurados (o no es parte de ningún AG)
@@ -416,11 +419,19 @@ foreach ($instance in $instancesWithAG) {
             $parts = $firstDetail -split ":"
             if ($parts.Count -ge 4) {
                 $role = $parts[3].Trim()
+                # Si es "NULL" string, mantener como UNKNOWN
+                if ($role -eq "NULL" -or [string]::IsNullOrWhiteSpace($role)) {
+                    $role = "UNKNOWN"
+                }
             }
             if ($parts.Count -ge 5) {
                 $availabilityMode = $parts[4].Trim()
+                # Si es "NULL" string, mantener como N/A
+                if ($availabilityMode -eq "NULL" -or [string]::IsNullOrWhiteSpace($availabilityMode)) {
+                    $availabilityMode = "N/A"
+                }
                 # Abreviar para display
-                if ($availabilityMode -eq "ASYNCHRONOUS_COMMIT") {
+                elseif ($availabilityMode -eq "ASYNCHRONOUS_COMMIT") {
                     $availabilityMode = "ASYNC"
                 } elseif ($availabilityMode -eq "SYNCHRONOUS_COMMIT") {
                     $availabilityMode = "SYNC"
