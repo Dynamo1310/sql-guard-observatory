@@ -138,15 +138,6 @@ WHERE ars.is_local = 1
                 # Hay datos de AGs - bases de datos participando en este nodo
                 $result.DatabaseCount = $data.Count
                 
-                # DEBUG: Ver qué columnas tiene realmente el primer row
-                $firstRow = $data[0]
-                $hasRole = $firstRow.PSObject.Properties.Name -contains "Role"
-                $hasAvailMode = $firstRow.PSObject.Properties.Name -contains "AvailabilityMode"
-                
-                if (-not $hasRole -or -not $hasAvailMode) {
-                    Write-Warning "[$InstanceName] Faltan columnas: Role=$hasRole, AvailabilityMode=$hasAvailMode"
-                }
-                
                 # Contar bases "saludables" según su modo de disponibilidad:
                 # - SYNCHRONOUS_COMMIT: debe estar SYNCHRONIZED
                 # - ASYNCHRONOUS_COMMIT: puede estar SYNCHRONIZING (es normal y esperado)
@@ -461,17 +452,8 @@ foreach ($instance in $instancesWithAG) {
     
     Write-Host "   $status $instanceName [$role/$availabilityMode] - State:$($alwaysOn.WorstState) DBs:$($alwaysOn.DatabaseCount) Healthy:$($alwaysOn.SynchronizedCount) SendQ:$($alwaysOn.MaxSendQueueKB)KB" -ForegroundColor $color
     
-    # Mostrar detalles SIEMPRE que hay UNKNOWN para diagnóstico
-    if ($role -eq "UNKNOWN" -and $alwaysOn.Details) {
-        Write-Host "      → DIAGNOSTICO [0]: '$($alwaysOn.Details[0])'" -ForegroundColor Magenta
-        Write-Host "      → Details.Count: $($alwaysOn.Details.Count)" -ForegroundColor Magenta
-        Write-Host "      → Details type: $($alwaysOn.Details.GetType().Name)" -ForegroundColor Magenta
-        if ($alwaysOn.Details.Count -gt 0) {
-            Write-Host "      → All details: $($alwaysOn.Details -join ' || ')" -ForegroundColor Magenta
-        }
-    }
-    # Mostrar detalles si está en modo verbose Y hay algo inusual
-    elseif ($VerboseOutput -and $role -eq "NO_AG" -and $alwaysOn.Details) {
+    # Mostrar detalles si está en modo verbose
+    if ($VerboseOutput -and $alwaysOn.Details -and $alwaysOn.Details.Count -gt 0) {
         Write-Host "      → Details: $($alwaysOn.Details -join ' | ')" -ForegroundColor DarkGray
     }
     
