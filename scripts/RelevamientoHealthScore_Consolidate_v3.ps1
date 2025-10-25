@@ -494,10 +494,10 @@ function Get-HealthStatusDisplay {
     param([string]$Status)
     
     switch ($Status) {
-        "Healthy" { return "🟢 Óptimo" }
-        "Warning" { return "🟡 Advertencia" }
-        "Risk" { return "🟠 Riesgo" }
-        "Critical" { return "🔴 Crítico" }
+        "Healthy" { return "[OK] Optimo" }
+        "Warning" { return "[WARN] Advertencia" }
+        "Risk" { return "[RISK] Riesgo" }
+        "Critical" { return "[CRIT] Critico" }
         default { return $Status }
     }
 }
@@ -759,14 +759,14 @@ INSERT INTO dbo.InstanceHealth_Score (
 #region ===== MAIN =====
 
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Health Score v3.0 - CONSOLIDATOR (10 categorías)    ║" -ForegroundColor Cyan
-Write-Host "║  Sistema de puntuación: 100 puntos totales           ║" -ForegroundColor Cyan
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "=========================================================" -ForegroundColor Cyan
+Write-Host " Health Score v3.0 - CONSOLIDATOR (10 categorias)" -ForegroundColor Cyan
+Write-Host " Sistema de puntuacion: 100 puntos totales" -ForegroundColor Cyan
+Write-Host "=========================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener todas las instancias
-Write-Host "1️⃣  Obteniendo lista de instancias..." -ForegroundColor Yellow
+Write-Host "[1/2] Obteniendo lista de instancias..." -ForegroundColor Yellow
 
 $instances = Get-AllInstanceNames
 
@@ -779,7 +779,7 @@ Write-Host "   Encontradas: $($instances.Count) instancias" -ForegroundColor Gre
 
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "2️⃣  Calculando Health Score..." -ForegroundColor Yellow
+Write-Host "[2/2] Calculando Health Score..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
@@ -907,26 +907,27 @@ Write-Progress -Activity "Calculando Health Score" -Completed
 
 # 3. Resumen final
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  RESUMEN FINAL - HEALTH SCORE v3.0                   ║" -ForegroundColor Green
-Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "=========================================================" -ForegroundColor Green
+Write-Host " RESUMEN FINAL - HEALTH SCORE v3.0" -ForegroundColor Green
+Write-Host "=========================================================" -ForegroundColor Green
+Write-Host "  Total instancias:     $($results.Count)" -ForegroundColor White
 
 $avgScore = ($results | Measure-Object -Property HealthScore -Average).Average
-Write-Host "║  Score promedio:       $([int]$avgScore)/100".PadRight(53) "║" -ForegroundColor White
+Write-Host "  Score promedio:       $([int]$avgScore)/100" -ForegroundColor White
 
 $healthyCount = ($results | Where-Object { $_.HealthStatus -eq 'Healthy' }).Count
 $warningCount = ($results | Where-Object { $_.HealthStatus -eq 'Warning' }).Count
 $riskCount = ($results | Where-Object { $_.HealthStatus -eq 'Risk' }).Count
 $criticalCount = ($results | Where-Object { $_.HealthStatus -eq 'Critical' }).Count
 
-Write-Host "║  🟢 Healthy (≥85):      $healthyCount".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  🟡 Warning (70-84):    $warningCount".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  🟠 Risk (50-69):       $riskCount".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  🔴 Critical (<50):     $criticalCount".PadRight(53) "║" -ForegroundColor White
+Write-Host "  [OK] Healthy (>=85):   $healthyCount" -ForegroundColor Green
+Write-Host "  [WARN] Warning (70-84): $warningCount" -ForegroundColor Yellow
+Write-Host "  [RISK] Risk (50-69):    $riskCount" -ForegroundColor DarkYellow
+Write-Host "  [CRIT] Critical (<50):  $criticalCount" -ForegroundColor Red
 
-Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Promedios por Categoría:                             ║" -ForegroundColor Green
+Write-Host "---------------------------------------------------------" -ForegroundColor Green
+Write-Host " Promedios por Categoria:" -ForegroundColor Green
+Write-Host "---------------------------------------------------------" -ForegroundColor Green
 
 $avgBackups = ($results | Measure-Object -Property BackupsScore -Average).Average
 $avgAlwaysOn = ($results | Measure-Object -Property AlwaysOnScore -Average).Average
@@ -939,20 +940,20 @@ $avgMemoria = ($results | Measure-Object -Property MemoriaScore -Average).Averag
 $avgMantenimientos = ($results | Measure-Object -Property MantenimientosScore -Average).Average
 $avgConfig = ($results | Measure-Object -Property ConfiguracionTempdbScore -Average).Average
 
-Write-Host "║  Backups:              $([int]$avgBackups)/100 (18%)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  AlwaysOn:             $([int]$avgAlwaysOn)/100 (14%)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Conectividad:         $([int]$avgConectividad)/100 (10%)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Errores Críticos:     $([int]$avgErrores)/100 (7%)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  CPU:                  $([int]$avgCPU)/100 (10%)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  IO:                   $([int]$avgIO)/100 (10%)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Discos:               $([int]$avgDiscos)/100 (8%)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Memoria:              $([int]$avgMemoria)/100 (7%)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Mantenimientos:       $([int]$avgMantenimientos)/100 (6%)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Config/TempDB:        $([int]$avgConfig)/100 (10%)".PadRight(53) "║" -ForegroundColor White
+Write-Host "  Backups:              $([int]$avgBackups)/100 (18pct)" -ForegroundColor White
+Write-Host "  AlwaysOn:             $([int]$avgAlwaysOn)/100 (14pct)" -ForegroundColor White
+Write-Host "  Conectividad:         $([int]$avgConectividad)/100 (10pct)" -ForegroundColor White
+Write-Host "  Errores Criticos:     $([int]$avgErrores)/100 (7pct)" -ForegroundColor White
+Write-Host "  CPU:                  $([int]$avgCPU)/100 (10pct)" -ForegroundColor White
+Write-Host "  IO:                   $([int]$avgIO)/100 (10pct)" -ForegroundColor White
+Write-Host "  Discos:               $([int]$avgDiscos)/100 (8pct)" -ForegroundColor White
+Write-Host "  Memoria:              $([int]$avgMemoria)/100 (7pct)" -ForegroundColor White
+Write-Host "  Mantenimientos:       $([int]$avgMantenimientos)/100 (6pct)" -ForegroundColor White
+Write-Host "  Config/TempDB:        $([int]$avgConfig)/100 (10pct)" -ForegroundColor White
 
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "=========================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "✅ Consolidación completada!" -ForegroundColor Green
+Write-Host "[OK] Consolidacion completada!" -ForegroundColor Green
 
 #endregion
 
