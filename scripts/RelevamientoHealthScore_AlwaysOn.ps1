@@ -390,9 +390,14 @@ foreach ($instance in $instancesWithAG) {
     if ($alwaysOn.Details -and $alwaysOn.Details.Count -gt 0) {
         $firstDetail = $alwaysOn.Details[0]
         
-        # Verificar si es un mensaje de estado en lugar de datos reales
-        if ($firstDetail -notlike "AlwaysOn*" -and $firstDetail -like "*:*:*:*") {
-            # El formato es: AGName:DatabaseName:DBSyncState:Role:AvailabilityMode
+        # Verificar si es un mensaje descriptivo (comienza con "AlwaysOn")
+        if ($firstDetail -like "AlwaysOn*") {
+            # Es un mensaje descriptivo (ej: "AlwaysOn habilitado pero sin AGs configurados")
+            $role = "NO_AG"
+            $availabilityMode = "N/A"
+        }
+        else {
+            # Es data real, parsear: AGName:DatabaseName:DBSyncState:Role:AvailabilityMode
             $parts = $firstDetail -split ":"
             if ($parts.Count -ge 4) {
                 $role = $parts[3].Trim()
@@ -406,12 +411,6 @@ foreach ($instance in $instancesWithAG) {
                     $availabilityMode = "SYNC"
                 }
             }
-        }
-        else {
-            # Es un mensaje descriptivo (ej: "AlwaysOn habilitado pero sin AGs configurados")
-            # Marcar como configuración especial
-            $role = "NO_AG"
-            $availabilityMode = "N/A"
         }
     }
     
