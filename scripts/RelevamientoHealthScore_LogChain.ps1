@@ -144,9 +144,13 @@ ORDER BY LogChainAtRisk DESC, HoursSinceLastLog DESC;
     
     if ($null -eq $maxHoursSinceLog) { $maxHoursSinceLog = 0 }
     
-    # Detalles en JSON
-    $details = $results | Where-Object { $_.LogChainAtRisk -eq 1 } | Select-Object DatabaseName, RecoveryModel, HoursSinceLastLog, LogReuseWait | ConvertTo-Json -Compress
-    if ($null -eq $details -or $details -eq "") { $details = "[]" }
+    # Detalles en JSON (forzar array con @())
+    $detailsArray = @($results | Where-Object { $_.LogChainAtRisk -eq 1 } | Select-Object DatabaseName, RecoveryModel, HoursSinceLastLog, LogReuseWait)
+    if ($detailsArray.Count -eq 0) {
+        $details = "[]"
+    } else {
+        $details = $detailsArray | ConvertTo-Json -Compress -AsArray
+    }
     
     return @{
         BrokenChainCount = $brokenChainDBs
@@ -309,20 +313,6 @@ function Write-ToSqlServer {
     
     try {
         foreach ($row in $Data) {
-            # Sanitizar TODOS los campos de texto
-            $instanceName = ($row.InstanceName -replace "'", "''")
-            $ambiente = if ($row.Ambiente) { ($row.Ambiente -replace "'", "''") } else { "N/A" }
-            $hostingSite = if ($row.HostingSite) { ($row.HostingSite -replace "'", "''") } else { "N/A" }
-            $sqlVersion = if ($row.SqlVersion) { ($row.SqlVersion -replace "'", "''") } else { "N/A" }
-            
-            # Sanitizar LogChainDetails (JSON puede tener caracteres problemáticos)
-            $logChainDetails = if ($row.LogChainDetails -and $row.LogChainDetails -ne "[]") { 
-                # Eliminar saltos de línea y escapar comillas
-                ($row.LogChainDetails -replace "`r`n", " " -replace "`n", " " -replace "'", "''")
-            } else { 
-                "[]" 
-            }
-            
             $query = @"
 INSERT INTO dbo.InstanceHealth_LogChain (
     InstanceName,
@@ -335,15 +325,15 @@ INSERT INTO dbo.InstanceHealth_LogChain (
     MaxHoursSinceLogBackup,
     LogChainDetails
 ) VALUES (
-    '$instanceName',
-    '$ambiente',
-    '$hostingSite',
-    '$sqlVersion',
+    '$($row.InstanceName)',
+    '$($row.Ambiente)',
+    '$($row.HostingSite)',
+    '$($row.SqlVersion)',
     GETUTCDATE(),
     $($row.BrokenChainCount),
     $($row.FullDBsWithoutLogBackup),
     $($row.MaxHoursSinceLogBackup),
-    '$logChainDetails'
+    '$($row.LogChainDetails -replace "'", "''")'
 );
 "@
         
