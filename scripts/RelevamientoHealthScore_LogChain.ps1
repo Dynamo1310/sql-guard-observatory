@@ -337,11 +337,19 @@ INSERT INTO dbo.InstanceHealth_LogChain (
 );
 "@
         
-            Invoke-DbaQuery -SqlInstance $SqlServer `
-                -Database $SqlDatabase `
-                -Query $query `
-                -QueryTimeout 30 `
-                -EnableException
+            try {
+                Invoke-DbaQuery -SqlInstance $SqlServer `
+                    -Database $SqlDatabase `
+                    -Query $query `
+                    -QueryTimeout 30 `
+                    -EnableException
+            }
+            catch {
+                Write-Warning "Error al insertar $($row.InstanceName):"
+                Write-Warning "Query: $query"
+                Write-Warning "Error: $_"
+                throw
+            }
         }
         
         Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
