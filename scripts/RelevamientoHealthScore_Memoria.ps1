@@ -258,7 +258,7 @@ INSERT INTO dbo.InstanceHealth_Memoria (
     $($row.MemoryGrantsActive),
     $($row.PLETarget),
     $(if ($row.MemoryPressure) {1} else {0}),
-    $($row.StolenServerMemoryMB)
+    $(if ($row.StolenServerMemoryMB) {$row.StolenServerMemoryMB} else {0})
 );
 "@
             
