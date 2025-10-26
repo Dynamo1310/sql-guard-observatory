@@ -447,7 +447,7 @@ foreach ($instance in $instances) {
         BrokenChainCount = $logChainStatus.BrokenChainCount
         FullDBsWithoutLogBackup = $logChainStatus.FullDBsWithoutLogBackup
         MaxHoursSinceLogBackup = $logChainStatus.MaxHoursSinceLogBackup
-        LogChainDetails = ($logChainStatus.Details | ConvertTo-Json -Compress)
+        LogChainDetails = $logChainStatus.Details  # Ya es JSON string
     }
 }
 
