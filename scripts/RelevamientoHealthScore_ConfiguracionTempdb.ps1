@@ -6,17 +6,23 @@
     Script de baja frecuencia (cada 30 minutos) que recolecta:
     - Configuración de TempDB (archivos, tamaños, growth)
     - Contención en TempDB (PAGELATCH waits)
-    - Latencia de TempDB
+    - Latencia de TempDB (read/write separadas)
+    - Espacio libre y version store
     - Max Server Memory configurado vs óptimo
     
     Guarda en: InstanceHealth_ConfiguracionTempdb
     
-    Peso en scoring: 10%
-    Fórmula: 60% tempdb + 40% memoria configurada
-    Cap: Contención PAGELATCH => cap 65
+    TempDB Health Score Compuesto (0-100 puntos):
+    - 40% Contención (PAGELATCH waits)
+    - 30% Latencia de disco (write latency)
+    - 20% Configuración (archivos, same size, growth)
+    - 10% Recursos (espacio libre, version store)
+    
+    Peso en HealthScore v3: 8%
+    Fórmula consolidador: 60% tempdb health + 40% memoria configurada
     
 .NOTES
-    Versión: 3.0
+    Versión: 3.0.1 (Score Compuesto)
     Frecuencia: Cada 30 minutos
     Timeout: 15 segundos
     
@@ -52,6 +58,182 @@ $OnlyAWS = $false
 #endregion
 
 #region ===== FUNCIONES =====
+
+function Calculate-TempDBHealthScore {
+    <#
+    .SYNOPSIS
+        Calcula un score compuesto de TempDB considerando TODAS las métricas
+    .DESCRIPTION
+        Fórmula del TempDB Health Score (0-100 puntos):
+        
+        1. CONTENCIÓN (40%) - PAGELATCH waits
+           - 0 waits = 100 pts
+           - <100 waits = 90 pts
+           - <1,000 waits = 70 pts
+           - <10,000 waits = 40 pts
+           - ≥10,000 waits = 0 pts
+        
+        2. LATENCIA DE DISCO (30%) - Write latency promedio
+           - ≤5ms = 100 pts
+           - ≤10ms = 90 pts
+           - ≤20ms = 70 pts
+           - ≤50ms = 40 pts
+           - >50ms = 0 pts
+        
+        3. CONFIGURACIÓN (20%) - Files, same size, same growth
+           - Archivos óptimos (1 por CPU, máx 8)
+           - Same size
+           - Same growth
+           - Growth config OK (≥64MB, no % growth)
+        
+        4. RECURSOS (10%) - Espacio libre, version store
+           - Free space ≥20% = 100 pts
+           - Free space 10-19% = 60 pts
+           - Free space <10% = 0 pts
+           - Version store penalización
+    #>
+    param(
+        [int]$PageLatchWaits,
+        [decimal]$AvgWriteLatencyMs,
+        [int]$FileCount,
+        [int]$CPUCount,
+        [bool]$AllSameSize,
+        [bool]$AllSameGrowth,
+        [bool]$GrowthConfigOK,
+        [decimal]$FreeSpacePct,
+        [int]$VersionStoreMB
+    )
+    
+    # 1. CONTENCIÓN (40 pts)
+    $contentionScore = 0
+    if ($PageLatchWaits -eq 0) {
+        $contentionScore = 100
+    }
+    elseif ($PageLatchWaits -lt 100) {
+        $contentionScore = 90
+    }
+    elseif ($PageLatchWaits -lt 1000) {
+        $contentionScore = 70
+    }
+    elseif ($PageLatchWaits -lt 10000) {
+        $contentionScore = 40
+    }
+    else {
+        $contentionScore = 0
+    }
+    $contentionContribution = $contentionScore * 0.40
+    
+    # 2. LATENCIA DE DISCO (30 pts)
+    $diskScore = 0
+    if ($AvgWriteLatencyMs -eq 0) {
+        $diskScore = 100  # Sin datos, asumir OK
+    }
+    elseif ($AvgWriteLatencyMs -le 5) {
+        $diskScore = 100  # Excelente (SSD/NVMe)
+    }
+    elseif ($AvgWriteLatencyMs -le 10) {
+        $diskScore = 90   # Muy bueno
+    }
+    elseif ($AvgWriteLatencyMs -le 20) {
+        $diskScore = 70   # Aceptable
+    }
+    elseif ($AvgWriteLatencyMs -le 50) {
+        $diskScore = 40   # Lento
+    }
+    else {
+        $diskScore = 0    # Crítico
+    }
+    $diskContribution = $diskScore * 0.30
+    
+    # 3. CONFIGURACIÓN (20 pts)
+    $configScore = 100
+    
+    # Número óptimo de archivos (1 por CPU core, máximo 8)
+    $optimalFiles = [Math]::Min($CPUCount, 8)
+    if ($optimalFiles -eq 0) { $optimalFiles = 4 }  # Default si no hay CPUCount
+    
+    if ($FileCount -eq $optimalFiles) {
+        # Perfecto
+        $configScore -= 0
+    }
+    elseif ($FileCount -ge ($optimalFiles / 2)) {
+        # Aceptable (al menos la mitad)
+        $configScore -= 20
+    }
+    elseif ($FileCount -ge 2) {
+        # Subóptimo
+        $configScore -= 40
+    }
+    elseif ($FileCount -eq 1) {
+        # Crítico - un solo archivo
+        $configScore -= 60
+    }
+    else {
+        # Sin datos
+        $configScore -= 30
+    }
+    
+    # Same size (fundamental para evitar hotspots)
+    if (-not $AllSameSize) {
+        $configScore -= 20
+    }
+    
+    # Same growth (importante para mantener balance)
+    if (-not $AllSameGrowth) {
+        $configScore -= 10
+    }
+    
+    # Growth config OK (≥64MB, no % growth)
+    if (-not $GrowthConfigOK) {
+        $configScore -= 10
+    }
+    
+    if ($configScore -lt 0) { $configScore = 0 }
+    $configContribution = $configScore * 0.20
+    
+    # 4. RECURSOS (10 pts)
+    $resourceScore = 100
+    
+    # Espacio libre
+    if ($FreeSpacePct -eq 0) {
+        # Sin datos, penalizar moderadamente
+        $resourceScore -= 20
+    }
+    elseif ($FreeSpacePct -ge 20) {
+        # Óptimo
+        $resourceScore -= 0
+    }
+    elseif ($FreeSpacePct -ge 10) {
+        # Aceptable
+        $resourceScore -= 40
+    }
+    else {
+        # Crítico
+        $resourceScore -= 100
+    }
+    
+    # Version store (penalización si es muy grande)
+    if ($VersionStoreMB -gt 5120) {
+        # >5 GB = problema serio
+        $resourceScore -= 50
+    }
+    elseif ($VersionStoreMB -gt 2048) {
+        # >2 GB = advertencia
+        $resourceScore -= 30
+    }
+    elseif ($VersionStoreMB -gt 1024) {
+        # >1 GB = monitorear
+        $resourceScore -= 10
+    }
+    
+    if ($resourceScore -lt 0) { $resourceScore = 0 }
+    $resourceContribution = $resourceScore * 0.10
+    
+    # SCORE FINAL
+    $finalScore = [int][Math]::Round($contentionContribution + $diskContribution + $configContribution + $resourceContribution, 0)
+    
+    return $finalScore
+}
 
 function Get-ConfigTempdbMetrics {
     param(
@@ -175,23 +357,6 @@ WHERE wait_type LIKE 'PAGELATCH%'
         $pageLatch = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryPageLatch -QueryTimeout $TimeoutSec -EnableException
         if ($pageLatch -and $pageLatch.PageLatchWaitMs -ne [DBNull]::Value) {
             $result.TempDBPageLatchWaits = [int]$pageLatch.PageLatchWaitMs
-            
-            # Calcular score de contención (inversamente proporcional a waits)
-            if ($result.TempDBPageLatchWaits -eq 0) {
-                $result.TempDBContentionScore = 100
-            }
-            elseif ($result.TempDBPageLatchWaits -lt 100) {
-                $result.TempDBContentionScore = 90
-            }
-            elseif ($result.TempDBPageLatchWaits -lt 1000) {
-                $result.TempDBContentionScore = 70
-            }
-            elseif ($result.TempDBPageLatchWaits -lt 10000) {
-                $result.TempDBContentionScore = 40
-            }
-            else {
-                $result.TempDBContentionScore = 0
-            }
         }
         
         # Query 3.5: Espacio usado en TempDB (SQL 2012+)
@@ -335,6 +500,18 @@ FROM sys.dm_os_sys_info;
     } catch {
         Write-Warning "Error obteniendo config/tempdb metrics en ${InstanceName}: $($_.Exception.Message)"
     }
+    
+    # Calcular TempDB Health Score Compuesto (considerando TODAS las métricas)
+    $result.TempDBContentionScore = Calculate-TempDBHealthScore `
+        -PageLatchWaits $result.TempDBPageLatchWaits `
+        -AvgWriteLatencyMs $result.TempDBAvgWriteLatencyMs `
+        -FileCount $result.TempDBFileCount `
+        -CPUCount $result.CPUCount `
+        -AllSameSize $result.TempDBAllSameSize `
+        -AllSameGrowth $result.TempDBAllSameGrowth `
+        -GrowthConfigOK $result.TempDBGrowthConfigOK `
+        -FreeSpacePct $result.TempDBFreeSpacePct `
+        -VersionStoreMB $result.TempDBVersionStoreMB
     
     return $result
 }
@@ -539,12 +716,17 @@ foreach ($instance in $instances) {
         $isUnlimited = ($configMetrics.MaxServerMemoryMB -eq 0 -and $configMetrics.Details -like "*UNLIMITED*")
         
         # Verificar problemas críticos
-        if ($configMetrics.TempDBContentionScore -eq 0) {
-            $status = "🚨 CONTENTION!"
-            $warnings += "PAGELATCH=$($configMetrics.TempDBPageLatchWaits)ms"
+        if ($configMetrics.TempDBContentionScore -lt 40) {
+            $status = "🚨 CRÍTICO!"
+            if ($configMetrics.TempDBPageLatchWaits -gt 10000) {
+                $warnings += "PAGELATCH_CRÍTICO"
+            }
+            if ($configMetrics.TempDBAvgWriteLatencyMs -gt 50) {
+                $warnings += "Disco_Lento(>50ms)"
+            }
         }
         elseif ($configMetrics.TempDBContentionScore -lt 70) {
-            $warnings += "Contention=$($configMetrics.TempDBContentionScore)"
+            $warnings += "TempDB_Score=$($configMetrics.TempDBContentionScore)"
         }
         
         # Verificar configuración
@@ -599,7 +781,7 @@ foreach ($instance in $instances) {
         }
         
         Write-Host "   $status $instanceName" -ForegroundColor Gray -NoNewline
-        Write-Host " | Files:$($configMetrics.TempDBFileCount) Mem:$memDisplay Score:$($configMetrics.TempDBContentionScore)$latencyInfo$spaceInfo" -ForegroundColor $color
+        Write-Host " | Files:$($configMetrics.TempDBFileCount) Mem:$memDisplay TempDB_Score:$($configMetrics.TempDBContentionScore)$latencyInfo$spaceInfo" -ForegroundColor $color
     }
     
     $results += [PSCustomObject]@{
@@ -661,14 +843,17 @@ $goodGrowth = ($results | Where-Object {$_.TempDBGrowthConfigOK}).Count
 Write-Host "║  Growth bien config:   $goodGrowth".PadRight(53) "║" -ForegroundColor White
 
 Write-Host "║                                                       ║" -ForegroundColor White
-Write-Host "║  🔥 CONTENCIÓN                                        ║" -ForegroundColor Cyan
+Write-Host "║  🏥 TEMPDB HEALTH SCORE (Score Compuesto)            ║" -ForegroundColor Cyan
 
-$withContention = ($results | Where-Object {$_.TempDBContentionScore -lt 70}).Count
-$pctContention = if ($results.Count -gt 0) { [Math]::Round(($withContention * 100.0) / $results.Count, 1) } else { 0 }
-Write-Host "║  Con contención:       $withContention ($pctContention%)".PadRight(53) "║" -ForegroundColor $(if ($withContention -gt 50) {"Red"} elseif ($withContention -gt 20) {"Yellow"} else {"White"})
+$withProblems = ($results | Where-Object {$_.TempDBContentionScore -lt 70}).Count
+$pctProblems = if ($results.Count -gt 0) { [Math]::Round(($withProblems * 100.0) / $results.Count, 1) } else { 0 }
+Write-Host "║  Score <70 (problemas): $withProblems ($pctProblems%)".PadRight(53) "║" -ForegroundColor $(if ($withProblems -gt 50) {"Red"} elseif ($withProblems -gt 20) {"Yellow"} else {"White"})
 
-$criticalContention = ($results | Where-Object {$_.TempDBContentionScore -eq 0}).Count
-Write-Host "║  Contención crítica:   $criticalContention".PadRight(53) "║" -ForegroundColor $(if ($criticalContention -gt 0) {"Red"} else {"White"})
+$criticalHealth = ($results | Where-Object {$_.TempDBContentionScore -lt 40}).Count
+Write-Host "║  Score <40 (crítico):   $criticalHealth".PadRight(53) "║" -ForegroundColor $(if ($criticalHealth -gt 0) {"Red"} else {"White"})
+
+$avgScore = if ($results.Count -gt 0) { [Math]::Round(($results | Measure-Object -Property TempDBContentionScore -Average).Average, 1) } else { 0 }
+Write-Host "║  Score promedio:        $avgScore/100".PadRight(53) "║" -ForegroundColor White
 
 Write-Host "║                                                       ║" -ForegroundColor White
 Write-Host "║  💾 DISCO                                             ║" -ForegroundColor Cyan
