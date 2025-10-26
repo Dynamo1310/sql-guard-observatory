@@ -19,6 +19,8 @@ export function ThemeToggle() {
     setTheme(newTheme);
     localStorage.setItem('theme', newTheme);
     document.documentElement.classList.toggle('dark', newTheme === 'dark');
+    // Disparar evento personalizado para actualización inmediata
+    window.dispatchEvent(new CustomEvent('themeChange', { detail: { theme: newTheme } }));
   };
 
   return (

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { authApi } from '@/services/api';
-import supervLogo from '/SUPV.png';
+import sqlNovaAnimation from '/SQLNovaAnimation.mp4';
 import windows11Logo from '/Windows11.png';
 import { Loader2 } from 'lucide-react';
 
@@ -40,10 +40,17 @@ export default function Login() {
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
       <Card className="w-full max-w-md shadow-2xl">
         <CardHeader className="space-y-1">
-          <div className="flex items-center justify-center mb-4">
-            <img src={supervLogo} alt="Supervielle Logo" className="h-16" />
+          <div className="flex items-center justify-center mb-4 overflow-hidden">
+            <video 
+              src={sqlNovaAnimation} 
+              autoPlay 
+              muted 
+              playsInline
+              className="w-full h-48 object-cover"
+              style={{ objectPosition: 'center' }}
+            />
           </div>
-          <CardTitle className="text-2xl text-center">Observabilidad SQL Server</CardTitle>
+          <CardTitle className="text-2xl text-center">SQL Nova - Observabilidad SQL Server</CardTitle>
           <CardDescription className="text-center">
             Autenticación con Windows (Dominio gscorp.ad)
           </CardDescription>

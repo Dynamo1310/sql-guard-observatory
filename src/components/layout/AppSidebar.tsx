@@ -1,6 +1,9 @@
 import { Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import supvLogo from '/SUPV.png';
+import { useState, useEffect } from 'react';
+import sqlNovaLightLogo from '/SQLNovaLightMode.png';
+import sqlNovaDarkLogo from '/SQLNovaDarkMode.png';
+import sqlNovaIcon from '/SQLNovaIcon.png';
 import {
   Sidebar,
   SidebarContent,
@@ -38,6 +41,37 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const { isAdmin, isSuperAdmin, hasPermission, logout } = useAuth();
   const isCollapsed = state === 'collapsed';
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    // Detectar tema inicial
+    const updateTheme = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setTheme(isDark ? 'dark' : 'light');
+    };
+
+    // Actualizar tema inicial
+    updateTheme();
+
+    // Escuchar evento personalizado de cambio de tema (actualización instantánea)
+    const handleThemeChange = (event: CustomEvent) => {
+      setTheme(event.detail.theme);
+    };
+
+    window.addEventListener('themeChange', handleThemeChange as EventListener);
+
+    // Observar cambios en el tema como fallback
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+    return () => {
+      window.removeEventListener('themeChange', handleThemeChange as EventListener);
+      observer.disconnect();
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -58,14 +92,12 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarContent>
         {/* Logo Section */}
-        <div className="p-2 border-b border-sidebar-border">
-          <div className="flex justify-center">
-            <img 
-              src={supvLogo} 
-              alt="Supervielle" 
-              className={isCollapsed ? "h-8 w-auto" : "h-9 w-auto"}
-            />
-          </div>
+        <div className="h-16 border-b border-sidebar-border flex items-center justify-center px-2">
+          <img 
+            src={isCollapsed ? sqlNovaIcon : (theme === 'light' ? sqlNovaLightLogo : sqlNovaDarkLogo)} 
+            alt="SQL Nova" 
+            className={isCollapsed ? "h-8 w-8" : "h-10 w-auto"}
+          />
         </div>
         
         {/* Observabilidad */}

@@ -1344,6 +1344,32 @@ export default function HealthScore() {
                                         </div>
                                       </div>
 
+                                      {/* Contención (PAGELATCH Waits) */}
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground font-medium">PAGELATCH Waits</span>
+                                          <Badge 
+                                            variant={
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits === 0 ? 'outline' :
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits < 100 ? 'outline' :
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits < 1000 ? 'default' :
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits < 10000 ? 'default' :
+                                              'destructive'
+                                            }
+                                            className="text-xs font-mono"
+                                          >
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits.toLocaleString()}
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits >= 10000 && ' ⚠️'}
+                                          </Badge>
+                                        </div>
+                                        <p className="text-[9px] text-muted-foreground italic">
+                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits === 0 ? '✅ Sin contención' :
+                                           instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits < 1000 ? 'Contención baja' :
+                                           instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits < 10000 ? 'Contención moderada' :
+                                           '⚠️ Contención alta (40% del score)'}
+                                        </p>
+                                      </div>
+
                                       {/* Espacio y Recursos */}
                                       {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBTotalSizeMB > 0 || 
                                         instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct > 0 ||
