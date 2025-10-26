@@ -78,17 +78,10 @@ function Get-ConfigTempdbMetrics {
     
     try {
         # Detectar versión de SQL Server para compatibilidad
-        $versionQuery = "SELECT SERVERPROPERTY('ProductVersion') AS Version"
+        $versionQuery = "SELECT SERVERPROPERTY('ProductVersion') AS Version, @@VERSION AS VersionString"
         $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
         $version = $versionResult.Version
         $majorVersion = [int]($version.Split('.')[0])
-        
-        # SQL 2008/2008 R2 usa physical_memory_in_bytes, SQL 2012+ usa physical_memory_kb
-        $memoryColumn = if ($majorVersion -ge 11) { 
-            "physical_memory_kb / 1024" 
-        } else { 
-            "physical_memory_in_bytes / 1024 / 1024" 
-        }
         
         # Query 1: TempDB Files
         $queryTempDBFiles = @"
@@ -185,30 +178,76 @@ WHERE name = 'max server memory (MB)';
         }
         
         # Query 5: System Info (compatible con SQL 2008+)
-        $querySysInfo = @"
+        # Construir query según versión para evitar problemas de expansión de variables
+        if ($majorVersion -ge 11) {
+            # SQL Server 2012+ (versión 11+): usa physical_memory_kb
+            $querySysInfo = @"
 SELECT 
-    $memoryColumn AS TotalPhysicalMemoryMB,
+    physical_memory_kb / 1024 AS TotalPhysicalMemoryMB,
     cpu_count AS CPUCount
 FROM sys.dm_os_sys_info;
 "@
+        }
+        else {
+            # SQL Server 2008/2008 R2 (versión 10): usa physical_memory_in_bytes
+            $querySysInfo = @"
+SELECT 
+    physical_memory_in_bytes / 1024 / 1024 AS TotalPhysicalMemoryMB,
+    cpu_count AS CPUCount
+FROM sys.dm_os_sys_info;
+"@
+        }
         
         $sysInfo = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySysInfo -QueryTimeout $TimeoutSec -EnableException
         if ($sysInfo) {
             if ($sysInfo.TotalPhysicalMemoryMB -ne [DBNull]::Value) {
-                $result.TotalPhysicalMemoryMB = [int]$sysInfo.TotalPhysicalMemoryMB
+                $rawValue = [long]$sysInfo.TotalPhysicalMemoryMB
+                
+                # Validar que el valor sea razonable (entre 512 MB y 16 TB)
+                if ($rawValue -gt 0 -and $rawValue -lt 16777216) {
+                    $result.TotalPhysicalMemoryMB = [int]$rawValue
+                }
+                else {
+                    Write-Warning "Valor de memoria física sospechoso en ${InstanceName}: $rawValue MB"
+                    # Intentar obtener de otra fuente
+                    $altQuery = "SELECT total_physical_memory_kb / 1024 AS TotalPhysicalMemoryMB FROM sys.dm_os_sys_memory"
+                    try {
+                        $altMem = Invoke-DbaQuery -SqlInstance $InstanceName -Query $altQuery -QueryTimeout $TimeoutSec -EnableException
+                        if ($altMem -and $altMem.TotalPhysicalMemoryMB -gt 0) {
+                            $result.TotalPhysicalMemoryMB = [int]$altMem.TotalPhysicalMemoryMB
+                        }
+                    }
+                    catch {
+                        # SQL 2008 no tiene sys.dm_os_sys_memory
+                    }
+                }
             }
             if ($sysInfo.CPUCount -ne [DBNull]::Value) {
                 $result.CPUCount = [int]$sysInfo.CPUCount
             }
         }
         
-        # Calcular si Max Memory está dentro del rango óptimo
-        if ($result.TotalPhysicalMemoryMB -gt 0 -and $result.MaxServerMemoryMB -gt 0) {
-            $result.MaxMemoryPctOfPhysical = [decimal](($result.MaxServerMemoryMB * 100.0) / $result.TotalPhysicalMemoryMB)
+        # Calcular si Max Memory está dentro del rango óptimo (con validaciones)
+        if ($result.TotalPhysicalMemoryMB -gt 512 -and $result.MaxServerMemoryMB -gt 0) {
+            $calculatedPct = ($result.MaxServerMemoryMB * 100.0) / $result.TotalPhysicalMemoryMB
             
-            # Considerar óptimo si está entre 70% y 95%
-            if ($result.MaxMemoryPctOfPhysical -ge 70 -and $result.MaxMemoryPctOfPhysical -le 95) {
-                $result.MaxMemoryWithinOptimal = $true
+            # Validar que el porcentaje sea razonable (0-200%)
+            if ($calculatedPct -ge 0 -and $calculatedPct -le 200) {
+                $result.MaxMemoryPctOfPhysical = [Math]::Round($calculatedPct, 2)
+                
+                # Considerar óptimo si está entre 70% y 95%
+                if ($result.MaxMemoryPctOfPhysical -ge 70 -and $result.MaxMemoryPctOfPhysical -le 95) {
+                    $result.MaxMemoryWithinOptimal = $true
+                }
+            }
+            else {
+                Write-Warning "Porcentaje de memoria inválido en ${InstanceName}: $calculatedPct% (MaxMem=$($result.MaxServerMemoryMB)MB, Total=$($result.TotalPhysicalMemoryMB)MB)"
+                $result.MaxMemoryPctOfPhysical = 0
+            }
+        }
+        else {
+            if ($result.TotalPhysicalMemoryMB -le 512) {
+                Write-Warning "Memoria física muy baja o inválida en ${InstanceName}: $($result.TotalPhysicalMemoryMB)MB"
             }
         }
         
@@ -247,6 +286,16 @@ function Write-ToSqlServer {
         foreach ($row in $Data) {
             $details = ($row.Details -join "|") -replace "'", "''"
             
+            # Validar y truncar MaxMemoryPctOfPhysical para que no exceda DECIMAL(5,2)
+            $maxMemPct = $row.MaxMemoryPctOfPhysical
+            if ($maxMemPct -gt 999.99) {
+                Write-Warning "MaxMemoryPctOfPhysical truncado para $($row.InstanceName): $maxMemPct → 999.99"
+                $maxMemPct = 999.99
+            }
+            if ($maxMemPct -lt -999.99) {
+                $maxMemPct = -999.99
+            }
+            
             $query = @"
 INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     InstanceName,
@@ -280,7 +329,7 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     $($row.TempDBContentionScore),
     $($row.MaxServerMemoryMB),
     $($row.TotalPhysicalMemoryMB),
-    $($row.MaxMemoryPctOfPhysical),
+    $maxMemPct,
     $(if ($row.MaxMemoryWithinOptimal) {1} else {0}),
     $($row.CPUCount),
     '$details'
@@ -368,22 +417,49 @@ foreach ($instance in $instances) {
     $status = "✅"
     $warnings = @()
     
-    if ($configMetrics.TempDBPageLatchWaits -gt 10000) {
-        $status = "🚨 CONTENTION!"
-        $warnings += "High PAGELATCH"
+    # Validar si hay datos válidos
+    if ($configMetrics.MaxMemoryPctOfPhysical -eq 0 -and $configMetrics.TempDBFileCount -eq 0) {
+        $status = "❌ NO DATA"
+        Write-Host "   $status $instanceName - No se pudieron obtener métricas" -ForegroundColor Red
     }
-    elseif (-not $configMetrics.TempDBAllSameSize) {
-        $warnings += "Size mismatch"
+    else {
+        # Verificar problemas críticos
+        if ($configMetrics.TempDBContentionScore -eq 0) {
+            $status = "🚨 CONTENTION!"
+            $warnings += "PAGELATCH=$($configMetrics.TempDBPageLatchWaits)ms"
+        }
+        elseif ($configMetrics.TempDBContentionScore -lt 70) {
+            $warnings += "Contention=$($configMetrics.TempDBContentionScore)"
+        }
+        
+        # Verificar configuración
+        if (-not $configMetrics.TempDBAllSameSize -and $configMetrics.TempDBFileCount -gt 1) {
+            $warnings += "Size mismatch"
+        }
+        
+        if (-not $configMetrics.MaxMemoryWithinOptimal -and $configMetrics.MaxMemoryPctOfPhysical -gt 0) {
+            $warnings += "MaxMem=$([int]$configMetrics.MaxMemoryPctOfPhysical)%"
+        }
+        
+        # Solo archivos de TempDB
+        if ($configMetrics.TempDBFileCount -eq 1) {
+            $warnings += "Only 1 file!"
+        }
+        
+        if ($warnings.Count -gt 0 -and $status -eq "✅") {
+            $status = "⚠️ " + ($warnings -join ", ")
+        }
+        
+        # Formato mejorado
+        $memDisplay = if ($configMetrics.MaxMemoryPctOfPhysical -gt 0) { 
+            "$([Math]::Round($configMetrics.MaxMemoryPctOfPhysical, 1))%" 
+        } else { 
+            "N/A" 
+        }
+        
+        Write-Host "   $status $instanceName" -ForegroundColor Gray -NoNewline
+        Write-Host " | Files:$($configMetrics.TempDBFileCount) Mem:$memDisplay Score:$($configMetrics.TempDBContentionScore)" -ForegroundColor DarkGray
     }
-    elseif (-not $configMetrics.MaxMemoryWithinOptimal) {
-        $warnings += "Max mem not optimal"
-    }
-    
-    if ($warnings.Count -gt 0 -and $status -eq "✅") {
-        $status = "⚠️ " + ($warnings -join ", ")
-    }
-    
-    Write-Host "   $status $instanceName - TempDB:$($configMetrics.TempDBFileCount)files MaxMem:$([int]$configMetrics.MaxMemoryPctOfPhysical)% Contention:$($configMetrics.TempDBContentionScore)" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
