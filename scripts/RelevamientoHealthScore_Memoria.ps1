@@ -504,6 +504,24 @@ if ($top5Grants.Count -gt 0) {
     }
 }
 
+# Top 5 instancias con Stolen Memory más alto
+$top5Stolen = $results | Where-Object {$_.StolenServerMemoryMB -gt 0 -and $_.TotalServerMemoryMB -gt 0} | 
+    Select-Object InstanceName, StolenServerMemoryMB, TotalServerMemoryMB, @{
+        Name='StolenPct'
+        Expression={[int](($_.StolenServerMemoryMB * 100.0) / $_.TotalServerMemoryMB)}
+    } | 
+    Sort-Object -Property StolenPct -Descending | 
+    Select-Object -First 5
+
+if ($top5Stolen.Count -gt 0) {
+    Write-Host "`n⚠️  TOP 5 INSTANCIAS CON STOLEN MEMORY MÁS ALTO:" -ForegroundColor Yellow
+    foreach ($inst in $top5Stolen) {
+        $color = if ($inst.StolenPct -gt 50) { "Red" } elseif ($inst.StolenPct -gt 30) { "Yellow" } else { "Gray" }
+        Write-Host "   $($inst.InstanceName.PadRight(25)) - Stolen: $($inst.StolenServerMemoryMB)MB (${inst.StolenPct}%)" -ForegroundColor $color
+    }
+    Write-Host "`n   💡 Stolen Memory = memoria usada fuera del buffer pool (planes, CLR, XPs, etc.)" -ForegroundColor DarkGray
+}
+
 Write-Host "`n✅ Script completado!" -ForegroundColor Green
 
 #endregion

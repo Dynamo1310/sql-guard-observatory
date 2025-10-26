@@ -574,11 +574,14 @@ foreach ($instance in $instances) {
                 }
             }
             
-            # THREADPOOL - siempre crítico si existe
+            # THREADPOOL - crítico solo si es significativo
             if ($waits.ThreadPoolWaitMs -gt 0) {
-                $status = "🚨 THREADPOOL!"
                 $pct = [Math]::Round([decimal](($waits.ThreadPoolWaitMs / $waits.TotalWaitMs) * 100), 2)
-                $alerts += "THREADPOOL:${pct}%"
+                # Solo alertar si el porcentaje es > 0.01% (más de 1 en 10,000 waits)
+                if ($pct -gt 0.01) {
+                    $status = "🚨 THREADPOOL!"
+                    $alerts += "THREADPOOL:${pct}%"
+                }
             }
             
             # SOS_SCHEDULER_YIELD - indica CPU pressure
@@ -647,9 +650,12 @@ Write-Host "║  RESOURCE_SEM 2-5%:       $(${memGrantsModerate}.ToString().PadL
 $writeLogHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.WriteLogWaitMs / $_.TotalWaitMs * 100) -gt 10}).Count
 Write-Host "║  WRITELOG >10%:           $(${writeLogHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($writeLogHigh -gt 0) { "Yellow" } else { "Cyan" })
 
-# THREADPOOL (siempre crítico)
-$threadPoolAny = ($results | Where-Object {$_.ThreadPoolWaitMs -gt 0}).Count
-Write-Host "║  THREADPOOL (crítico):    $(${threadPoolAny}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($threadPoolAny -gt 0) { "Red" } else { "Cyan" })
+# THREADPOOL (solo si es significativo: >0.01%)
+$threadPoolSignificant = ($results | Where-Object {
+    $_.ThreadPoolWaitMs -gt 0 -and $_.TotalWaitMs -gt 0 -and 
+    (($_.ThreadPoolWaitMs / $_.TotalWaitMs * 100) -gt 0.01)
+}).Count
+Write-Host "║  THREADPOOL >0.01%:       $(${threadPoolSignificant}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($threadPoolSignificant -gt 0) { "Red" } else { "Cyan" })
 
 # SOS_SCHEDULER_YIELD (CPU pressure)
 $sosYieldHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.SOSSchedulerYieldMs / $_.TotalWaitMs * 100) -gt 10}).Count
