@@ -109,7 +109,7 @@ SELECT
     MAX(growth * 8 / 1024) AS MaxGrowthMB,
     CASE WHEN MIN(size) = MAX(size) THEN 1 ELSE 0 END AS AllSameSize,
     CASE WHEN MIN(growth) = MAX(growth) THEN 1 ELSE 0 END AS AllSameGrowth,
-    CASE WHEN MIN(growth) >= 64 AND MAX(is_percent_growth) = 0 THEN 1 ELSE 0 END AS GrowthConfigOK
+    CASE WHEN MIN(growth) >= 64 AND SUM(CAST(is_percent_growth AS INT)) = 0 THEN 1 ELSE 0 END AS GrowthConfigOK
 FROM sys.master_files
 WHERE database_id = DB_ID('tempdb')
   AND type_desc = 'ROWS';
