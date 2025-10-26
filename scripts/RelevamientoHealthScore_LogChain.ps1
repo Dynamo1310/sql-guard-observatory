@@ -313,10 +313,10 @@ function Write-ToSqlServer {
     
     try {
         foreach ($row in $Data) {
-            # Sanitizar valores numéricos (pueden ser NULL)
-            $brokenChainCount = if ($null -eq $row.BrokenChainCount) { 0 } else { $row.BrokenChainCount }
-            $fullDBsWithoutLog = if ($null -eq $row.FullDBsWithoutLogBackup) { 0 } else { $row.FullDBsWithoutLogBackup }
-            $maxHoursSinceLog = if ($null -eq $row.MaxHoursSinceLogBackup) { 0 } else { $row.MaxHoursSinceLogBackup }
+            # Sanitizar valores numéricos (pueden ser NULL o vacíos)
+            $brokenChainCount = if ([string]::IsNullOrEmpty($row.BrokenChainCount)) { 0 } else { [int]$row.BrokenChainCount }
+            $fullDBsWithoutLog = if ([string]::IsNullOrEmpty($row.FullDBsWithoutLogBackup)) { 0 } else { [int]$row.FullDBsWithoutLogBackup }
+            $maxHoursSinceLog = if ([string]::IsNullOrEmpty($row.MaxHoursSinceLogBackup)) { 0 } else { [int]$row.MaxHoursSinceLogBackup }
             
             $query = @"
 INSERT INTO dbo.InstanceHealth_LogChain (
