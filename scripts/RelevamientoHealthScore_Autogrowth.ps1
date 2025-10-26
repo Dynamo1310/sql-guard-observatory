@@ -65,11 +65,124 @@ function Get-AutogrowthStatus {
     param([string]$Instance)
     
     $query = @"
--- Autogrowth Events (últimas 24h)
-SELECT COUNT(*) AS AutogrowthEventsLast24h
-FROM sys.fn_dblog(NULL, NULL)
-WHERE Operation = 'LOP_GROW_FILE'
-  AND [Begin Time] > DATEADD(HOUR, -24, GETDATE());
+-- Autogrowth Events (últimas 24h) - Detección en 3 niveles
+DECLARE @AutogrowthEvents INT = 0;
+DECLARE @Method VARCHAR(50) = 'Unknown';
+
+-- NIVEL 1: Verificar si system_health está habilitado y disponible
+DECLARE @SystemHealthEnabled BIT = 0;
+IF EXISTS (
+    SELECT 1 
+    FROM sys.dm_xe_sessions 
+    WHERE name = 'system_health'
+)
+BEGIN
+    SET @SystemHealthEnabled = 1;
+    SET @Method = 'ExtendedEvents';
+    
+    -- Intentar leer eventos de autogrowth de system_health
+    BEGIN TRY
+        WITH autogrowth_events AS (
+            SELECT 
+                CAST(event_data AS XML) AS event_xml
+            FROM sys.fn_xe_file_target_read_file(
+                'system_health*.xel', 
+                NULL, 
+                NULL, 
+                NULL
+            )
+            WHERE object_name = 'database_file_size_change'
+        )
+        SELECT @AutogrowthEvents = COUNT(*)
+        FROM autogrowth_events
+        WHERE event_xml.value('(event/@timestamp)[1]', 'datetime2') > DATEADD(HOUR, -24, GETUTCDATE())
+          AND event_xml.value('(event/data[@name="is_automatic"]/value)[1]', 'bit') = 1;
+    END TRY
+    BEGIN CATCH
+        -- XE disponible pero falló la lectura, intentar siguiente método
+        SET @AutogrowthEvents = 0;
+        SET @SystemHealthEnabled = 0;
+    END CATCH
+END
+
+-- NIVEL 2: Si XE no está disponible, usar Default Trace (SQL 2005+)
+IF @SystemHealthEnabled = 0 AND @AutogrowthEvents = 0
+BEGIN
+    BEGIN TRY
+        DECLARE @tracefile VARCHAR(500);
+        SELECT @tracefile = CAST(value AS VARCHAR(500))
+        FROM sys.fn_trace_getinfo(NULL)
+        WHERE traceid = 1 AND property = 2;
+        
+        IF @tracefile IS NOT NULL
+        BEGIN
+            SET @Method = 'DefaultTrace';
+            
+            SELECT @AutogrowthEvents = COUNT(*)
+            FROM sys.fn_trace_gettable(@tracefile, DEFAULT) t
+            INNER JOIN sys.trace_events e ON t.EventClass = e.trace_event_id
+            WHERE e.name = 'Data File Auto Grow'
+              AND t.StartTime > DATEADD(HOUR, -24, GETDATE());
+        END
+    END TRY
+    BEGIN CATCH
+        SET @AutogrowthEvents = 0;
+    END CATCH
+END
+
+-- NIVEL 3: Último recurso - fn_dblog en todas las DBs (menos preciso)
+IF @AutogrowthEvents = 0
+BEGIN
+    BEGIN TRY
+        SET @Method = 'TransactionLog';
+        
+        CREATE TABLE #AutogrowthTemp (EventCount INT);
+        
+        DECLARE @dbname NVARCHAR(128);
+        DECLARE @sql NVARCHAR(MAX);
+        
+        DECLARE db_cursor CURSOR FOR
+        SELECT name 
+        FROM sys.databases
+        WHERE database_id > 4 
+          AND state_desc = 'ONLINE'
+          AND is_read_only = 0;
+        
+        OPEN db_cursor;
+        FETCH NEXT FROM db_cursor INTO @dbname;
+        
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            BEGIN TRY
+                SET @sql = N'
+                USE [' + @dbname + N'];
+                SELECT COUNT(*) 
+                FROM sys.fn_dblog(NULL, NULL)
+                WHERE Operation = ''LOP_GROW_FILE''
+                  AND [Begin Time] > DATEADD(HOUR, -24, GETDATE());';
+                
+                INSERT INTO #AutogrowthTemp
+                EXEC sp_executesql @sql;
+            END TRY
+            BEGIN CATCH
+                -- Si falla en alguna DB, continuar con la siguiente
+            END CATCH
+            
+            FETCH NEXT FROM db_cursor INTO @dbname;
+        END
+        
+        CLOSE db_cursor;
+        DEALLOCATE db_cursor;
+        
+        SELECT @AutogrowthEvents = SUM(EventCount) FROM #AutogrowthTemp;
+        DROP TABLE #AutogrowthTemp;
+    END TRY
+    BEGIN CATCH
+        SET @AutogrowthEvents = 0;
+    END CATCH
+END
+
+SELECT ISNULL(@AutogrowthEvents, 0) AS AutogrowthEventsLast24h;
 
 -- File Size vs MaxSize
 SELECT 
