@@ -48,9 +48,10 @@ $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
 $SqlDatabase = "SQLNova"
 $TimeoutSec = 15
-$TestMode = $false
-$IncludeAWS = $false
-$OnlyAWS = $false
+$TestMode = $false    # $true = solo 5 instancias para testing
+$IncludeAWS = $false  # Cambiar a $true para incluir AWS
+$OnlyAWS = $false     # Cambiar a $true para SOLO AWS
+# NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
 
@@ -431,18 +432,27 @@ Write-Host ""
 Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
-    $response = Invoke-RestMethod -Uri $ApiUrl -Method Get -TimeoutSec 30
-    $instances = $response | Where-Object { 
-        $_.NombreServidor -and 
-        (-not $_.EsAWS -or $IncludeAWS) -and
-        (-not $OnlyAWS -or $_.EsAWS)
-    } | Select-Object -ExpandProperty NombreServidor -Unique
+    $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
+    $instances = $response
     
+    # Filtrar por AWS
+    if (-not $IncludeAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -ne "AWS" }
+    }
+    if ($OnlyAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -eq "AWS" }
+    }
+    
+    # SIEMPRE excluir instancias con DMZ en el nombre
+    $instances = $instances | Where-Object { $_.NombreInstancia -notlike "*DMZ*" }
+    
+    # Test mode: solo 5 instancias
     if ($TestMode) {
         $instances = $instances | Select-Object -First 5
     }
     
     Write-Host "   Instancias a procesar: $($instances.Count)" -ForegroundColor Green
+    
 } catch {
     Write-Error "Error obteniendo instancias: $($_.Exception.Message)"
     exit 1
@@ -454,23 +464,25 @@ Write-Host "`n2️⃣  Recolectando wait statistics..." -ForegroundColor Yellow
 $results = @()
 
 foreach ($instance in $instances) {
+    $instanceName = $instance.NombreInstancia
+    
     try {
         # Test connection
-        $canConnect = Test-SqlConnection -InstanceName $instance -TimeoutSec 10
+        $canConnect = Test-SqlConnection -InstanceName $instanceName -TimeoutSec 10
         
         if (-not $canConnect) {
-            Write-Host "   ❌ NO CONECTA $instance" -ForegroundColor Red
+            Write-Host "   ❌ NO CONECTA $instanceName" -ForegroundColor Red
             continue
         }
         
         # Get wait statistics
-        $waits = Get-WaitStatistics -InstanceName $instance -TimeoutSec $TimeoutSec
+        $waits = Get-WaitStatistics -InstanceName $instanceName -TimeoutSec $TimeoutSec
         
-        # Add metadata
-        $waits.InstanceName = $instance
-        $waits.Ambiente = "Produccion"  # TODO: Obtener del API
-        $waits.HostingSite = "Onpremise"  # TODO: Obtener del API
-        $waits.SqlVersion = "N/A"  # TODO: Obtener versión
+        # Add metadata from API
+        $waits.InstanceName = $instanceName
+        $waits.Ambiente = if ($instance.Ambiente) { $instance.Ambiente } else { "N/A" }
+        $waits.HostingSite = if ($instance.hostingSite) { $instance.hostingSite } else { "Onpremise" }
+        $waits.SqlVersion = if ($instance.Version) { $instance.Version } else { "N/A" }
         
         $results += [PSCustomObject]$waits
         
@@ -512,10 +524,10 @@ foreach ($instance in $instances) {
         }
         
         $alertText = if ($alerts.Count -gt 0) { " [$($alerts -join ', ')]" } else { "" }
-        Write-Host "   $status $instance$alertText" -ForegroundColor $(if ($status -like "*🚨*") { "Red" } elseif ($status -like "*⚠️*") { "Yellow" } else { "Gray" })
+        Write-Host "   $status $instanceName$alertText" -ForegroundColor $(if ($status -like "*🚨*") { "Red" } elseif ($status -like "*⚠️*") { "Yellow" } else { "Gray" })
         
     } catch {
-        Write-Host "   ❌ ERROR $instance - $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "   ❌ ERROR $instanceName - $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
