@@ -83,7 +83,7 @@ ORDER BY IsProblematic DESC, State;
 -- Suspect Pages
 SELECT COUNT(*) AS SuspectPageCount
 FROM msdb.dbo.suspect_pages
-WHERE event_time > DATEADD(DAY, -30, GETDATE());
+WHERE last_update_date > DATEADD(DAY, -30, GETDATE());
 "@
     
     try {
