@@ -31,10 +31,10 @@
     12. 📈 Autogrowth & Capacity       5%
     
     SEMÁFORO:
-    🟢 Healthy (85-100): Optimal performance
-    🟡 Warning (70-84): Requires attention
-    🟠 Risk (50-69): Action required
-    🔴 Critical (<50): Immediate action
+    🟢 Healthy (90-100): Optimal performance
+    🟡 Warning (75-89): Requires attention
+    🟠 Risk (60-74): Action required
+    🔴 Critical (<60): Immediate action
     
 .NOTES
     Versión: 3.0 FINAL (12 categorías balanceadas)
@@ -622,9 +622,9 @@ function Apply-Cap {
 function Get-HealthStatus {
     param([decimal]$Score)
     
-    if ($Score -ge 85) { return "Healthy" }
-    if ($Score -ge 70) { return "Warning" }
-    if ($Score -ge 50) { return "Risk" }
+    if ($Score -ge 90) { return "Healthy" }
+    if ($Score -ge 75) { return "Warning" }
+    if ($Score -ge 60) { return "Risk" }
     return "Critical"
 }
 
@@ -1163,10 +1163,10 @@ $warningCount = ($results | Where-Object { $_.HealthStatus -eq 'Warning' }).Coun
 $riskCount = ($results | Where-Object { $_.HealthStatus -eq 'Risk' }).Count
 $criticalCount = ($results | Where-Object { $_.HealthStatus -eq 'Critical' }).Count
 
-Write-Host "  [OK] Healthy (>=85):   $healthyCount" -ForegroundColor Green
-Write-Host "  [WARN] Warning (70-84): $warningCount" -ForegroundColor Yellow
-Write-Host "  [RISK] Risk (50-69):    $riskCount" -ForegroundColor DarkYellow
-Write-Host "  [CRIT] Critical (<50):  $criticalCount" -ForegroundColor Red
+Write-Host "  [OK] Healthy (>=90):   $healthyCount" -ForegroundColor Green
+Write-Host "  [WARN] Warning (75-89): $warningCount" -ForegroundColor Yellow
+Write-Host "  [RISK] Risk (60-74):    $riskCount" -ForegroundColor DarkYellow
+Write-Host "  [CRIT] Critical (<60):  $criticalCount" -ForegroundColor Red
 
 Write-Host "---------------------------------------------------------" -ForegroundColor Green
 Write-Host " Promedios por Categoria:" -ForegroundColor Green

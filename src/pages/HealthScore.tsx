@@ -195,25 +195,25 @@ export default function HealthScore() {
                     <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
                       <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-green-600">HEALTHY</p>
-                      <p className="text-center text-lg font-mono font-bold text-green-600">≥85 pts</p>
+                      <p className="text-center text-lg font-mono font-bold text-green-600">90-100 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">Optimal performance</p>
                     </div>
                     <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
                       <AlertTriangle className="h-6 w-6 text-yellow-600 mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-yellow-600">WARNING</p>
-                      <p className="text-center text-lg font-mono font-bold text-yellow-600">70-84 pts</p>
+                      <p className="text-center text-lg font-mono font-bold text-yellow-600">75-89 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">Requires attention</p>
                     </div>
                     <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
                       <AlertCircle className="h-6 w-6 text-orange-600 mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-orange-600">RISK</p>
-                      <p className="text-center text-lg font-mono font-bold text-orange-600">50-69 pts</p>
+                      <p className="text-center text-lg font-mono font-bold text-orange-600">60-74 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">Action required</p>
                     </div>
                     <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
                       <XCircle className="h-6 w-6 text-red-600 mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-red-600">CRITICAL</p>
-                      <p className="text-center text-lg font-mono font-bold text-red-600">{'<'}50 pts</p>
+                      <p className="text-center text-lg font-mono font-bold text-red-600">{'<'}60 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">Immediate action</p>
                     </div>
                   </div>
@@ -606,10 +606,10 @@ export default function HealthScore() {
                       <TableCell className="text-center py-2">
                         <span className={cn(
                           'font-mono text-sm font-bold',
-                          score.healthScore >= 85 && 'text-green-600',
-                          score.healthScore >= 70 && score.healthScore < 85 && 'text-yellow-600',
-                          score.healthScore >= 50 && score.healthScore < 70 && 'text-orange-600',
-                          score.healthScore < 50 && 'text-red-600'
+                          score.healthScore >= 90 && 'text-green-600',
+                          score.healthScore >= 75 && score.healthScore < 90 && 'text-yellow-600',
+                          score.healthScore >= 60 && score.healthScore < 75 && 'text-orange-600',
+                          score.healthScore < 60 && 'text-red-600'
                         )}>
                           {score.healthScore}
                           <span className="text-xs text-muted-foreground">/100</span>
@@ -621,10 +621,10 @@ export default function HealthScore() {
                             value={(score.healthScore / 100) * 100} 
                             className={cn(
                               'h-2 w-24',
-                              score.healthScore >= 85 && '[&>div]:bg-green-600',
-                              score.healthScore >= 70 && score.healthScore < 85 && '[&>div]:bg-yellow-600',
-                              score.healthScore >= 50 && score.healthScore < 70 && '[&>div]:bg-orange-600',
-                              score.healthScore < 50 && '[&>div]:bg-red-600'
+                              score.healthScore >= 90 && '[&>div]:bg-green-600',
+                              score.healthScore >= 75 && score.healthScore < 90 && '[&>div]:bg-yellow-600',
+                              score.healthScore >= 60 && score.healthScore < 75 && '[&>div]:bg-orange-600',
+                              score.healthScore < 60 && '[&>div]:bg-red-600'
                             )}
                           />
                         </div>
