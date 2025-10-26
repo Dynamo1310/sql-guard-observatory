@@ -309,9 +309,16 @@ function Write-ToSqlServer {
     
     try {
         foreach ($row in $Data) {
-            # Sanitizar LogChainDetails (puede ser null o contener comillas)
-            $logChainDetails = if ($row.LogChainDetails) { 
-                $row.LogChainDetails -replace "'", "''" 
+            # Sanitizar TODOS los campos de texto
+            $instanceName = ($row.InstanceName -replace "'", "''")
+            $ambiente = if ($row.Ambiente) { ($row.Ambiente -replace "'", "''") } else { "N/A" }
+            $hostingSite = if ($row.HostingSite) { ($row.HostingSite -replace "'", "''") } else { "N/A" }
+            $sqlVersion = if ($row.SqlVersion) { ($row.SqlVersion -replace "'", "''") } else { "N/A" }
+            
+            # Sanitizar LogChainDetails (JSON puede tener caracteres problemáticos)
+            $logChainDetails = if ($row.LogChainDetails -and $row.LogChainDetails -ne "[]") { 
+                # Eliminar saltos de línea y escapar comillas
+                ($row.LogChainDetails -replace "`r`n", " " -replace "`n", " " -replace "'", "''")
             } else { 
                 "[]" 
             }
@@ -328,10 +335,10 @@ INSERT INTO dbo.InstanceHealth_LogChain (
     MaxHoursSinceLogBackup,
     LogChainDetails
 ) VALUES (
-    '$($row.InstanceName)',
-    '$($row.Ambiente)',
-    '$($row.HostingSite)',
-    '$($row.SqlVersion)',
+    '$instanceName',
+    '$ambiente',
+    '$hostingSite',
+    '$sqlVersion',
     GETUTCDATE(),
     $($row.BrokenChainCount),
     $($row.FullDBsWithoutLogBackup),
