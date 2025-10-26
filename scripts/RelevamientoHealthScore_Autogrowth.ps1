@@ -30,31 +30,36 @@
 #Requires -Modules dbatools
 
 [CmdletBinding()]
-param(
-    [string]$ApiBaseUrl = "http://localhost:5000",
-    [string]$SqlServer = "asprbm-nov-01\API",
-    [string]$SqlDatabase = "SQLNova",
-    [int]$TimeoutSec = 300
-)
+param()
+
+# Verificar que dbatools está disponible
+if (-not (Get-Module -ListAvailable -Name dbatools)) {
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    exit 1
+}
+
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+}
+
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
-$ErrorActionPreference = "Stop"
+$ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
+$SqlServer = "SSPR17MON-01"
+$SqlDatabase = "SQLNova"
+$TimeoutSec = 15
+$TestMode = $false    # $true = solo 5 instancias para testing
+$IncludeAWS = $false  # Cambiar a $true para incluir AWS
+$OnlyAWS = $false     # Cambiar a $true para SOLO AWS
+# NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
 
 #region ===== FUNCIONES =====
-
-function Get-AllInstanceNames {
-    try {
-        $response = Invoke-RestMethod -Uri "$ApiBaseUrl/api/instances/active" -Method Get -TimeoutSec 30
-        return $response | Where-Object { $_.isActive } | Select-Object -ExpandProperty instanceName
-    }
-    catch {
-        Write-Error "Error obteniendo instancias desde API: $_"
-        return @()
-    }
-}
 
 function Get-AutogrowthStatus {
     param([string]$Instance)
@@ -132,11 +137,17 @@ ORDER BY PercentOfMax DESC;
 
 function Write-ToSqlServer {
     param(
-        [PSCustomObject]$Data
+        [array]$Data
     )
     
+    if ($Data.Count -eq 0) {
+        Write-Host "No hay datos para guardar." -ForegroundColor Yellow
+        return
+    }
+    
     try {
-        $query = @"
+        foreach ($row in $Data) {
+            $query = @"
 INSERT INTO dbo.InstanceHealth_Autogrowth (
     InstanceName,
     Ambiente,
@@ -149,30 +160,30 @@ INSERT INTO dbo.InstanceHealth_Autogrowth (
     WorstPercentOfMax,
     AutogrowthDetails
 ) VALUES (
-    '$($Data.InstanceName)',
-    '$($Data.Ambiente)',
-    '$($Data.HostingSite)',
-    '$($Data.SqlVersion)',
+    '$($row.InstanceName)',
+    '$($row.Ambiente)',
+    '$($row.HostingSite)',
+    '$($row.SqlVersion)',
     GETUTCDATE(),
-    $($Data.AutogrowthEventsLast24h),
-    $($Data.FilesNearLimit),
-    $($Data.FilesWithBadGrowth),
-    $($Data.WorstPercentOfMax),
-    '$($Data.AutogrowthDetails -replace "'", "''")'
+    $($row.AutogrowthEventsLast24h),
+    $($row.FilesNearLimit),
+    $($row.FilesWithBadGrowth),
+    $($row.WorstPercentOfMax),
+    '$($row.AutogrowthDetails -replace "'", "''")'
 );
 "@
         
-        Invoke-DbaQuery -SqlInstance $SqlServer `
-            -Database $SqlDatabase `
-            -Query $query `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+            Invoke-DbaQuery -SqlInstance $SqlServer `
+                -Database $SqlDatabase `
+                -Query $query `
+                -QueryTimeout 30 `
+                -EnableException
+        }
         
-        return $true
-    }
-    catch {
-        Write-Error "Error guardando en SQL: $_"
-        return $false
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        
+    } catch {
+        Write-Error "Error guardando en SQL: $($_.Exception.Message)"
     }
 }
 
@@ -187,42 +198,60 @@ Write-Host "=========================================================" -Foregrou
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "[1/2] Obteniendo instancias..." -ForegroundColor Yellow
-$instances = Get-AllInstanceNames
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
-if ($instances.Count -eq 0) {
-    Write-Error "No se encontraron instancias activas!"
+try {
+    $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
+    $instances = $response
+    
+    if (-not $IncludeAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -ne "AWS" }
+    }
+    if ($OnlyAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -eq "AWS" }
+    }
+    
+    $instances = $instances | Where-Object { $_.NombreInstancia -notlike "*DMZ*" }
+    
+    if ($TestMode) {
+        $instances = $instances | Select-Object -First 5
+    }
+    
+    Write-Host "   Instancias a procesar: $($instances.Count)" -ForegroundColor Green
+    
+} catch {
+    Write-Error "Error obteniendo instancias: $($_.Exception.Message)"
     exit 1
 }
 
-Write-Host "   Encontradas: $($instances.Count) instancias" -ForegroundColor Green
-
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "[2/2] Recolectando métricas de autogrowth..." -ForegroundColor Yellow
+Write-Host "2️⃣  Recolectando métricas de autogrowth..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
 
-foreach ($instanceName in $instances) {
+foreach ($instance in $instances) {
     $counter++
-    $progress = [math]::Round(($counter / $instances.Count) * 100)
-    Write-Progress -Activity "Recolectando autogrowth metrics" -Status "$instanceName ($counter/$($instances.Count))" -PercentComplete $progress
+    $instanceName = $instance.NombreInstancia
     
-    # Obtener metadatos
+    Write-Progress -Activity "Recolectando métricas" `
+        -Status "$counter de $($instances.Count): $instanceName" `
+        -PercentComplete (($counter / $instances.Count) * 100)
+    
+    $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
+    $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+    $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+    
+    # Test connection
     try {
-        $server = Connect-DbaInstance -SqlInstance $instanceName -NonPooledConnection
-        $ambiente = if ($server.Name -like "*PRD*" -or $server.Name -like "*PROD*") { "Produccion" } 
-                    elseif ($server.Name -like "*QA*" -or $server.Name -like "*TST*") { "QA" }
-                    elseif ($server.Name -like "*DEV*") { "Desarrollo" }
-                    else { "Otro" }
-        $hostingSite = if ($server.ComputerName -like "*AWS*") { "AWS" } 
-                       elseif ($server.ComputerName -like "*AZURE*") { "Azure" }
-                       else { "OnPremise" }
-        $sqlVersion = $server.VersionString
-    }
-    catch {
-        Write-Warning "No se pudo conectar a ${instanceName}: $_"
+        $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
+        if (-not $connection.IsPingable) {
+            Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+            continue
+        }
+    } catch {
+        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
         continue
     }
     
@@ -230,12 +259,23 @@ foreach ($instanceName in $instances) {
     $autogrowthStatus = Get-AutogrowthStatus -Instance $instanceName
     
     if ($null -eq $autogrowthStatus) {
-        Write-Warning "Saltando $instanceName (sin datos)"
+        Write-Host "   ⚠️  $instanceName - Sin datos (skipped)" -ForegroundColor Yellow
         continue
     }
     
+    $status = "✅"
+    if ($autogrowthStatus.FilesNearLimit -gt 0) {
+        $status = "🚨 FILES NEAR LIMIT!"
+    } elseif ($autogrowthStatus.AutogrowthEventsLast24h -gt 100) {
+        $status = "⚠️  HIGH AUTOGROWTH"
+    } elseif ($autogrowthStatus.FilesWithBadGrowth -gt 0) {
+        $status = "⚠️  BAD GROWTH CONFIG"
+    }
+    
+    Write-Host "   $status $instanceName - Events:$($autogrowthStatus.AutogrowthEventsLast24h) NearLimit:$($autogrowthStatus.FilesNearLimit) BadGrowth:$($autogrowthStatus.FilesWithBadGrowth)" -ForegroundColor Gray
+    
     # Crear objeto de resultado
-    $result = [PSCustomObject]@{
+    $results += [PSCustomObject]@{
         InstanceName = $instanceName
         Ambiente = $ambiente
         HostingSite = $hostingSite
@@ -244,29 +284,37 @@ foreach ($instanceName in $instances) {
         FilesNearLimit = $autogrowthStatus.FilesNearLimit
         FilesWithBadGrowth = $autogrowthStatus.FilesWithBadGrowth
         WorstPercentOfMax = $autogrowthStatus.WorstPercentOfMax
-        AutogrowthDetails = $autogrowthStatus.Details
-    }
-    
-    # Guardar en SQL
-    if (Write-ToSqlServer -Data $result) {
-        $results += $result
-        Write-Host "   ✓ $instanceName - Autogrowths: $($result.AutogrowthEventsLast24h), Files near limit: $($result.FilesNearLimit)" -ForegroundColor Gray
+        AutogrowthDetails = ($autogrowthStatus.Details | ConvertTo-Json -Compress)
     }
 }
 
-Write-Progress -Activity "Recolectando autogrowth metrics" -Completed
+Write-Progress -Activity "Recolectando métricas" -Completed
 
-# 3. Resumen
+# 3. Guardar en SQL
 Write-Host ""
-Write-Host "=========================================================" -ForegroundColor Green
-Write-Host " RESUMEN - AUTOGROWTH & CAPACITY" -ForegroundColor Green
-Write-Host "=========================================================" -ForegroundColor Green
-Write-Host "  Total instancias procesadas: $($results.Count)" -ForegroundColor White
-Write-Host "  Total autogrowth events (24h): $(($results | Measure-Object -Property AutogrowthEventsLast24h -Sum).Sum)" -ForegroundColor White
-Write-Host "  Instancias con files near limit: $(($results | Where-Object { $_.FilesNearLimit -gt 0 }).Count)" -ForegroundColor White
-Write-Host "=========================================================" -ForegroundColor Green
+Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
+
+Write-ToSqlServer -Data $results
+
+# 4. Resumen
 Write-Host ""
-Write-Host "[OK] Recoleccion completada!" -ForegroundColor Green
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  RESUMEN - AUTOGROWTH & CAPACITY                      ║" -ForegroundColor Green
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+
+$totalEvents = ($results | Measure-Object -Property AutogrowthEventsLast24h -Sum).Sum
+Write-Host "║  Autogrowth events (24h):  $totalEvents".PadRight(53) "║" -ForegroundColor White
+
+$nearLimit = ($results | Where-Object { $_.FilesNearLimit -gt 0 }).Count
+Write-Host "║  Files near limit:     $nearLimit".PadRight(53) "║" -ForegroundColor White
+
+$badGrowth = ($results | Where-Object { $_.FilesWithBadGrowth -gt 0 }).Count
+Write-Host "║  Files with bad growth:    $badGrowth".PadRight(53) "║" -ForegroundColor White
+
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host ""
+Write-Host "✅ Script completado!" -ForegroundColor Green
 
 #endregion
 

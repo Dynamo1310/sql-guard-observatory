@@ -29,31 +29,36 @@
 #Requires -Modules dbatools
 
 [CmdletBinding()]
-param(
-    [string]$ApiBaseUrl = "http://localhost:5000",
-    [string]$SqlServer = "asprbm-nov-01\API",
-    [string]$SqlDatabase = "SQLNova",
-    [int]$TimeoutSec = 300
-)
+param()
+
+# Verificar que dbatools está disponible
+if (-not (Get-Module -ListAvailable -Name dbatools)) {
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    exit 1
+}
+
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+}
+
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
-$ErrorActionPreference = "Stop"
+$ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
+$SqlServer = "SSPR17MON-01"
+$SqlDatabase = "SQLNova"
+$TimeoutSec = 15
+$TestMode = $false    # $true = solo 5 instancias para testing
+$IncludeAWS = $false  # Cambiar a $true para incluir AWS
+$OnlyAWS = $false     # Cambiar a $true para SOLO AWS
+# NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
 
 #region ===== FUNCIONES =====
-
-function Get-AllInstanceNames {
-    try {
-        $response = Invoke-RestMethod -Uri "$ApiBaseUrl/api/instances/active" -Method Get -TimeoutSec 30
-        return $response | Where-Object { $_.isActive } | Select-Object -ExpandProperty instanceName
-    }
-    catch {
-        Write-Error "Error obteniendo instancias desde API: $_"
-        return @()
-    }
-}
 
 function Get-LogChainStatus {
     param([string]$Instance)
