@@ -6,7 +6,7 @@
 -- Impacto: Permite medir memoria robada del buffer pool
 -- ============================================================================
 
-BEGIN;
+BEGIN TRANSACTION;
 
 PRINT '🔧 Health Score v3.1 - Stolen Server Memory';
 PRINT '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
@@ -116,5 +116,5 @@ PRINT '      WHERE CollectedAtUtc >= DATEADD(MINUTE, -30, GETUTCDATE());';
 PRINT '   3. Actualizar consolidador para incluir stolen memory en scoring de Memoria';
 PRINT '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
 
-COMMIT;
+COMMIT TRANSACTION;
 
