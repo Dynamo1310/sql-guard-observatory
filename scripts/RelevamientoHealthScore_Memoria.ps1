@@ -113,15 +113,15 @@ WHERE name = 'max server memory (MB)';
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -EnableException `
+            -As DataSet  # ← Forzar a devolver como DataSet para múltiples resultsets
         
-        if ($data) {
-            # Procesar múltiples resultsets
-            $resultSets = @($data)
+        if ($data -and $data.Tables.Count -gt 0) {
+            # Procesar múltiples resultsets desde DataSet
             
             # ResultSet 1: Performance Counters
-            if ($resultSets.Count -ge 1 -and $resultSets[0]) {
-                $counters = $resultSets[0]
+            if ($data.Tables.Count -ge 1) {
+                $counters = $data.Tables[0].Rows
                 
                 foreach ($counter in $counters) {
                     $counterName = $counter.counter_name
@@ -152,27 +152,27 @@ WHERE name = 'max server memory (MB)';
             }
             
             # ResultSet 2: Memory Grants Pending
-            if ($resultSets.Count -ge 2 -and $resultSets[1]) {
-                $grantsPending = $resultSets[1] | Select-Object -First 1
+            if ($data.Tables.Count -ge 2 -and $data.Tables[1].Rows.Count -gt 0) {
+                $grantsPending = $data.Tables[1].Rows[0]
                 if ($grantsPending.GrantsPending -ne [DBNull]::Value) {
                     $result.MemoryGrantsPending = [int]$grantsPending.GrantsPending
                 }
             }
             
             # ResultSet 3: Memory Grants Active
-            if ($resultSets.Count -ge 3 -and $resultSets[2]) {
-                $grantsActive = $resultSets[2] | Select-Object -First 1
+            if ($data.Tables.Count -ge 3 -and $data.Tables[2].Rows.Count -gt 0) {
+                $grantsActive = $data.Tables[2].Rows[0]
                 if ($grantsActive.GrantsActive -ne [DBNull]::Value) {
                     $result.MemoryGrantsActive = [int]$grantsActive.GrantsActive
                 }
             }
             
-            # ResultSet 4: System Info (no usado directamente, pero capturamos por si acaso)
-            # if ($resultSets.Count -ge 4 -and $resultSets[3]) { }
+            # ResultSet 4: System Info (no usado directamente)
+            # if ($data.Tables.Count -ge 4 -and $data.Tables[3].Rows.Count -gt 0) { }
             
             # ResultSet 5: Max Server Memory
-            if ($resultSets.Count -ge 5 -and $resultSets[4]) {
-                $maxMem = $resultSets[4] | Select-Object -First 1
+            if ($data.Tables.Count -ge 5 -and $data.Tables[4].Rows.Count -gt 0) {
+                $maxMem = $data.Tables[4].Rows[0]
                 if ($maxMem.MaxServerMemoryMB -ne [DBNull]::Value) {
                     $result.MaxServerMemoryMB = [int]$maxMem.MaxServerMemoryMB
                 }
