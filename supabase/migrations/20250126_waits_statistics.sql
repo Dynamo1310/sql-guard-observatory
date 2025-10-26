@@ -182,13 +182,13 @@ BEGIN
     PRINT '      ℹ️ Columnas de I/O waits ya existen';
 END
 
--- ===== Errores: Agregar blocking =====
+-- ===== ErroresCriticos: Agregar blocking =====
 PRINT '';
-PRINT '   🔹 Errores: Agregando métricas de Blocking...';
+PRINT '   🔹 Errores Críticos: Agregando métricas de Blocking...';
 
-IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.InstanceHealth_Errores') AND name = 'BlockedSessionCount')
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.InstanceHealth_ErroresCriticos') AND name = 'BlockedSessionCount')
 BEGIN
-    ALTER TABLE dbo.InstanceHealth_Errores
+    ALTER TABLE dbo.InstanceHealth_ErroresCriticos
     ADD 
         -- Blocking
         BlockedSessionCount INT DEFAULT 0,
@@ -238,10 +238,10 @@ WHERE object_id = OBJECT_ID('dbo.InstanceHealth_IO')
   AND name LIKE '%Wait%'
 UNION ALL
 SELECT 
-    'InstanceHealth_Errores (blocking agregado)',
+    'InstanceHealth_ErroresCriticos (blocking agregado)',
     COUNT(*)
 FROM sys.columns 
-WHERE object_id = OBJECT_ID('dbo.InstanceHealth_Errores')
+WHERE object_id = OBJECT_ID('dbo.InstanceHealth_ErroresCriticos')
   AND name LIKE '%Block%';
 
 -- ============================================================================
@@ -271,7 +271,7 @@ PRINT '   3. Actualizar consolidador para incluir waits en scoring';
 PRINT '   4. Actualizar frontend para mostrar waits';
 PRINT '';
 PRINT '📊 Impacto en Health Score:';
-PRINT '   - Blocking → Errores & Blocking (7%)';
+PRINT '   - Blocking → Errores Críticos & Blocking (7%)';
 PRINT '   - PAGEIOLATCH → I/O (7%)';
 PRINT '   - RESOURCE_SEMAPHORE → Memoria (7%)';
 PRINT '   - CXPACKET → CPU (10%)';
