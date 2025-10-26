@@ -16,11 +16,16 @@ export function ThemeToggle() {
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
+    
+    // Actualizar DOM primero
+    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+    
+    // Disparar evento inmediatamente después (síncrono)
+    window.dispatchEvent(new CustomEvent('themeChange', { detail: { theme: newTheme } }));
+    
+    // Actualizar estado local y localStorage
     setTheme(newTheme);
     localStorage.setItem('theme', newTheme);
-    document.documentElement.classList.toggle('dark', newTheme === 'dark');
-    // Disparar evento personalizado para actualización inmediata
-    window.dispatchEvent(new CustomEvent('themeChange', { detail: { theme: newTheme } }));
   };
 
   return (

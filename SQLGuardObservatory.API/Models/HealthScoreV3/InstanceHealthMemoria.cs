@@ -38,5 +38,19 @@ public class InstanceHealthMemoria
     public int MemoryGrantsActive { get; set; }
     public int PLETarget { get; set; }
     public bool MemoryPressure { get; set; }
+    
+    /// <summary>
+    /// Stolen Server Memory: memoria usada por objetos fuera del buffer pool
+    /// (Lock Manager, Connection Memory, Thread stacks, Memory Clerks, etc.)
+    /// </summary>
+    public int StolenServerMemoryMB { get; set; }
+    
+    /// <summary>
+    /// Porcentaje de stolen memory respecto al buffer pool
+    /// </summary>
+    [NotMapped]
+    public decimal StolenMemoryPct => BufferPoolSizeMB > 0 
+        ? Math.Round((decimal)StolenServerMemoryMB / BufferPoolSizeMB * 100, 2) 
+        : 0;
 }
 

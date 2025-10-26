@@ -46,6 +46,7 @@ export default function Login() {
               autoPlay 
               muted 
               playsInline
+              preload="auto"
               className="w-full h-48 object-cover"
               style={{ objectPosition: 'center' }}
             />

@@ -71,6 +71,7 @@ function Get-MemoryMetrics {
         MemoryGrantsActive = 0
         PLETarget = 0
         MemoryPressure = $false
+        StolenServerMemoryMB = 0  # NUEVO: Memoria robada del buffer pool
     }
     
     try {
@@ -142,6 +143,10 @@ WHERE name = 'max server memory (MB)';
                     }
                     elseif ($counterName -like '*Target Server Memory*') {
                         $result.TargetServerMemoryMB = [int]($counterValue / 1024)
+                    }
+                    elseif ($counterName -like '*Stolen Server Memory*') {
+                        # Stolen memory: memoria usada por objetos fuera del buffer pool
+                        $result.StolenServerMemoryMB = [int]($counterValue / 1024)
                     }
                 }
             }
@@ -235,7 +240,8 @@ INSERT INTO dbo.InstanceHealth_Memoria (
     MemoryGrantsPending,
     MemoryGrantsActive,
     PLETarget,
-    MemoryPressure
+    MemoryPressure,
+    StolenServerMemoryMB
 ) VALUES (
     '$($row.InstanceName)',
     '$($row.Ambiente)',
@@ -251,7 +257,8 @@ INSERT INTO dbo.InstanceHealth_Memoria (
     $($row.MemoryGrantsPending),
     $($row.MemoryGrantsActive),
     $($row.PLETarget),
-    $(if ($row.MemoryPressure) {1} else {0})
+    $(if ($row.MemoryPressure) {1} else {0}),
+    $($row.StolenServerMemoryMB)
 );
 "@
             

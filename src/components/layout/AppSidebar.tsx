@@ -1,6 +1,5 @@
 import { Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 import sqlNovaLightLogo from '/SQLNovaLightMode.png';
 import sqlNovaDarkLogo from '/SQLNovaDarkMode.png';
 import sqlNovaIcon from '/SQLNovaIcon.png';
@@ -41,37 +40,6 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const { isAdmin, isSuperAdmin, hasPermission, logout } = useAuth();
   const isCollapsed = state === 'collapsed';
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-
-  useEffect(() => {
-    // Detectar tema inicial
-    const updateTheme = () => {
-      const isDark = document.documentElement.classList.contains('dark');
-      setTheme(isDark ? 'dark' : 'light');
-    };
-
-    // Actualizar tema inicial
-    updateTheme();
-
-    // Escuchar evento personalizado de cambio de tema (actualización instantánea)
-    const handleThemeChange = (event: CustomEvent) => {
-      setTheme(event.detail.theme);
-    };
-
-    window.addEventListener('themeChange', handleThemeChange as EventListener);
-
-    // Observar cambios en el tema como fallback
-    const observer = new MutationObserver(updateTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => {
-      window.removeEventListener('themeChange', handleThemeChange as EventListener);
-      observer.disconnect();
-    };
-  }, []);
 
   const handleLogout = () => {
     logout();
@@ -92,11 +60,24 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarContent>
         {/* Logo Section */}
-        <div className="h-16 border-b border-sidebar-border flex items-center justify-center px-2">
+        <div className="h-16 border-b border-sidebar-border flex items-center justify-center px-2 relative">
+          {/* Logo claro (visible en modo light cuando está expandido) */}
           <img 
-            src={isCollapsed ? sqlNovaIcon : (theme === 'light' ? sqlNovaLightLogo : sqlNovaDarkLogo)} 
+            src={sqlNovaLightLogo} 
             alt="SQL Nova" 
-            className={isCollapsed ? "h-8 w-8" : "h-10 w-auto"}
+            className={`logo-light h-10 w-auto transition-none ${isCollapsed ? 'hidden' : 'block'}`}
+          />
+          {/* Logo oscuro (visible en modo dark cuando está expandido) */}
+          <img 
+            src={sqlNovaDarkLogo} 
+            alt="SQL Nova" 
+            className={`logo-dark h-10 w-auto transition-none ${isCollapsed ? 'hidden' : 'block'}`}
+          />
+          {/* Ícono (visible cuando está colapsado) */}
+          <img 
+            src={sqlNovaIcon} 
+            alt="SQL Nova" 
+            className={`h-8 w-8 transition-none ${isCollapsed ? 'block' : 'hidden'}`}
           />
         </div>
         
@@ -114,13 +95,16 @@ export function AppSidebar() {
                       <NavLink
                         to={item.url}
                         end
+                        style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
                         className={({ isActive }) =>
-                          isActive
-                            ? 'bg-sidebar-accent text-sidebar-primary font-medium'
-                            : 'hover:bg-sidebar-accent/50'
+                          `w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
+                            isActive
+                              ? 'bg-sidebar-accent text-sidebar-primary font-medium'
+                              : 'hover:bg-sidebar-accent/50'
+                          }`
                         }
                       >
-                        <item.icon className="h-4 w-4" />
+                        <item.icon className="h-4 w-4 flex-shrink-0" />
                         {!isCollapsed && <span>{item.title}</span>}
                       </NavLink>
                     </SidebarMenuButton>
@@ -144,13 +128,16 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild>
                       <NavLink
                         to={item.url}
+                        style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
                         className={({ isActive }) =>
-                          isActive
-                            ? 'bg-sidebar-accent text-sidebar-primary font-medium'
-                            : 'hover:bg-sidebar-accent/50'
+                          `w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
+                            isActive
+                              ? 'bg-sidebar-accent text-sidebar-primary font-medium'
+                              : 'hover:bg-sidebar-accent/50'
+                          }`
                         }
                       >
-                        <item.icon className="h-4 w-4" />
+                        <item.icon className="h-4 w-4 flex-shrink-0" />
                         {!isCollapsed && <span>{item.title}</span>}
                       </NavLink>
                     </SidebarMenuButton>
@@ -161,13 +148,16 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild>
                       <NavLink
                         to={item.url}
+                        style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
                         className={({ isActive }) =>
-                          isActive
-                            ? 'bg-sidebar-accent text-sidebar-primary font-medium'
-                            : 'hover:bg-sidebar-accent/50'
+                          `w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
+                            isActive
+                              ? 'bg-sidebar-accent text-sidebar-primary font-medium'
+                              : 'hover:bg-sidebar-accent/50'
+                          }`
                         }
                       >
-                        <item.icon className="h-4 w-4" />
+                        <item.icon className="h-4 w-4 flex-shrink-0" />
                         {!isCollapsed && <span>{item.title}</span>}
                       </NavLink>
                     </SidebarMenuButton>
@@ -186,9 +176,10 @@ export function AppSidebar() {
               <Button
                 onClick={handleLogout}
                 variant="ghost"
-                className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+                style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
+                className="w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors text-destructive hover:text-destructive hover:bg-destructive/10"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4 flex-shrink-0" />
                 {!isCollapsed && <span>Cerrar Sesión</span>}
               </Button>
             </SidebarMenuButton>

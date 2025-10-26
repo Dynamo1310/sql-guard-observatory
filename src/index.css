@@ -152,4 +152,17 @@ All colors MUST be HSL.
   .transition-smooth {
     transition: var(--transition-smooth);
   }
+
+  /* Cambio instantáneo de logo según tema */
+  .logo-dark {
+    display: none;
+  }
+
+  .dark .logo-light {
+    display: none !important;
+  }
+
+  .dark .logo-dark {
+    display: block !important;
+  }
 }
