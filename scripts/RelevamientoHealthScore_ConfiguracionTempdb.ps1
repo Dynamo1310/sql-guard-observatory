@@ -174,7 +174,17 @@ WHERE name = 'max server memory (MB)';
         
         $maxMem = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryMaxMem -QueryTimeout $TimeoutSec -EnableException
         if ($maxMem -and $maxMem.MaxServerMemoryMB -ne [DBNull]::Value) {
-            $result.MaxServerMemoryMB = [int]$maxMem.MaxServerMemoryMB
+            $maxMemValue = [int]$maxMem.MaxServerMemoryMB
+            
+            # Detectar valor por defecto "unlimited" (2147483647 = 2^31-1)
+            # Este es el máximo de INT32 y significa que no está configurado
+            if ($maxMemValue -eq 2147483647) {
+                $result.MaxServerMemoryMB = 0  # Marcar como no configurado
+                $result.Details += "MaxMem=UNLIMITED(NotSet)"
+            }
+            else {
+                $result.MaxServerMemoryMB = $maxMemValue
+            }
         }
         
         # Query 5: System Info (compatible con SQL 2008+)
@@ -228,7 +238,12 @@ FROM sys.dm_os_sys_info;
         }
         
         # Calcular si Max Memory está dentro del rango óptimo (con validaciones)
-        if ($result.TotalPhysicalMemoryMB -gt 512 -and $result.MaxServerMemoryMB -gt 0) {
+        if ($result.MaxServerMemoryMB -eq 0) {
+            # Max Memory no está configurado (valor por defecto unlimited)
+            $result.MaxMemoryPctOfPhysical = 0
+            $result.MaxMemoryWithinOptimal = $false
+        }
+        elseif ($result.TotalPhysicalMemoryMB -gt 512 -and $result.MaxServerMemoryMB -gt 0) {
             $calculatedPct = ($result.MaxServerMemoryMB * 100.0) / $result.TotalPhysicalMemoryMB
             
             # Validar que el porcentaje sea razonable (0-200%)
@@ -423,6 +438,9 @@ foreach ($instance in $instances) {
         Write-Host "   $status $instanceName - No se pudieron obtener métricas" -ForegroundColor Red
     }
     else {
+        # Verificar si Max Memory está sin configurar (UNLIMITED)
+        $isUnlimited = ($configMetrics.MaxServerMemoryMB -eq 0 -and $configMetrics.Details -like "*UNLIMITED*")
+        
         # Verificar problemas críticos
         if ($configMetrics.TempDBContentionScore -eq 0) {
             $status = "🚨 CONTENTION!"
@@ -437,13 +455,17 @@ foreach ($instance in $instances) {
             $warnings += "Size mismatch"
         }
         
-        if (-not $configMetrics.MaxMemoryWithinOptimal -and $configMetrics.MaxMemoryPctOfPhysical -gt 0) {
+        # Problema crítico: Max Memory no configurado
+        if ($isUnlimited) {
+            $warnings += "MaxMem=UNLIMITED⚠️"
+        }
+        elseif (-not $configMetrics.MaxMemoryWithinOptimal -and $configMetrics.MaxMemoryPctOfPhysical -gt 0) {
             $warnings += "MaxMem=$([int]$configMetrics.MaxMemoryPctOfPhysical)%"
         }
         
-        # Solo archivos de TempDB
+        # Solo 1 archivo de TempDB
         if ($configMetrics.TempDBFileCount -eq 1) {
-            $warnings += "Only 1 file!"
+            $warnings += "1 file only!"
         }
         
         if ($warnings.Count -gt 0 -and $status -eq "✅") {
@@ -451,14 +473,21 @@ foreach ($instance in $instances) {
         }
         
         # Formato mejorado
-        $memDisplay = if ($configMetrics.MaxMemoryPctOfPhysical -gt 0) { 
-            "$([Math]::Round($configMetrics.MaxMemoryPctOfPhysical, 1))%" 
-        } else { 
-            "N/A" 
+        if ($isUnlimited) {
+            $memDisplay = "UNLIMITED"
+            $color = "Yellow"
+        }
+        elseif ($configMetrics.MaxMemoryPctOfPhysical -gt 0) {
+            $memDisplay = "$([Math]::Round($configMetrics.MaxMemoryPctOfPhysical, 1))%"
+            $color = "DarkGray"
+        }
+        else {
+            $memDisplay = "N/A"
+            $color = "DarkGray"
         }
         
         Write-Host "   $status $instanceName" -ForegroundColor Gray -NoNewline
-        Write-Host " | Files:$($configMetrics.TempDBFileCount) Mem:$memDisplay Score:$($configMetrics.TempDBContentionScore)" -ForegroundColor DarkGray
+        Write-Host " | Files:$($configMetrics.TempDBFileCount) Mem:$memDisplay Score:$($configMetrics.TempDBContentionScore)" -ForegroundColor $color
     }
     
     $results += [PSCustomObject]@{
@@ -507,6 +536,11 @@ Write-Host "║  Con contención:       $withContention".PadRight(53) "║" -For
 
 $optimalMem = ($results | Where-Object {$_.MaxMemoryWithinOptimal}).Count
 Write-Host "║  Max mem óptimo:       $optimalMem".PadRight(53) "║" -ForegroundColor White
+
+$unlimitedMem = ($results | Where-Object {$_.MaxServerMemoryMB -eq 0}).Count
+if ($unlimitedMem -gt 0) {
+    Write-Host "║  ⚠️  Max mem UNLIMITED:  $unlimitedMem".PadRight(53) "║" -ForegroundColor Yellow
+}
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
