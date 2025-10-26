@@ -24,16 +24,32 @@ public class InstanceHealthConfiguracionTempdb
     
     public DateTime CollectedAtUtc { get; set; }
     
-    // Métricas de TempDB
+    // TempDB - Archivos
     public int TempDBFileCount { get; set; }
     public bool TempDBAllSameSize { get; set; }
     public bool TempDBAllSameGrowth { get; set; }
+    public int TempDBTotalSizeMB { get; set; }
+    public int TempDBUsedSpaceMB { get; set; }
+    
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal TempDBFreeSpacePct { get; set; }
+    
+    // TempDB - Rendimiento
+    [Column(TypeName = "decimal(10,2)")]
+    public decimal TempDBAvgReadLatencyMs { get; set; }
     
     [Column(TypeName = "decimal(10,2)")]
-    public decimal TempDBAvgLatencyMs { get; set; }
+    public decimal TempDBAvgWriteLatencyMs { get; set; }
     
     public int TempDBPageLatchWaits { get; set; }
     public int TempDBContentionScore { get; set; }
+    public int TempDBVersionStoreMB { get; set; }
+    
+    // TempDB - Configuración
+    public int TempDBAvgFileSizeMB { get; set; }
+    public int TempDBMinFileSizeMB { get; set; }
+    public int TempDBMaxFileSizeMB { get; set; }
+    public bool TempDBGrowthConfigOK { get; set; }
     
     // Métricas de Configuración
     public int MaxServerMemoryMB { get; set; }

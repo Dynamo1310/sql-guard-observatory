@@ -938,12 +938,29 @@ export interface ConfiguracionTempdbDetails {
   id: number;
   instanceName: string;
   collectedAtUtc: string;
+  
+  // TempDB - Archivos
   tempDBFileCount: number;
   tempDBAllSameSize: boolean;
   tempDBAllSameGrowth: boolean;
-  tempDBAvgLatencyMs: number;
+  tempDBTotalSizeMB: number;
+  tempDBUsedSpaceMB: number;
+  tempDBFreeSpacePct: number;
+  
+  // TempDB - Rendimiento
+  tempDBAvgReadLatencyMs: number;
+  tempDBAvgWriteLatencyMs: number;
   tempDBPageLatchWaits: number;
-  tempDBContentionScore: number;
+  tempDBContentionScore: number;  // Score compuesto (0-100)
+  tempDBVersionStoreMB: number;
+  
+  // TempDB - Configuración
+  tempDBAvgFileSizeMB: number;
+  tempDBMinFileSizeMB: number;
+  tempDBMaxFileSizeMB: number;
+  tempDBGrowthConfigOK: boolean;
+  
+  // Max Memory
   maxServerMemoryMB: number;
   totalPhysicalMemoryMB: number;
   maxMemoryPctOfPhysical: number;

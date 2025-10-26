@@ -27,7 +27,7 @@
     TAB 3: MAINTENANCE & CONFIG (25%)
     9. 🚨 Errores sev≥20               7%
     10. 🧹 Mantenimientos              5%
-    11. 🧩 Configuración & tempdb      8%
+    11. 🧩 Config & TempDB (compuesto) 8%
     12. 📈 Autogrowth & Capacity       5%
     
     SEMÁFORO:
@@ -502,6 +502,19 @@ function Calculate-MantenimientosScore {
 
 # 11. CONFIGURACIÓN & TEMPDB (8%)
 function Calculate-ConfiguracionTempdbScore {
+    <#
+    .SYNOPSIS
+        Calcula el score de Configuración & TempDB combinando el TempDB Health Score
+        compuesto (ya calculado por el collector) con la configuración de Max Memory.
+    .DESCRIPTION
+        Fórmula: 60% TempDB Health Score + 40% Max Memory Config
+        
+        El TempDB Health Score compuesto (calculado por el collector) ya considera:
+        - 40% Contención (PAGELATCH waits)
+        - 30% Latencia de disco (write latency)
+        - 20% Configuración (files, same size, growth)
+        - 10% Recursos (free space, version store)
+    #>
     param(
         [object]$Data
     )
@@ -509,49 +522,30 @@ function Calculate-ConfiguracionTempdbScore {
     $score = 0
     $cap = 100
     
-    # 60% tempdb + 40% memoria configurada
-    
-    # TEMPDB score (60%)
-    $tempdbScore = 100
-    
-    # Archivos óptimos (1 por CPU core, máx 8)
-    $optimalFiles = [Math]::Min($Data.CPUCount, 8)
-    if ($Data.TempDBFileCount -eq $optimalFiles) {
-        $tempdbScore -= 0
-    }
-    elseif ($Data.TempDBFileCount -ge ($optimalFiles / 2)) {
-        $tempdbScore -= 10
-    }
-    else {
-        $tempdbScore -= 30
+    # 60% TempDB Health Score Compuesto (ya calculado por el collector)
+    # Este score ya considera contención, latencia, config y recursos
+    $tempdbHealthScore = if ($Data.TempDBContentionScore -ne $null) {
+        [int]$Data.TempDBContentionScore
+    } else {
+        50  # Default si no hay datos
     }
     
-    # Same size y growth
-    if (-not $Data.TempDBAllSameSize) { $tempdbScore -= 15 }
-    if (-not $Data.TempDBAllSameGrowth) { $tempdbScore -= 10 }
-    
-    # Contención (inversamente proporcional a contention score)
-    $contentionPenalty = (100 - $Data.TempDBContentionScore) * 0.35
-    $tempdbScore -= $contentionPenalty
-    
-    # Latencia
-    if ($Data.TempDBAvgLatencyMs -gt 20) { $tempdbScore -= 10 }
-    elseif ($Data.TempDBAvgLatencyMs -gt 10) { $tempdbScore -= 5 }
-    
-    if ($tempdbScore -lt 0) { $tempdbScore = 0 }
-    
-    # MEMORIA CONFIGURADA score (40%)
+    # 40% Configuración de Max Memory
     $memoryScore = 100
     if (-not $Data.MaxMemoryWithinOptimal) {
-        $memoryScore = 60  # No está dentro del rango óptimo
+        $memoryScore = 60  # No está dentro del rango óptimo (70-95%)
     }
     
     # Score final ponderado
-    $score = ($tempdbScore * 0.6) + ($memoryScore * 0.4)
+    $score = ($tempdbHealthScore * 0.6) + ($memoryScore * 0.4)
     
-    # Contención PAGELATCH => cap 65
-    if ($Data.TempDBContentionScore -lt 50) {
-        $cap = 65
+    # Aplicar cap si TempDB Health Score es crítico (<40)
+    if ($tempdbHealthScore -lt 40) {
+        $cap = 65  # TempDB crítico limita el score general de la categoría
+    }
+    # Aplicar cap si hay problemas moderados (<70)
+    elseif ($tempdbHealthScore -lt 70) {
+        $cap = 85  # TempDB con problemas limita moderadamente
     }
     
     return @{ Score = [int]$score; Cap = $cap }
@@ -763,12 +757,18 @@ SELECT
     -- Maintenance
     mnt.LastCheckdb,
     mnt.CheckdbOk,
-    -- Config/TempDB
+    -- Config/TempDB (con nuevas métricas extendidas)
     cfg.TempDBFileCount,
     cfg.TempDBAllSameSize,
     cfg.TempDBAllSameGrowth,
-    cfg.TempDBAvgLatencyMs,
+    cfg.TempDBGrowthConfigOK,
+    cfg.TempDBAvgReadLatencyMs,
+    cfg.TempDBAvgWriteLatencyMs,
     cfg.TempDBContentionScore,
+    cfg.TempDBFreeSpacePct,
+    cfg.TempDBVersionStoreMB,
+    cfg.TempDBTotalSizeMB,
+    cfg.TempDBUsedSpaceMB,
     cfg.MaxMemoryWithinOptimal,
     cfg.CPUCount,
     -- Autogrowth

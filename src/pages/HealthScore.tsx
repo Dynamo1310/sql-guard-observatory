@@ -1255,45 +1255,142 @@ export default function HealthScore() {
                                     </Badge>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-3 text-sm pt-3 pb-3">
                                   {instanceDetails[score.instanceName].configuracionTempdbDetails ? (
                                     <>
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">TempDB Files</span>
-                                        <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount >= instanceDetails[score.instanceName].configuracionTempdbDetails.cpuCount ? 'outline' : 'default'} className="text-xs">
-                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount}
-                                        </Badge>
-                                      </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Same Size & Growth</span>
-                                        <div className="flex gap-1">
-                                          <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? 'outline' : 'destructive'} className="text-xs">
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? '✓' : '✗'}
+                                      {/* TempDB Health Score Compuesto */}
+                                      <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-lg p-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-xs font-semibold text-indigo-600">TempDB Health Score</span>
+                                          <Badge 
+                                            variant={
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 90 ? 'outline' :
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 70 ? 'default' :
+                                              'destructive'
+                                            } 
+                                            className="text-sm font-mono font-bold"
+                                          >
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore}/100
                                           </Badge>
-                                          <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? 'outline' : 'destructive'} className="text-xs">
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? '✓' : '✗'}
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground">
+                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 90 ? '✅ Óptimo' :
+                                           instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 70 ? '⚠️ Advertencia' :
+                                           instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 40 ? '🚨 Problemas' :
+                                           '❌ Crítico'}
+                                        </p>
+                                      </div>
+
+                                      {/* Archivos */}
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-muted-foreground font-medium">TempDB Files</span>
+                                          <Badge 
+                                            variant={
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount >= Math.min(instanceDetails[score.instanceName].configuracionTempdbDetails.cpuCount, 8) ? 'outline' : 
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount >= 2 ? 'default' :
+                                              'destructive'
+                                            } 
+                                            className="text-xs"
+                                          >
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount} 
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount === 1 && ' ⚠️'}
                                           </Badge>
-                                  </div>
+                                        </div>
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Same Size & Growth & Config</span>
+                                          <div className="flex gap-1">
+                                            <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? 'outline' : 'destructive'} className="text-xs">
+                                              {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? '✓' : '✗'}
+                                            </Badge>
+                                            <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? 'outline' : 'destructive'} className="text-xs">
+                                              {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? '✓' : '✗'}
+                                            </Badge>
+                                            <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBGrowthConfigOK ? 'outline' : 'default'} className="text-xs">
+                                              {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBGrowthConfigOK ? '✓' : '✗'}
+                                            </Badge>
+                                          </div>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">TempDB Latency</span>
-                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgLatencyMs.toFixed(1)}ms</span>
+
+                                      {/* Latencia */}
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Read Latency</span>
+                                          <Badge 
+                                            variant={
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgReadLatencyMs <= 10 ? 'outline' :
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgReadLatencyMs <= 20 ? 'default' :
+                                              'destructive'
+                                            }
+                                            className="text-xs font-mono"
+                                          >
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgReadLatencyMs.toFixed(1)}ms
+                                          </Badge>
+                                        </div>
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Write Latency</span>
+                                          <Badge 
+                                            variant={
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs <= 10 ? 'outline' :
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs <= 20 ? 'default' :
+                                              'destructive'
+                                            }
+                                            className="text-xs font-mono"
+                                          >
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs.toFixed(1)}ms
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 50 && ' 🐌'}
+                                          </Badge>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Contention Score</span>
-                                        <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore > 50 ? 'destructive' : 'outline'} className="text-xs">
-                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore}
-                                        </Badge>
+
+                                      {/* Espacio y Recursos */}
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">TempDB Size / Used</span>
+                                          <span className="font-mono">{(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBTotalSizeMB / 1024).toFixed(1)} / {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBUsedSpaceMB / 1024).toFixed(1)} GB</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Free Space</span>
+                                          <Badge 
+                                            variant={
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct >= 20 ? 'outline' :
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct >= 10 ? 'default' :
+                                              'destructive'
+                                            }
+                                            className="text-xs font-mono"
+                                          >
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct.toFixed(1)}%
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct < 10 && instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct > 0 && ' ⚠️'}
+                                          </Badge>
+                                        </div>
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-muted-foreground">Version Store</span>
+                                          <Badge 
+                                            variant={
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB < 1024 ? 'outline' :
+                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB < 2048 ? 'default' :
+                                              'destructive'
+                                            }
+                                            className="text-xs font-mono"
+                                          >
+                                            {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB / 1024).toFixed(2)} GB
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB > 2048 && ' ⚠️'}
+                                          </Badge>
+                                        </div>
                                       </div>
-                                      <div className="pt-2 border-t">
+
+                                      {/* Max Memory */}
+                                      <div className="pt-2 border-t space-y-1">
                                         <div className="flex items-center justify-between text-xs">
                                           <span className="text-muted-foreground">Max Server Memory</span>
                                           <span className="font-mono">{(instanceDetails[score.instanceName].configuracionTempdbDetails.maxServerMemoryMB / 1024).toFixed(1)} GB</span>
                                         </div>
-                                        <div className="flex items-center justify-between text-xs mt-1">
+                                        <div className="flex items-center justify-between text-xs">
                                           <span className="text-muted-foreground">% of Physical</span>
                                           <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.maxMemoryWithinOptimal ? 'outline' : 'default'} className="text-xs">
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.maxMemoryPctOfPhysical.toFixed(1)}%
+                                            {!instanceDetails[score.instanceName].configuracionTempdbDetails.maxMemoryWithinOptimal && ' ⚠️'}
                                           </Badge>
                                         </div>
                                       </div>
