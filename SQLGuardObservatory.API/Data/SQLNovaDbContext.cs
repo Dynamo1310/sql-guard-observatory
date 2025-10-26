@@ -30,6 +30,9 @@ public class SQLNovaDbContext : DbContext
     public DbSet<InstanceHealthDiscos> InstanceHealthDiscos { get; set; }
     public DbSet<InstanceHealthConfiguracionTempdb> InstanceHealthConfiguracionTempdb { get; set; }
     public DbSet<InstanceHealthAutogrowth> InstanceHealthAutogrowth { get; set; }
+    
+    // Health Score v3.1 - Wait Statistics & Blocking
+    public DbSet<InstanceHealthWaits> InstanceHealthWaits { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -115,6 +118,12 @@ public class SQLNovaDbContext : DbContext
         });
 
         modelBuilder.Entity<InstanceHealthAutogrowth>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        modelBuilder.Entity<InstanceHealthWaits>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });

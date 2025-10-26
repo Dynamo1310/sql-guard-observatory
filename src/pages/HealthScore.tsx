@@ -1039,6 +1039,62 @@ export default function HealthScore() {
                                         <span className="text-muted-foreground">Avg CPU (10min)</span>
                                         <span className="font-mono">{instanceDetails[score.instanceName].cpuDetails.avgCPUPercentLast10Min}%</span>
                                         </div>
+                                      
+                                      {/* NUEVO: CPU Waits */}
+                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.totalWaitMs > 0 && (
+                                        <div className="mt-3 pt-2 border-t border-blue-500/10 space-y-1">
+                                          <div className="text-xs font-medium text-muted-foreground mb-2">
+                                            CPU Waits
+                                          </div>
+                                          
+                                          {/* CXPACKET (Parallelism) */}
+                                          {(() => {
+                                            const cxPct = (instanceDetails[score.instanceName].waitsDetails!.cxPacketWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                            return cxPct > 0.1 && (
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted-foreground">CXPACKET (parallelism)</span>
+                                                <Badge 
+                                                  variant={cxPct > 15 ? 'destructive' : cxPct > 10 ? 'default' : 'outline'}
+                                                  className="text-xs font-mono"
+                                                >
+                                                  {cxPct.toFixed(1)}%
+                                                  {cxPct > 15 && ' ⚠️'}
+                                                </Badge>
+                                              </div>
+                                            );
+                                          })()}
+                                          
+                                          {/* SOS_SCHEDULER_YIELD (CPU Pressure) */}
+                                          {(() => {
+                                            const sosPct = (instanceDetails[score.instanceName].waitsDetails!.sosSchedulerYieldMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                            return sosPct > 0.1 && (
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted-foreground">SOS_YIELD (CPU pressure)</span>
+                                                <Badge 
+                                                  variant={sosPct > 15 ? 'destructive' : sosPct > 10 ? 'default' : 'outline'}
+                                                  className="text-xs font-mono"
+                                                >
+                                                  {sosPct.toFixed(1)}%
+                                                  {sosPct > 15 && ' 🔥'}
+                                                </Badge>
+                                              </div>
+                                            );
+                                          })()}
+                                          
+                                          {/* Mensaje si hay problemas */}
+                                          {(() => {
+                                            const cxPct = (instanceDetails[score.instanceName].waitsDetails!.cxPacketWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                            const sosPct = (instanceDetails[score.instanceName].waitsDetails!.sosSchedulerYieldMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                            if (cxPct > 15) {
+                                              return <p className="text-[9px] text-destructive italic mt-1">⚠️ Revisar MaxDOP o queries mal optimizadas</p>;
+                                            }
+                                            if (sosPct > 15) {
+                                              return <p className="text-[9px] text-destructive italic mt-1">🔥 CPU saturado - Optimización urgente</p>;
+                                            }
+                                            return null;
+                                          })()}
+                                        </div>
+                                      )}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de CPU</p>
@@ -1093,6 +1149,70 @@ export default function HealthScore() {
                                         <span className="text-muted-foreground">Target / Total Memory</span>
                                         <span className="font-mono">{(instanceDetails[score.instanceName].memoriaDetails.targetServerMemoryMB / 1024).toFixed(1)} / {(instanceDetails[score.instanceName].memoriaDetails.totalServerMemoryMB / 1024).toFixed(1)} GB</span>
                                       </div>
+                                      
+                                      {/* NUEVO: Memory Waits & Stolen Memory */}
+                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.totalWaitMs > 0 && (
+                                        <div className="mt-3 pt-2 border-t border-pink-500/10 space-y-1">
+                                          {/* RESOURCE_SEMAPHORE (Memory Grants) */}
+                                          {(() => {
+                                            const resSemPct = (instanceDetails[score.instanceName].waitsDetails!.resourceSemaphoreWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                            return resSemPct > 0.1 && (
+                                              <>
+                                                <div className="text-xs font-medium text-muted-foreground mb-2">
+                                                  Memory Waits
+                                                </div>
+                                                <div className="flex items-center justify-between text-xs">
+                                                  <span className="text-muted-foreground">RESOURCE_SEMAPHORE</span>
+                                                  <Badge 
+                                                    variant={resSemPct > 5 ? 'destructive' : resSemPct > 2 ? 'default' : 'outline'}
+                                                    className="text-xs font-mono"
+                                                  >
+                                                    {resSemPct.toFixed(1)}%
+                                                    {resSemPct > 5 && ' ⚠️'}
+                                                  </Badge>
+                                                </div>
+                                                {resSemPct > 5 && (
+                                                  <p className="text-[9px] text-destructive italic mt-1">⚠️ Agregar memoria o optimizar queries</p>
+                                                )}
+                                              </>
+                                            );
+                                          })()}
+                                        </div>
+                                      )}
+                                      
+                                      {/* Stolen Memory */}
+                                      {instanceDetails[score.instanceName].memoriaDetails.stolenServerMemoryMB > 0 && (
+                                        <div className="mt-3 pt-2 border-t border-pink-500/10 space-y-1">
+                                          <div className="text-xs font-medium text-muted-foreground mb-2">
+                                            Stolen Memory
+                                          </div>
+                                          {(() => {
+                                            const stolenPct = instanceDetails[score.instanceName].memoriaDetails.totalServerMemoryMB > 0
+                                              ? (instanceDetails[score.instanceName].memoriaDetails.stolenServerMemoryMB / instanceDetails[score.instanceName].memoriaDetails.totalServerMemoryMB) * 100
+                                              : 0;
+                                            return (
+                                              <>
+                                                <div className="flex items-center justify-between text-xs">
+                                                  <span className="text-muted-foreground">{instanceDetails[score.instanceName].memoriaDetails.stolenServerMemoryMB}MB ({stolenPct.toFixed(1)}%)</span>
+                                                  <Badge 
+                                                    variant={stolenPct > 50 ? 'destructive' : stolenPct > 30 ? 'default' : 'outline'}
+                                                    className="text-xs"
+                                                  >
+                                                    {stolenPct > 50 ? '🔴 Crítico' : stolenPct > 30 ? '⚠️ Alto' : '✅ Normal'}
+                                                  </Badge>
+                                                </div>
+                                                <p className="text-[9px] text-muted-foreground italic">
+                                                  {stolenPct > 50 
+                                                    ? 'Plan cache bloat o CLR memory leak'
+                                                    : stolenPct > 30 
+                                                    ? 'Revisar plan cache con DMVs'
+                                                    : 'Memoria fuera del buffer pool (planes, locks, CLR)'}
+                                                </p>
+                                              </>
+                                            );
+                                          })()}
+                                        </div>
+                                      )}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de memoria</p>
@@ -1143,6 +1263,62 @@ export default function HealthScore() {
                                         <span className="text-muted-foreground">Log File Write</span>
                                         <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.logFileAvgWriteMs.toFixed(1)} ms</span>
                                       </div>
+                                      
+                                      {/* NUEVO: I/O Waits */}
+                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.totalWaitMs > 0 && (
+                                        <div className="mt-3 pt-2 border-t border-cyan-500/10 space-y-1">
+                                          <div className="text-xs font-medium text-muted-foreground mb-2">
+                                            I/O Waits
+                                          </div>
+                                          
+                                          {/* PAGEIOLATCH (Data Page Reads) */}
+                                          {(() => {
+                                            const pageIOPct = (instanceDetails[score.instanceName].waitsDetails!.pageIOLatchWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                            return pageIOPct > 0.1 && (
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted-foreground">PAGEIOLATCH (data reads)</span>
+                                                <Badge 
+                                                  variant={pageIOPct > 10 ? 'destructive' : pageIOPct > 5 ? 'default' : 'outline'}
+                                                  className="text-xs font-mono"
+                                                >
+                                                  {pageIOPct.toFixed(1)}%
+                                                  {pageIOPct > 10 && ' 🐌'}
+                                                </Badge>
+                                              </div>
+                                            );
+                                          })()}
+                                          
+                                          {/* WRITELOG (Transaction Log Writes) */}
+                                          {(() => {
+                                            const writeLogPct = (instanceDetails[score.instanceName].waitsDetails!.writeLogWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                            return writeLogPct > 0.1 && (
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted-foreground">WRITELOG (log writes)</span>
+                                                <Badge 
+                                                  variant={writeLogPct > 10 ? 'destructive' : writeLogPct > 5 ? 'default' : 'outline'}
+                                                  className="text-xs font-mono"
+                                                >
+                                                  {writeLogPct.toFixed(1)}%
+                                                  {writeLogPct > 10 && ' 🐌'}
+                                                </Badge>
+                                              </div>
+                                            );
+                                          })()}
+                                          
+                                          {/* Mensaje si hay problemas */}
+                                          {(() => {
+                                            const pageIOPct = (instanceDetails[score.instanceName].waitsDetails!.pageIOLatchWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                            const writeLogPct = (instanceDetails[score.instanceName].waitsDetails!.writeLogWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                            if (pageIOPct > 10) {
+                                              return <p className="text-[9px] text-destructive italic mt-1">🐌 Discos lentos - Considerar SSD o más índices</p>;
+                                            }
+                                            if (writeLogPct > 10) {
+                                              return <p className="text-[9px] text-destructive italic mt-1">🐌 Log I/O lento - Mover log a disco más rápido</p>;
+                                            }
+                                            return null;
+                                          })()}
+                                        </div>
+                                      )}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de I/O</p>
@@ -1235,6 +1411,68 @@ export default function HealthScore() {
                                       {instanceDetails[score.instanceName].erroresCriticosDetails.errorDetails && (
                                         <div className="pt-2 border-t">
                                           <p className="text-xs text-muted-foreground line-clamp-3">{instanceDetails[score.instanceName].erroresCriticosDetails.errorDetails}</p>
+                                        </div>
+                                      )}
+                                      
+                                      {/* NUEVO: Blocking */}
+                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount > 0 && (
+                                        <div className="mt-3 pt-2 border-t border-red-500/20 space-y-1">
+                                          <div className="text-xs font-medium text-muted-foreground mb-2">
+                                            🔒 Blocking
+                                          </div>
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="text-muted-foreground">
+                                              {instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount} sesiones bloqueadas
+                                            </span>
+                                            <Badge 
+                                              variant={
+                                                instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount > 10 || instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds > 30
+                                                  ? 'destructive'
+                                                  : instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount > 5 || instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds > 10
+                                                  ? 'default'
+                                                  : 'outline'
+                                              }
+                                              className="text-xs font-mono"
+                                            >
+                                              Max: {instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds}s
+                                              {(instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount > 10 || instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds > 30) && ' 🚨'}
+                                            </Badge>
+                                          </div>
+                                          
+                                          {/* Nivel de severidad */}
+                                          {(() => {
+                                            const blockedCount = instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount;
+                                            const maxBlockTime = instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds;
+                                            
+                                            if (blockedCount > 10 || maxBlockTime > 30) {
+                                              return (
+                                                <p className="text-[9px] text-destructive italic mt-1">
+                                                  🚨 Blocking severo - Investigar deadlocks con sp_WhoIsActive
+                                                </p>
+                                              );
+                                            }
+                                            if (blockedCount > 5 || maxBlockTime > 10) {
+                                              return (
+                                                <p className="text-[9px] text-amber-600 italic mt-1">
+                                                  ⚠️ Blocking alto - Revisar locks y transacciones
+                                                </p>
+                                              );
+                                            }
+                                            return (
+                                              <p className="text-[9px] text-muted-foreground italic mt-1">
+                                                Blocking leve - Probablemente temporal
+                                              </p>
+                                            );
+                                          })()}
+                                          
+                                          {/* Blocker Session IDs si están disponibles */}
+                                          {instanceDetails[score.instanceName].waitsDetails!.blockerSessionIds && (
+                                            <div className="mt-2 p-1 bg-muted/30 rounded">
+                                              <p className="text-[9px] text-muted-foreground">
+                                                <span className="font-semibold">Blocker SPIDs:</span> {instanceDetails[score.instanceName].waitsDetails!.blockerSessionIds}
+                                              </p>
+                                            </div>
+                                          )}
                                         </div>
                                       )}
                                     </>

@@ -922,6 +922,7 @@ export interface MemoriaDetails {
   memoryGrantsActive: number;
   pleTarget: number;
   memoryPressure: boolean;
+  stolenServerMemoryMB: number;  // Memoria fuera del buffer pool
 }
 
 export interface MaintenanceDetails {
@@ -1004,6 +1005,55 @@ export interface AutogrowthDetails {
   autogrowthDetails?: string;  // JSON
 }
 
+export interface WaitsDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  
+  // Blocking
+  blockedSessionCount: number;
+  maxBlockTimeSeconds: number;
+  blockerSessionIds?: string;
+  
+  // Top Waits
+  topWait1Type?: string;
+  topWait1Count: number;
+  topWait1Ms: number;
+  
+  // CPU/Parallelism Waits
+  cxPacketWaitCount: number;
+  cxPacketWaitMs: number;
+  cxConsumerWaitCount: number;
+  cxConsumerWaitMs: number;
+  sosSchedulerYieldCount: number;
+  sosSchedulerYieldMs: number;
+  threadPoolWaitCount: number;
+  threadPoolWaitMs: number;
+  
+  // Memory Waits
+  resourceSemaphoreWaitCount: number;
+  resourceSemaphoreWaitMs: number;
+  
+  // I/O Waits
+  pageIOLatchWaitCount: number;
+  pageIOLatchWaitMs: number;
+  writeLogWaitCount: number;
+  writeLogWaitMs: number;
+  asyncIOCompletionCount: number;
+  asyncIOCompletionMs: number;
+  
+  // Lock Waits
+  lockWaitCount: number;
+  lockWaitMs: number;
+  
+  // Config
+  maxDOP?: number;
+  
+  // Totals
+  totalWaits: number;
+  totalWaitMs: number;
+}
+
 export interface HealthScoreV3DetailDto extends HealthScoreV3Dto {
   // TAB 1: Availability & DR
   backupsDetails?: BackupsDetails;
@@ -1016,6 +1066,7 @@ export interface HealthScoreV3DetailDto extends HealthScoreV3Dto {
   memoriaDetails?: MemoriaDetails;
   ioDetails?: IODetails;
   discosDetails?: DiscosDetails;
+  waitsDetails?: WaitsDetails;  // NUEVO
   
   // TAB 3: Maintenance & Config
   erroresCriticosDetails?: ErroresCriticosDetails;
