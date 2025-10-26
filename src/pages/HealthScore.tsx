@@ -183,7 +183,7 @@ export default function HealthScore() {
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Métrica de <span className="font-bold text-foreground">0 a 100 puntos</span> que evalúa la salud de instancias SQL Server mediante 
-                  análisis de <span className="font-bold">10 categorías ponderadas</span> de disponibilidad, continuidad, rendimiento y configuración.
+                  análisis de <span className="font-bold">12 categorías ponderadas</span> de disponibilidad, continuidad, rendimiento y configuración.
                 </p>
               </div>
 

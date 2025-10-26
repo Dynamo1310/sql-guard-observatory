@@ -309,6 +309,13 @@ function Write-ToSqlServer {
     
     try {
         foreach ($row in $Data) {
+            # Sanitizar LogChainDetails (puede ser null o contener comillas)
+            $logChainDetails = if ($row.LogChainDetails) { 
+                $row.LogChainDetails -replace "'", "''" 
+            } else { 
+                "[]" 
+            }
+            
             $query = @"
 INSERT INTO dbo.InstanceHealth_LogChain (
     InstanceName,
@@ -329,7 +336,7 @@ INSERT INTO dbo.InstanceHealth_LogChain (
     $($row.BrokenChainCount),
     $($row.FullDBsWithoutLogBackup),
     $($row.MaxHoursSinceLogBackup),
-    '$($row.LogChainDetails -replace "'", "''")'
+    '$logChainDetails'
 );
 "@
         
