@@ -499,24 +499,24 @@ foreach ($instance in $instances) {
             $alerts += "Blocked:$($waits.BlockedSessionCount)"
         }
         
-        if ($waits.TotalWaits -gt 0) {
+        if ($waits.TotalWaits -gt 0 -and $waits.TotalWaitMs -gt 0) {
             # Check for high percentages
             if ($waits.PageIOLatchWaitMs -gt 0) {
-                $pct = [Math]::Round(($waits.PageIOLatchWaitMs / $waits.TotalWaitMs) * 100, 1)
+                $pct = [Math]::Round([decimal](($waits.PageIOLatchWaitMs / $waits.TotalWaitMs) * 100), 1)
                 if ($pct -gt 20) {
                     $alerts += "PAGEIOLATCH:${pct}%"
                 }
             }
             
             if ($waits.CXPacketWaitMs -gt 0) {
-                $pct = [Math]::Round(($waits.CXPacketWaitMs / $waits.TotalWaitMs) * 100, 1)
+                $pct = [Math]::Round([decimal](($waits.CXPacketWaitMs / $waits.TotalWaitMs) * 100), 1)
                 if ($pct -gt 30) {
                     $alerts += "CXPACKET:${pct}%"
                 }
             }
             
             if ($waits.ResourceSemaphoreWaitMs -gt 0) {
-                $pct = [Math]::Round(($waits.ResourceSemaphoreWaitMs / $waits.TotalWaitMs) * 100, 1)
+                $pct = [Math]::Round([decimal](($waits.ResourceSemaphoreWaitMs / $waits.TotalWaitMs) * 100), 1)
                 if ($pct -gt 10) {
                     $alerts += "RESOURCE_SEM:${pct}%"
                 }
