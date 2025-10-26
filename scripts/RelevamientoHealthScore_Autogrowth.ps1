@@ -136,7 +136,14 @@ ORDER BY PercentOfMax DESC;
         $autogrowthEvents = $datasets.Tables[0]
         $fileInfo = $datasets.Tables[1]
         
-        $autogrowthCount = if ($autogrowthEvents.Count -gt 0) { $autogrowthEvents[0].AutogrowthEventsLast24h } else { 0 }
+        # Manejar nulls y valores negativos correctamente
+        $autogrowthCount = if ($autogrowthEvents.Count -gt 0 -and $null -ne $autogrowthEvents[0].AutogrowthEventsLast24h) { 
+            $val = [int]$autogrowthEvents[0].AutogrowthEventsLast24h
+            if ($val -lt 0) { 0 } else { $val }
+        } else { 
+            0 
+        }
+        
         $filesNearLimit = ($fileInfo | Where-Object { $_.PercentOfMax -gt 80 }).Count
         $filesWithBadGrowth = ($fileInfo | Where-Object { $_.HasIssue -eq 1 }).Count
         $worstPercentOfMax = ($fileInfo | Measure-Object -Property PercentOfMax -Maximum).Maximum
@@ -289,7 +296,14 @@ if ($UseParallel) {
             $autogrowthEvents = $datasets.Tables[0]
             $fileInfo = $datasets.Tables[1]
             
-            $autogrowthCount = if ($autogrowthEvents.Count -gt 0) { $autogrowthEvents[0].AutogrowthEventsLast24h } else { 0 }
+            # Manejar nulls y valores negativos correctamente
+            $autogrowthCount = if ($autogrowthEvents.Count -gt 0 -and $null -ne $autogrowthEvents[0].AutogrowthEventsLast24h) { 
+                $val = [int]$autogrowthEvents[0].AutogrowthEventsLast24h
+                if ($val -lt 0) { 0 } else { $val }
+            } else { 
+                0 
+            }
+            
             $filesNearLimit = ($fileInfo | Where-Object { $_.PercentOfMax -gt 80 }).Count
             $filesWithBadGrowth = ($fileInfo | Where-Object { $_.HasIssue -eq 1 }).Count
             $worstPercentOfMax = ($fileInfo | Measure-Object -Property PercentOfMax -Maximum).Maximum
@@ -549,6 +563,21 @@ if ($critical.Count -gt 0) {
         Write-Host "   • $($_.InstanceName): $($_.FilesNearLimit) archivos >80% maxsize (peor: $($_.WorstPercentOfMax)%)" -ForegroundColor Red
     }
 }
+
+Write-Host ""
+Write-Host "ℹ️  NOTAS:" -ForegroundColor Cyan
+Write-Host "   • 0 eventos = Sin autogrowth en 24h (normal en instancias estables)" -ForegroundColor Gray
+Write-Host "   • 1-100 eventos = Crecimiento moderado y esperado" -ForegroundColor Gray
+Write-Host "   • >100 eventos = Posible problema de sizing inicial" -ForegroundColor Gray
+Write-Host "   • BadGrowth = % growth en archivos >1GB o archivos >90% maxsize" -ForegroundColor Gray
+
+# Estadísticas adicionales
+$withData = ($results | Where-Object { $_.AutogrowthEventsLast24h -gt 0 }).Count
+$noData = ($results | Where-Object { $_.AutogrowthEventsLast24h -eq 0 }).Count
+Write-Host ""
+Write-Host "📊 Distribución:" -ForegroundColor Cyan
+Write-Host "   • Instancias con autogrowth detectado: $withData ($([math]::Round(($withData/$results.Count)*100,1))%)" -ForegroundColor Gray
+Write-Host "   • Instancias sin autogrowth (0): $noData ($([math]::Round(($noData/$results.Count)*100,1))%)" -ForegroundColor Gray
 
 Write-Host ""
 Write-Host "✅ Script completado!" -ForegroundColor Green
