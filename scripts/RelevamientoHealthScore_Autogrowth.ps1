@@ -67,87 +67,37 @@ function Get-AutogrowthStatus {
     param([string]$Instance)
     
     $query = @"
--- Autogrowth Events (últimas 24h) - Detección en 3 niveles
+-- Autogrowth Events (últimas 24h) usando Default Trace (más confiable)
 DECLARE @AutogrowthEvents INT = 0;
-DECLARE @Method VARCHAR(50) = 'Unknown';
 
--- NIVEL 1: Verificar si system_health está habilitado y disponible
-DECLARE @SystemHealthEnabled BIT = 0;
-IF EXISTS (
-    SELECT 1 
-    FROM sys.dm_xe_sessions 
-    WHERE name = 'system_health'
-)
-BEGIN
-    SET @SystemHealthEnabled = 1;
-    SET @Method = 'ExtendedEvents';
+-- Intentar con Default Trace primero (más rápido y confiable)
+BEGIN TRY
+    DECLARE @tracefile VARCHAR(500);
     
-    -- Intentar leer eventos de autogrowth de system_health
-    BEGIN TRY
-        WITH autogrowth_events AS (
-            SELECT 
-                CAST(event_data AS XML) AS event_xml
-            FROM sys.fn_xe_file_target_read_file(
-                'system_health*.xel', 
-                NULL, 
-                NULL, 
-                NULL
-            )
-            WHERE object_name = 'database_file_size_change'
-        )
+    SELECT @tracefile = CAST(value AS VARCHAR(500))
+    FROM sys.fn_trace_getinfo(NULL)
+    WHERE traceid = 1 AND property = 2;
+    
+    IF @tracefile IS NOT NULL
+    BEGIN
         SELECT @AutogrowthEvents = COUNT(*)
-        FROM autogrowth_events
-        WHERE event_xml.value('(event/@timestamp)[1]', 'datetime2') > DATEADD(HOUR, -24, GETUTCDATE())
-          AND event_xml.value('(event/data[@name="is_automatic"]/value)[1]', 'bit') = 1;
-    END TRY
-    BEGIN CATCH
-        -- XE disponible pero falló la lectura, intentar siguiente método
+        FROM sys.fn_trace_gettable(@tracefile, DEFAULT) t
+        INNER JOIN sys.trace_events e ON t.EventClass = e.trace_event_id
+        WHERE e.name IN ('Data File Auto Grow', 'Log File Auto Grow')
+          AND t.StartTime > DATEADD(HOUR, -24, GETDATE());
+    END
+    ELSE
+    BEGIN
+        -- Si Default Trace está deshabilitado, marcar como sin datos
         SET @AutogrowthEvents = 0;
-        SET @SystemHealthEnabled = 0;
-    END CATCH
-END
+    END
+END TRY
+BEGIN CATCH
+    -- Si falla, devolver 0 (sin datos disponibles)
+    SET @AutogrowthEvents = 0;
+END CATCH
 
--- NIVEL 2: Si XE no está disponible, usar Default Trace (SQL 2005+)
-IF @SystemHealthEnabled = 0 AND @AutogrowthEvents = 0
-BEGIN
-    BEGIN TRY
-        DECLARE @tracefile VARCHAR(500);
-        SELECT @tracefile = CAST(value AS VARCHAR(500))
-        FROM sys.fn_trace_getinfo(NULL)
-        WHERE traceid = 1 AND property = 2;
-        
-        IF @tracefile IS NOT NULL
-        BEGIN
-            SET @Method = 'DefaultTrace';
-            
-            SELECT @AutogrowthEvents = COUNT(*)
-            FROM sys.fn_trace_gettable(@tracefile, DEFAULT) t
-            INNER JOIN sys.trace_events e ON t.EventClass = e.trace_event_id
-            WHERE e.name = 'Data File Auto Grow'
-              AND t.StartTime > DATEADD(HOUR, -24, GETDATE());
-        END
-    END TRY
-    BEGIN CATCH
-        SET @AutogrowthEvents = 0;
-    END CATCH
-END
-
--- NIVEL 3: Último recurso - Simplificado (solo en tempdb para estimación)
-IF @AutogrowthEvents = 0
-BEGIN
-    BEGIN TRY
-        SET @Method = 'Estimated';
-        
-        -- Si no pudimos obtener datos históricos, al menos detectar archivos problemáticos
-        -- No intentamos leer transaction logs (muy lento), solo marcamos como "sin datos históricos"
-        SET @AutogrowthEvents = -1;  -- Valor especial que indica "sin datos disponibles"
-    END TRY
-    BEGIN CATCH
-        SET @AutogrowthEvents = 0;
-    END CATCH
-END
-
-SELECT ISNULL(@AutogrowthEvents, 0) AS AutogrowthEventsLast24h;
+SELECT @AutogrowthEvents AS AutogrowthEventsLast24h;
 
 -- File Size vs MaxSize
 SELECT 
@@ -369,85 +319,39 @@ if ($UseParallel) {
     
     # Definir la query directamente aquí (copiada de la función)
     $queryTemplate = @"
--- Autogrowth Events (últimas 24h) - Detección en 3 niveles
+-- Autogrowth Events (últimas 24h) usando Default Trace (más confiable)
 DECLARE @AutogrowthEvents INT = 0;
-DECLARE @Method VARCHAR(50) = 'Unknown';
 
--- NIVEL 1: Verificar si system_health está habilitado y disponible
-DECLARE @SystemHealthEnabled BIT = 0;
-IF EXISTS (
-    SELECT 1 
-    FROM sys.dm_xe_sessions 
-    WHERE name = 'system_health'
-)
-BEGIN
-    SET @SystemHealthEnabled = 1;
-    SET @Method = 'ExtendedEvents';
+-- Intentar con Default Trace primero (más rápido y confiable)
+BEGIN TRY
+    DECLARE @tracefile VARCHAR(500);
     
-    -- Intentar leer eventos de autogrowth de system_health
-    BEGIN TRY
-        WITH autogrowth_events AS (
-            SELECT 
-                CAST(event_data AS XML) AS event_xml
-            FROM sys.fn_xe_file_target_read_file(
-                'system_health*.xel', 
-                NULL, 
-                NULL, 
-                NULL
-            )
-            WHERE object_name = 'database_file_size_change'
-        )
+    SELECT @tracefile = CAST(value AS VARCHAR(500))
+    FROM sys.fn_trace_getinfo(NULL)
+    WHERE traceid = 1 AND property = 2;
+    
+    IF @tracefile IS NOT NULL
+    BEGIN
         SELECT @AutogrowthEvents = COUNT(*)
-        FROM autogrowth_events
-        WHERE event_xml.value('(event/@timestamp)[1]', 'datetime2') > DATEADD(HOUR, -24, GETUTCDATE())
-          AND event_xml.value('(event/data[@name="is_automatic"]/value)[1]', 'bit') = 1;
-    END TRY
-    BEGIN CATCH
+        FROM sys.fn_trace_gettable(@tracefile, DEFAULT) t
+        INNER JOIN sys.trace_events e ON t.EventClass = e.trace_event_id
+        WHERE e.name IN ('Data File Auto Grow', 'Log File Auto Grow')
+          AND t.StartTime > DATEADD(HOUR, -24, GETDATE());
+    END
+    ELSE
+    BEGIN
+        -- Si Default Trace está deshabilitado, marcar como sin datos
         SET @AutogrowthEvents = 0;
-        SET @SystemHealthEnabled = 0;
-    END CATCH
-END
+    END
+END TRY
+BEGIN CATCH
+    -- Si falla, devolver 0 (sin datos disponibles)
+    SET @AutogrowthEvents = 0;
+END CATCH
 
--- NIVEL 2: Si XE no está disponible, usar Default Trace (SQL 2005+)
-IF @SystemHealthEnabled = 0 AND @AutogrowthEvents = 0
-BEGIN
-    BEGIN TRY
-        DECLARE @tracefile VARCHAR(500);
-        SELECT @tracefile = CAST(value AS VARCHAR(500))
-        FROM sys.fn_trace_getinfo(NULL)
-        WHERE traceid = 1 AND property = 2;
-        
-        IF @tracefile IS NOT NULL
-        BEGIN
-            SET @Method = 'DefaultTrace';
-            
-            SELECT @AutogrowthEvents = COUNT(*)
-            FROM sys.fn_trace_gettable(@tracefile, DEFAULT) t
-            INNER JOIN sys.trace_events e ON t.EventClass = e.trace_event_id
-            WHERE e.name = 'Data File Auto Grow'
-              AND t.StartTime > DATEADD(HOUR, -24, GETDATE());
-        END
-    END TRY
-    BEGIN CATCH
-        SET @AutogrowthEvents = 0;
-    END CATCH
-END
+SELECT @AutogrowthEvents AS AutogrowthEventsLast24h;
 
--- NIVEL 3: Último recurso - Simplificado (solo en tempdb para estimación)
-IF @AutogrowthEvents = 0
-BEGIN
-    BEGIN TRY
-        SET @Method = 'Estimated';
-        SET @AutogrowthEvents = -1;
-    END TRY
-    BEGIN CATCH
-        SET @AutogrowthEvents = 0;
-    END CATCH
-END
-
-SELECT ISNULL(@AutogrowthEvents, 0) AS AutogrowthEventsLast24h;
-
--- File Size vs MaxSize
+-- File Size vs MaxSize (incluye métricas de bad growth)
 SELECT 
     DB_NAME(mf.database_id) AS DatabaseName,
     mf.name AS FileName,
@@ -605,18 +509,47 @@ Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "║  RESUMEN - AUTOGROWTH & CAPACITY                      ║" -ForegroundColor Green
 Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Total instancias procesadas:  $($results.Count)".PadRight(53) "║" -ForegroundColor White
 
 $totalEvents = ($results | Measure-Object -Property AutogrowthEventsLast24h -Sum).Sum
-Write-Host "║  Autogrowth events (24h):  $totalEvents".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Total autogrowth events (24h): $totalEvents".PadRight(53) "║" -ForegroundColor White
 
 $nearLimit = ($results | Where-Object { $_.FilesNearLimit -gt 0 }).Count
-Write-Host "║  Files near limit:     $nearLimit".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Instancias con files near limit: $nearLimit".PadRight(53) "║" -ForegroundColor White
 
 $badGrowth = ($results | Where-Object { $_.FilesWithBadGrowth -gt 0 }).Count
-Write-Host "║  Files with bad growth:    $badGrowth".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Instancias con bad growth config: $badGrowth".PadRight(53) "║" -ForegroundColor White
+
+$highAutogrowth = ($results | Where-Object { $_.AutogrowthEventsLast24h -gt 100 }).Count
+Write-Host "║  Instancias con >100 events/día: $highAutogrowth".PadRight(53) "║" -ForegroundColor White
+
+$criticalFiles = ($results | Where-Object { $_.WorstPercentOfMax -gt 90 }).Count
+Write-Host "║  Instancias con archivos >90% max: $criticalFiles".PadRight(53) "║" -ForegroundColor White
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+
+# Mostrar top 10 instancias con más autogrowth
+if ($results.Count -gt 0 -and ($results | Where-Object { $_.AutogrowthEventsLast24h -gt 0 }).Count -gt 0) {
+    Write-Host ""
+    Write-Host "🔥 TOP 10 Instancias con más autogrowth events:" -ForegroundColor Yellow
+    $results | Where-Object { $_.AutogrowthEventsLast24h -gt 0 } | 
+        Sort-Object -Property AutogrowthEventsLast24h -Descending | 
+        Select-Object -First 10 | 
+        ForEach-Object {
+            Write-Host "   • $($_.InstanceName): $($_.AutogrowthEventsLast24h) events" -ForegroundColor Gray
+        }
+}
+
+# Mostrar instancias críticas
+$critical = $results | Where-Object { $_.FilesNearLimit -gt 0 -or $_.WorstPercentOfMax -gt 90 }
+if ($critical.Count -gt 0) {
+    Write-Host ""
+    Write-Host "🚨 INSTANCIAS CRÍTICAS (archivos cerca del límite):" -ForegroundColor Red
+    $critical | ForEach-Object {
+        Write-Host "   • $($_.InstanceName): $($_.FilesNearLimit) archivos >80% maxsize (peor: $($_.WorstPercentOfMax)%)" -ForegroundColor Red
+    }
+}
+
 Write-Host ""
 Write-Host "✅ Script completado!" -ForegroundColor Green
 
