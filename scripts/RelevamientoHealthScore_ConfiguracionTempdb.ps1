@@ -141,10 +141,11 @@ WHERE database_id = DB_ID('tempdb')
         # Query 2: TempDB Latency (separar read/write para mejor diagnóstico)
         $queryLatency = @"
 SELECT 
-    AVG(CASE WHEN num_of_reads = 0 THEN 0 ELSE (io_stall_read_ms * 1.0 / num_of_reads) END) AS AvgReadLatencyMs,
-    AVG(CASE WHEN num_of_writes = 0 THEN 0 ELSE (io_stall_write_ms * 1.0 / num_of_writes) END) AS AvgWriteLatencyMs
-FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL)
-WHERE file_id > 0 AND type = 0;  -- Solo archivos de datos
+    AVG(CASE WHEN vfs.num_of_reads = 0 THEN 0 ELSE (vfs.io_stall_read_ms * 1.0 / vfs.num_of_reads) END) AS AvgReadLatencyMs,
+    AVG(CASE WHEN vfs.num_of_writes = 0 THEN 0 ELSE (vfs.io_stall_write_ms * 1.0 / vfs.num_of_writes) END) AS AvgWriteLatencyMs
+FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
+INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
+WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
 "@
         
         $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
