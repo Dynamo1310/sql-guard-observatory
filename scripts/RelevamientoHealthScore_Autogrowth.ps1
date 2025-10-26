@@ -398,6 +398,7 @@ ORDER BY PercentOfMax DESC;
     
     # Lanzar jobs en lotes
     $jobs = @()
+    $processedJobs = @()  # Tracking de jobs ya procesados
     $counter = 0
     
     foreach ($instance in $instances) {
@@ -407,8 +408,8 @@ ORDER BY PercentOfMax DESC;
         while ((Get-Job -State Running).Count -ge $MaxParallelJobs) {
             Start-Sleep -Milliseconds 100
             
-            # Procesar jobs completados
-            $completedJobs = Get-Job -State Completed
+            # Procesar jobs completados que aún no hemos procesado
+            $completedJobs = Get-Job -State Completed | Where-Object { $_.Id -notin $processedJobs }
             foreach ($job in $completedJobs) {
                 $result = Receive-Job -Job $job
                 if ($null -ne $result) {
@@ -420,7 +421,8 @@ ORDER BY PercentOfMax DESC;
                     
                     Write-Host "   $status $($result.InstanceName) - Events:$($result.AutogrowthEventsLast24h) NearLimit:$($result.FilesNearLimit)" -ForegroundColor Gray
                 }
-                Remove-Job -Job $job
+                $processedJobs += $job.Id
+                Remove-Job -Job $job -ErrorAction SilentlyContinue
             }
         }
         
@@ -433,24 +435,36 @@ ORDER BY PercentOfMax DESC;
         $jobs += $job
     }
     
-    # Esperar a que terminen todos los jobs
+    # Esperar a que terminen todos los jobs restantes
     Write-Host "   ⏳ Esperando jobs restantes..." -ForegroundColor Yellow
-    Wait-Job -Job $jobs | Out-Null
-    
-    # Recoger resultados finales
-    foreach ($job in $jobs) {
-        $result = Receive-Job -Job $job
-        if ($null -ne $result -and $results.InstanceName -notcontains $result.InstanceName) {
-            $results += $result
-            
-            $status = "✅"
-            if ($result.FilesNearLimit -gt 0) { $status = "🚨" }
-            elseif ($result.AutogrowthEventsLast24h -gt 100) { $status = "⚠️ " }
-            
-            Write-Host "   $status $($result.InstanceName) - Events:$($result.AutogrowthEventsLast24h) NearLimit:$($result.FilesNearLimit)" -ForegroundColor Gray
-        }
-        Remove-Job -Job $job
+    $remainingJobs = Get-Job | Where-Object { $_.Id -in $jobs.Id -and $_.Id -notin $processedJobs }
+    if ($remainingJobs) {
+        Wait-Job -Job $remainingJobs | Out-Null
     }
+    
+    # Recoger resultados finales solo de jobs no procesados
+    foreach ($job in $jobs) {
+        if ($job.Id -notin $processedJobs) {
+            try {
+                $result = Receive-Job -Job $job -ErrorAction SilentlyContinue
+                if ($null -ne $result -and $results.InstanceName -notcontains $result.InstanceName) {
+                    $results += $result
+                    
+                    $status = "✅"
+                    if ($result.FilesNearLimit -gt 0) { $status = "🚨" }
+                    elseif ($result.AutogrowthEventsLast24h -gt 100) { $status = "⚠️ " }
+                    
+                    Write-Host "   $status $($result.InstanceName) - Events:$($result.AutogrowthEventsLast24h) NearLimit:$($result.FilesNearLimit)" -ForegroundColor Gray
+                }
+            } catch {
+                # Job ya fue removido, ignorar
+            }
+            Remove-Job -Job $job -ErrorAction SilentlyContinue
+        }
+    }
+    
+    # Limpiar cualquier job restante
+    Get-Job | Where-Object { $_.Id -in $jobs.Id } | Remove-Job -ErrorAction SilentlyContinue
     
 } else {
     # Modo secuencial (original)
