@@ -290,6 +290,38 @@ function Calculate-CPUScore {
         $cap = 70
     }
     
+    # NUEVO: Waits de CPU (CXPACKET, CXCONSUMER, SOS_SCHEDULER_YIELD)
+    $totalWaitMs = Get-SafeNumeric -Value $Data.TotalWaitMs -Default 0
+    
+    if ($totalWaitMs -gt 0) {
+        # CXPACKET + CXCONSUMER: parallelism waits
+        $cxPacketMs = Get-SafeNumeric -Value $Data.CXPacketWaitMs -Default 0
+        $cxConsumerMs = Get-SafeNumeric -Value $Data.CXConsumerWaitMs -Default 0
+        $parallelismMs = $cxPacketMs + $cxConsumerMs
+        $parallelismPct = ($parallelismMs / $totalWaitMs) * 100
+        
+        # SOS_SCHEDULER_YIELD: CPU pressure
+        $sosYieldMs = Get-SafeNumeric -Value $Data.SOSSchedulerYieldMs -Default 0
+        $sosYieldPct = ($sosYieldMs / $totalWaitMs) * 100
+        
+        # Penalizar por CXPACKET/CXCONSUMER alto (mal MaxDOP o queries mal optimizadas)
+        if ($parallelismPct -gt 15) {
+            $score = [Math]::Min($score, 50)  # Parallelism muy alto
+        }
+        elseif ($parallelismPct -gt 10) {
+            $score = [Math]::Min($score, 70)  # Parallelism alto
+        }
+        
+        # Penalizar por SOS_SCHEDULER_YIELD alto (CPU pressure)
+        if ($sosYieldPct -gt 15) {
+            $score = [Math]::Min($score, 40)  # CPU muy saturado
+            $cap = [Math]::Min($cap, 70)
+        }
+        elseif ($sosYieldPct -gt 10) {
+            $score = [Math]::Min($score, 60)  # CPU saturado
+        }
+    }
+    
     return @{ Score = $score; Cap = $cap }
 }
 
@@ -340,12 +372,45 @@ function Calculate-MemoriaScore {
     # Fórmula ponderada
     $score = ($pleScore * 0.6) + ($grantsScore * 0.25) + ($usoScore * 0.15)
     
+    # NUEVO: Waits de memoria (RESOURCE_SEMAPHORE) y Stolen Memory
+    $totalWaitMs = Get-SafeNumeric -Value $Data.TotalWaitMs -Default 0
+    
+    if ($totalWaitMs -gt 0) {
+        # RESOURCE_SEMAPHORE: queries esperando memoria
+        $resSemMs = Get-SafeNumeric -Value $Data.ResourceSemaphoreWaitMs -Default 0
+        $resSemPct = ($resSemMs / $totalWaitMs) * 100
+        
+        if ($resSemPct -gt 5) {
+            $score = [Math]::Min($score, 40)  # Memory grants muy alto
+            $cap = [Math]::Min($cap, 60)
+        }
+        elseif ($resSemPct -gt 2) {
+            $score = [Math]::Min($score, 60)  # Memory grants alto
+        }
+    }
+    
+    # Stolen Memory: memoria fuera del buffer pool
+    $stolenMemMB = Get-SafeNumeric -Value $Data.StolenServerMemoryMB -Default 0
+    $totalMemMB = Get-SafeNumeric -Value $Data.TotalServerMemoryMB -Default 0
+    
+    if ($totalMemMB -gt 0 -and $stolenMemMB -gt 0) {
+        $stolenPct = ($stolenMemMB / $totalMemMB) * 100
+        
+        if ($stolenPct -gt 50) {
+            $score = [Math]::Min($score, 50)  # Stolen memory crítico
+            $cap = [Math]::Min($cap, 70)
+        }
+        elseif ($stolenPct -gt 30) {
+            $score = [Math]::Min($score, 70)  # Stolen memory alto
+        }
+    }
+    
     # PLE <0.15×objetivo o Grants>10 => cap 60
     if ($Data.PLETarget -gt 0 -and $Data.PageLifeExpectancy -lt ($Data.PLETarget * 0.15)) {
-        $cap = 60
+        $cap = [Math]::Min($cap, 60)
     }
     if ($Data.MemoryGrantsPending -gt 10) {
-        $cap = 60
+        $cap = [Math]::Min($cap, 60)
     }
     
     return @{ Score = [int]$score; Cap = $cap }
@@ -380,6 +445,46 @@ function Calculate-IOScore {
     # Log p95 >20ms => cap 70
     if ($Data.LogFileAvgWriteMs -gt 20) {
         $cap = 70
+    }
+    
+    # NUEVO: Waits de I/O (PAGEIOLATCH, WRITELOG, ASYNC_IO_COMPLETION)
+    $totalWaitMs = Get-SafeNumeric -Value $Data.TotalWaitMs -Default 0
+    
+    if ($totalWaitMs -gt 0) {
+        # PAGEIOLATCH: data page reads
+        $pageIOLatchMs = Get-SafeNumeric -Value $Data.PageIOLatchWaitMs -Default 0
+        $pageIOLatchPct = ($pageIOLatchMs / $totalWaitMs) * 100
+        
+        # WRITELOG: transaction log writes
+        $writeLogMs = Get-SafeNumeric -Value $Data.WriteLogWaitMs -Default 0
+        $writeLogPct = ($writeLogMs / $totalWaitMs) * 100
+        
+        # ASYNC_IO_COMPLETION: backup/bulk operations
+        $asyncIOMs = Get-SafeNumeric -Value $Data.AsyncIOCompletionMs -Default 0
+        $asyncIOPct = ($asyncIOMs / $totalWaitMs) * 100
+        
+        # Penalizar por PAGEIOLATCH alto (I/O lento en data files)
+        if ($pageIOLatchPct -gt 10) {
+            $score = [Math]::Min($score, 40)  # I/O data muy lento
+            $cap = [Math]::Min($cap, 60)
+        }
+        elseif ($pageIOLatchPct -gt 5) {
+            $score = [Math]::Min($score, 60)  # I/O data lento
+        }
+        
+        # Penalizar por WRITELOG alto (I/O lento en log files)
+        if ($writeLogPct -gt 10) {
+            $score = [Math]::Min($score, 50)  # I/O log muy lento
+            $cap = [Math]::Min($cap, 70)
+        }
+        elseif ($writeLogPct -gt 5) {
+            $score = [Math]::Min($score, 70)  # I/O log lento
+        }
+        
+        # ASYNC_IO_COMPLETION no penaliza tanto (operaciones batch esperadas)
+        if ($asyncIOPct -gt 20) {
+            $score = [Math]::Min($score, 80)  # Muchas operaciones batch
+        }
     }
     
     return @{ Score = $score; Cap = $cap }
@@ -428,7 +533,7 @@ function Calculate-DiscosScore {
     return @{ Score = $score; Cap = $cap }
 }
 
-# 9. ERRORES CRÍTICOS (7%)
+# 9. ERRORES CRÍTICOS & BLOCKING (7%)
 function Calculate-ErroresCriticosScore {
     param(
         [object]$Data
@@ -449,6 +554,27 @@ function Calculate-ErroresCriticosScore {
     # Si hay evento reciente => cap 70
     if ($Data.Severity20PlusLast1h -gt 0) {
         $cap = 70
+    }
+    
+    # NUEVO: Blocking (sesiones bloqueadas)
+    $blockedCount = Get-SafeInt -Value $Data.BlockedSessionCount -Default 0
+    $maxBlockTime = Get-SafeInt -Value $Data.MaxBlockTimeSeconds -Default 0
+    
+    if ($blockedCount -gt 0) {
+        # Blocking severo (>10 sesiones o >30s)
+        if ($blockedCount -gt 10 -or $maxBlockTime -gt 30) {
+            $score = [Math]::Min($score, 40)  # Blocking crítico
+            $cap = [Math]::Min($cap, 60)
+        }
+        # Blocking moderado (5-10 sesiones o 10-30s)
+        elseif ($blockedCount -gt 5 -or $maxBlockTime -gt 10) {
+            $score = [Math]::Min($score, 60)  # Blocking alto
+            $cap = [Math]::Min($cap, 80)
+        }
+        # Blocking bajo (1-5 sesiones o <10s)
+        else {
+            $score = [Math]::Min($score, 80)  # Blocking leve
+        }
     }
     
     return @{ Score = $score; Cap = $cap }
@@ -703,6 +829,11 @@ LatestAutogrowth AS (
     SELECT TOP 1 * FROM dbo.InstanceHealth_Autogrowth
     WHERE InstanceName = '$InstanceName'
     ORDER BY CollectedAtUtc DESC
+),
+LatestWaits AS (
+    SELECT TOP 1 * FROM dbo.InstanceHealth_Waits
+    WHERE InstanceName = '$InstanceName'
+    ORDER BY CollectedAtUtc DESC
 )
 SELECT 
     '$InstanceName' AS InstanceName,
@@ -753,6 +884,7 @@ SELECT
     mem.TotalServerMemoryMB,
     mem.MaxServerMemoryMB,
     mem.PLETarget,
+    mem.StolenServerMemoryMB,
     -- Maintenance
     mnt.LastCheckdb,
     mnt.CheckdbOk,
@@ -774,7 +906,20 @@ SELECT
     au.AutogrowthEventsLast24h,
     au.FilesNearLimit,
     au.FilesWithBadGrowth,
-    au.WorstPercentOfMax
+    au.WorstPercentOfMax,
+    -- Waits & Blocking (NUEVO)
+    w.BlockedSessionCount,
+    w.MaxBlockTimeSeconds,
+    w.CXPacketWaitMs,
+    w.CXConsumerWaitMs,
+    w.SOSSchedulerYieldMs,
+    w.ThreadPoolWaitMs,
+    w.ResourceSemaphoreWaitMs,
+    w.PageIOLatchWaitMs,
+    w.WriteLogWaitMs,
+    w.AsyncIOCompletionMs,
+    w.TotalWaits,
+    w.TotalWaitMs
 FROM LatestBackups b
 LEFT JOIN LatestAlwaysOn ag ON 1=1
 LEFT JOIN LatestLogChain lc ON 1=1
@@ -786,7 +931,8 @@ LEFT JOIN LatestDiscos d ON 1=1
 LEFT JOIN LatestMemoria mem ON 1=1
 LEFT JOIN LatestMaintenance mnt ON 1=1
 LEFT JOIN LatestConfig cfg ON 1=1
-LEFT JOIN LatestAutogrowth au ON 1=1;
+LEFT JOIN LatestAutogrowth au ON 1=1
+LEFT JOIN LatestWaits w ON 1=1;
 "@
         
         $data = Invoke-DbaQuery -SqlInstance $SqlServer `
