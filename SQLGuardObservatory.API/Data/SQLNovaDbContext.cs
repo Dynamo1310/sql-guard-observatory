@@ -16,16 +16,20 @@ public class SQLNovaDbContext : DbContext
     public DbSet<InventarioDiscosSnapshot> InventarioDiscosSnapshot { get; set; }
     public DbSet<InstanceHealthSnapshot> InstanceHealthSnapshots { get; set; }
 
-    // Health Score v3.0 - 10 Categorías
+    // Health Score v3.0 FINAL - 12 Categorías
     public DbSet<InstanceHealthScore> InstanceHealthScores { get; set; }
-    public DbSet<InstanceHealthConectividad> InstanceHealthConectividad { get; set; }
+    public DbSet<InstanceHealthBackups> InstanceHealthBackups { get; set; }
+    public DbSet<InstanceHealthMaintenance> InstanceHealthMaintenance { get; set; }
     public DbSet<InstanceHealthAlwaysOn> InstanceHealthAlwaysOn { get; set; }
+    public DbSet<InstanceHealthLogChain> InstanceHealthLogChain { get; set; }
+    public DbSet<InstanceHealthDatabaseStates> InstanceHealthDatabaseStates { get; set; }
     public DbSet<InstanceHealthErroresCriticos> InstanceHealthErroresCriticos { get; set; }
     public DbSet<InstanceHealthCPU> InstanceHealthCPU { get; set; }
+    public DbSet<InstanceHealthMemoria> InstanceHealthMemoria { get; set; }
     public DbSet<InstanceHealthIO> InstanceHealthIO { get; set; }
     public DbSet<InstanceHealthDiscos> InstanceHealthDiscos { get; set; }
-    public DbSet<InstanceHealthMemoria> InstanceHealthMemoria { get; set; }
     public DbSet<InstanceHealthConfiguracionTempdb> InstanceHealthConfiguracionTempdb { get; set; }
+    public DbSet<InstanceHealthAutogrowth> InstanceHealthAutogrowth { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,20 +53,26 @@ public class SQLNovaDbContext : DbContext
             entity.HasKey(e => new { e.InstanceName, e.GeneratedAtUtc });
         });
 
-        // Health Score v3.0 entities
+        // Health Score v3.0 FINAL - 12 Categorías
         modelBuilder.Entity<InstanceHealthScore>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
         });
 
-        modelBuilder.Entity<InstanceHealthConectividad>(entity =>
+        modelBuilder.Entity<InstanceHealthAlwaysOn>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
         });
 
-        modelBuilder.Entity<InstanceHealthAlwaysOn>(entity =>
+        modelBuilder.Entity<InstanceHealthLogChain>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        modelBuilder.Entity<InstanceHealthDatabaseStates>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
@@ -80,6 +90,12 @@ public class SQLNovaDbContext : DbContext
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
         });
 
+        modelBuilder.Entity<InstanceHealthMemoria>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
         modelBuilder.Entity<InstanceHealthIO>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -92,13 +108,13 @@ public class SQLNovaDbContext : DbContext
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
         });
 
-        modelBuilder.Entity<InstanceHealthMemoria>(entity =>
+        modelBuilder.Entity<InstanceHealthConfiguracionTempdb>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
         });
 
-        modelBuilder.Entity<InstanceHealthConfiguracionTempdb>(entity =>
+        modelBuilder.Entity<InstanceHealthAutogrowth>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });

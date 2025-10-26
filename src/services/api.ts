@@ -779,28 +779,44 @@ export interface HealthScoreV3Dto {
   healthScore: number;
   healthStatus: 'Healthy' | 'Warning' | 'Risk' | 'Critical';
   generatedAtUtc: string;
-  // Scores por categoría (cada uno sobre 100)
+  
+  // Scores por categoría (cada uno sobre 100) - 12 CATEGORÍAS
+  // TAB 1: Availability & DR (40%)
   score_Backups?: number;           // 18%
   score_AlwaysOn?: number;          // 14%
-  score_Conectividad?: number;      // 10%
-  score_ErroresCriticos?: number;   // 7%
+  score_LogChain?: number;          // 5%
+  score_DatabaseStates?: number;    // 3%
+  
+  // TAB 2: Performance (35%)
   score_CPU?: number;               // 10%
+  score_Memoria?: number;           // 8%
   score_IO?: number;                // 10%
-  score_Discos?: number;            // 8%
-  score_Memoria?: number;           // 7%
-  score_Maintenance?: number;       // 6%
-  score_ConfiguracionTempdb?: number; // 10%
+  score_Discos?: number;            // 7%
+  
+  // TAB 3: Maintenance & Config (25%)
+  score_ErroresCriticos?: number;   // 7%
+  score_Maintenance?: number;       // 5%
+  score_ConfiguracionTempdb?: number; // 8%
+  score_Autogrowth?: number;        // 5%
+  
   // Contribuciones ponderadas (0-peso máximo)
-  backupsContribution?: number;           // Max: 18.00
-  alwaysOnContribution?: number;          // Max: 14.00
-  conectividadContribution?: number;      // Max: 10.00
-  erroresCriticosContribution?: number;   // Max: 7.00
-  cpuContribution?: number;               // Max: 10.00
-  ioContribution?: number;                // Max: 10.00
-  discosContribution?: number;            // Max: 8.00
-  memoriaContribution?: number;           // Max: 7.00
-  mantenimientosContribution?: number;    // Max: 6.00
-  configuracionTempdbContribution?: number; // Max: 10.00
+  // TAB 1: Availability & DR
+  backupsContribution?: number;           // Max: 18
+  alwaysOnContribution?: number;          // Max: 14
+  logChainContribution?: number;          // Max: 5
+  databaseStatesContribution?: number;    // Max: 3
+  
+  // TAB 2: Performance
+  cpuContribution?: number;               // Max: 10
+  memoriaContribution?: number;           // Max: 8
+  ioContribution?: number;                // Max: 10
+  discosContribution?: number;            // Max: 7
+  
+  // TAB 3: Maintenance & Config
+  erroresCriticosContribution?: number;   // Max: 7
+  mantenimientosContribution?: number;    // Max: 5
+  configuracionTempdbContribution?: number; // Max: 8
+  autogrowthContribution?: number;        // Max: 5
 }
 
 export interface BackupsDetails {
@@ -936,17 +952,59 @@ export interface ConfiguracionTempdbDetails {
   configDetails?: string;
 }
 
+export interface LogChainDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  brokenChainCount: number;
+  fullDBsWithoutLogBackup: number;
+  maxHoursSinceLogBackup: number;
+  logChainDetails?: string;  // JSON
+}
+
+export interface DatabaseStatesDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  offlineCount: number;
+  suspectCount: number;
+  emergencyCount: number;
+  recoveryPendingCount: number;
+  singleUserCount: number;
+  restoringCount: number;
+  suspectPageCount: number;
+  databaseStateDetails?: string;  // JSON
+}
+
+export interface AutogrowthDetails {
+  id: number;
+  instanceName: string;
+  collectedAtUtc: string;
+  autogrowthEventsLast24h: number;
+  filesNearLimit: number;
+  filesWithBadGrowth: number;
+  worstPercentOfMax: number;
+  autogrowthDetails?: string;  // JSON
+}
+
 export interface HealthScoreV3DetailDto extends HealthScoreV3Dto {
+  // TAB 1: Availability & DR
   backupsDetails?: BackupsDetails;
   alwaysOnDetails?: AlwaysOnDetails;
-  conectividadDetails?: ConectividadDetails;
-  erroresCriticosDetails?: ErroresCriticosDetails;
+  logChainDetails?: LogChainDetails;
+  databaseStatesDetails?: DatabaseStatesDetails;
+  
+  // TAB 2: Performance
   cpuDetails?: CPUDetails;
+  memoriaDetails?: MemoriaDetails;
   ioDetails?: IODetails;
   discosDetails?: DiscosDetails;
-  memoriaDetails?: MemoriaDetails;
+  
+  // TAB 3: Maintenance & Config
+  erroresCriticosDetails?: ErroresCriticosDetails;
   maintenanceDetails?: MaintenanceDetails;
   configuracionTempdbDetails?: ConfiguracionTempdbDetails;
+  autogrowthDetails?: AutogrowthDetails;
 }
 
 export interface HealthScoreV3SummaryDto {

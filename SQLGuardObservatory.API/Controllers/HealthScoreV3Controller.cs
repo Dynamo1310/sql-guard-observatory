@@ -21,7 +21,7 @@ namespace SQLGuardObservatory.API.Controllers
         }
 
         /// <summary>
-        /// Obtiene el último Health Score v3.0 de todas las instancias
+        /// Obtiene el último Health Score v3.0 FINAL (12 categorías) de todas las instancias
         /// GET: api/v3/healthscore
         /// </summary>
         [HttpGet]
@@ -42,24 +42,28 @@ namespace SQLGuardObservatory.API.Controllers
                             HealthStatus,
                             BackupsScore,
                             AlwaysOnScore,
-                            ConectividadScore,
-                            ErroresCriticosScore,
+                            LogChainScore,
+                            DatabaseStatesScore,
                             CPUScore,
+                            MemoriaScore,
                             IOScore,
                             DiscosScore,
-                            MemoriaScore,
+                            ErroresCriticosScore,
                             MantenimientosScore,
                             ConfiguracionTempdbScore,
+                            AutogrowthScore,
                             BackupsContribution,
                             AlwaysOnContribution,
-                            ConectividadContribution,
-                            ErroresCriticosContribution,
+                            LogChainContribution,
+                            DatabaseStatesContribution,
                             CPUContribution,
+                            MemoriaContribution,
                             IOContribution,
                             DiscosContribution,
-                            MemoriaContribution,
+                            ErroresCriticosContribution,
                             MantenimientosContribution,
                             ConfiguracionTempdbContribution,
+                            AutogrowthContribution,
                             GlobalCap,
                             ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
                         FROM dbo.InstanceHealth_Score
@@ -74,24 +78,28 @@ namespace SQLGuardObservatory.API.Controllers
                         HealthStatus,
                         BackupsScore AS Score_Backups,
                         AlwaysOnScore AS Score_AlwaysOn,
-                        ConectividadScore AS Score_Conectividad,
-                        ErroresCriticosScore AS Score_ErroresCriticos,
+                        LogChainScore AS Score_LogChain,
+                        DatabaseStatesScore AS Score_DatabaseStates,
                         CPUScore AS Score_CPU,
+                        MemoriaScore AS Score_Memoria,
                         IOScore AS Score_IO,
                         DiscosScore AS Score_Discos,
-                        MemoriaScore AS Score_Memoria,
+                        ErroresCriticosScore AS Score_ErroresCriticos,
                         MantenimientosScore AS Score_Maintenance,
                         ConfiguracionTempdbScore AS Score_ConfiguracionTempdb,
-                        BackupsContribution AS BackupsContribution,
-                        AlwaysOnContribution AS AlwaysOnContribution,
-                        ConectividadContribution AS ConectividadContribution,
-                        ErroresCriticosContribution AS ErroresCriticosContribution,
-                        CPUContribution AS CPUContribution,
-                        IOContribution AS IOContribution,
-                        DiscosContribution AS DiscosContribution,
-                        MemoriaContribution AS MemoriaContribution,
-                        MantenimientosContribution AS MantenimientosContribution,
-                        ConfiguracionTempdbContribution AS ConfiguracionTempdbContribution
+                        AutogrowthScore AS Score_Autogrowth,
+                        BackupsContribution,
+                        AlwaysOnContribution,
+                        LogChainContribution,
+                        DatabaseStatesContribution,
+                        CPUContribution,
+                        MemoriaContribution,
+                        IOContribution,
+                        DiscosContribution,
+                        ErroresCriticosContribution,
+                        MantenimientosContribution,
+                        ConfiguracionTempdbContribution,
+                        AutogrowthContribution
                     FROM RankedScores
                     WHERE rn = 1
                     ORDER BY HealthScore ASC, InstanceName;
@@ -130,14 +138,16 @@ namespace SQLGuardObservatory.API.Controllers
                         HealthStatus,
                         BackupsScore AS Score_Backups,
                         AlwaysOnScore AS Score_AlwaysOn,
-                        ConectividadScore AS Score_Conectividad,
-                        ErroresCriticosScore AS Score_ErroresCriticos,
+                        LogChainScore AS Score_LogChain,
+                        DatabaseStatesScore AS Score_DatabaseStates,
                         CPUScore AS Score_CPU,
+                        MemoriaScore AS Score_Memoria,
                         IOScore AS Score_IO,
                         DiscosScore AS Score_Discos,
-                        MemoriaScore AS Score_Memoria,
+                        ErroresCriticosScore AS Score_ErroresCriticos,
                         MantenimientosScore AS Score_Maintenance,
-                        ConfiguracionTempdbScore AS Score_ConfiguracionTempdb
+                        ConfiguracionTempdbScore AS Score_ConfiguracionTempdb,
+                        AutogrowthScore AS Score_Autogrowth
                     FROM dbo.InstanceHealth_Score
                     WHERE InstanceName = {0}
                     ORDER BY CollectedAtUtc DESC;
@@ -257,7 +267,7 @@ namespace SQLGuardObservatory.API.Controllers
         }
 
         /// <summary>
-        /// Obtiene todos los detalles de health score y sus métricas subyacentes
+        /// Obtiene todos los detalles de health score y sus métricas subyacentes (12 categorías)
         /// GET: api/v3/healthscore/{instanceName}/details
         /// </summary>
         [HttpGet("{instanceName}/details")]
@@ -277,24 +287,28 @@ namespace SQLGuardObservatory.API.Controllers
                         HealthStatus,
                         BackupsScore AS Score_Backups,
                         AlwaysOnScore AS Score_AlwaysOn,
-                        ConectividadScore AS Score_Conectividad,
-                        ErroresCriticosScore AS Score_ErroresCriticos,
+                        LogChainScore AS Score_LogChain,
+                        DatabaseStatesScore AS Score_DatabaseStates,
                         CPUScore AS Score_CPU,
+                        MemoriaScore AS Score_Memoria,
                         IOScore AS Score_IO,
                         DiscosScore AS Score_Discos,
-                        MemoriaScore AS Score_Memoria,
+                        ErroresCriticosScore AS Score_ErroresCriticos,
                         MantenimientosScore AS Score_Maintenance,
                         ConfiguracionTempdbScore AS Score_ConfiguracionTempdb,
+                        AutogrowthScore AS Score_Autogrowth,
                         BackupsContribution,
                         AlwaysOnContribution,
-                        ConectividadContribution,
-                        ErroresCriticosContribution,
+                        LogChainContribution,
+                        DatabaseStatesContribution,
                         CPUContribution,
+                        MemoriaContribution,
                         IOContribution,
                         DiscosContribution,
-                        MemoriaContribution,
+                        ErroresCriticosContribution,
                         MantenimientosContribution,
-                        ConfiguracionTempdbContribution
+                        ConfiguracionTempdbContribution,
+                        AutogrowthContribution
                     FROM dbo.InstanceHealth_Score
                     WHERE InstanceName = {0}
                     ORDER BY CollectedAtUtc DESC";
@@ -320,84 +334,100 @@ namespace SQLGuardObservatory.API.Controllers
                     HealthStatus = score.HealthStatus,
                     Score_Backups = score.Score_Backups,
                     Score_AlwaysOn = score.Score_AlwaysOn,
-                    Score_Conectividad = score.Score_Conectividad,
-                    Score_ErroresCriticos = score.Score_ErroresCriticos,
+                    Score_LogChain = score.Score_LogChain,
+                    Score_DatabaseStates = score.Score_DatabaseStates,
                     Score_CPU = score.Score_CPU,
+                    Score_Memoria = score.Score_Memoria,
                     Score_IO = score.Score_IO,
                     Score_Discos = score.Score_Discos,
-                    Score_Memoria = score.Score_Memoria,
+                    Score_ErroresCriticos = score.Score_ErroresCriticos,
                     Score_Maintenance = score.Score_Maintenance,
                     Score_ConfiguracionTempdb = score.Score_ConfiguracionTempdb,
+                    Score_Autogrowth = score.Score_Autogrowth,
                     BackupsContribution = score.BackupsContribution,
                     AlwaysOnContribution = score.AlwaysOnContribution,
-                    ConectividadContribution = score.ConectividadContribution,
-                    ErroresCriticosContribution = score.ErroresCriticosContribution,
+                    LogChainContribution = score.LogChainContribution,
+                    DatabaseStatesContribution = score.DatabaseStatesContribution,
                     CPUContribution = score.CPUContribution,
+                    MemoriaContribution = score.MemoriaContribution,
                     IOContribution = score.IOContribution,
                     DiscosContribution = score.DiscosContribution,
-                    MemoriaContribution = score.MemoriaContribution,
+                    ErroresCriticosContribution = score.ErroresCriticosContribution,
                     MantenimientosContribution = score.MantenimientosContribution,
-                    ConfiguracionTempdbContribution = score.ConfiguracionTempdbContribution
+                    ConfiguracionTempdbContribution = score.ConfiguracionTempdbContribution,
+                    AutogrowthContribution = score.AutogrowthContribution
                 };
 
                 // Backups
                 var backupsQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Backups WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
                 details.BackupsDetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthBackups>(backupsQuery, instanceName)
+                    .SqlQueryRaw<InstanceHealthBackups>(backupsQuery, instanceName)
                     .FirstOrDefaultAsync();
 
                 // AlwaysOn
                 var alwaysOnQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_AlwaysOn WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
                 details.AlwaysOnDetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthAlwaysOn>(alwaysOnQuery, instanceName)
+                    .SqlQueryRaw<InstanceHealthAlwaysOn>(alwaysOnQuery, instanceName)
                     .FirstOrDefaultAsync();
 
-                // Conectividad
-                var conectividadQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Conectividad WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
-                details.ConectividadDetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthConectividad>(conectividadQuery, instanceName)
+                // Log Chain
+                var logChainQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_LogChain WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.LogChainDetails = await _context.Database
+                    .SqlQueryRaw<InstanceHealthLogChain>(logChainQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // Database States
+                var databaseStatesQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_DatabaseStates WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.DatabaseStatesDetails = await _context.Database
+                    .SqlQueryRaw<InstanceHealthDatabaseStates>(databaseStatesQuery, instanceName)
                     .FirstOrDefaultAsync();
 
                 // Errores Críticos
                 var erroresQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_ErroresCriticos WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
                 details.ErroresCriticosDetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthErroresCriticos>(erroresQuery, instanceName)
+                    .SqlQueryRaw<InstanceHealthErroresCriticos>(erroresQuery, instanceName)
                     .FirstOrDefaultAsync();
 
                 // CPU
                 var cpuQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_CPU WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
                 details.CPUDetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthCPU>(cpuQuery, instanceName)
-                    .FirstOrDefaultAsync();
-
-                // IO
-                var ioQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_IO WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
-                details.IODetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthIO>(ioQuery, instanceName)
-                    .FirstOrDefaultAsync();
-
-                // Discos
-                var discosQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Discos WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
-                details.DiscosDetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthDiscos>(discosQuery, instanceName)
+                    .SqlQueryRaw<InstanceHealthCPU>(cpuQuery, instanceName)
                     .FirstOrDefaultAsync();
 
                 // Memoria
                 var memoriaQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Memoria WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
                 details.MemoriaDetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthMemoria>(memoriaQuery, instanceName)
+                    .SqlQueryRaw<InstanceHealthMemoria>(memoriaQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // IO
+                var ioQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_IO WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.IODetails = await _context.Database
+                    .SqlQueryRaw<InstanceHealthIO>(ioQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // Discos
+                var discosQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Discos WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.DiscosDetails = await _context.Database
+                    .SqlQueryRaw<InstanceHealthDiscos>(discosQuery, instanceName)
                     .FirstOrDefaultAsync();
 
                 // Maintenance
                 var maintenanceQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Maintenance WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
                 details.MaintenanceDetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthMaintenance>(maintenanceQuery, instanceName)
+                    .SqlQueryRaw<InstanceHealthMaintenance>(maintenanceQuery, instanceName)
                     .FirstOrDefaultAsync();
 
                 // Configuracion & TempDB
                 var configQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_ConfiguracionTempdb WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
                 details.ConfiguracionTempdbDetails = await _context.Database
-                    .SqlQueryRaw<Models.HealthScoreV3.InstanceHealthConfiguracionTempdb>(configQuery, instanceName)
+                    .SqlQueryRaw<InstanceHealthConfiguracionTempdb>(configQuery, instanceName)
+                    .FirstOrDefaultAsync();
+
+                // Autogrowth
+                var autogrowthQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_Autogrowth WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";
+                details.AutogrowthDetails = await _context.Database
+                    .SqlQueryRaw<InstanceHealthAutogrowth>(autogrowthQuery, instanceName)
                     .FirstOrDefaultAsync();
 
                 return Ok(details);
@@ -421,44 +451,65 @@ namespace SQLGuardObservatory.API.Controllers
         public int HealthScore { get; set; }
         public string HealthStatus { get; set; } = string.Empty;
         
-        // Scores por categoría (cada uno sobre 100)
-        public int Score_Backups { get; set; }
-        public int Score_AlwaysOn { get; set; }
-        public int Score_Conectividad { get; set; }
-        public int Score_ErroresCriticos { get; set; }
-        public int Score_CPU { get; set; }
-        public int Score_IO { get; set; }
-        public int Score_Discos { get; set; }
-        public int Score_Memoria { get; set; }
-        public int Score_Maintenance { get; set; }
-        public int Score_ConfiguracionTempdb { get; set; }
+        // Scores por categoría (cada uno sobre 100) - 12 CATEGORÍAS
+        // TAB 1: Availability & DR (40%)
+        public int Score_Backups { get; set; }           // 18%
+        public int Score_AlwaysOn { get; set; }          // 14%
+        public int Score_LogChain { get; set; }          // 5%
+        public int Score_DatabaseStates { get; set; }    // 3%
+        
+        // TAB 2: Performance (35%)
+        public int Score_CPU { get; set; }               // 10%
+        public int Score_Memoria { get; set; }           // 8%
+        public int Score_IO { get; set; }                // 10%
+        public int Score_Discos { get; set; }            // 7%
+        
+        // TAB 3: Maintenance & Config (25%)
+        public int Score_ErroresCriticos { get; set; }   // 7%
+        public int Score_Maintenance { get; set; }       // 5%
+        public int Score_ConfiguracionTempdb { get; set; } // 8%
+        public int Score_Autogrowth { get; set; }        // 5%
         
         // Contribuciones ponderadas (0-peso máximo, redondeadas a entero)
-        public int BackupsContribution { get; set; }
-        public int AlwaysOnContribution { get; set; }
-        public int ConectividadContribution { get; set; }
-        public int ErroresCriticosContribution { get; set; }
-        public int CPUContribution { get; set; }
-        public int IOContribution { get; set; }
-        public int DiscosContribution { get; set; }
-        public int MemoriaContribution { get; set; }
-        public int MantenimientosContribution { get; set; }
-        public int ConfiguracionTempdbContribution { get; set; }
+        // TAB 1: Availability & DR
+        public int BackupsContribution { get; set; }           // Max: 18
+        public int AlwaysOnContribution { get; set; }          // Max: 14
+        public int LogChainContribution { get; set; }          // Max: 5
+        public int DatabaseStatesContribution { get; set; }    // Max: 3
+        
+        // TAB 2: Performance
+        public int CPUContribution { get; set; }               // Max: 10
+        public int MemoriaContribution { get; set; }           // Max: 8
+        public int IOContribution { get; set; }                // Max: 10
+        public int DiscosContribution { get; set; }            // Max: 7
+        
+        // TAB 3: Maintenance & Config
+        public int ErroresCriticosContribution { get; set; }   // Max: 7
+        public int MantenimientosContribution { get; set; }    // Max: 5
+        public int ConfiguracionTempdbContribution { get; set; } // Max: 8
+        public int AutogrowthContribution { get; set; }        // Max: 5
     }
 
     public class HealthScoreV3DetailDto : HealthScoreV3Dto
     {
-        // Detalles de cada categoría
-        public Models.HealthScoreV3.InstanceHealthBackups? BackupsDetails { get; set; }
-        public Models.HealthScoreV3.InstanceHealthAlwaysOn? AlwaysOnDetails { get; set; }
-        public Models.HealthScoreV3.InstanceHealthConectividad? ConectividadDetails { get; set; }
-        public Models.HealthScoreV3.InstanceHealthErroresCriticos? ErroresCriticosDetails { get; set; }
-        public Models.HealthScoreV3.InstanceHealthCPU? CPUDetails { get; set; }
-        public Models.HealthScoreV3.InstanceHealthIO? IODetails { get; set; }
-        public Models.HealthScoreV3.InstanceHealthDiscos? DiscosDetails { get; set; }
-        public Models.HealthScoreV3.InstanceHealthMemoria? MemoriaDetails { get; set; }
-        public Models.HealthScoreV3.InstanceHealthMaintenance? MaintenanceDetails { get; set; }
-        public Models.HealthScoreV3.InstanceHealthConfiguracionTempdb? ConfiguracionTempdbDetails { get; set; }
+        // Detalles de cada categoría (12 categorías)
+        // TAB 1: Availability & DR
+        public InstanceHealthBackups? BackupsDetails { get; set; }
+        public InstanceHealthAlwaysOn? AlwaysOnDetails { get; set; }
+        public InstanceHealthLogChain? LogChainDetails { get; set; }
+        public InstanceHealthDatabaseStates? DatabaseStatesDetails { get; set; }
+        
+        // TAB 2: Performance
+        public InstanceHealthCPU? CPUDetails { get; set; }
+        public InstanceHealthMemoria? MemoriaDetails { get; set; }
+        public InstanceHealthIO? IODetails { get; set; }
+        public InstanceHealthDiscos? DiscosDetails { get; set; }
+        
+        // TAB 3: Maintenance & Config
+        public InstanceHealthErroresCriticos? ErroresCriticosDetails { get; set; }
+        public InstanceHealthMaintenance? MaintenanceDetails { get; set; }
+        public InstanceHealthConfiguracionTempdb? ConfiguracionTempdbDetails { get; set; }
+        public InstanceHealthAutogrowth? AutogrowthDetails { get; set; }
     }
 
     public class HealthScoreV3SummaryDto
