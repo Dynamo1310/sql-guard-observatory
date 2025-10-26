@@ -489,7 +489,21 @@ foreach ($instance in $instances) {
         # Console output
         $status = "✅"
         $alerts = @()
+        $metrics = @()
         
+        # Total Wait Time (para mostrar siempre)
+        if ($waits.TotalWaitMs -gt 0) {
+            $waitHours = [Math]::Round($waits.TotalWaitMs / 1000.0 / 3600.0, 1)
+            $metrics += "Wait:${waitHours}h"
+        }
+        
+        # Top Wait Type (siempre mostrar)
+        if ($waits.TopWait1Type) {
+            $topWaitSec = [Math]::Round($waits.TopWait1Ms / 1000.0, 0)
+            $metrics += "Top:$($waits.TopWait1Type)"
+        }
+        
+        # Blocking
         if ($waits.BlockedSessionCount -gt 10) {
             $status = "🚨 BLOCKING!"
             $alerts += "Blocked:$($waits.BlockedSessionCount)"
@@ -500,31 +514,89 @@ foreach ($instance in $instances) {
         }
         
         if ($waits.TotalWaits -gt 0 -and $waits.TotalWaitMs -gt 0) {
-            # Check for high percentages
+            # PAGEIOLATCH - thresholds más sensibles
             if ($waits.PageIOLatchWaitMs -gt 0) {
-                $pct = [Math]::Round([decimal](($waits.PageIOLatchWaitMs / $waits.TotalWaitMs) * 100), 1)
-                if ($pct -gt 20) {
+                $pct = [Math]::Round([decimal](($waits.PageIOLatchWaitMs / $waits.TotalWaitMs) * 100), 2)
+                if ($pct -gt 10) {
+                    $status = "🚨 I/O WAITS!"
                     $alerts += "PAGEIOLATCH:${pct}%"
                 }
-            }
-            
-            if ($waits.CXPacketWaitMs -gt 0) {
-                $pct = [Math]::Round([decimal](($waits.CXPacketWaitMs / $waits.TotalWaitMs) * 100), 1)
-                if ($pct -gt 30) {
-                    $alerts += "CXPACKET:${pct}%"
+                elseif ($pct -gt 5) {
+                    if ($status -eq "✅") { $status = "⚠️ I/O" }
+                    $alerts += "PAGEIOLATCH:${pct}%"
+                }
+                elseif ($pct -gt 1) {
+                    $metrics += "PageIO:${pct}%"
                 }
             }
             
+            # CXPACKET - thresholds más sensibles
+            if ($waits.CXPacketWaitMs -gt 0) {
+                $pct = [Math]::Round([decimal](($waits.CXPacketWaitMs / $waits.TotalWaitMs) * 100), 2)
+                if ($pct -gt 15) {
+                    $status = "🚨 PARALLELISM!"
+                    $alerts += "CXPACKET:${pct}%"
+                }
+                elseif ($pct -gt 10) {
+                    if ($status -eq "✅") { $status = "⚠️ CXPACKET" }
+                    $alerts += "CXPACKET:${pct}%"
+                }
+                elseif ($pct -gt 1) {
+                    $metrics += "CXP:${pct}%"
+                }
+            }
+            
+            # RESOURCE_SEMAPHORE - thresholds más sensibles
             if ($waits.ResourceSemaphoreWaitMs -gt 0) {
-                $pct = [Math]::Round([decimal](($waits.ResourceSemaphoreWaitMs / $waits.TotalWaitMs) * 100), 1)
-                if ($pct -gt 10) {
+                $pct = [Math]::Round([decimal](($waits.ResourceSemaphoreWaitMs / $waits.TotalWaitMs) * 100), 2)
+                if ($pct -gt 5) {
+                    $status = "🚨 MEMORY GRANTS!"
                     $alerts += "RESOURCE_SEM:${pct}%"
+                }
+                elseif ($pct -gt 2) {
+                    if ($status -eq "✅") { $status = "⚠️ MemGrant" }
+                    $alerts += "RESOURCE_SEM:${pct}%"
+                }
+                elseif ($pct -gt 0.5) {
+                    $metrics += "ResSem:${pct}%"
+                }
+            }
+            
+            # WRITELOG - alto en términos absolutos
+            if ($waits.WriteLogWaitMs -gt 0) {
+                $pct = [Math]::Round([decimal](($waits.WriteLogWaitMs / $waits.TotalWaitMs) * 100), 2)
+                if ($pct -gt 10) {
+                    if ($status -eq "✅") { $status = "⚠️ WriteLog" }
+                    $alerts += "WRITELOG:${pct}%"
+                }
+                elseif ($pct -gt 5) {
+                    $metrics += "WriteLog:${pct}%"
+                }
+            }
+            
+            # THREADPOOL - siempre crítico si existe
+            if ($waits.ThreadPoolWaitMs -gt 0) {
+                $status = "🚨 THREADPOOL!"
+                $pct = [Math]::Round([decimal](($waits.ThreadPoolWaitMs / $waits.TotalWaitMs) * 100), 2)
+                $alerts += "THREADPOOL:${pct}%"
+            }
+            
+            # SOS_SCHEDULER_YIELD - indica CPU pressure
+            if ($waits.SOSSchedulerYieldMs -gt 0) {
+                $pct = [Math]::Round([decimal](($waits.SOSSchedulerYieldMs / $waits.TotalWaitMs) * 100), 2)
+                if ($pct -gt 10) {
+                    if ($status -eq "✅") { $status = "⚠️ CPU Pressure" }
+                    $alerts += "SOS_YIELD:${pct}%"
+                }
+                elseif ($pct -gt 5) {
+                    $metrics += "SOSYield:${pct}%"
                 }
             }
         }
         
         $alertText = if ($alerts.Count -gt 0) { " [$($alerts -join ', ')]" } else { "" }
-        Write-Host "   $status $instanceName$alertText" -ForegroundColor $(if ($status -like "*🚨*") { "Red" } elseif ($status -like "*⚠️*") { "Yellow" } else { "Gray" })
+        $metricsText = if ($metrics.Count -gt 0) { " | $($metrics -join ', ')" } else { "" }
+        Write-Host "   $status $instanceName$alertText$metricsText" -ForegroundColor $(if ($status -like "*🚨*") { "Red" } elseif ($status -like "*⚠️*") { "Yellow" } else { "Gray" })
         
     } catch {
         Write-Host "   ❌ ERROR $instanceName - $($_.Exception.Message)" -ForegroundColor Red
@@ -541,12 +613,60 @@ Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
 Write-Host "║  RESUMEN - WAIT STATISTICS & BLOCKING                ║" -ForegroundColor Cyan
 Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Cyan
-Write-Host "║  Total instancias:     $($results.Count.ToString().PadLeft(3))                          ║" -ForegroundColor Cyan
-Write-Host "║  Con blocking:         $(($results | Where-Object {$_.BlockedSessionCount -gt 0}).Count.ToString().PadLeft(3))                          ║" -ForegroundColor Cyan
-Write-Host "║  Blocking severo (>10):$(($results | Where-Object {$_.BlockedSessionCount -gt 10}).Count.ToString().PadLeft(3))                          ║" -ForegroundColor Cyan
-Write-Host "║  Con PAGEIOLATCH alto: $(($results | Where-Object {$_.TotalWaits -gt 0 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -gt 20}).Count.ToString().PadLeft(3))                          ║" -ForegroundColor Cyan
-Write-Host "║  Con CXPACKET alto:    $(($results | Where-Object {$_.TotalWaits -gt 0 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -gt 30}).Count.ToString().PadLeft(3))                          ║" -ForegroundColor Cyan
+Write-Host "║  Total instancias:        $($results.Count.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
+
+# Blocking
+$withBlocking = ($results | Where-Object {$_.BlockedSessionCount -gt 0}).Count
+$severeBlocking = ($results | Where-Object {$_.BlockedSessionCount -gt 10}).Count
+Write-Host "║  Con blocking:            $(${withBlocking}.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
+Write-Host "║  Blocking severo (>10):   $(${severeBlocking}.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
+
+# PAGEIOLATCH (I/O waits) - ajustado a nuevos thresholds
+$pageIOHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -gt 10}).Count
+$pageIOModerate = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -gt 5 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -le 10}).Count
+$pageIOLow = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -gt 1 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -le 5}).Count
+Write-Host "║  PAGEIOLATCH >10%:        $(${pageIOHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($pageIOHigh -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  PAGEIOLATCH 5-10%:       $(${pageIOModerate}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($pageIOModerate -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  PAGEIOLATCH 1-5%:        $(${pageIOLow}.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
+
+# CXPACKET (parallelism waits) - ajustado a nuevos thresholds
+$cxpacketHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -gt 15}).Count
+$cxpacketModerate = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -gt 10 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -le 15}).Count
+$cxpacketLow = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -gt 1 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -le 10}).Count
+Write-Host "║  CXPACKET >15%:           $(${cxpacketHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($cxpacketHigh -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  CXPACKET 10-15%:         $(${cxpacketModerate}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($cxpacketModerate -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  CXPACKET 1-10%:          $(${cxpacketLow}.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
+
+# RESOURCE_SEMAPHORE (memory grants)
+$memGrantsHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.ResourceSemaphoreWaitMs / $_.TotalWaitMs * 100) -gt 5}).Count
+$memGrantsModerate = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.ResourceSemaphoreWaitMs / $_.TotalWaitMs * 100) -gt 2 -and ($_.ResourceSemaphoreWaitMs / $_.TotalWaitMs * 100) -le 5}).Count
+Write-Host "║  RESOURCE_SEM >5%:        $(${memGrantsHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($memGrantsHigh -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  RESOURCE_SEM 2-5%:       $(${memGrantsModerate}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($memGrantsModerate -gt 0) { "Yellow" } else { "Cyan" })
+
+# WRITELOG
+$writeLogHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.WriteLogWaitMs / $_.TotalWaitMs * 100) -gt 10}).Count
+Write-Host "║  WRITELOG >10%:           $(${writeLogHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($writeLogHigh -gt 0) { "Yellow" } else { "Cyan" })
+
+# THREADPOOL (siempre crítico)
+$threadPoolAny = ($results | Where-Object {$_.ThreadPoolWaitMs -gt 0}).Count
+Write-Host "║  THREADPOOL (crítico):    $(${threadPoolAny}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($threadPoolAny -gt 0) { "Red" } else { "Cyan" })
+
+# SOS_SCHEDULER_YIELD (CPU pressure)
+$sosYieldHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.SOSSchedulerYieldMs / $_.TotalWaitMs * 100) -gt 10}).Count
+Write-Host "║  SOS_YIELD >10%:          $(${sosYieldHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($sosYieldHigh -gt 0) { "Yellow" } else { "Cyan" })
+
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+
+# Top 5 instancias por wait time
+Write-Host "`n📊 TOP 5 INSTANCIAS POR WAIT TIME:" -ForegroundColor Yellow
+$top5 = $results | Sort-Object -Property TotalWaitMs -Descending | Select-Object -First 5
+foreach ($inst in $top5) {
+    if ($inst.TotalWaitMs -gt 0) {
+        $waitHours = [Math]::Round($inst.TotalWaitMs / 1000.0 / 3600.0, 1)
+        $topWait = if ($inst.TopWait1Type) { $inst.TopWait1Type } else { "N/A" }
+        Write-Host "   $($inst.InstanceName.PadRight(25)) - ${waitHours}h total | Top: $topWait" -ForegroundColor Gray
+    }
+}
 
 Write-Host "`n✅ Script completado!" -ForegroundColor Green
 
