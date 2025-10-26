@@ -539,14 +539,13 @@ function Calculate-ConfiguracionTempdbScore {
     # Score final ponderado
     $score = ($tempdbHealthScore * 0.6) + ($memoryScore * 0.4)
     
-    # Aplicar cap si TempDB Health Score es crítico (<40)
+    # Aplicar cap SOLO si TempDB Health Score es CRÍTICO (<40)
+    # Esto garantiza que problemas severos de TempDB afecten el score global
     if ($tempdbHealthScore -lt 40) {
-        $cap = 65  # TempDB crítico limita el score general de la categoría
+        $cap = 65  # TempDB crítico (disco saturado, 1 archivo, espacio <10%)
     }
-    # Aplicar cap si hay problemas moderados (<70)
-    elseif ($tempdbHealthScore -lt 70) {
-        $cap = 85  # TempDB con problemas limita moderadamente
-    }
+    # NO aplicar cap para scores 40-69 (problemas moderados)
+    # El score ya refleja la penalización (60% del score de TempDB)
     
     return @{ Score = [int]$score; Cap = $cap }
 }
