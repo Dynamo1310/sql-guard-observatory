@@ -502,6 +502,8 @@ if ($top5Grants.Count -gt 0) {
     foreach ($inst in $top5Grants) {
         Write-Host "   $($inst.InstanceName.PadRight(25)) - Grants Pending: $($inst.MemoryGrantsPending)" -ForegroundColor Yellow
     }
+} else {
+    Write-Host "`n✅ No hay instancias con Memory Grants Pending (todas las queries tienen memoria suficiente)" -ForegroundColor Green
 }
 
 # Top 5 instancias con Stolen Memory más alto
@@ -517,7 +519,7 @@ if ($top5Stolen.Count -gt 0) {
     Write-Host "`n⚠️  TOP 5 INSTANCIAS CON STOLEN MEMORY MÁS ALTO:" -ForegroundColor Yellow
     foreach ($inst in $top5Stolen) {
         $color = if ($inst.StolenPct -gt 50) { "Red" } elseif ($inst.StolenPct -gt 30) { "Yellow" } else { "Gray" }
-        Write-Host "   $($inst.InstanceName.PadRight(25)) - Stolen: $($inst.StolenServerMemoryMB)MB (${inst.StolenPct}%)" -ForegroundColor $color
+        Write-Host "   $($inst.InstanceName.PadRight(25)) - Stolen: $($inst.StolenServerMemoryMB)MB ($($inst.StolenPct)%)" -ForegroundColor $color
     }
     Write-Host "`n   💡 Stolen Memory = memoria usada fuera del buffer pool (planes, CLR, XPs, etc.)" -ForegroundColor DarkGray
 }
