@@ -84,6 +84,56 @@ $PESOS = @{
 
 #endregion
 
+#region ===== FUNCIONES HELPER =====
+
+function Get-SafeNumeric {
+    <#
+    .SYNOPSIS
+        Convierte un valor potencialmente NULL/DBNull/vacío a un número válido
+    #>
+    param(
+        [Parameter(Mandatory)]
+        $Value,
+        [double]$Default = 0
+    )
+    
+    if ($null -eq $Value -or $Value -is [System.DBNull] -or [string]::IsNullOrWhiteSpace($Value.ToString())) {
+        return $Default
+    }
+    
+    try {
+        return [double]$Value
+    }
+    catch {
+        return $Default
+    }
+}
+
+function Get-SafeInt {
+    <#
+    .SYNOPSIS
+        Convierte un valor potencialmente NULL/DBNull/vacío a un entero válido
+    #>
+    param(
+        [Parameter(Mandatory)]
+        $Value,
+        [int]$Default = 0
+    )
+    
+    if ($null -eq $Value -or $Value -is [System.DBNull] -or [string]::IsNullOrWhiteSpace($Value.ToString())) {
+        return $Default
+    }
+    
+    try {
+        return [int]$Value
+    }
+    catch {
+        return $Default
+    }
+}
+
+#endregion
+
 #region ===== FUNCIONES DE SCORING =====
 
 # 1. BACKUPS (18%)

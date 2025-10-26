@@ -113,16 +113,20 @@ ORDER BY
             if ($allReads) {
                 $result.AvgReadLatencyMs = [decimal](($allReads | Measure-Object -Property AvgReadLatencyMs -Average).Average)
                 $result.MaxReadLatencyMs = [decimal](($allReads | Measure-Object -Property AvgReadLatencyMs -Maximum).Maximum)
-                $result.ReadIOPS = [int](($allReads | Measure-Object -Property NumReads -Sum).Sum)
+                # NumReads es un contador acumulativo desde el reinicio, no IOPS reales
+                # Para evitar overflow de INT, lo establecemos en 0 (no se usa en scoring)
+                $result.ReadIOPS = 0
             }
             
             if ($allWrites) {
                 $result.AvgWriteLatencyMs = [decimal](($allWrites | Measure-Object -Property AvgWriteLatencyMs -Average).Average)
                 $result.MaxWriteLatencyMs = [decimal](($allWrites | Measure-Object -Property AvgWriteLatencyMs -Maximum).Maximum)
-                $result.WriteIOPS = [int](($allWrites | Measure-Object -Property NumWrites -Sum).Sum)
+                # NumWrites es un contador acumulativo desde el reinicio, no IOPS reales
+                # Para evitar overflow de INT, lo establecemos en 0 (no se usa en scoring)
+                $result.WriteIOPS = 0
             }
             
-            $result.TotalIOPS = $result.ReadIOPS + $result.WriteIOPS
+            $result.TotalIOPS = 0  # No almacenamos contadores acumulativos
             
             # Métricas específicas por tipo de archivo
             $dataFiles = $data | Where-Object { $_.FileType -eq 'ROWS' }
