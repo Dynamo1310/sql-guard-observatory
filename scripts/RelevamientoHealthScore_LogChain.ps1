@@ -313,6 +313,11 @@ function Write-ToSqlServer {
     
     try {
         foreach ($row in $Data) {
+            # Sanitizar valores numéricos (pueden ser NULL)
+            $brokenChainCount = if ($null -eq $row.BrokenChainCount) { 0 } else { $row.BrokenChainCount }
+            $fullDBsWithoutLog = if ($null -eq $row.FullDBsWithoutLogBackup) { 0 } else { $row.FullDBsWithoutLogBackup }
+            $maxHoursSinceLog = if ($null -eq $row.MaxHoursSinceLogBackup) { 0 } else { $row.MaxHoursSinceLogBackup }
+            
             $query = @"
 INSERT INTO dbo.InstanceHealth_LogChain (
     InstanceName,
@@ -330,9 +335,9 @@ INSERT INTO dbo.InstanceHealth_LogChain (
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
     GETUTCDATE(),
-    $($row.BrokenChainCount),
-    $($row.FullDBsWithoutLogBackup),
-    $($row.MaxHoursSinceLogBackup),
+    $brokenChainCount,
+    $fullDBsWithoutLog,
+    $maxHoursSinceLog,
     '$($row.LogChainDetails -replace "'", "''")'
 );
 "@
