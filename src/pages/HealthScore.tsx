@@ -1345,40 +1345,56 @@ export default function HealthScore() {
                                       </div>
 
                                       {/* Espacio y Recursos */}
-                                      <div className="space-y-1">
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">TempDB Size / Used</span>
-                                          <span className="font-mono">{(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBTotalSizeMB / 1024).toFixed(1)} / {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBUsedSpaceMB / 1024).toFixed(1)} GB</span>
+                                      {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBTotalSizeMB > 0 || 
+                                        instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct > 0 ||
+                                        instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB > 0) ? (
+                                        <div className="space-y-1">
+                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBTotalSizeMB > 0 && (
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-muted-foreground">TempDB Size / Used</span>
+                                              <span className="font-mono">{(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBTotalSizeMB / 1024).toFixed(1)} / {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBUsedSpaceMB / 1024).toFixed(1)} GB</span>
+                                            </div>
+                                          )}
+                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct > 0 && (
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-muted-foreground">Free Space</span>
+                                              <Badge 
+                                                variant={
+                                                  instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct >= 20 ? 'outline' :
+                                                  instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct >= 10 ? 'default' :
+                                                  'destructive'
+                                                }
+                                                className="text-xs font-mono"
+                                              >
+                                                {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct.toFixed(1)}%
+                                                {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct < 10 && ' ⚠️'}
+                                              </Badge>
+                                            </div>
+                                          )}
+                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB > 0 && (
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-muted-foreground">Version Store</span>
+                                              <Badge 
+                                                variant={
+                                                  instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB < 1024 ? 'outline' :
+                                                  instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB < 2048 ? 'default' :
+                                                  'destructive'
+                                                }
+                                                className="text-xs font-mono"
+                                              >
+                                                {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB / 1024).toFixed(2)} GB
+                                                {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB > 2048 && ' ⚠️'}
+                                              </Badge>
+                                            </div>
+                                          )}
                                         </div>
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Free Space</span>
-                                          <Badge 
-                                            variant={
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct >= 20 ? 'outline' :
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct >= 10 ? 'default' :
-                                              'destructive'
-                                            }
-                                            className="text-xs font-mono"
-                                          >
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct.toFixed(1)}%
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct < 10 && instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct > 0 && ' ⚠️'}
-                                          </Badge>
+                                      ) : (
+                                        <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2">
+                                          <p className="text-[10px] text-muted-foreground text-center">
+                                            ℹ️ Métricas extendidas disponibles después de la próxima recolección
+                                          </p>
                                         </div>
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Version Store</span>
-                                          <Badge 
-                                            variant={
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB < 1024 ? 'outline' :
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB < 2048 ? 'default' :
-                                              'destructive'
-                                            }
-                                            className="text-xs font-mono"
-                                          >
-                                            {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB / 1024).toFixed(2)} GB
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB > 2048 && ' ⚠️'}
-                                          </Badge>
-                                        </div>
-                                      </div>
+                                      )}
 
                                       {/* Max Memory */}
                                       <div className="pt-2 border-t space-y-1">
