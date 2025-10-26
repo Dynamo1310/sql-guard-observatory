@@ -51,10 +51,12 @@ Import-Module dbatools -Force -ErrorAction Stop
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
 $SqlDatabase = "SQLNova"
-$TimeoutSec = 15
-$TestMode = $false    # $true = solo 5 instancias para testing
-$IncludeAWS = $false  # Cambiar a $true para incluir AWS
-$OnlyAWS = $false     # Cambiar a $true para SOLO AWS
+$TimeoutSec = 10          # Reducido de 15 a 10 segundos
+$TestMode = $false        # $true = solo 5 instancias para testing
+$IncludeAWS = $false      # Cambiar a $true para incluir AWS
+$OnlyAWS = $false         # Cambiar a $true para SOLO AWS
+$MaxParallelJobs = 10     # Procesar 10 instancias en paralelo
+$UseParallel = $true      # Usar procesamiento paralelo
 # NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
@@ -130,52 +132,15 @@ BEGIN
     END CATCH
 END
 
--- NIVEL 3: Último recurso - fn_dblog en todas las DBs (menos preciso)
+-- NIVEL 3: Último recurso - Simplificado (solo en tempdb para estimación)
 IF @AutogrowthEvents = 0
 BEGIN
     BEGIN TRY
-        SET @Method = 'TransactionLog';
+        SET @Method = 'Estimated';
         
-        CREATE TABLE #AutogrowthTemp (EventCount INT);
-        
-        DECLARE @dbname NVARCHAR(128);
-        DECLARE @sql NVARCHAR(MAX);
-        
-        DECLARE db_cursor CURSOR FOR
-        SELECT name 
-        FROM sys.databases
-        WHERE database_id > 4 
-          AND state_desc = 'ONLINE'
-          AND is_read_only = 0;
-        
-        OPEN db_cursor;
-        FETCH NEXT FROM db_cursor INTO @dbname;
-        
-        WHILE @@FETCH_STATUS = 0
-        BEGIN
-            BEGIN TRY
-                SET @sql = N'
-                USE [' + @dbname + N'];
-                SELECT COUNT(*) 
-                FROM sys.fn_dblog(NULL, NULL)
-                WHERE Operation = ''LOP_GROW_FILE''
-                  AND [Begin Time] > DATEADD(HOUR, -24, GETDATE());';
-                
-                INSERT INTO #AutogrowthTemp
-                EXEC sp_executesql @sql;
-            END TRY
-            BEGIN CATCH
-                -- Si falla en alguna DB, continuar con la siguiente
-            END CATCH
-            
-            FETCH NEXT FROM db_cursor INTO @dbname;
-        END
-        
-        CLOSE db_cursor;
-        DEALLOCATE db_cursor;
-        
-        SELECT @AutogrowthEvents = SUM(EventCount) FROM #AutogrowthTemp;
-        DROP TABLE #AutogrowthTemp;
+        -- Si no pudimos obtener datos históricos, al menos detectar archivos problemáticos
+        -- No intentamos leer transaction logs (muy lento), solo marcamos como "sin datos históricos"
+        SET @AutogrowthEvents = -1;  -- Valor especial que indica "sin datos disponibles"
     END TRY
     BEGIN CATCH
         SET @AutogrowthEvents = 0;
@@ -342,62 +307,288 @@ Write-Host ""
 Write-Host "2️⃣  Recolectando métricas de autogrowth..." -ForegroundColor Yellow
 
 $results = @()
-$counter = 0
 
-foreach ($instance in $instances) {
-    $counter++
-    $instanceName = $instance.NombreInstancia
+if ($UseParallel) {
+    Write-Host "   ⚡ Modo paralelo activado ($MaxParallelJobs jobs simultáneos)" -ForegroundColor Cyan
     
-    Write-Progress -Activity "Recolectando métricas" `
-        -Status "$counter de $($instances.Count): $instanceName" `
-        -PercentComplete (($counter / $instances.Count) * 100)
+    # ScriptBlock para ejecutar en paralelo
+    $scriptBlock = {
+        param($Instance, $TimeoutSec, $QueryTemplate)
+        
+        Import-Module dbatools -Force -ErrorAction SilentlyContinue
+        
+        $instanceName = $Instance.NombreInstancia
+        $ambiente = if ($Instance.PSObject.Properties.Name -contains "ambiente") { $Instance.ambiente } else { "N/A" }
+        $hostingSite = if ($Instance.PSObject.Properties.Name -contains "hostingSite") { $Instance.hostingSite } else { "N/A" }
+        $sqlVersion = if ($Instance.PSObject.Properties.Name -contains "MajorVersion") { $Instance.MajorVersion } else { "N/A" }
+        
+        # Test connection rápido
+        try {
+            $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
+            if (-not $connection.IsPingable) {
+                return $null
+            }
+        } catch {
+            return $null
+        }
+        
+        # Obtener métricas
+        try {
+            $datasets = Invoke-DbaQuery -SqlInstance $instanceName -Query $QueryTemplate -QueryTimeout $TimeoutSec -EnableException -As DataSet
+            
+            $autogrowthEvents = $datasets.Tables[0]
+            $fileInfo = $datasets.Tables[1]
+            
+            $autogrowthCount = if ($autogrowthEvents.Count -gt 0) { $autogrowthEvents[0].AutogrowthEventsLast24h } else { 0 }
+            $filesNearLimit = ($fileInfo | Where-Object { $_.PercentOfMax -gt 80 }).Count
+            $filesWithBadGrowth = ($fileInfo | Where-Object { $_.HasIssue -eq 1 }).Count
+            $worstPercentOfMax = ($fileInfo | Measure-Object -Property PercentOfMax -Maximum).Maximum
+            
+            if ($null -eq $worstPercentOfMax) { $worstPercentOfMax = 0 }
+            
+            $problematicFiles = $fileInfo | Where-Object { $_.HasIssue -eq 1 -or $_.PercentOfMax -gt 70 } | 
+                                Select-Object DatabaseName, FileName, FileType, SizeMB, MaxSizeMB, PercentOfMax, GrowthSetting
+            $details = $problematicFiles | ConvertTo-Json -Compress
+            if ($null -eq $details -or $details -eq "") { $details = "[]" }
+            
+            return [PSCustomObject]@{
+                InstanceName = $instanceName
+                Ambiente = $ambiente
+                HostingSite = $hostingSite
+                SqlVersion = $sqlVersion
+                AutogrowthEventsLast24h = $autogrowthCount
+                FilesNearLimit = $filesNearLimit
+                FilesWithBadGrowth = $filesWithBadGrowth
+                WorstPercentOfMax = [math]::Round($worstPercentOfMax, 2)
+                AutogrowthDetails = $details
+            }
+        } catch {
+            return $null
+        }
+    }
     
-    $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
-    $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
-    $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+    # Definir la query directamente aquí (copiada de la función)
+    $queryTemplate = @"
+-- Autogrowth Events (últimas 24h) - Detección en 3 niveles
+DECLARE @AutogrowthEvents INT = 0;
+DECLARE @Method VARCHAR(50) = 'Unknown';
+
+-- NIVEL 1: Verificar si system_health está habilitado y disponible
+DECLARE @SystemHealthEnabled BIT = 0;
+IF EXISTS (
+    SELECT 1 
+    FROM sys.dm_xe_sessions 
+    WHERE name = 'system_health'
+)
+BEGIN
+    SET @SystemHealthEnabled = 1;
+    SET @Method = 'ExtendedEvents';
     
-    # Test connection
-    try {
-        $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
-        if (-not $connection.IsPingable) {
+    -- Intentar leer eventos de autogrowth de system_health
+    BEGIN TRY
+        WITH autogrowth_events AS (
+            SELECT 
+                CAST(event_data AS XML) AS event_xml
+            FROM sys.fn_xe_file_target_read_file(
+                'system_health*.xel', 
+                NULL, 
+                NULL, 
+                NULL
+            )
+            WHERE object_name = 'database_file_size_change'
+        )
+        SELECT @AutogrowthEvents = COUNT(*)
+        FROM autogrowth_events
+        WHERE event_xml.value('(event/@timestamp)[1]', 'datetime2') > DATEADD(HOUR, -24, GETUTCDATE())
+          AND event_xml.value('(event/data[@name="is_automatic"]/value)[1]', 'bit') = 1;
+    END TRY
+    BEGIN CATCH
+        SET @AutogrowthEvents = 0;
+        SET @SystemHealthEnabled = 0;
+    END CATCH
+END
+
+-- NIVEL 2: Si XE no está disponible, usar Default Trace (SQL 2005+)
+IF @SystemHealthEnabled = 0 AND @AutogrowthEvents = 0
+BEGIN
+    BEGIN TRY
+        DECLARE @tracefile VARCHAR(500);
+        SELECT @tracefile = CAST(value AS VARCHAR(500))
+        FROM sys.fn_trace_getinfo(NULL)
+        WHERE traceid = 1 AND property = 2;
+        
+        IF @tracefile IS NOT NULL
+        BEGIN
+            SET @Method = 'DefaultTrace';
+            
+            SELECT @AutogrowthEvents = COUNT(*)
+            FROM sys.fn_trace_gettable(@tracefile, DEFAULT) t
+            INNER JOIN sys.trace_events e ON t.EventClass = e.trace_event_id
+            WHERE e.name = 'Data File Auto Grow'
+              AND t.StartTime > DATEADD(HOUR, -24, GETDATE());
+        END
+    END TRY
+    BEGIN CATCH
+        SET @AutogrowthEvents = 0;
+    END CATCH
+END
+
+-- NIVEL 3: Último recurso - Simplificado (solo en tempdb para estimación)
+IF @AutogrowthEvents = 0
+BEGIN
+    BEGIN TRY
+        SET @Method = 'Estimated';
+        SET @AutogrowthEvents = -1;
+    END TRY
+    BEGIN CATCH
+        SET @AutogrowthEvents = 0;
+    END CATCH
+END
+
+SELECT ISNULL(@AutogrowthEvents, 0) AS AutogrowthEventsLast24h;
+
+-- File Size vs MaxSize
+SELECT 
+    DB_NAME(mf.database_id) AS DatabaseName,
+    mf.name AS FileName,
+    mf.type_desc AS FileType,
+    mf.size * 8.0 / 1024 AS SizeMB,
+    CASE 
+        WHEN mf.max_size = -1 THEN NULL
+        WHEN mf.max_size = 268435456 THEN NULL
+        ELSE mf.max_size * 8.0 / 1024
+    END AS MaxSizeMB,
+    CASE 
+        WHEN mf.max_size = -1 OR mf.max_size = 268435456 THEN 0
+        ELSE (CAST(mf.size AS FLOAT) / mf.max_size) * 100
+    END AS PercentOfMax,
+    mf.is_percent_growth AS IsPercentGrowth,
+    CASE 
+        WHEN mf.is_percent_growth = 1 THEN CAST(mf.growth AS VARCHAR) + '%'
+        ELSE CAST(mf.growth * 8 / 1024 AS VARCHAR) + ' MB'
+    END AS GrowthSetting,
+    CASE 
+        WHEN mf.max_size != -1 AND mf.max_size != 268435456 
+             AND (CAST(mf.size AS FLOAT) / mf.max_size) > 0.9 THEN 1
+        WHEN mf.is_percent_growth = 1 AND mf.size * 8 / 1024 > 1000 THEN 1
+        ELSE 0
+    END AS HasIssue
+FROM sys.master_files mf
+WHERE mf.database_id > 4
+ORDER BY PercentOfMax DESC;
+"@
+    
+    # Lanzar jobs en lotes
+    $jobs = @()
+    $counter = 0
+    
+    foreach ($instance in $instances) {
+        $counter++
+        
+        # Esperar si hay demasiados jobs corriendo
+        while ((Get-Job -State Running).Count -ge $MaxParallelJobs) {
+            Start-Sleep -Milliseconds 100
+            
+            # Procesar jobs completados
+            $completedJobs = Get-Job -State Completed
+            foreach ($job in $completedJobs) {
+                $result = Receive-Job -Job $job
+                if ($null -ne $result) {
+                    $results += $result
+                    
+                    $status = "✅"
+                    if ($result.FilesNearLimit -gt 0) { $status = "🚨" }
+                    elseif ($result.AutogrowthEventsLast24h -gt 100) { $status = "⚠️ " }
+                    
+                    Write-Host "   $status $($result.InstanceName) - Events:$($result.AutogrowthEventsLast24h) NearLimit:$($result.FilesNearLimit)" -ForegroundColor Gray
+                }
+                Remove-Job -Job $job
+            }
+        }
+        
+        Write-Progress -Activity "Recolectando métricas" `
+            -Status "$counter de $($instances.Count) instancias procesadas" `
+            -PercentComplete (($counter / $instances.Count) * 100)
+        
+        # Lanzar nuevo job
+        $job = Start-Job -ScriptBlock $scriptBlock -ArgumentList $instance, $TimeoutSec, $queryTemplate
+        $jobs += $job
+    }
+    
+    # Esperar a que terminen todos los jobs
+    Write-Host "   ⏳ Esperando jobs restantes..." -ForegroundColor Yellow
+    Wait-Job -Job $jobs | Out-Null
+    
+    # Recoger resultados finales
+    foreach ($job in $jobs) {
+        $result = Receive-Job -Job $job
+        if ($null -ne $result -and $results.InstanceName -notcontains $result.InstanceName) {
+            $results += $result
+            
+            $status = "✅"
+            if ($result.FilesNearLimit -gt 0) { $status = "🚨" }
+            elseif ($result.AutogrowthEventsLast24h -gt 100) { $status = "⚠️ " }
+            
+            Write-Host "   $status $($result.InstanceName) - Events:$($result.AutogrowthEventsLast24h) NearLimit:$($result.FilesNearLimit)" -ForegroundColor Gray
+        }
+        Remove-Job -Job $job
+    }
+    
+} else {
+    # Modo secuencial (original)
+    $counter = 0
+    foreach ($instance in $instances) {
+        $counter++
+        $instanceName = $instance.NombreInstancia
+        
+        Write-Progress -Activity "Recolectando métricas" `
+            -Status "$counter de $($instances.Count): $instanceName" `
+            -PercentComplete (($counter / $instances.Count) * 100)
+        
+        $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
+        $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+        $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+        
+        try {
+            $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
+            if (-not $connection.IsPingable) {
+                Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+                continue
+            }
+        } catch {
             Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
             continue
         }
-    } catch {
-        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
-        continue
-    }
-    
-    # Obtener métricas
-    $autogrowthStatus = Get-AutogrowthStatus -Instance $instanceName
-    
-    if ($null -eq $autogrowthStatus) {
-        Write-Host "   ⚠️  $instanceName - Sin datos (skipped)" -ForegroundColor Yellow
-        continue
-    }
-    
-    $status = "✅"
-    if ($autogrowthStatus.FilesNearLimit -gt 0) {
-        $status = "🚨 FILES NEAR LIMIT!"
-    } elseif ($autogrowthStatus.AutogrowthEventsLast24h -gt 100) {
-        $status = "⚠️  HIGH AUTOGROWTH"
-    } elseif ($autogrowthStatus.FilesWithBadGrowth -gt 0) {
-        $status = "⚠️  BAD GROWTH CONFIG"
-    }
-    
-    Write-Host "   $status $instanceName - Events:$($autogrowthStatus.AutogrowthEventsLast24h) NearLimit:$($autogrowthStatus.FilesNearLimit) BadGrowth:$($autogrowthStatus.FilesWithBadGrowth)" -ForegroundColor Gray
-    
-    # Crear objeto de resultado
-    $results += [PSCustomObject]@{
-        InstanceName = $instanceName
-        Ambiente = $ambiente
-        HostingSite = $hostingSite
-        SqlVersion = $sqlVersion
-        AutogrowthEventsLast24h = $autogrowthStatus.AutogrowthEventsLast24h
-        FilesNearLimit = $autogrowthStatus.FilesNearLimit
-        FilesWithBadGrowth = $autogrowthStatus.FilesWithBadGrowth
-        WorstPercentOfMax = $autogrowthStatus.WorstPercentOfMax
-        AutogrowthDetails = ($autogrowthStatus.Details | ConvertTo-Json -Compress)
+        
+        $autogrowthStatus = Get-AutogrowthStatus -Instance $instanceName
+        
+        if ($null -eq $autogrowthStatus) {
+            Write-Host "   ⚠️  $instanceName - Sin datos (skipped)" -ForegroundColor Yellow
+            continue
+        }
+        
+        $status = "✅"
+        if ($autogrowthStatus.FilesNearLimit -gt 0) {
+            $status = "🚨 FILES NEAR LIMIT!"
+        } elseif ($autogrowthStatus.AutogrowthEventsLast24h -gt 100) {
+            $status = "⚠️  HIGH AUTOGROWTH"
+        } elseif ($autogrowthStatus.FilesWithBadGrowth -gt 0) {
+            $status = "⚠️  BAD GROWTH CONFIG"
+        }
+        
+        Write-Host "   $status $instanceName - Events:$($autogrowthStatus.AutogrowthEventsLast24h) NearLimit:$($autogrowthStatus.FilesNearLimit) BadGrowth:$($autogrowthStatus.FilesWithBadGrowth)" -ForegroundColor Gray
+        
+        $results += [PSCustomObject]@{
+            InstanceName = $instanceName
+            Ambiente = $ambiente
+            HostingSite = $hostingSite
+            SqlVersion = $sqlVersion
+            AutogrowthEventsLast24h = $autogrowthStatus.AutogrowthEventsLast24h
+            FilesNearLimit = $autogrowthStatus.FilesNearLimit
+            FilesWithBadGrowth = $autogrowthStatus.FilesWithBadGrowth
+            WorstPercentOfMax = $autogrowthStatus.WorstPercentOfMax
+            AutogrowthDetails = ($autogrowthStatus.Details | ConvertTo-Json -Compress)
+        }
     }
 }
 
