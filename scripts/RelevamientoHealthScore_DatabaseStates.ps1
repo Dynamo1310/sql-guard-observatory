@@ -30,31 +30,36 @@
 #Requires -Modules dbatools
 
 [CmdletBinding()]
-param(
-    [string]$ApiBaseUrl = "http://localhost:5000",
-    [string]$SqlServer = "asprbm-nov-01\API",
-    [string]$SqlDatabase = "SQLNova",
-    [int]$TimeoutSec = 300
-)
+param()
+
+# Verificar que dbatools está disponible
+if (-not (Get-Module -ListAvailable -Name dbatools)) {
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    exit 1
+}
+
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+}
+
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
-$ErrorActionPreference = "Stop"
+$ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
+$SqlServer = "SSPR17MON-01"
+$SqlDatabase = "SQLNova"
+$TimeoutSec = 15
+$TestMode = $false    # $true = solo 5 instancias para testing
+$IncludeAWS = $false  # Cambiar a $true para incluir AWS
+$OnlyAWS = $false     # Cambiar a $true para SOLO AWS
+# NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
 
 #region ===== FUNCIONES =====
-
-function Get-AllInstanceNames {
-    try {
-        $response = Invoke-RestMethod -Uri "$ApiBaseUrl/api/instances/active" -Method Get -TimeoutSec 30
-        return $response | Where-Object { $_.isActive } | Select-Object -ExpandProperty instanceName
-    }
-    catch {
-        Write-Error "Error obteniendo instancias desde API: $_"
-        return @()
-    }
-}
 
 function Get-DatabaseStatesStatus {
     param([string]$Instance)
@@ -119,11 +124,17 @@ WHERE event_time > DATEADD(DAY, -30, GETDATE());
 
 function Write-ToSqlServer {
     param(
-        [PSCustomObject]$Data
+        [array]$Data
     )
     
+    if ($Data.Count -eq 0) {
+        Write-Host "No hay datos para guardar." -ForegroundColor Yellow
+        return
+    }
+    
     try {
-        $query = @"
+        foreach ($row in $Data) {
+            $query = @"
 INSERT INTO dbo.InstanceHealth_DatabaseStates (
     InstanceName,
     Ambiente,
@@ -139,33 +150,33 @@ INSERT INTO dbo.InstanceHealth_DatabaseStates (
     SuspectPageCount,
     DatabaseStateDetails
 ) VALUES (
-    '$($Data.InstanceName)',
-    '$($Data.Ambiente)',
-    '$($Data.HostingSite)',
-    '$($Data.SqlVersion)',
+    '$($row.InstanceName)',
+    '$($row.Ambiente)',
+    '$($row.HostingSite)',
+    '$($row.SqlVersion)',
     GETUTCDATE(),
-    $($Data.OfflineCount),
-    $($Data.SuspectCount),
-    $($Data.EmergencyCount),
-    $($Data.RecoveryPendingCount),
-    $($Data.SingleUserCount),
-    $($Data.RestoringCount),
-    $($Data.SuspectPageCount),
-    '$($Data.DatabaseStateDetails -replace "'", "''")'
+    $($row.OfflineCount),
+    $($row.SuspectCount),
+    $($row.EmergencyCount),
+    $($row.RecoveryPendingCount),
+    $($row.SingleUserCount),
+    $($row.RestoringCount),
+    $($row.SuspectPageCount),
+    '$($row.DatabaseStateDetails -replace "'", "''")'
 );
 "@
         
-        Invoke-DbaQuery -SqlInstance $SqlServer `
-            -Database $SqlDatabase `
-            -Query $query `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+            Invoke-DbaQuery -SqlInstance $SqlServer `
+                -Database $SqlDatabase `
+                -Query $query `
+                -QueryTimeout 30 `
+                -EnableException
+        }
         
-        return $true
-    }
-    catch {
-        Write-Error "Error guardando en SQL: $_"
-        return $false
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        
+    } catch {
+        Write-Error "Error guardando en SQL: $($_.Exception.Message)"
     }
 }
 
@@ -180,42 +191,61 @@ Write-Host "=========================================================" -Foregrou
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "[1/2] Obteniendo instancias..." -ForegroundColor Yellow
-$instances = Get-AllInstanceNames
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
-if ($instances.Count -eq 0) {
-    Write-Error "No se encontraron instancias activas!"
+try {
+    $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
+    $instances = $response
+    
+    if (-not $IncludeAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -ne "AWS" }
+    }
+    if ($OnlyAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -eq "AWS" }
+    }
+    
+    # FILTRO DMZ - Excluir instancias con DMZ en el nombre
+    $instances = $instances | Where-Object { $_.NombreInstancia -notlike "*DMZ*" }
+    
+    if ($TestMode) {
+        $instances = $instances | Select-Object -First 5
+    }
+    
+    Write-Host "   Instancias a procesar: $($instances.Count)" -ForegroundColor Green
+    
+} catch {
+    Write-Error "Error obteniendo instancias: $($_.Exception.Message)"
     exit 1
 }
 
-Write-Host "   Encontradas: $($instances.Count) instancias" -ForegroundColor Green
-
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "[2/2] Recolectando estados de databases..." -ForegroundColor Yellow
+Write-Host "2️⃣  Recolectando estados de databases..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
 
-foreach ($instanceName in $instances) {
+foreach ($instance in $instances) {
     $counter++
-    $progress = [math]::Round(($counter / $instances.Count) * 100)
-    Write-Progress -Activity "Recolectando database states" -Status "$instanceName ($counter/$($instances.Count))" -PercentComplete $progress
+    $instanceName = $instance.NombreInstancia
     
-    # Obtener metadatos
+    Write-Progress -Activity "Recolectando métricas" `
+        -Status "$counter de $($instances.Count): $instanceName" `
+        -PercentComplete (($counter / $instances.Count) * 100)
+    
+    $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
+    $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+    $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+    
+    # Test connection
     try {
-        $server = Connect-DbaInstance -SqlInstance $instanceName -NonPooledConnection
-        $ambiente = if ($server.Name -like "*PRD*" -or $server.Name -like "*PROD*") { "Produccion" } 
-                    elseif ($server.Name -like "*QA*" -or $server.Name -like "*TST*") { "QA" }
-                    elseif ($server.Name -like "*DEV*") { "Desarrollo" }
-                    else { "Otro" }
-        $hostingSite = if ($server.ComputerName -like "*AWS*") { "AWS" } 
-                       elseif ($server.ComputerName -like "*AZURE*") { "Azure" }
-                       else { "OnPremise" }
-        $sqlVersion = $server.VersionString
-    }
-    catch {
-        Write-Warning "No se pudo conectar a ${instanceName}: $_"
+        $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
+        if (-not $connection.IsPingable) {
+            Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+            continue
+        }
+    } catch {
+        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
         continue
     }
     
@@ -223,12 +253,27 @@ foreach ($instanceName in $instances) {
     $dbStatus = Get-DatabaseStatesStatus -Instance $instanceName
     
     if ($null -eq $dbStatus) {
-        Write-Warning "Saltando $instanceName (sin datos)"
+        Write-Host "   ⚠️  $instanceName - Sin datos (skipped)" -ForegroundColor Yellow
         continue
     }
     
+    $totalProblematic = $dbStatus.OfflineCount + $dbStatus.SuspectCount + $dbStatus.EmergencyCount + $dbStatus.RecoveryPendingCount
+    
+    $status = "✅"
+    if ($dbStatus.SuspectCount -gt 0 -or $dbStatus.EmergencyCount -gt 0) {
+        $status = "🚨 CRITICAL STATE!"
+    } elseif ($dbStatus.OfflineCount -gt 0) {
+        $status = "⚠️  DB OFFLINE"
+    } elseif ($dbStatus.SuspectPageCount -gt 0) {
+        $status = "⚠️  SUSPECT PAGES"
+    } elseif ($totalProblematic -gt 0) {
+        $status = "⚠️  PROBLEMATIC"
+    }
+    
+    Write-Host "   $status $instanceName - Offline:$($dbStatus.OfflineCount) Suspect:$($dbStatus.SuspectCount) Emergency:$($dbStatus.EmergencyCount) SuspectPages:$($dbStatus.SuspectPageCount)" -ForegroundColor Gray
+    
     # Crear objeto de resultado
-    $result = [PSCustomObject]@{
+    $results += [PSCustomObject]@{
         InstanceName = $instanceName
         Ambiente = $ambiente
         HostingSite = $hostingSite
@@ -240,32 +285,40 @@ foreach ($instanceName in $instances) {
         SingleUserCount = $dbStatus.SingleUserCount
         RestoringCount = $dbStatus.RestoringCount
         SuspectPageCount = $dbStatus.SuspectPageCount
-        DatabaseStateDetails = $dbStatus.Details
-    }
-    
-    # Guardar en SQL
-    if (Write-ToSqlServer -Data $result) {
-        $results += $result
-        $totalProblematic = $result.OfflineCount + $result.SuspectCount + $result.EmergencyCount + $result.RecoveryPendingCount
-        Write-Host "   ✓ $instanceName - Problematic DBs: $totalProblematic" -ForegroundColor Gray
+        DatabaseStateDetails = ($dbStatus.Details | ConvertTo-Json -Compress)
     }
 }
 
-Write-Progress -Activity "Recolectando database states" -Completed
+Write-Progress -Activity "Recolectando métricas" -Completed
 
-# 3. Resumen
+# 3. Guardar en SQL
 Write-Host ""
-Write-Host "=========================================================" -ForegroundColor Green
-Write-Host " RESUMEN - DATABASE STATES" -ForegroundColor Green
-Write-Host "=========================================================" -ForegroundColor Green
-Write-Host "  Total instancias procesadas: $($results.Count)" -ForegroundColor White
-Write-Host "  DBs Offline: $(($results | Measure-Object -Property OfflineCount -Sum).Sum)" -ForegroundColor White
-Write-Host "  DBs Suspect: $(($results | Measure-Object -Property SuspectCount -Sum).Sum)" -ForegroundColor White
-Write-Host "  DBs Emergency: $(($results | Measure-Object -Property EmergencyCount -Sum).Sum)" -ForegroundColor White
-Write-Host "  Suspect Pages: $(($results | Measure-Object -Property SuspectPageCount -Sum).Sum)" -ForegroundColor White
-Write-Host "=========================================================" -ForegroundColor Green
+Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
+
+Write-ToSqlServer -Data $results
+
+# 4. Resumen
 Write-Host ""
-Write-Host "[OK] Recoleccion completada!" -ForegroundColor Green
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  RESUMEN - DATABASE STATES                            ║" -ForegroundColor Green
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+
+$totalOffline = ($results | Measure-Object -Property OfflineCount -Sum).Sum
+Write-Host "║  DBs Offline:          $totalOffline".PadRight(53) "║" -ForegroundColor White
+
+$totalSuspect = ($results | Measure-Object -Property SuspectCount -Sum).Sum
+Write-Host "║  DBs Suspect:          $totalSuspect".PadRight(53) "║" -ForegroundColor White
+
+$totalEmergency = ($results | Measure-Object -Property EmergencyCount -Sum).Sum
+Write-Host "║  DBs Emergency:        $totalEmergency".PadRight(53) "║" -ForegroundColor White
+
+$totalSuspectPages = ($results | Measure-Object -Property SuspectPageCount -Sum).Sum
+Write-Host "║  Suspect Pages:        $totalSuspectPages".PadRight(53) "║" -ForegroundColor White
+
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host ""
+Write-Host "✅ Script completado!" -ForegroundColor Green
 
 #endregion
 

@@ -124,11 +124,17 @@ ORDER BY LogChainAtRisk DESC, HoursSinceLastLog DESC;
 
 function Write-ToSqlServer {
     param(
-        [PSCustomObject]$Data
+        [array]$Data
     )
     
+    if ($Data.Count -eq 0) {
+        Write-Host "No hay datos para guardar." -ForegroundColor Yellow
+        return
+    }
+    
     try {
-        $query = @"
+        foreach ($row in $Data) {
+            $query = @"
 INSERT INTO dbo.InstanceHealth_LogChain (
     InstanceName,
     Ambiente,
@@ -140,29 +146,29 @@ INSERT INTO dbo.InstanceHealth_LogChain (
     MaxHoursSinceLogBackup,
     LogChainDetails
 ) VALUES (
-    '$($Data.InstanceName)',
-    '$($Data.Ambiente)',
-    '$($Data.HostingSite)',
-    '$($Data.SqlVersion)',
+    '$($row.InstanceName)',
+    '$($row.Ambiente)',
+    '$($row.HostingSite)',
+    '$($row.SqlVersion)',
     GETUTCDATE(),
-    $($Data.BrokenChainCount),
-    $($Data.FullDBsWithoutLogBackup),
-    $($Data.MaxHoursSinceLogBackup),
-    '$($Data.LogChainDetails -replace "'", "''")'
+    $($row.BrokenChainCount),
+    $($row.FullDBsWithoutLogBackup),
+    $($row.MaxHoursSinceLogBackup),
+    '$($row.LogChainDetails -replace "'", "''")'
 );
 "@
         
-        Invoke-DbaQuery -SqlInstance $SqlServer `
-            -Database $SqlDatabase `
-            -Query $query `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+            Invoke-DbaQuery -SqlInstance $SqlServer `
+                -Database $SqlDatabase `
+                -Query $query `
+                -QueryTimeout 30 `
+                -EnableException
+        }
         
-        return $true
-    }
-    catch {
-        Write-Error "Error guardando en SQL: $_"
-        return $false
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        
+    } catch {
+        Write-Error "Error guardando en SQL: $($_.Exception.Message)"
     }
 }
 
@@ -177,42 +183,61 @@ Write-Host "=========================================================" -Foregrou
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "[1/2] Obteniendo instancias..." -ForegroundColor Yellow
-$instances = Get-AllInstanceNames
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
-if ($instances.Count -eq 0) {
-    Write-Error "No se encontraron instancias activas!"
+try {
+    $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
+    $instances = $response
+    
+    if (-not $IncludeAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -ne "AWS" }
+    }
+    if ($OnlyAWS) {
+        $instances = $instances | Where-Object { $_.hostingSite -eq "AWS" }
+    }
+    
+    # FILTRO DMZ - Excluir instancias con DMZ en el nombre
+    $instances = $instances | Where-Object { $_.NombreInstancia -notlike "*DMZ*" }
+    
+    if ($TestMode) {
+        $instances = $instances | Select-Object -First 5
+    }
+    
+    Write-Host "   Instancias a procesar: $($instances.Count)" -ForegroundColor Green
+    
+} catch {
+    Write-Error "Error obteniendo instancias: $($_.Exception.Message)"
     exit 1
 }
 
-Write-Host "   Encontradas: $($instances.Count) instancias" -ForegroundColor Green
-
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "[2/2] Recolectando métricas de log chain..." -ForegroundColor Yellow
+Write-Host "2️⃣  Recolectando métricas de log chain..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
 
-foreach ($instanceName in $instances) {
+foreach ($instance in $instances) {
     $counter++
-    $progress = [math]::Round(($counter / $instances.Count) * 100)
-    Write-Progress -Activity "Recolectando log chain metrics" -Status "$instanceName ($counter/$($instances.Count))" -PercentComplete $progress
+    $instanceName = $instance.NombreInstancia
     
-    # Obtener metadatos
+    Write-Progress -Activity "Recolectando métricas" `
+        -Status "$counter de $($instances.Count): $instanceName" `
+        -PercentComplete (($counter / $instances.Count) * 100)
+    
+    $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
+    $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+    $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+    
+    # Test connection
     try {
-        $server = Connect-DbaInstance -SqlInstance $instanceName -NonPooledConnection
-        $ambiente = if ($server.Name -like "*PRD*" -or $server.Name -like "*PROD*") { "Produccion" } 
-                    elseif ($server.Name -like "*QA*" -or $server.Name -like "*TST*") { "QA" }
-                    elseif ($server.Name -like "*DEV*") { "Desarrollo" }
-                    else { "Otro" }
-        $hostingSite = if ($server.ComputerName -like "*AWS*") { "AWS" } 
-                       elseif ($server.ComputerName -like "*AZURE*") { "Azure" }
-                       else { "OnPremise" }
-        $sqlVersion = $server.VersionString
-    }
-    catch {
-        Write-Warning "No se pudo conectar a ${instanceName}: $_"
+        $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
+        if (-not $connection.IsPingable) {
+            Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+            continue
+        }
+    } catch {
+        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
         continue
     }
     
@@ -220,12 +245,23 @@ foreach ($instanceName in $instances) {
     $logChainStatus = Get-LogChainStatus -Instance $instanceName
     
     if ($null -eq $logChainStatus) {
-        Write-Warning "Saltando $instanceName (sin datos)"
+        Write-Host "   ⚠️  $instanceName - Sin datos (skipped)" -ForegroundColor Yellow
         continue
     }
     
+    $status = "✅"
+    if ($logChainStatus.BrokenChainCount -gt 0) {
+        $status = "🚨 BROKEN CHAINS!"
+    } elseif ($logChainStatus.FullDBsWithoutLogBackup -gt 0) {
+        $status = "⚠️  NO LOG BACKUPS"
+    } elseif ($logChainStatus.MaxHoursSinceLogBackup -gt 24) {
+        $status = "⚠️  LOG BACKUP OLD"
+    }
+    
+    Write-Host "   $status $instanceName - Broken:$($logChainStatus.BrokenChainCount) NoLogBkp:$($logChainStatus.FullDBsWithoutLogBackup) MaxHours:$($logChainStatus.MaxHoursSinceLogBackup)h" -ForegroundColor Gray
+    
     # Crear objeto de resultado
-    $result = [PSCustomObject]@{
+    $results += [PSCustomObject]@{
         InstanceName = $instanceName
         Ambiente = $ambiente
         HostingSite = $hostingSite
@@ -233,29 +269,37 @@ foreach ($instanceName in $instances) {
         BrokenChainCount = $logChainStatus.BrokenChainCount
         FullDBsWithoutLogBackup = $logChainStatus.FullDBsWithoutLogBackup
         MaxHoursSinceLogBackup = $logChainStatus.MaxHoursSinceLogBackup
-        LogChainDetails = $logChainStatus.Details
-    }
-    
-    # Guardar en SQL
-    if (Write-ToSqlServer -Data $result) {
-        $results += $result
-        Write-Host "   ✓ $instanceName - Broken chains: $($result.BrokenChainCount)" -ForegroundColor Gray
+        LogChainDetails = ($logChainStatus.Details | ConvertTo-Json -Compress)
     }
 }
 
-Write-Progress -Activity "Recolectando log chain metrics" -Completed
+Write-Progress -Activity "Recolectando métricas" -Completed
 
-# 3. Resumen
+# 3. Guardar en SQL
 Write-Host ""
-Write-Host "=========================================================" -ForegroundColor Green
-Write-Host " RESUMEN - LOG CHAIN INTEGRITY" -ForegroundColor Green
-Write-Host "=========================================================" -ForegroundColor Green
-Write-Host "  Total instancias procesadas: $($results.Count)" -ForegroundColor White
-Write-Host "  Instancias con broken chains: $(($results | Where-Object { $_.BrokenChainCount -gt 0 }).Count)" -ForegroundColor White
-Write-Host "  Total DBs con log chain roto: $(($results | Measure-Object -Property BrokenChainCount -Sum).Sum)" -ForegroundColor White
-Write-Host "=========================================================" -ForegroundColor Green
+Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
+
+Write-ToSqlServer -Data $results
+
+# 4. Resumen
 Write-Host ""
-Write-Host "[OK] Recoleccion completada!" -ForegroundColor Green
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  RESUMEN - LOG CHAIN INTEGRITY                        ║" -ForegroundColor Green
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+
+$brokenChains = ($results | Where-Object { $_.BrokenChainCount -gt 0 }).Count
+Write-Host "║  Con broken chains:    $brokenChains".PadRight(53) "║" -ForegroundColor White
+
+$totalBroken = ($results | Measure-Object -Property BrokenChainCount -Sum).Sum
+Write-Host "║  Total DBs con log chain roto: $totalBroken".PadRight(53) "║" -ForegroundColor White
+
+$noLogBackup = ($results | Where-Object { $_.FullDBsWithoutLogBackup -gt 0 }).Count
+Write-Host "║  Con DBs sin LOG backup:   $noLogBackup".PadRight(53) "║" -ForegroundColor White
+
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host ""
+Write-Host "✅ Script completado!" -ForegroundColor Green
 
 #endregion
 
