@@ -77,8 +77,21 @@ function Get-ConfigTempdbMetrics {
     }
     
     try {
-        $query = @"
--- TempDB Files
+        # Detectar versión de SQL Server para compatibilidad
+        $versionQuery = "SELECT SERVERPROPERTY('ProductVersion') AS Version"
+        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
+        $version = $versionResult.Version
+        $majorVersion = [int]($version.Split('.')[0])
+        
+        # SQL 2008/2008 R2 usa physical_memory_in_bytes, SQL 2012+ usa physical_memory_kb
+        $memoryColumn = if ($majorVersion -ge 11) { 
+            "physical_memory_kb / 1024" 
+        } else { 
+            "physical_memory_in_bytes / 1024 / 1024" 
+        }
+        
+        # Query 1: TempDB Files
+        $queryTempDBFiles = @"
 SELECT 
     COUNT(*) AS FileCount,
     MIN(size * 8 / 1024) AS MinSizeMB,
@@ -90,8 +103,25 @@ SELECT
 FROM sys.master_files
 WHERE database_id = DB_ID('tempdb')
   AND type_desc = 'ROWS';
-
--- TempDB Latency
+"@
+        
+        $tempdbFiles = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryTempDBFiles -QueryTimeout $TimeoutSec -EnableException
+        if ($tempdbFiles) {
+            $result.TempDBFileCount = [int]$tempdbFiles.FileCount
+            $result.TempDBAllSameSize = ([int]$tempdbFiles.AllSameSize -eq 1)
+            $result.TempDBAllSameGrowth = ([int]$tempdbFiles.AllSameGrowth -eq 1)
+            
+            $result.Details += "Files=$($result.TempDBFileCount)"
+            if (-not $result.TempDBAllSameSize) {
+                $result.Details += "SizeMismatch=$($tempdbFiles.MinSizeMB)MB-$($tempdbFiles.MaxSizeMB)MB"
+            }
+            if (-not $result.TempDBAllSameGrowth) {
+                $result.Details += "GrowthMismatch"
+            }
+        }
+        
+        # Query 2: TempDB Latency
+        $queryLatency = @"
 SELECT 
     CASE WHEN num_of_reads = 0 THEN 0 
          ELSE (io_stall_read_ms / num_of_reads) 
@@ -101,117 +131,84 @@ SELECT
     END AS AvgWriteLatencyMs
 FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL)
 WHERE file_id = 1;
-
--- PAGELATCH Waits (contención en TempDB)
+"@
+        
+        $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
+        if ($latency) {
+            $avgRead = if ($latency.AvgReadLatencyMs -ne [DBNull]::Value) { [decimal]$latency.AvgReadLatencyMs } else { 0 }
+            $avgWrite = if ($latency.AvgWriteLatencyMs -ne [DBNull]::Value) { [decimal]$latency.AvgWriteLatencyMs } else { 0 }
+            $result.TempDBAvgLatencyMs = [decimal](($avgRead + $avgWrite) / 2)
+        }
+        
+        # Query 3: PAGELATCH Waits
+        $queryPageLatch = @"
 SELECT 
     ISNULL(SUM(wait_time_ms), 0) AS PageLatchWaitMs,
     ISNULL(SUM(waiting_tasks_count), 0) AS PageLatchWaitCount
 FROM sys.dm_os_wait_stats
 WHERE wait_type LIKE 'PAGELATCH%'
-  AND wait_type NOT LIKE 'PAGELATCH_SH%';  -- Excluir shared
-
--- Max Server Memory
-SELECT 
-    CAST(value AS INT) AS MaxServerMemoryMB
+  AND wait_type NOT LIKE 'PAGELATCH_SH%';
+"@
+        
+        $pageLatch = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryPageLatch -QueryTimeout $TimeoutSec -EnableException
+        if ($pageLatch -and $pageLatch.PageLatchWaitMs -ne [DBNull]::Value) {
+            $result.TempDBPageLatchWaits = [int]$pageLatch.PageLatchWaitMs
+            
+            # Calcular score de contención (inversamente proporcional a waits)
+            if ($result.TempDBPageLatchWaits -eq 0) {
+                $result.TempDBContentionScore = 100
+            }
+            elseif ($result.TempDBPageLatchWaits -lt 100) {
+                $result.TempDBContentionScore = 90
+            }
+            elseif ($result.TempDBPageLatchWaits -lt 1000) {
+                $result.TempDBContentionScore = 70
+            }
+            elseif ($result.TempDBPageLatchWaits -lt 10000) {
+                $result.TempDBContentionScore = 40
+            }
+            else {
+                $result.TempDBContentionScore = 0
+            }
+        }
+        
+        # Query 4: Max Server Memory
+        $queryMaxMem = @"
+SELECT CAST(value AS INT) AS MaxServerMemoryMB
 FROM sys.configurations
 WHERE name = 'max server memory (MB)';
-
--- System Info
+"@
+        
+        $maxMem = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryMaxMem -QueryTimeout $TimeoutSec -EnableException
+        if ($maxMem -and $maxMem.MaxServerMemoryMB -ne [DBNull]::Value) {
+            $result.MaxServerMemoryMB = [int]$maxMem.MaxServerMemoryMB
+        }
+        
+        # Query 5: System Info (compatible con SQL 2008+)
+        $querySysInfo = @"
 SELECT 
-    physical_memory_kb / 1024 AS TotalPhysicalMemoryMB,
+    $memoryColumn AS TotalPhysicalMemoryMB,
     cpu_count AS CPUCount
 FROM sys.dm_os_sys_info;
 "@
         
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query $query `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+        $sysInfo = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySysInfo -QueryTimeout $TimeoutSec -EnableException
+        if ($sysInfo) {
+            if ($sysInfo.TotalPhysicalMemoryMB -ne [DBNull]::Value) {
+                $result.TotalPhysicalMemoryMB = [int]$sysInfo.TotalPhysicalMemoryMB
+            }
+            if ($sysInfo.CPUCount -ne [DBNull]::Value) {
+                $result.CPUCount = [int]$sysInfo.CPUCount
+            }
+        }
         
-        if ($data) {
-            # Procesar múltiples resultsets
-            $resultSets = @($data)
+        # Calcular si Max Memory está dentro del rango óptimo
+        if ($result.TotalPhysicalMemoryMB -gt 0 -and $result.MaxServerMemoryMB -gt 0) {
+            $result.MaxMemoryPctOfPhysical = [decimal](($result.MaxServerMemoryMB * 100.0) / $result.TotalPhysicalMemoryMB)
             
-            # ResultSet 1: TempDB Files
-            if ($resultSets.Count -ge 1 -and $resultSets[0]) {
-                $tempdbFiles = $resultSets[0] | Select-Object -First 1
-                $result.TempDBFileCount = [int]$tempdbFiles.FileCount
-                $result.TempDBAllSameSize = ([int]$tempdbFiles.AllSameSize -eq 1)
-                $result.TempDBAllSameGrowth = ([int]$tempdbFiles.AllSameGrowth -eq 1)
-                
-                $result.Details += "Files=$($result.TempDBFileCount)"
-                if (-not $result.TempDBAllSameSize) {
-                    $result.Details += "SizeMismatch=$($tempdbFiles.MinSizeMB)MB-$($tempdbFiles.MaxSizeMB)MB"
-                }
-                if (-not $result.TempDBAllSameGrowth) {
-                    $result.Details += "GrowthMismatch"
-                }
-            }
-            
-            # ResultSet 2: TempDB Latency
-            if ($resultSets.Count -ge 2 -and $resultSets[1]) {
-                $latency = $resultSets[1] | Select-Object -First 1
-                if ($latency) {
-                    $avgRead = if ($latency.AvgReadLatencyMs -ne [DBNull]::Value) { [decimal]$latency.AvgReadLatencyMs } else { 0 }
-                    $avgWrite = if ($latency.AvgWriteLatencyMs -ne [DBNull]::Value) { [decimal]$latency.AvgWriteLatencyMs } else { 0 }
-                    $result.TempDBAvgLatencyMs = [decimal](($avgRead + $avgWrite) / 2)
-                }
-            }
-            
-            # ResultSet 3: PAGELATCH Waits
-            if ($resultSets.Count -ge 3 -and $resultSets[2]) {
-                $pageLatch = $resultSets[2] | Select-Object -First 1
-                if ($pageLatch.PageLatchWaitMs -ne [DBNull]::Value) {
-                    $result.TempDBPageLatchWaits = [int]$pageLatch.PageLatchWaitMs
-                    
-                    # Calcular score de contención (inversamente proporcional a waits)
-                    # 0 waits = 100, >1000ms = penalización severa
-                    if ($result.TempDBPageLatchWaits -eq 0) {
-                        $result.TempDBContentionScore = 100
-                    }
-                    elseif ($result.TempDBPageLatchWaits -lt 100) {
-                        $result.TempDBContentionScore = 90
-                    }
-                    elseif ($result.TempDBPageLatchWaits -lt 1000) {
-                        $result.TempDBContentionScore = 70
-                    }
-                    elseif ($result.TempDBPageLatchWaits -lt 10000) {
-                        $result.TempDBContentionScore = 40
-                    }
-                    else {
-                        $result.TempDBContentionScore = 0
-                    }
-                }
-            }
-            
-            # ResultSet 4: Max Server Memory
-            if ($resultSets.Count -ge 4 -and $resultSets[3]) {
-                $maxMem = $resultSets[3] | Select-Object -First 1
-                if ($maxMem.MaxServerMemoryMB -ne [DBNull]::Value) {
-                    $result.MaxServerMemoryMB = [int]$maxMem.MaxServerMemoryMB
-                }
-            }
-            
-            # ResultSet 5: System Info
-            if ($resultSets.Count -ge 5 -and $resultSets[4]) {
-                $sysInfo = $resultSets[4] | Select-Object -First 1
-                if ($sysInfo.TotalPhysicalMemoryMB -ne [DBNull]::Value) {
-                    $result.TotalPhysicalMemoryMB = [int]$sysInfo.TotalPhysicalMemoryMB
-                }
-                if ($sysInfo.CPUCount -ne [DBNull]::Value) {
-                    $result.CPUCount = [int]$sysInfo.CPUCount
-                }
-            }
-            
-            # Calcular si Max Memory está dentro del rango óptimo
-            # Óptimo: 80-90% de memoria física (dejar espacio para OS y otras apps)
-            if ($result.TotalPhysicalMemoryMB -gt 0 -and $result.MaxServerMemoryMB -gt 0) {
-                $result.MaxMemoryPctOfPhysical = [decimal](($result.MaxServerMemoryMB * 100.0) / $result.TotalPhysicalMemoryMB)
-                
-                # Considerar óptimo si está entre 70% y 95%
-                if ($result.MaxMemoryPctOfPhysical -ge 70 -and $result.MaxMemoryPctOfPhysical -le 95) {
-                    $result.MaxMemoryWithinOptimal = $true
-                }
+            # Considerar óptimo si está entre 70% y 95%
+            if ($result.MaxMemoryPctOfPhysical -ge 70 -and $result.MaxMemoryPctOfPhysical -le 95) {
+                $result.MaxMemoryWithinOptimal = $true
             }
         }
         
