@@ -7,6 +7,9 @@
 MaxMem: 29963494% ❌
 MaxMem: 52441603% ❌
 MaxMem: 3276850%  ❌
+
+Causa: MaxServerMemoryMB = 2147483647 (2^31-1)
+Significa: Max Server Memory NO CONFIGURADO (valor por defecto)
 ```
 
 ### 2. Error al Guardar en SQL
@@ -46,7 +49,26 @@ FROM sys.dm_os_sys_info;
 
 ## ✅ Soluciones Implementadas
 
-### 1. Detección y Queries Separadas por Versión
+### 1. Detección de Max Memory UNLIMITED
+
+```powershell
+# Query 4: Max Server Memory con detección de valor por defecto
+$maxMem = Invoke-DbaQuery -Query $queryMaxMem
+if ($maxMem -and $maxMem.MaxServerMemoryMB -ne [DBNull]::Value) {
+    $maxMemValue = [int]$maxMem.MaxServerMemoryMB
+    
+    # Detectar valor por defecto "unlimited" (2147483647 = 2^31-1)
+    if ($maxMemValue -eq 2147483647) {
+        $result.MaxServerMemoryMB = 0  # Marcar como no configurado
+        $result.Details += "MaxMem=UNLIMITED(NotSet)"
+    }
+    else {
+        $result.MaxServerMemoryMB = $maxMemValue
+    }
+}
+```
+
+### 2. Detección y Queries Separadas por Versión
 
 ```powershell
 # Detectar versión
@@ -73,7 +95,7 @@ FROM sys.dm_os_sys_info;
 }
 ```
 
-### 2. Validación de Valores de Memoria
+### 3. Validación de Valores de Memoria
 
 ```powershell
 # Validar que el valor sea razonable (entre 512 MB y 16 TB)
@@ -86,11 +108,16 @@ else {
 }
 ```
 
-### 3. Validación de Porcentaje
+### 4. Validación de Porcentaje (con manejo de UNLIMITED)
 
 ```powershell
 # Calcular porcentaje con validaciones
-if ($result.TotalPhysicalMemoryMB -gt 512 -and $result.MaxServerMemoryMB -gt 0) {
+if ($result.MaxServerMemoryMB -eq 0) {
+    # Max Memory no está configurado (valor por defecto unlimited)
+    $result.MaxMemoryPctOfPhysical = 0
+    $result.MaxMemoryWithinOptimal = $false
+}
+elseif ($result.TotalPhysicalMemoryMB -gt 512 -and $result.MaxServerMemoryMB -gt 0) {
     $calculatedPct = ($result.MaxServerMemoryMB * 100.0) / $result.TotalPhysicalMemoryMB
     
     # Validar rango (0-200%)
@@ -104,7 +131,7 @@ if ($result.TotalPhysicalMemoryMB -gt 512 -and $result.MaxServerMemoryMB -gt 0) 
 }
 ```
 
-### 4. Truncamiento al Insertar en SQL
+### 5. Truncamiento al Insertar en SQL
 
 ```powershell
 # Validar y truncar para que no exceda DECIMAL(5,2)
@@ -115,7 +142,7 @@ if ($maxMemPct -gt 999.99) {
 }
 ```
 
-### 5. Separación de Queries (Evitar Múltiples ResultSets)
+### 6. Separación de Queries (Evitar Múltiples ResultSets)
 
 **Antes** (problemático):
 ```powershell
@@ -145,14 +172,17 @@ $maxMem = Invoke-DbaQuery -Query $queryMaxMem
 $sysInfo = Invoke-DbaQuery -Query $querySysInfo
 ```
 
-### 6. Mejor Formato de Salida
+### 7. Mejor Formato de Salida
 
 ```powershell
 # Antes
 Write-Host "⚠️ Size mismatch SSDS17-02 - TempDB:8files MaxMem:3276850% Contention:40"
 
-# Ahora
+# Ahora (normal)
 Write-Host "⚠️ Size mismatch, MaxMem=82% SSDS17-02 | Files:8 Mem:82% Score:40"
+
+# Ahora (UNLIMITED)
+Write-Host "⚠️ MaxMem=UNLIMITED⚠️ SSDS17-02 | Files:2 Mem:UNLIMITED Score:40" -ForegroundColor Yellow
 ```
 
 ---
@@ -167,22 +197,36 @@ Write-Host "⚠️ Size mismatch, MaxMem=82% SSDS17-02 | Files:8 Mem:82% Score:4
 
 ### Después:
 ```
-⚠️ MaxMem=156%, Only 1 file! SSTS14ODM-01 | Files:1 Mem:156.0% Score:40
+⚠️ MaxMem=UNLIMITED⚠️, 1 file only! SSDS17-03 | Files:2 Mem:UNLIMITED Score:0
+⚠️ MaxMem=156%, 1 file only! SSTS14ODM-01 | Files:1 Mem:156.0% Score:40
 ✅ SSPR19SSO-51 | Files:4 Mem:74.0% Score:40
-⚠️ PAGELATCH=15234ms SSPR19SSO-01 | Files:4 Mem:85.3% Score:0
+🚨 CONTENTION! SSDS19-01 | Files:4 Mem:UNLIMITED Score:0
 ✅ Guardados 127 registros en SQL Server
+
+╔═══════════════════════════════════════════════════════╗
+║  RESUMEN - CONFIGURACIÓN & TEMPDB                     ║
+╠═══════════════════════════════════════════════════════╣
+║  Total instancias:     127                          ║
+║  TempDB files avg:     5                            ║
+║  Con same size:        72                           ║
+║  Con contención:       85                           ║
+║  Max mem óptimo:       63                           ║
+║  ⚠️  Max mem UNLIMITED:  18                          ║
+╚═══════════════════════════════════════════════════════╝
 ```
 
 ---
 
 ## 🎯 Validaciones Agregadas
 
-1. **Detección de versión SQL** → Queries específicas por versión
-2. **Rango de memoria física** → 512 MB a 16 TB
-3. **Rango de porcentaje** → 0% a 200%
-4. **Truncamiento en INSERT** → Máximo 999.99%
-5. **Valores por defecto** → 0 si no se puede obtener
-6. **Warnings informativos** → Alertas en valores sospechosos
+1. **Detección de Max Memory UNLIMITED** → Identifica valor 2147483647
+2. **Detección de versión SQL** → Queries específicas por versión
+3. **Rango de memoria física** → 512 MB a 16 TB
+4. **Rango de porcentaje** → 0% a 200%
+5. **Truncamiento en INSERT** → Máximo 999.99%
+6. **Valores por defecto** → 0 si no se puede obtener
+7. **Warnings informativos** → Alertas en valores sospechosos
+8. **Reporte de UNLIMITED** → Muestra "UNLIMITED" en lugar de porcentaje
 
 ---
 
@@ -200,6 +244,39 @@ Write-Host "⚠️ Size mismatch, MaxMem=82% SSDS17-02 | Files:8 Mem:82% Score:4
 ---
 
 ## 📝 Notas Importantes
+
+### MaxMem UNLIMITED (2147483647)
+**🚨 PROBLEMA CRÍTICO**: Algunas instancias tienen Max Server Memory sin configurar:
+
+```sql
+-- Detectar instancias con max memory por defecto
+SELECT @@SERVERNAME AS Instance, CAST(value AS INT) AS MaxMemoryMB
+FROM sys.configurations
+WHERE name = 'max server memory (MB)'
+  AND CAST(value AS INT) = 2147483647;
+```
+
+**Por qué es peligroso:**
+- SQL Server puede consumir TODA la memoria del servidor
+- El sistema operativo puede quedarse sin RAM (paging, crashes)
+- Otros servicios no tienen memoria suficiente
+- Rendimiento impredecible bajo carga
+
+**Acción recomendada:**
+```sql
+-- Configurar max memory al 80% de RAM física
+-- Ejemplo: Servidor con 64 GB RAM
+EXEC sp_configure 'show advanced options', 1;
+RECONFIGURE;
+EXEC sp_configure 'max server memory (MB)', 51200;  -- 80% de 64 GB
+RECONFIGURE;
+```
+
+El script ahora:
+- ✅ Detecta valor `2147483647` como "UNLIMITED"
+- ✅ Marca `MaxServerMemoryMB = 0` en la base de datos
+- ✅ Muestra "UNLIMITED" en vez de porcentaje
+- ✅ Reporta conteo de instancias sin configurar
 
 ### MaxMem fuera de rango (70-95%)
 Algunos servidores tendrán valores legítimos fuera del rango óptimo:

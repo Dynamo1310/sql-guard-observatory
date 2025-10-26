@@ -60,14 +60,28 @@ function Get-ConfigTempdbMetrics {
     )
     
     $result = @{
-        # TempDB
+        # TempDB - Archivos
         TempDBFileCount = 0
         TempDBAllSameSize = $false
         TempDBAllSameGrowth = $false
-        TempDBAvgLatencyMs = 0
+        TempDBTotalSizeMB = 0
+        TempDBUsedSpaceMB = 0
+        TempDBFreeSpacePct = 0
+        
+        # TempDB - Rendimiento
+        TempDBAvgReadLatencyMs = 0
+        TempDBAvgWriteLatencyMs = 0
         TempDBPageLatchWaits = 0
         TempDBContentionScore = 100
-        # Configuración
+        TempDBVersionStoreMB = 0
+        
+        # TempDB - Configuración
+        TempDBAvgFileSizeMB = 0
+        TempDBMinFileSizeMB = 0
+        TempDBMaxFileSizeMB = 0
+        TempDBGrowthConfigOK = $true
+        
+        # Configuración del Servidor
         MaxServerMemoryMB = 0
         TotalPhysicalMemoryMB = 0
         MaxMemoryPctOfPhysical = 0
@@ -83,16 +97,19 @@ function Get-ConfigTempdbMetrics {
         $version = $versionResult.Version
         $majorVersion = [int]($version.Split('.')[0])
         
-        # Query 1: TempDB Files
+        # Query 1: TempDB Files (extendido con más métricas)
         $queryTempDBFiles = @"
 SELECT 
     COUNT(*) AS FileCount,
+    SUM(size * 8 / 1024) AS TotalSizeMB,
+    AVG(size * 8 / 1024) AS AvgSizeMB,
     MIN(size * 8 / 1024) AS MinSizeMB,
     MAX(size * 8 / 1024) AS MaxSizeMB,
     MIN(growth * 8 / 1024) AS MinGrowthMB,
     MAX(growth * 8 / 1024) AS MaxGrowthMB,
     CASE WHEN MIN(size) = MAX(size) THEN 1 ELSE 0 END AS AllSameSize,
-    CASE WHEN MIN(growth) = MAX(growth) THEN 1 ELSE 0 END AS AllSameGrowth
+    CASE WHEN MIN(growth) = MAX(growth) THEN 1 ELSE 0 END AS AllSameGrowth,
+    CASE WHEN MIN(growth) >= 64 AND MAX(is_percent_growth) = 0 THEN 1 ELSE 0 END AS GrowthConfigOK
 FROM sys.master_files
 WHERE database_id = DB_ID('tempdb')
   AND type_desc = 'ROWS';
@@ -101,8 +118,13 @@ WHERE database_id = DB_ID('tempdb')
         $tempdbFiles = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryTempDBFiles -QueryTimeout $TimeoutSec -EnableException
         if ($tempdbFiles) {
             $result.TempDBFileCount = [int]$tempdbFiles.FileCount
+            $result.TempDBTotalSizeMB = [int]$tempdbFiles.TotalSizeMB
+            $result.TempDBAvgFileSizeMB = [int]$tempdbFiles.AvgSizeMB
+            $result.TempDBMinFileSizeMB = [int]$tempdbFiles.MinSizeMB
+            $result.TempDBMaxFileSizeMB = [int]$tempdbFiles.MaxSizeMB
             $result.TempDBAllSameSize = ([int]$tempdbFiles.AllSameSize -eq 1)
             $result.TempDBAllSameGrowth = ([int]$tempdbFiles.AllSameGrowth -eq 1)
+            $result.TempDBGrowthConfigOK = ([int]$tempdbFiles.GrowthConfigOK -eq 1)
             
             $result.Details += "Files=$($result.TempDBFileCount)"
             if (-not $result.TempDBAllSameSize) {
@@ -111,26 +133,32 @@ WHERE database_id = DB_ID('tempdb')
             if (-not $result.TempDBAllSameGrowth) {
                 $result.Details += "GrowthMismatch"
             }
+            if (-not $result.TempDBGrowthConfigOK) {
+                $result.Details += "SmallGrowth"
+            }
         }
         
-        # Query 2: TempDB Latency
+        # Query 2: TempDB Latency (separar read/write para mejor diagnóstico)
         $queryLatency = @"
 SELECT 
-    CASE WHEN num_of_reads = 0 THEN 0 
-         ELSE (io_stall_read_ms / num_of_reads) 
-    END AS AvgReadLatencyMs,
-    CASE WHEN num_of_writes = 0 THEN 0 
-         ELSE (io_stall_write_ms / num_of_writes) 
-    END AS AvgWriteLatencyMs
+    AVG(CASE WHEN num_of_reads = 0 THEN 0 ELSE (io_stall_read_ms * 1.0 / num_of_reads) END) AS AvgReadLatencyMs,
+    AVG(CASE WHEN num_of_writes = 0 THEN 0 ELSE (io_stall_write_ms * 1.0 / num_of_writes) END) AS AvgWriteLatencyMs
 FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL)
-WHERE file_id = 1;
+WHERE file_id > 0 AND type = 0;  -- Solo archivos de datos
 "@
         
         $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
         if ($latency) {
-            $avgRead = if ($latency.AvgReadLatencyMs -ne [DBNull]::Value) { [decimal]$latency.AvgReadLatencyMs } else { 0 }
-            $avgWrite = if ($latency.AvgWriteLatencyMs -ne [DBNull]::Value) { [decimal]$latency.AvgWriteLatencyMs } else { 0 }
-            $result.TempDBAvgLatencyMs = [decimal](($avgRead + $avgWrite) / 2)
+            $result.TempDBAvgReadLatencyMs = if ($latency.AvgReadLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgReadLatencyMs, 2) } else { 0 }
+            $result.TempDBAvgWriteLatencyMs = if ($latency.AvgWriteLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgWriteLatencyMs, 2) } else { 0 }
+            
+            # Diagnóstico de disco
+            if ($result.TempDBAvgWriteLatencyMs -gt 50) {
+                $result.Details += "SlowDisk(>50ms)"
+            }
+            elseif ($result.TempDBAvgWriteLatencyMs -gt 20) {
+                $result.Details += "RegularDisk(>20ms)"
+            }
         }
         
         # Query 3: PAGELATCH Waits
@@ -162,6 +190,43 @@ WHERE wait_type LIKE 'PAGELATCH%'
             }
             else {
                 $result.TempDBContentionScore = 0
+            }
+        }
+        
+        # Query 3.5: Espacio usado en TempDB (SQL 2012+)
+        if ($majorVersion -ge 11) {
+            $querySpaceUsage = @"
+SELECT 
+    SUM(total_page_count) * 8 / 1024 AS TotalSizeMB,
+    SUM(allocated_extent_page_count) * 8 / 1024 AS UsedSpaceMB,
+    SUM(version_store_reserved_page_count) * 8 / 1024 AS VersionStoreMB,
+    CASE 
+        WHEN SUM(total_page_count) > 0 
+        THEN CAST((SUM(total_page_count) - SUM(allocated_extent_page_count)) * 100.0 / SUM(total_page_count) AS DECIMAL(5,2))
+        ELSE 0 
+    END AS FreeSpacePct
+FROM sys.dm_db_file_space_usage
+WHERE database_id = DB_ID('tempdb');
+"@
+            
+            try {
+                $spaceUsage = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySpaceUsage -QueryTimeout $TimeoutSec -EnableException
+                if ($spaceUsage) {
+                    $result.TempDBUsedSpaceMB = if ($spaceUsage.UsedSpaceMB -ne [DBNull]::Value) { [int]$spaceUsage.UsedSpaceMB } else { 0 }
+                    $result.TempDBFreeSpacePct = if ($spaceUsage.FreeSpacePct -ne [DBNull]::Value) { [decimal]$spaceUsage.FreeSpacePct } else { 0 }
+                    $result.TempDBVersionStoreMB = if ($spaceUsage.VersionStoreMB -ne [DBNull]::Value) { [int]$spaceUsage.VersionStoreMB } else { 0 }
+                    
+                    # Alertas
+                    if ($result.TempDBFreeSpacePct -lt 10) {
+                        $result.Details += "LowFreeSpace(<10%)"
+                    }
+                    if ($result.TempDBVersionStoreMB -gt 1024) {
+                        $result.Details += "LargeVersionStore(>1GB)"
+                    }
+                }
+            }
+            catch {
+                # sys.dm_db_file_space_usage puede no estar disponible en algunas versiones
             }
         }
         
@@ -311,6 +376,11 @@ function Write-ToSqlServer {
                 $maxMemPct = -999.99
             }
             
+            # Validar TempDBFreeSpacePct para DECIMAL(5,2)
+            $freeSpacePct = $row.TempDBFreeSpacePct
+            if ($freeSpacePct -gt 999.99) { $freeSpacePct = 999.99 }
+            if ($freeSpacePct -lt 0) { $freeSpacePct = 0 }
+            
             $query = @"
 INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     InstanceName,
@@ -318,12 +388,25 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     HostingSite,
     SqlVersion,
     CollectedAtUtc,
+    -- TempDB - Archivos
     TempDBFileCount,
     TempDBAllSameSize,
     TempDBAllSameGrowth,
-    TempDBAvgLatencyMs,
+    TempDBTotalSizeMB,
+    TempDBUsedSpaceMB,
+    TempDBFreeSpacePct,
+    -- TempDB - Rendimiento
+    TempDBAvgReadLatencyMs,
+    TempDBAvgWriteLatencyMs,
     TempDBPageLatchWaits,
     TempDBContentionScore,
+    TempDBVersionStoreMB,
+    -- TempDB - Configuración
+    TempDBAvgFileSizeMB,
+    TempDBMinFileSizeMB,
+    TempDBMaxFileSizeMB,
+    TempDBGrowthConfigOK,
+    -- Servidor
     MaxServerMemoryMB,
     TotalPhysicalMemoryMB,
     MaxMemoryPctOfPhysical,
@@ -336,12 +419,25 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
     GETUTCDATE(),
+    -- TempDB - Archivos
     $($row.TempDBFileCount),
     $(if ($row.TempDBAllSameSize) {1} else {0}),
     $(if ($row.TempDBAllSameGrowth) {1} else {0}),
-    $($row.TempDBAvgLatencyMs),
+    $($row.TempDBTotalSizeMB),
+    $($row.TempDBUsedSpaceMB),
+    $freeSpacePct,
+    -- TempDB - Rendimiento
+    $($row.TempDBAvgReadLatencyMs),
+    $($row.TempDBAvgWriteLatencyMs),
     $($row.TempDBPageLatchWaits),
     $($row.TempDBContentionScore),
+    $($row.TempDBVersionStoreMB),
+    -- TempDB - Configuración
+    $($row.TempDBAvgFileSizeMB),
+    $($row.TempDBMinFileSizeMB),
+    $($row.TempDBMaxFileSizeMB),
+    $(if ($row.TempDBGrowthConfigOK) {1} else {0}),
+    -- Servidor
     $($row.MaxServerMemoryMB),
     $($row.TotalPhysicalMemoryMB),
     $maxMemPct,
@@ -472,7 +568,7 @@ foreach ($instance in $instances) {
             $status = "⚠️ " + ($warnings -join ", ")
         }
         
-        # Formato mejorado
+        # Formato mejorado con métricas adicionales
         if ($isUnlimited) {
             $memDisplay = "UNLIMITED"
             $color = "Yellow"
@@ -486,8 +582,23 @@ foreach ($instance in $instances) {
             $color = "DarkGray"
         }
         
+        # Información de latencia si está disponible
+        $latencyInfo = ""
+        if ($configMetrics.TempDBAvgWriteLatencyMs -gt 50) {
+            $latencyInfo = " [Disk:$([Math]::Round($configMetrics.TempDBAvgWriteLatencyMs, 0))ms🐌]"
+        }
+        elseif ($configMetrics.TempDBAvgWriteLatencyMs -gt 20) {
+            $latencyInfo = " [Disk:$([Math]::Round($configMetrics.TempDBAvgWriteLatencyMs, 0))ms]"
+        }
+        
+        # Información de espacio si está disponible
+        $spaceInfo = ""
+        if ($configMetrics.TempDBFreeSpacePct -gt 0 -and $configMetrics.TempDBFreeSpacePct -lt 10) {
+            $spaceInfo = " [Free:$([Math]::Round($configMetrics.TempDBFreeSpacePct, 0))%⚠️]"
+        }
+        
         Write-Host "   $status $instanceName" -ForegroundColor Gray -NoNewline
-        Write-Host " | Files:$($configMetrics.TempDBFileCount) Mem:$memDisplay Score:$($configMetrics.TempDBContentionScore)" -ForegroundColor $color
+        Write-Host " | Files:$($configMetrics.TempDBFileCount) Mem:$memDisplay Score:$($configMetrics.TempDBContentionScore)$latencyInfo$spaceInfo" -ForegroundColor $color
     }
     
     $results += [PSCustomObject]@{
@@ -495,12 +606,25 @@ foreach ($instance in $instances) {
         Ambiente = $ambiente
         HostingSite = $hostingSite
         SqlVersion = $sqlVersion
+        # TempDB - Archivos
         TempDBFileCount = $configMetrics.TempDBFileCount
         TempDBAllSameSize = $configMetrics.TempDBAllSameSize
         TempDBAllSameGrowth = $configMetrics.TempDBAllSameGrowth
-        TempDBAvgLatencyMs = $configMetrics.TempDBAvgLatencyMs
+        TempDBTotalSizeMB = $configMetrics.TempDBTotalSizeMB
+        TempDBUsedSpaceMB = $configMetrics.TempDBUsedSpaceMB
+        TempDBFreeSpacePct = $configMetrics.TempDBFreeSpacePct
+        # TempDB - Rendimiento
+        TempDBAvgReadLatencyMs = $configMetrics.TempDBAvgReadLatencyMs
+        TempDBAvgWriteLatencyMs = $configMetrics.TempDBAvgWriteLatencyMs
         TempDBPageLatchWaits = $configMetrics.TempDBPageLatchWaits
         TempDBContentionScore = $configMetrics.TempDBContentionScore
+        TempDBVersionStoreMB = $configMetrics.TempDBVersionStoreMB
+        # TempDB - Configuración
+        TempDBAvgFileSizeMB = $configMetrics.TempDBAvgFileSizeMB
+        TempDBMinFileSizeMB = $configMetrics.TempDBMinFileSizeMB
+        TempDBMaxFileSizeMB = $configMetrics.TempDBMaxFileSizeMB
+        TempDBGrowthConfigOK = $configMetrics.TempDBGrowthConfigOK
+        # Servidor
         MaxServerMemoryMB = $configMetrics.MaxServerMemoryMB
         TotalPhysicalMemoryMB = $configMetrics.TotalPhysicalMemoryMB
         MaxMemoryPctOfPhysical = $configMetrics.MaxMemoryPctOfPhysical
@@ -523,6 +647,7 @@ Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "║  RESUMEN - CONFIGURACIÓN & TEMPDB                     ║" -ForegroundColor Green
 Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "║  📊 GENERAL                                           ║" -ForegroundColor Cyan
 Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
 
 $avgFiles = ($results | Measure-Object -Property TempDBFileCount -Average).Average
@@ -531,8 +656,39 @@ Write-Host "║  TempDB files avg:     $([int]$avgFiles)".PadRight(53) "║" -Fo
 $sameSize = ($results | Where-Object {$_.TempDBAllSameSize}).Count
 Write-Host "║  Con same size:        $sameSize".PadRight(53) "║" -ForegroundColor White
 
+$goodGrowth = ($results | Where-Object {$_.TempDBGrowthConfigOK}).Count
+Write-Host "║  Growth bien config:   $goodGrowth".PadRight(53) "║" -ForegroundColor White
+
+Write-Host "║                                                       ║" -ForegroundColor White
+Write-Host "║  🔥 CONTENCIÓN                                        ║" -ForegroundColor Cyan
+
 $withContention = ($results | Where-Object {$_.TempDBContentionScore -lt 70}).Count
-Write-Host "║  Con contención:       $withContention".PadRight(53) "║" -ForegroundColor White
+$pctContention = if ($results.Count -gt 0) { [Math]::Round(($withContention * 100.0) / $results.Count, 1) } else { 0 }
+Write-Host "║  Con contención:       $withContention ($pctContention%)".PadRight(53) "║" -ForegroundColor $(if ($withContention -gt 50) {"Red"} elseif ($withContention -gt 20) {"Yellow"} else {"White"})
+
+$criticalContention = ($results | Where-Object {$_.TempDBContentionScore -eq 0}).Count
+Write-Host "║  Contención crítica:   $criticalContention".PadRight(53) "║" -ForegroundColor $(if ($criticalContention -gt 0) {"Red"} else {"White"})
+
+Write-Host "║                                                       ║" -ForegroundColor White
+Write-Host "║  💾 DISCO                                             ║" -ForegroundColor Cyan
+
+$slowDisk = ($results | Where-Object {$_.TempDBAvgWriteLatencyMs -gt 20}).Count
+if ($slowDisk -gt 0) {
+    Write-Host "║  ⚠️  Disco lento (>20ms): $slowDisk".PadRight(53) "║" -ForegroundColor Yellow
+}
+
+$verySlowDisk = ($results | Where-Object {$_.TempDBAvgWriteLatencyMs -gt 50}).Count
+if ($verySlowDisk -gt 0) {
+    Write-Host "║  🚨 Disco MUY lento:    $verySlowDisk".PadRight(53) "║" -ForegroundColor Red
+}
+
+$avgWriteLatency = ($results | Where-Object {$_.TempDBAvgWriteLatencyMs -gt 0} | Measure-Object -Property TempDBAvgWriteLatencyMs -Average).Average
+if ($avgWriteLatency -gt 0) {
+    Write-Host "║  Latencia write avg:   $([Math]::Round($avgWriteLatency, 1))ms".PadRight(53) "║" -ForegroundColor White
+}
+
+Write-Host "║                                                       ║" -ForegroundColor White
+Write-Host "║  🧠 MEMORIA                                           ║" -ForegroundColor Cyan
 
 $optimalMem = ($results | Where-Object {$_.MaxMemoryWithinOptimal}).Count
 Write-Host "║  Max mem óptimo:       $optimalMem".PadRight(53) "║" -ForegroundColor White
@@ -540,6 +696,16 @@ Write-Host "║  Max mem óptimo:       $optimalMem".PadRight(53) "║" -Foregro
 $unlimitedMem = ($results | Where-Object {$_.MaxServerMemoryMB -eq 0}).Count
 if ($unlimitedMem -gt 0) {
     Write-Host "║  ⚠️  Max mem UNLIMITED:  $unlimitedMem".PadRight(53) "║" -ForegroundColor Yellow
+}
+
+$lowSpace = ($results | Where-Object {$_.TempDBFreeSpacePct -gt 0 -and $_.TempDBFreeSpacePct -lt 20}).Count
+if ($lowSpace -gt 0) {
+    Write-Host "║  ⚠️  Espacio bajo (<20%): $lowSpace".PadRight(53) "║" -ForegroundColor Yellow
+}
+
+$bigVersionStore = ($results | Where-Object {$_.TempDBVersionStoreMB -gt 1024}).Count
+if ($bigVersionStore -gt 0) {
+    Write-Host "║  ⚠️  Version store >1GB:  $bigVersionStore".PadRight(53) "║" -ForegroundColor Yellow
 }
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
