@@ -111,6 +111,27 @@ Según los datos que proporcionaste:
 ### ✅ Conclusión
 Las instancias están **funcionando correctamente** en términos de waits. Los thresholds anteriores eran demasiado altos para detectar problemas sutiles, pero los datos actuales indican **salud excelente**.
 
+## 🐛 Corrección de Errores
+
+### Error: "Multiple ambiguous overloads found for 'Round'"
+
+**Causa**: PowerShell no puede inferir el tipo correcto cuando se pasan valores `[bigint]` divididos por decimales a `[Math]::Round()`.
+
+**Solución**: Casting explícito a `[decimal]` en TODAS las llamadas a `[Math]::Round()`:
+
+```powershell
+# ❌ INCORRECTO (causa error)
+$waitHours = [Math]::Round($waits.TotalWaitMs / 1000.0 / 3600.0, 1)
+
+# ✅ CORRECTO
+$waitHours = [Math]::Round([decimal]($waits.TotalWaitMs / 1000.0 / 3600.0), 1)
+```
+
+**Líneas corregidas**:
+- Línea 496: Cálculo de `$waitHours` para display por instancia
+- Línea 502: Cálculo de `$topWaitSec` para display por instancia
+- Línea 665: Cálculo de `$waitHours` en el TOP 5 del resumen
+
 ## 🧪 Testing
 
 Para probar los cambios:

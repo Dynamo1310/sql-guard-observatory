@@ -75,12 +75,39 @@ function Get-MemoryMetrics {
     }
     
     try {
+        # Detectar versión de SQL Server para compatibilidad
+        $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(50)) AS Version;"
+        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
+        $version = $versionResult.Version
+        $majorVersion = [int]($version.Split('.')[0])
+        
+        # SQL 2008/2008 R2 usan nombres diferentes en sys.dm_os_sys_info
+        $sysInfoQuery = if ($majorVersion -le 10) {
+            # SQL 2008/2008 R2
+            @"
+SELECT 
+    physical_memory_in_bytes / 1024 / 1024 AS TotalPhysicalMemoryMB,
+    bpool_committed / 128 AS CommittedMemoryMB,
+    bpool_commit_target / 128 AS CommittedTargetMB
+FROM sys.dm_os_sys_info;
+"@
+        } else {
+            # SQL 2012+
+            @"
+SELECT 
+    physical_memory_kb / 1024 AS TotalPhysicalMemoryMB,
+    committed_kb / 1024 AS CommittedMemoryMB,
+    committed_target_kb / 1024 AS CommittedTargetMB
+FROM sys.dm_os_sys_info;
+"@
+        }
+        
         $query = @"
 -- Memory counters
 SELECT 
     counter_name,
     cntr_value
-FROM sys.dm_os_performance_counters
+FROM sys.dm_os_performance_counters WITH (NOLOCK)
 WHERE object_name LIKE '%Buffer Manager%'
    OR object_name LIKE '%Memory Manager%'
 ORDER BY counter_name;
@@ -88,25 +115,21 @@ ORDER BY counter_name;
 -- Memory Grants
 SELECT 
     COUNT(*) AS GrantsPending
-FROM sys.dm_exec_query_memory_grants
+FROM sys.dm_exec_query_memory_grants WITH (NOLOCK)
 WHERE grant_time IS NULL;
 
 SELECT 
     COUNT(*) AS GrantsActive
-FROM sys.dm_exec_query_memory_grants
+FROM sys.dm_exec_query_memory_grants WITH (NOLOCK)
 WHERE grant_time IS NOT NULL;
 
--- Server Memory
-SELECT 
-    physical_memory_kb / 1024 AS TotalPhysicalMemoryMB,
-    committed_kb / 1024 AS CommittedMemoryMB,
-    committed_target_kb / 1024 AS CommittedTargetMB
-FROM sys.dm_os_sys_info;
+-- Server Memory (version-specific)
+$sysInfoQuery
 
 -- Max Server Memory configurado
 SELECT 
     CAST(value AS INT) AS MaxServerMemoryMB
-FROM sys.configurations
+FROM sys.configurations WITH (NOLOCK)
 WHERE name = 'max server memory (MB)';
 "@
         
@@ -340,24 +363,59 @@ foreach ($instance in $instances) {
     
     $memMetrics = Get-MemoryMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
+    # Lógica de alertas mejorada
     $status = "✅"
-    if ($memMetrics.MemoryPressure) {
-        $status = "🚨 PRESSURE!"
-    }
-    elseif ($memMetrics.PageLifeExpectancy -lt 300) {
-        $status = "⚠️ LOW PLE!"
-    }
-    elseif ($memMetrics.MemoryGrantsPending -gt 5) {
-        $status = "⚠️ GRANTS!"
+    $alerts = @()
+    
+    # No alertar si PLE y Target son ambos 0 (indica error de recolección, no problema real)
+    $hasValidPLE = $memMetrics.PageLifeExpectancy -gt 0 -or $memMetrics.PLETarget -gt 0
+    
+    if ($hasValidPLE) {
+        if ($memMetrics.MemoryPressure) {
+            $status = "🚨 PRESSURE!"
+            $alerts += "Memory Pressure"
+        }
+        elseif ($memMetrics.PageLifeExpectancy -gt 0 -and $memMetrics.PageLifeExpectancy -lt 300) {
+            $status = "⚠️ LOW PLE!"
+            $alerts += "PLE < 300s"
+        }
     }
     
-    $pleRatio = if ($memMetrics.PLETarget -gt 0) { 
-        [int](($memMetrics.PageLifeExpectancy * 100) / $memMetrics.PLETarget) 
-    } else { 
-        100 
+    if ($memMetrics.MemoryGrantsPending -gt 5) {
+        if ($status -eq "✅") { $status = "⚠️ GRANTS!" }
+        $alerts += "Grants Pending: $($memMetrics.MemoryGrantsPending)"
     }
     
-    Write-Host "   $status $instanceName - PLE:$($memMetrics.PageLifeExpectancy)s ($pleRatio%) Target:$($memMetrics.PLETarget)s Grants:$($memMetrics.MemoryGrantsPending)" -ForegroundColor Gray
+    # Display mejorado de porcentajes (truncar valores absurdos)
+    $pleDisplay = ""
+    if ($memMetrics.PLETarget -gt 0) {
+        $pleRatio = [decimal](($memMetrics.PageLifeExpectancy * 100.0) / $memMetrics.PLETarget)
+        if ($pleRatio -gt 999) {
+            $pleDisplay = "(>999%)"  # Truncar valores absurdos
+        } else {
+            $pleDisplay = "($([int]$pleRatio)%)"
+        }
+    } else {
+        $pleDisplay = "(N/A)"
+    }
+    
+    # Mostrar Stolen Memory si es significativo
+    $stolenInfo = ""
+    if ($memMetrics.StolenServerMemoryMB -gt 0) {
+        $stolenPct = if ($memMetrics.TotalServerMemoryMB -gt 0) {
+            [int](($memMetrics.StolenServerMemoryMB * 100.0) / $memMetrics.TotalServerMemoryMB)
+        } else { 0 }
+        
+        if ($stolenPct -gt 30) {
+            $stolenInfo = " Stolen:${stolenPct}%⚠️"
+            if ($status -eq "✅") { $status = "⚠️ Stolen!" }
+        }
+        elseif ($stolenPct -gt 20) {
+            $stolenInfo = " Stolen:${stolenPct}%"
+        }
+    }
+    
+    Write-Host "   $status $instanceName - PLE:$($memMetrics.PageLifeExpectancy)s $pleDisplay Target:$($memMetrics.PLETarget)s Grants:$($memMetrics.MemoryGrantsPending)$stolenInfo" -ForegroundColor $(if ($status -like "*🚨*") { "Red" } elseif ($status -like "*⚠️*") { "Yellow" } else { "Gray" })
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -374,6 +432,7 @@ foreach ($instance in $instances) {
         MemoryGrantsActive = $memMetrics.MemoryGrantsActive
         PLETarget = $memMetrics.PLETarget
         MemoryPressure = $memMetrics.MemoryPressure
+        StolenServerMemoryMB = $memMetrics.StolenServerMemoryMB  # NUEVO
     }
 }
 
@@ -387,23 +446,65 @@ Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  RESUMEN - MEMORIA                                    ║" -ForegroundColor Green
-Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  RESUMEN - MEMORIA                                    ║" -ForegroundColor Cyan
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Cyan
+Write-Host "║  Total instancias:        $($results.Count.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
 
+# Page Life Expectancy
 $avgPLE = ($results | Measure-Object -Property PageLifeExpectancy -Average).Average
-Write-Host "║  PLE promedio:         $([int]$avgPLE)s".PadRight(53) "║" -ForegroundColor White
+$lowPLE = ($results | Where-Object {$_.PageLifeExpectancy -gt 0 -and $_.PageLifeExpectancy -lt 300}).Count
+$criticalPLE = ($results | Where-Object {$_.PageLifeExpectancy -gt 0 -and $_.PageLifeExpectancy -lt 100}).Count
+Write-Host "║  PLE promedio:            $([int]$avgPLE)s".PadRight(53) "║" -ForegroundColor Cyan
+Write-Host "║  PLE bajo (<300s):        $(${lowPLE}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($lowPLE -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  PLE crítico (<100s):     $(${criticalPLE}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($criticalPLE -gt 0) { "Red" } else { "Cyan" })
 
+# Memory Pressure
 $withPressure = ($results | Where-Object {$_.MemoryPressure}).Count
-Write-Host "║  Con memory pressure:  $withPressure".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Con memory pressure:     $(${withPressure}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($withPressure -gt 0) { "Red" } else { "Cyan" })
 
-$lowPLE = ($results | Where-Object {$_.PageLifeExpectancy -lt 300}).Count
-Write-Host "║  PLE bajo (<300s):     $lowPLE".PadRight(53) "║" -ForegroundColor White
+# Memory Grants
+$highGrants = ($results | Where-Object {$_.MemoryGrantsPending -gt 10}).Count
+$moderateGrants = ($results | Where-Object {$_.MemoryGrantsPending -gt 5 -and $_.MemoryGrantsPending -le 10}).Count
+Write-Host "║  Grants Pending >10:      $(${highGrants}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($highGrants -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  Grants Pending 5-10:     $(${moderateGrants}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($moderateGrants -gt 0) { "Yellow" } else { "Cyan" })
 
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
-Write-Host ""
-Write-Host "✅ Script completado!" -ForegroundColor Green
+# Stolen Memory
+$highStolen = ($results | Where-Object {
+    $_.StolenServerMemoryMB -gt 0 -and $_.TotalServerMemoryMB -gt 0 -and 
+    (($_.StolenServerMemoryMB * 100.0) / $_.TotalServerMemoryMB) -gt 30
+}).Count
+$moderateStolen = ($results | Where-Object {
+    $_.StolenServerMemoryMB -gt 0 -and $_.TotalServerMemoryMB -gt 0 -and 
+    (($_.StolenServerMemoryMB * 100.0) / $_.TotalServerMemoryMB) -gt 20 -and
+    (($_.StolenServerMemoryMB * 100.0) / $_.TotalServerMemoryMB) -le 30
+}).Count
+Write-Host "║  Stolen Memory >30%:      $(${highStolen}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($highStolen -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  Stolen Memory 20-30%:    $(${moderateStolen}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($moderateStolen -gt 0) { "Yellow" } else { "Cyan" })
+
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+
+# Top 5 instancias con PLE más bajo
+Write-Host "`n📊 TOP 5 INSTANCIAS CON PLE MÁS BAJO:" -ForegroundColor Yellow
+$top5LowPLE = $results | Where-Object {$_.PageLifeExpectancy -gt 0} | Sort-Object -Property PageLifeExpectancy | Select-Object -First 5
+foreach ($inst in $top5LowPLE) {
+    $pleRatio = if ($inst.PLETarget -gt 0) {
+        [int](($inst.PageLifeExpectancy * 100.0) / $inst.PLETarget)
+    } else { 0 }
+    $color = if ($inst.PageLifeExpectancy -lt 100) { "Red" } elseif ($inst.PageLifeExpectancy -lt 300) { "Yellow" } else { "Gray" }
+    Write-Host "   $($inst.InstanceName.PadRight(25)) - PLE: $($inst.PageLifeExpectancy)s (${pleRatio}% del target)" -ForegroundColor $color
+}
+
+# Top 5 instancias con Grants Pending
+$top5Grants = $results | Where-Object {$_.MemoryGrantsPending -gt 0} | Sort-Object -Property MemoryGrantsPending -Descending | Select-Object -First 5
+if ($top5Grants.Count -gt 0) {
+    Write-Host "`n⚠️  TOP 5 INSTANCIAS CON MEMORY GRANTS PENDING:" -ForegroundColor Yellow
+    foreach ($inst in $top5Grants) {
+        Write-Host "   $($inst.InstanceName.PadRight(25)) - Grants Pending: $($inst.MemoryGrantsPending)" -ForegroundColor Yellow
+    }
+}
+
+Write-Host "`n✅ Script completado!" -ForegroundColor Green
 
 #endregion
 

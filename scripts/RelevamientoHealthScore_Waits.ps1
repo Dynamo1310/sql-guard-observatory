@@ -493,13 +493,13 @@ foreach ($instance in $instances) {
         
         # Total Wait Time (para mostrar siempre)
         if ($waits.TotalWaitMs -gt 0) {
-            $waitHours = [Math]::Round($waits.TotalWaitMs / 1000.0 / 3600.0, 1)
+            $waitHours = [Math]::Round([decimal]($waits.TotalWaitMs / 1000.0 / 3600.0), 1)
             $metrics += "Wait:${waitHours}h"
         }
         
         # Top Wait Type (siempre mostrar)
-        if ($waits.TopWait1Type) {
-            $topWaitSec = [Math]::Round($waits.TopWait1Ms / 1000.0, 0)
+        if ($waits.TopWait1Type -and $waits.TopWait1Ms -gt 0) {
+            $topWaitSec = [Math]::Round([decimal]($waits.TopWait1Ms / 1000.0), 0)
             $metrics += "Top:$($waits.TopWait1Type)"
         }
         
@@ -662,7 +662,7 @@ Write-Host "`n📊 TOP 5 INSTANCIAS POR WAIT TIME:" -ForegroundColor Yellow
 $top5 = $results | Sort-Object -Property TotalWaitMs -Descending | Select-Object -First 5
 foreach ($inst in $top5) {
     if ($inst.TotalWaitMs -gt 0) {
-        $waitHours = [Math]::Round($inst.TotalWaitMs / 1000.0 / 3600.0, 1)
+        $waitHours = [Math]::Round([decimal]($inst.TotalWaitMs / 1000.0 / 3600.0), 1)
         $topWait = if ($inst.TopWait1Type) { $inst.TopWait1Type } else { "N/A" }
         Write-Host "   $($inst.InstanceName.PadRight(25)) - ${waitHours}h total | Top: $topWait" -ForegroundColor Gray
     }
