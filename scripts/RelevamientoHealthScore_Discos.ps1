@@ -187,6 +187,7 @@ function Get-DiskMetrics {
         Volumes = @()
         DataVolumes = @()
         LogVolumes = @()
+        ProblematicFilesQueryFailed = $false  # Indica si la query de archivos problemáticos falló
     }
     
     try {
@@ -249,9 +250,11 @@ ORDER BY FreePct ASC;
 
         # Query 1b: Archivos con poco espacio interno Y crecimiento habilitado (CRÍTICO)
         # Solo alertar si el archivo puede crecer (growth != 0) y tiene poco espacio libre interno
+        # Mejorada: ignora bases offline/restoring para evitar errores con FILEPROPERTY
         $queryProblematicFiles = @"
 -- Archivos con poco espacio interno Y crecimiento habilitado (compatible SQL 2008+)
 -- Basado en la lógica del usuario: solo alertar si growth != 0 y espacio interno < 30MB
+-- Mejorada: ignora bases offline/restoring/recovering para evitar errores
 SELECT 
     DB_NAME(mf.database_id) AS DatabaseName,
     mf.name AS FileName,
@@ -263,7 +266,10 @@ SELECT
     mf.is_percent_growth AS IsPercentGrowth,
     mf.max_size AS MaxSize
 FROM sys.master_files mf
-WHERE DB_NAME(mf.database_id) NOT IN ('master', 'model', 'msdb', 'tempdb')
+INNER JOIN sys.databases d ON mf.database_id = d.database_id
+WHERE d.name NOT IN ('master', 'model', 'msdb', 'tempdb')
+  AND d.state = 0  -- ONLINE (evita errores con FILEPROPERTY en bases offline)
+  AND d.is_read_only = 0  -- No read-only (pueden dar problemas con FILEPROPERTY)
   AND mf.growth != 0  -- Solo archivos con crecimiento habilitado
   AND (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 < 30  -- Menos de 30MB libres internos
 ORDER BY FreeSpaceInFileMB ASC;
@@ -337,10 +343,23 @@ GROUP BY vs.volume_mount_point;
             -TimeoutSec $TimeoutSec `
             -MaxRetries 2
         
-        $dataProblematicFiles = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
-            -Query $queryProblematicFiles `
-            -TimeoutSec $TimeoutSec `
-            -MaxRetries 2
+        # Query de archivos problemáticos: solo para SQL 2008+ y con manejo de errores explícito
+        $dataProblematicFiles = $null
+        $problematicFilesQueryFailed = $false
+        if ($majorVersion -ge 10) {
+            try {
+                $dataProblematicFiles = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
+                    -Query $queryProblematicFiles `
+                    -TimeoutSec $TimeoutSec `
+                    -MaxRetries 2
+            } catch {
+                $problematicFilesQueryFailed = $true
+                Write-Warning "      ⚠️  No se pudo obtener archivos problemáticos en ${InstanceName}: $($_.Exception.Message)"
+            }
+        } else {
+            # SQL 2005: No soportado para archivos problemáticos (requiere FILEPROPERTY con contexto correcto)
+            Write-Verbose "      ℹ️  Archivos problemáticos no disponible en SQL 2005 para ${InstanceName}"
+        }
         
         $dataIOLoad = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
             -Query $queryIOLoad `
@@ -442,6 +461,9 @@ GROUP BY vs.volume_mount_point;
                 $result.TempDBDiskFreePct = ConvertTo-SafeDecimal (($tempdbDisks | Measure-Object -Property FreePct -Average).Average) 100.0
             }
         }
+        
+        # Guardar si la query de archivos problemáticos falló
+        $result.ProblematicFilesQueryFailed = $problematicFilesQueryFailed
         
     } catch {
         $errorMsg = $_.Exception.Message
@@ -1026,6 +1048,15 @@ Write-Host "║  Discos críticos (<10%): $critical".PadRight(53) "║" -Foregro
 Write-Host "║  Instancias con archivos problemáticos: $instancesWithProblematicFiles".PadRight(53) "║" -ForegroundColor $(if ($instancesWithProblematicFiles -gt 0) { "Yellow" } else { "White" })
 Write-Host "║  Total archivos con <30MB libres: $totalProblematicFilesCount".PadRight(53) "║" -ForegroundColor $(if ($totalProblematicFilesCount -gt 0) { "Yellow" } else { "White" })
 Write-Host "║  (Solo archivos con growth habilitado)".PadRight(53) "║" -ForegroundColor DarkGray
+
+# Contar instancias donde falló la query de archivos problemáticos
+$instancesWithQueryFailed = ($results | Where-Object { $_.ProblematicFilesQueryFailed -eq $true }).Count
+if ($instancesWithQueryFailed -gt 0) {
+    Write-Host "║" -NoNewline -ForegroundColor Green
+    Write-Host "" -ForegroundColor White
+    Write-Host "║  ⚠️  Instancias con error en query de archivos: $instancesWithQueryFailed".PadRight(53) "║" -ForegroundColor Yellow
+    Write-Host "║      (Datos de archivos problemáticos incompletos)".PadRight(53) "║" -ForegroundColor DarkGray
+}
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 
