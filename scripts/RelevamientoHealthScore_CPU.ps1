@@ -73,16 +73,42 @@ function Get-CPUMetrics {
     }
     
     try {
-        $query = @"
--- CPU Utilization (últimos 10 minutos)
-DECLARE @ts_now bigint = (SELECT cpu_ticks/(cpu_ticks/ms_ticks) FROM sys.dm_os_sys_info WITH (NOLOCK));
+        # Detectar versión de SQL Server
+        $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(50)) AS Version;"
+        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
+        $version = [int]($versionResult.Version.Split('.')[0])
+        
+        # Para SQL 2005/2008 (versiones 9.x y 10.x), usar query simplificada
+        if ($version -le 10) {
+            $query = @"
+-- Runnable tasks (tareas esperando CPU) - Compatible con SQL 2005+
+SELECT 
+    ISNULL(COUNT(*), 0) AS RunnableTasksCount
+FROM sys.dm_os_schedulers WITH (NOLOCK)
+WHERE status = 'VISIBLE ONLINE'
+  AND runnable_tasks_count > 0;
 
-SELECT TOP(10)
-    DATEADD(ms, -1 * (@ts_now - [timestamp]), GETDATE()) AS EventTime,
-    SQLProcessUtilization AS SQLServerCPU,
-    SystemIdle,
-    100 - SystemIdle - SQLProcessUtilization AS OtherProcessCPU
-FROM (
+-- Work queued (I/O pendiente) - Compatible con SQL 2005+
+SELECT 
+    ISNULL(SUM(pending_disk_io_count), 0) AS PendingDiskIO
+FROM sys.dm_os_schedulers WITH (NOLOCK)
+WHERE scheduler_id < 255;
+
+-- CPU Snapshot actual de Performance Counter
+SELECT 
+    CAST(ISNULL(cntr_value, 0) AS INT) AS CPUValue
+FROM sys.dm_os_performance_counters WITH (NOLOCK)
+WHERE counter_name LIKE 'CPU usage %'
+  AND instance_name = 'default';
+"@
+        } else {
+            # Para SQL 2012+ (versiones 11.x+), usar query completa
+            $query = @"
+-- CPU Utilization (últimos 10 minutos) - SQL 2012+
+DECLARE @ts_now bigint;
+SELECT @ts_now = cpu_ticks / (cpu_ticks / ms_ticks) FROM sys.dm_os_sys_info WITH (NOLOCK);
+
+WITH CPUHistory AS (
     SELECT 
         record.value('(./Record/@id)[1]', 'int') AS record_id,
         record.value('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int') AS SystemIdle,
@@ -94,22 +120,29 @@ FROM (
         WHERE ring_buffer_type = N'RING_BUFFER_SCHEDULER_MONITOR'
           AND record LIKE N'%<SystemHealth>%'
     ) AS x
-) AS y
+)
+SELECT TOP(10)
+    DATEADD(ms, -1 * (@ts_now - [timestamp]), GETDATE()) AS EventTime,
+    SQLProcessUtilization AS SQLServerCPU,
+    SystemIdle,
+    100 - SystemIdle - SQLProcessUtilization AS OtherProcessCPU
+FROM CPUHistory
 ORDER BY record_id DESC;
 
 -- Runnable tasks (tareas esperando CPU)
 SELECT 
-    COUNT(*) AS RunnableTasksCount
-FROM sys.dm_os_schedulers
+    ISNULL(COUNT(*), 0) AS RunnableTasksCount
+FROM sys.dm_os_schedulers WITH (NOLOCK)
 WHERE status = 'VISIBLE ONLINE'
   AND runnable_tasks_count > 0;
 
 -- Work queued (I/O pendiente)
 SELECT 
     ISNULL(SUM(pending_disk_io_count), 0) AS PendingDiskIO
-FROM sys.dm_os_schedulers
+FROM sys.dm_os_schedulers WITH (NOLOCK)
 WHERE scheduler_id < 255;
 "@
+        }
         
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
@@ -120,41 +153,76 @@ WHERE scheduler_id < 255;
             # Procesar múltiples resultsets
             $resultSets = @($data)
             
-            # ResultSet 1: CPU Utilization (últimos 10 minutos)
-            if ($resultSets.Count -ge 1 -and $resultSets[0]) {
-                $cpuData = $resultSets[0]
+            if ($version -le 10) {
+                # SQL 2005/2008: Procesar resultsets simplificados
+                # ResultSet 1: Runnable tasks
+                if ($resultSets.Count -ge 1 -and $resultSets[0]) {
+                    $runnableData = $resultSets[0] | Select-Object -First 1
+                    if ($runnableData -and $runnableData.RunnableTasksCount -ne [DBNull]::Value) {
+                        $result.RunnableTasks = [int]$runnableData.RunnableTasksCount
+                    }
+                }
                 
-                if ($cpuData) {
-                    # Calcular promedio
-                    $result.AvgCPUPercentLast10Min = [int](($cpuData | Measure-Object -Property SQLServerCPU -Average).Average)
-                    
-                    # Calcular P95 (percentil 95)
-                    $sortedCPU = $cpuData | Sort-Object -Property SQLServerCPU
-                    $p95Index = [Math]::Floor($sortedCPU.Count * 0.95)
-                    if ($p95Index -ge $sortedCPU.Count) { $p95Index = $sortedCPU.Count - 1 }
-                    $result.P95CPUPercent = [int]$sortedCPU[$p95Index].SQLServerCPU
-                    
-                    # Últimos valores
-                    $latest = $cpuData | Select-Object -First 1
-                    $result.SQLProcessUtilization = [int]$latest.SQLServerCPU
-                    $result.SystemIdleProcess = [int]$latest.SystemIdle
-                    $result.OtherProcessUtilization = [int]$latest.OtherProcessCPU
+                # ResultSet 2: Pending I/O
+                if ($resultSets.Count -ge 2 -and $resultSets[1]) {
+                    $ioData = $resultSets[1] | Select-Object -First 1
+                    if ($ioData -and $ioData.PendingDiskIO -ne [DBNull]::Value) {
+                        $result.PendingDiskIOCount = [int]$ioData.PendingDiskIO
+                    }
                 }
-            }
-            
-            # ResultSet 2: Runnable tasks
-            if ($resultSets.Count -ge 2 -and $resultSets[1]) {
-                $runnableData = $resultSets[1] | Select-Object -First 1
-                if ($runnableData.RunnableTasksCount -ne [DBNull]::Value) {
-                    $result.RunnableTasks = [int]$runnableData.RunnableTasksCount
+                
+                # ResultSet 3: CPU Value (snapshot actual)
+                if ($resultSets.Count -ge 3 -and $resultSets[2]) {
+                    $cpuData = $resultSets[2] | Select-Object -First 1
+                    if ($cpuData -and $cpuData.CPUValue -ne [DBNull]::Value) {
+                        $cpuValue = [int]$cpuData.CPUValue
+                        # Usar el valor actual como promedio y p95 (no hay histórico)
+                        $result.SQLProcessUtilization = $cpuValue
+                        $result.AvgCPUPercentLast10Min = $cpuValue
+                        $result.P95CPUPercent = $cpuValue
+                        $result.SystemIdleProcess = 0  # No disponible en SQL 2005/2008
+                        $result.OtherProcessUtilization = 0
+                    }
                 }
-            }
-            
-            # ResultSet 3: Pending I/O
-            if ($resultSets.Count -ge 3 -and $resultSets[2]) {
-                $ioData = $resultSets[2] | Select-Object -First 1
-                if ($ioData.PendingDiskIO -ne [DBNull]::Value) {
-                    $result.PendingDiskIOCount = [int]$ioData.PendingDiskIO
+                
+            } else {
+                # SQL 2012+: Procesar resultsets completos
+                # ResultSet 1: CPU Utilization (últimos 10 minutos)
+                if ($resultSets.Count -ge 1 -and $resultSets[0]) {
+                    $cpuData = $resultSets[0]
+                    
+                    if ($cpuData -and $cpuData.Count -gt 0) {
+                        # Calcular promedio
+                        $result.AvgCPUPercentLast10Min = [int](($cpuData | Measure-Object -Property SQLServerCPU -Average).Average)
+                        
+                        # Calcular P95 (percentil 95)
+                        $sortedCPU = $cpuData | Sort-Object -Property SQLServerCPU
+                        $p95Index = [Math]::Floor($sortedCPU.Count * 0.95)
+                        if ($p95Index -ge $sortedCPU.Count) { $p95Index = $sortedCPU.Count - 1 }
+                        $result.P95CPUPercent = [int]$sortedCPU[$p95Index].SQLServerCPU
+                        
+                        # Últimos valores
+                        $latest = $cpuData | Select-Object -First 1
+                        $result.SQLProcessUtilization = [int]$latest.SQLServerCPU
+                        $result.SystemIdleProcess = [int]$latest.SystemIdle
+                        $result.OtherProcessUtilization = [int]$latest.OtherProcessCPU
+                    }
+                }
+                
+                # ResultSet 2: Runnable tasks
+                if ($resultSets.Count -ge 2 -and $resultSets[1]) {
+                    $runnableData = $resultSets[1] | Select-Object -First 1
+                    if ($runnableData -and $runnableData.RunnableTasksCount -ne [DBNull]::Value) {
+                        $result.RunnableTasks = [int]$runnableData.RunnableTasksCount
+                    }
+                }
+                
+                # ResultSet 3: Pending I/O
+                if ($resultSets.Count -ge 3 -and $resultSets[2]) {
+                    $ioData = $resultSets[2] | Select-Object -First 1
+                    if ($ioData -and $ioData.PendingDiskIO -ne [DBNull]::Value) {
+                        $result.PendingDiskIOCount = [int]$ioData.PendingDiskIO
+                    }
                 }
             }
         }

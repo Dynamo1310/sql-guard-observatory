@@ -35,7 +35,8 @@ WARNING: Error obteniendo config/tempdb metrics en BD04SER: Invalid object name 
 
 **Documentación**: 
 - `CORRECCION_TEMPDB_SQL2005_Y_TRUNCAMIENTO.md` (Primera implementación)
-- `CORRECCION_FINAL_SQL2005_TEMPDB.md` (Corrección definitiva)
+- `CORRECCION_FINAL_SQL2005_TEMPDB.md` (Consolidación de detección)
+- `CORRECCION_FALLBACK_ROBUSTO_SQL2008.md` (Try-catch con fallback automático)
 
 ---
 
@@ -223,17 +224,22 @@ ORDER BY MaxMemoryPctOfPhysical DESC
    - Consolidación de detección de versión
    - Análisis de causa raíz (doble detección)
 
-3. ✅ **`CORRECCION_PORCENTAJE_MEMORIA_INVALIDO.md`**
+3. ✅ **`CORRECCION_FALLBACK_ROBUSTO_SQL2008.md`**
+   - Try-catch específico para sys.dm_os_volume_stats
+   - Fallback automático si la DMV no está disponible
+   - Soporta permisos insuficientes, editions limitadas, etc.
+
+4. ✅ **`CORRECCION_PORCENTAJE_MEMORIA_INVALIDO.md`**
    - Lógica de validación actualizada
    - Warnings contextuales
    - Recomendaciones para DBAs
 
-4. ✅ **`CORRECCION_SUGERENCIA_DISCO_SSD_INTELIGENTE.md`**
+5. ✅ **`CORRECCION_SUGERENCIA_DISCO_SSD_INTELIGENTE.md`**
    - Comparación antes/después
    - Lógica del diagnóstico inteligente
    - Guía de testing
 
-5. ✅ **`RESUMEN_CORRECCIONES_27ENE2025_SESION2.md`** (este documento)
+6. ✅ **`RESUMEN_CORRECCIONES_27ENE2025_SESION2.md`** (este documento)
 
 ---
 
