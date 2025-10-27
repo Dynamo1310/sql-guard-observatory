@@ -7,20 +7,21 @@
     Categoría: DATABASE STATES (Peso: 3%)
     
     Métricas clave:
-    - Databases Offline/Suspect/Emergency
+    - Databases Suspect/Emergency (CRÍTICOS)
     - Recovery Pending
     - Single User / Restoring
     - Suspect Pages (corrupción)
     
+    NOTA: Databases OFFLINE se excluyen (pueden estar offline por mantenimiento intencional)
+    
     Scoring (0-100):
-    - 100 pts: Todas las DBs ONLINE, 0 suspect pages
-    - 80 pts: 1 DB no crítica offline por mantenimiento planeado
+    - 100 pts: Todas las DBs en estado OK, 0 suspect pages
     - 60 pts: 1 DB en single user o restoring
     - 40 pts: 1 DB en recovery pending o suspect pages detectadas
     - 20 pts: >1 DB en estado problemático
-    - 0 pts: Alguna DB crítica OFFLINE/SUSPECT/EMERGENCY
+    - 0 pts: Alguna DB crítica SUSPECT/EMERGENCY
     
-    Cap: 0 si DB crítica SUSPECT/OFFLINE, 50 si hay suspect pages
+    Cap: 0 si DB crítica SUSPECT/EMERGENCY, 50 si hay suspect pages
 
 .NOTES
     Author: SQL Guard Observatory
@@ -65,19 +66,20 @@ function Get-DatabaseStatesStatus {
     param([string]$Instance)
     
     $query = @"
--- Database States
+-- Database States (excluye OFFLINE - puede ser intencional por mantenimiento)
 SELECT 
     d.name AS DatabaseName,
     d.state_desc AS State,
     d.user_access_desc AS UserAccess,
     d.is_in_standby AS IsStandby,
     CASE 
-        WHEN d.state_desc IN ('OFFLINE', 'SUSPECT', 'EMERGENCY', 'RECOVERY_PENDING') THEN 1
+        WHEN d.state_desc IN ('SUSPECT', 'EMERGENCY', 'RECOVERY_PENDING') THEN 1
         WHEN d.user_access_desc = 'SINGLE_USER' THEN 1
         ELSE 0
     END AS IsProblematic
 FROM sys.databases d
 WHERE d.database_id > 4
+  AND d.state_desc <> 'OFFLINE'  -- Excluir bases offline (mantenimiento intencional)
 ORDER BY IsProblematic DESC, State;
 
 -- Suspect Pages
@@ -92,7 +94,8 @@ WHERE last_update_date > DATEADD(DAY, -30, GETDATE());
         $dbStates = $datasets.Tables[0]
         $suspectPages = $datasets.Tables[1]
         
-        $offlineCount = ($dbStates | Where-Object { $_.State -eq 'OFFLINE' }).Count
+        # OFFLINE se excluye - no se captura (puede ser mantenimiento intencional)
+        $offlineCount = 0
         $suspectCount = ($dbStates | Where-Object { $_.State -eq 'SUSPECT' }).Count
         $emergencyCount = ($dbStates | Where-Object { $_.State -eq 'EMERGENCY' }).Count
         $recoveryPendingCount = ($dbStates | Where-Object { $_.State -eq 'RECOVERY_PENDING' }).Count
@@ -257,20 +260,18 @@ foreach ($instance in $instances) {
         continue
     }
     
-    $totalProblematic = $dbStatus.OfflineCount + $dbStatus.SuspectCount + $dbStatus.EmergencyCount + $dbStatus.RecoveryPendingCount
+    $totalProblematic = $dbStatus.SuspectCount + $dbStatus.EmergencyCount + $dbStatus.RecoveryPendingCount
     
     $status = "✅"
     if ($dbStatus.SuspectCount -gt 0 -or $dbStatus.EmergencyCount -gt 0) {
         $status = "🚨 CRITICAL STATE!"
-    } elseif ($dbStatus.OfflineCount -gt 0) {
-        $status = "⚠️  DB OFFLINE"
     } elseif ($dbStatus.SuspectPageCount -gt 0) {
         $status = "⚠️  SUSPECT PAGES"
     } elseif ($totalProblematic -gt 0) {
         $status = "⚠️  PROBLEMATIC"
     }
     
-    Write-Host "   $status $instanceName - Offline:$($dbStatus.OfflineCount) Suspect:$($dbStatus.SuspectCount) Emergency:$($dbStatus.EmergencyCount) SuspectPages:$($dbStatus.SuspectPageCount)" -ForegroundColor Gray
+    Write-Host "   $status $instanceName - Suspect:$($dbStatus.SuspectCount) Emergency:$($dbStatus.EmergencyCount) RecovPending:$($dbStatus.RecoveryPendingCount) SuspectPages:$($dbStatus.SuspectPageCount)" -ForegroundColor Gray
     
     # Crear objeto de resultado
     $results += [PSCustomObject]@{
@@ -304,18 +305,20 @@ Write-Host "║  RESUMEN - DATABASE STATES                            ║" -Fore
 Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
 Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
 
-$totalOffline = ($results | Measure-Object -Property OfflineCount -Sum).Sum
-Write-Host "║  DBs Offline:          $totalOffline".PadRight(53) "║" -ForegroundColor White
-
 $totalSuspect = ($results | Measure-Object -Property SuspectCount -Sum).Sum
 Write-Host "║  DBs Suspect:          $totalSuspect".PadRight(53) "║" -ForegroundColor White
 
 $totalEmergency = ($results | Measure-Object -Property EmergencyCount -Sum).Sum
 Write-Host "║  DBs Emergency:        $totalEmergency".PadRight(53) "║" -ForegroundColor White
 
+$totalRecovPending = ($results | Measure-Object -Property RecoveryPendingCount -Sum).Sum
+Write-Host "║  DBs Recovery Pending: $totalRecovPending".PadRight(53) "║" -ForegroundColor White
+
 $totalSuspectPages = ($results | Measure-Object -Property SuspectPageCount -Sum).Sum
 Write-Host "║  Suspect Pages:        $totalSuspectPages".PadRight(53) "║" -ForegroundColor White
 
+Write-Host "║                                                       ║" -ForegroundColor White
+Write-Host "║  ℹ️  OFFLINE DBs se excluyen (mantenimiento OK)      ║" -ForegroundColor DarkGray
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
 Write-Host "✅ Script completado!" -ForegroundColor Green
