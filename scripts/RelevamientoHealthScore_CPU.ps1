@@ -144,37 +144,38 @@ WHERE scheduler_id < 255;
 "@
         }
         
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $datasets = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
+            -As DataSet `
             -EnableException
         
-        if ($data) {
-            # Procesar múltiples resultsets
-            $resultSets = @($data)
+        if ($datasets -and $datasets.Tables.Count -gt 0) {
+            # Procesar múltiples resultsets correctamente
+            $resultSets = $datasets.Tables
             
             if ($version -le 10) {
                 # SQL 2005/2008: Procesar resultsets simplificados
                 # ResultSet 1: Runnable tasks
-                if ($resultSets.Count -ge 1 -and $resultSets[0]) {
-                    $runnableData = $resultSets[0] | Select-Object -First 1
-                    if ($runnableData -and $runnableData.RunnableTasksCount -ne [DBNull]::Value) {
+                if ($resultSets.Count -ge 1 -and $resultSets[0].Rows.Count -gt 0) {
+                    $runnableData = $resultSets[0].Rows[0]
+                    if ($runnableData.RunnableTasksCount -ne [DBNull]::Value) {
                         $result.RunnableTasks = [int]$runnableData.RunnableTasksCount
                     }
                 }
                 
                 # ResultSet 2: Pending I/O
-                if ($resultSets.Count -ge 2 -and $resultSets[1]) {
-                    $ioData = $resultSets[1] | Select-Object -First 1
-                    if ($ioData -and $ioData.PendingDiskIO -ne [DBNull]::Value) {
+                if ($resultSets.Count -ge 2 -and $resultSets[1].Rows.Count -gt 0) {
+                    $ioData = $resultSets[1].Rows[0]
+                    if ($ioData.PendingDiskIO -ne [DBNull]::Value) {
                         $result.PendingDiskIOCount = [int]$ioData.PendingDiskIO
                     }
                 }
                 
                 # ResultSet 3: CPU Value (snapshot actual)
-                if ($resultSets.Count -ge 3 -and $resultSets[2]) {
-                    $cpuData = $resultSets[2] | Select-Object -First 1
-                    if ($cpuData -and $cpuData.CPUValue -ne [DBNull]::Value) {
+                if ($resultSets.Count -ge 3 -and $resultSets[2].Rows.Count -gt 0) {
+                    $cpuData = $resultSets[2].Rows[0]
+                    if ($cpuData.CPUValue -ne [DBNull]::Value) {
                         $cpuValue = [int]$cpuData.CPUValue
                         # Usar el valor actual como promedio y p95 (no hay histórico)
                         $result.SQLProcessUtilization = $cpuValue
@@ -188,21 +189,29 @@ WHERE scheduler_id < 255;
             } else {
                 # SQL 2012+: Procesar resultsets completos
                 # ResultSet 1: CPU Utilization (últimos 10 minutos)
-                if ($resultSets.Count -ge 1 -and $resultSets[0]) {
-                    $cpuData = $resultSets[0]
+                if ($resultSets.Count -ge 1 -and $resultSets[0].Rows.Count -gt 0) {
+                    # Convertir DataTable rows a objetos PowerShell
+                    $cpuRows = @()
+                    foreach ($row in $resultSets[0].Rows) {
+                        $cpuRows += [PSCustomObject]@{
+                            SQLServerCPU = [int]$row.SQLServerCPU
+                            SystemIdle = [int]$row.SystemIdle
+                            OtherProcessCPU = [int]$row.OtherProcessCPU
+                        }
+                    }
                     
-                    if ($cpuData -and $cpuData.Count -gt 0) {
+                    if ($cpuRows.Count -gt 0) {
                         # Calcular promedio
-                        $result.AvgCPUPercentLast10Min = [int](($cpuData | Measure-Object -Property SQLServerCPU -Average).Average)
+                        $result.AvgCPUPercentLast10Min = [int](($cpuRows | Measure-Object -Property SQLServerCPU -Average).Average)
                         
                         # Calcular P95 (percentil 95)
-                        $sortedCPU = $cpuData | Sort-Object -Property SQLServerCPU
+                        $sortedCPU = $cpuRows | Sort-Object -Property SQLServerCPU
                         $p95Index = [Math]::Floor($sortedCPU.Count * 0.95)
                         if ($p95Index -ge $sortedCPU.Count) { $p95Index = $sortedCPU.Count - 1 }
                         $result.P95CPUPercent = [int]$sortedCPU[$p95Index].SQLServerCPU
                         
-                        # Últimos valores
-                        $latest = $cpuData | Select-Object -First 1
+                        # Últimos valores (primero en el resultset)
+                        $latest = $cpuRows[0]
                         $result.SQLProcessUtilization = [int]$latest.SQLServerCPU
                         $result.SystemIdleProcess = [int]$latest.SystemIdle
                         $result.OtherProcessUtilization = [int]$latest.OtherProcessCPU
@@ -210,17 +219,17 @@ WHERE scheduler_id < 255;
                 }
                 
                 # ResultSet 2: Runnable tasks
-                if ($resultSets.Count -ge 2 -and $resultSets[1]) {
-                    $runnableData = $resultSets[1] | Select-Object -First 1
-                    if ($runnableData -and $runnableData.RunnableTasksCount -ne [DBNull]::Value) {
+                if ($resultSets.Count -ge 2 -and $resultSets[1].Rows.Count -gt 0) {
+                    $runnableData = $resultSets[1].Rows[0]
+                    if ($runnableData.RunnableTasksCount -ne [DBNull]::Value) {
                         $result.RunnableTasks = [int]$runnableData.RunnableTasksCount
                     }
                 }
                 
                 # ResultSet 3: Pending I/O
-                if ($resultSets.Count -ge 3 -and $resultSets[2]) {
-                    $ioData = $resultSets[2] | Select-Object -First 1
-                    if ($ioData -and $ioData.PendingDiskIO -ne [DBNull]::Value) {
+                if ($resultSets.Count -ge 3 -and $resultSets[2].Rows.Count -gt 0) {
+                    $ioData = $resultSets[2].Rows[0]
+                    if ($ioData.PendingDiskIO -ne [DBNull]::Value) {
                         $result.PendingDiskIOCount = [int]$ioData.PendingDiskIO
                     }
                 }
