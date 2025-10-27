@@ -7,15 +7,8 @@
     1. Lee datos de las 12 tablas especializadas
     2. Calcula HealthScore final (100 puntos)
     3. Aplica pesos según categoría
-    4. Aplica penalizaciones SELECTIVAS (solo a categorías relacionadas)
+    4. Aplica caps y penalizaciones
     5. Guarda en InstanceHealth_Score
-    
-    PENALIZACIONES BALANCEADAS (NO caps globales):
-    - Autogrowth crítico → Penaliza Discos, I/O, AlwaysOn
-    - TempDB crítico → Penaliza I/O, CPU, Memoria
-    - Backups crítico → Penaliza AlwaysOn, LogChain
-    - Errores severos → Penaliza CPU, Memoria, I/O (moderado)
-    - Discos críticos → Penaliza Autogrowth, I/O
     
     CATEGORÍAS Y PESOS (100 puntos) - 12 CATEGORÍAS:
     
@@ -754,7 +747,7 @@ function Get-IODiagnosisForTempDB {
                 $diagnosis.Icon = "🚨"
             }
             # CASO: Problema general
-    else {
+            else {
                 $diagnosis.Problem = "Posible problema de hardware, RAID, o storage backend"
                 $diagnosis.Severity = "CRITICAL"
                 $diagnosis.Suggestion = "🚨 SSD con latencia anormal ($([int]$WriteLatencyMs)ms). Si es HDD, migrar a SSD/NVMe. Si ya es SSD, revisar sobrecarga o problemas de hardware"
@@ -882,9 +875,13 @@ function Calculate-ConfiguracionTempdbScore {
     # Score final ponderado
     $score = ($tempdbHealthScore * 0.6) + ($memoryScore * 0.4)
     
-    # NO aplicar cap individual - las penalizaciones selectivas ya se encargan
-    # de penalizar I/O (-50%), CPU (-30%), y Memoria (-20%) cuando TempDB < 40
-    # Esto evita el "doble castigo" y permite que el score refleje el valor real
+    # Aplicar cap SOLO si TempDB Health Score es CRÍTICO (<40)
+    # Esto garantiza que problemas severos de TempDB afecten el score global
+    if ($tempdbHealthScore -lt 40) {
+        $cap = 65  # TempDB crítico (disco saturado, 1 archivo, espacio <10%)
+    }
+    # NO aplicar cap para scores 40-69 (problemas moderados)
+    # El score ya refleja la penalización (60% del score de TempDB)
     
     return @{ Score = [int]$score; Cap = $cap }
 }
@@ -1387,11 +1384,14 @@ foreach ($instanceName in $instances) {
     $configTempdbScore = Apply-Cap -Score $configTempdbResult.Score -Cap $configTempdbResult.Cap
     $autogrowthScore = Apply-Cap -Score $autogrowthResult.Score -Cap $autogrowthResult.Cap
     
-    # ===== PENALIZACIONES SELECTIVAS (BALANCEADAS) =====
-    # En lugar de aplicar un cap global que penaliza TODO,
-    # aplicamos penalizaciones solo a categorías relacionadas con el problema
+    # Determinar cap global (el más restrictivo)
+    $globalCap = 100
+    $allCaps = @($backupsResult.Cap, $alwaysOnResult.Cap, $logChainResult.Cap, $databaseStatesResult.Cap,
+                 $cpuResult.Cap, $memoriaResult.Cap, $ioResult.Cap, $discosResult.Cap, 
+                 $erroresResult.Cap, $mantenimientosResult.Cap, $configTempdbResult.Cap, $autogrowthResult.Cap)
+    $globalCap = ($allCaps | Measure-Object -Minimum).Minimum
     
-    # Calcular contribuciones base (sin penalizaciones cruzadas)
+    # Calcular contribuciones reales redondeadas a entero
     $backupsContribution = [int][Math]::Round($backupsScore * $PESOS.Backups / 100)
     $alwaysOnContribution = [int][Math]::Round($alwaysOnScore * $PESOS.AlwaysOn / 100)
     $logChainContribution = [int][Math]::Round($logChainScore * $PESOS.LogChain / 100)
@@ -1405,51 +1405,43 @@ foreach ($instanceName in $instances) {
     $configTempdbContribution = [int][Math]::Round($configTempdbScore * $PESOS.ConfiguracionTempdb / 100)
     $autogrowthContribution = [int][Math]::Round($autogrowthScore * $PESOS.Autogrowth / 100)
     
-    # PENALIZACIÓN SELECTIVA 1: Autogrowth crítico (archivo al límite)
-    if ($autogrowthScore -eq 0) {
-        # Solo penalizar categorías RELACIONADAS con capacidad/disco
-        $discosContribution = [int][Math]::Round($discosContribution * 0.5)      # -50% (capacidad relacionada)
-        $ioContribution = [int][Math]::Round($ioContribution * 0.7)              # -30% (I/O relacionado)
-        $alwaysOnContribution = [int][Math]::Round($alwaysOnContribution * 0.8)  # -20% (puede afectar sync)
-        # Backups, CPU, Memory, Errores, etc. NO se penalizan (no relacionados)
-    }
-    
-    # PENALIZACIÓN SELECTIVA 2: TempDB crítico (contención/disco lento)
-    if ($configTempdbScore -lt 40) {
-        # Solo penalizar categorías RELACIONADAS con performance
-        $ioContribution = [int][Math]::Round($ioContribution * 0.5)        # -50% (disco lento causa TempDB lento)
-        $cpuContribution = [int][Math]::Round($cpuContribution * 0.7)      # -30% (contención aumenta CPU)
-        $memoriaContribution = [int][Math]::Round($memoriaContribution * 0.8) # -20% (contención puede ser por memoria)
-        # Backups, Discos, AlwaysOn, etc. NO se penalizan (no relacionados)
-    }
-    
-    # PENALIZACIÓN SELECTIVA 3: Backups críticos
-    if ($backupsScore -eq 0) {
-        # Solo penalizar categorías RELACIONADAS con DR
-        $alwaysOnContribution = [int][Math]::Round($alwaysOnContribution * 0.8)  # -20% (DR complementario)
-        $logChainContribution = [int][Math]::Round($logChainContribution * 0.7)  # -30% (log backups relacionados)
-        # CPU, Memory, I/O, etc. NO se penalizan (no relacionados)
-    }
-    
-    # PENALIZACIÓN SELECTIVA 4: Errores críticos severos
-    if ($erroresScore -lt 30) {
-        # Penalización moderada global (errores indican inestabilidad general)
-        $cpuContribution = [int][Math]::Round($cpuContribution * 0.8)            # -20%
-        $memoriaContribution = [int][Math]::Round($memoriaContribution * 0.8)    # -20%
-        $ioContribution = [int][Math]::Round($ioContribution * 0.8)              # -20%
-        # Backups NO se penaliza (errores no afectan backups)
-    }
-    
-    # PENALIZACIÓN SELECTIVA 5: Discos críticos (< 10% libre)
-    if ($discosScore -lt 30) {
-        # Solo penalizar categorías RELACIONADAS con capacidad
-        $autogrowthContribution = [int][Math]::Round($autogrowthContribution * 0.5) # -50% (directamente relacionado)
-        $ioContribution = [int][Math]::Round($ioContribution * 0.7)                 # -30% (disco lleno afecta I/O)
-        # CPU, Memory, Backups NO se penalizan
-    }
-    
-    # Calcular score final (suma de contribuciones con penalizaciones selectivas)
+    # Calcular suma sin cap
     $totalScoreBeforeCap = [int](
+        $backupsContribution +
+        $alwaysOnContribution +
+        $logChainContribution +
+        $databaseStatesContribution +
+        $cpuContribution +
+        $memoriaContribution +
+        $ioContribution +
+        $discosContribution +
+        $erroresContribution +
+        $mantenimientosContribution +
+        $configTempdbContribution +
+        $autogrowthContribution
+    )
+    
+    # Aplicar cap global y ajustar contribuciones proporcionalmente si es necesario
+    if ($totalScoreBeforeCap -gt $globalCap) {
+        # Calcular factor de ajuste
+        $adjustmentFactor = [decimal]$globalCap / [decimal]$totalScoreBeforeCap
+        
+        # Ajustar cada contribución proporcionalmente
+        $backupsContribution = [int][Math]::Round($backupsContribution * $adjustmentFactor)
+        $alwaysOnContribution = [int][Math]::Round($alwaysOnContribution * $adjustmentFactor)
+        $logChainContribution = [int][Math]::Round($logChainContribution * $adjustmentFactor)
+        $databaseStatesContribution = [int][Math]::Round($databaseStatesContribution * $adjustmentFactor)
+        $cpuContribution = [int][Math]::Round($cpuContribution * $adjustmentFactor)
+        $memoriaContribution = [int][Math]::Round($memoriaContribution * $adjustmentFactor)
+        $ioContribution = [int][Math]::Round($ioContribution * $adjustmentFactor)
+        $discosContribution = [int][Math]::Round($discosContribution * $adjustmentFactor)
+        $erroresContribution = [int][Math]::Round($erroresContribution * $adjustmentFactor)
+        $mantenimientosContribution = [int][Math]::Round($mantenimientosContribution * $adjustmentFactor)
+        $configTempdbContribution = [int][Math]::Round($configTempdbContribution * $adjustmentFactor)
+        $autogrowthContribution = [int][Math]::Round($autogrowthContribution * $adjustmentFactor)
+        
+        # Recalcular totalScore con contribuciones ajustadas
+        $totalScore = [int](
             $backupsContribution +
             $alwaysOnContribution +
             $logChainContribution +
@@ -1464,12 +1456,34 @@ foreach ($instanceName in $instances) {
             $autogrowthContribution
         )
         
-    # NO aplicar cap global - cada categoría mantiene su contribución real con penalizaciones selectivas
-    # Esto permite que una instancia con 10/12 categorías perfectas tenga un score razonable
-    # en lugar de ser arrastrada a 50% por 2 problemas específicos
-    
-    # Score final = suma de contribuciones (ya incluyen penalizaciones selectivas)
+        # Ajuste fino: si la suma no llega exactamente al cap por redondeos, ajustar la contribución mayor
+        if ($totalScore -lt $globalCap) {
+            $diff = $globalCap - $totalScore
+            # Determinar cuál es la contribución más grande y agregarle la diferencia
+            $maxValue = ($backupsContribution, $alwaysOnContribution, $logChainContribution, $databaseStatesContribution,
+                        $cpuContribution, $memoriaContribution, $ioContribution, $discosContribution, 
+                        $erroresContribution, $mantenimientosContribution, $configTempdbContribution, 
+                        $autogrowthContribution | Measure-Object -Maximum).Maximum
+            
+            if ($backupsContribution -eq $maxValue) { $backupsContribution += $diff }
+            elseif ($alwaysOnContribution -eq $maxValue) { $alwaysOnContribution += $diff }
+            elseif ($logChainContribution -eq $maxValue) { $logChainContribution += $diff }
+            elseif ($databaseStatesContribution -eq $maxValue) { $databaseStatesContribution += $diff }
+            elseif ($cpuContribution -eq $maxValue) { $cpuContribution += $diff }
+            elseif ($memoriaContribution -eq $maxValue) { $memoriaContribution += $diff }
+            elseif ($ioContribution -eq $maxValue) { $ioContribution += $diff }
+            elseif ($discosContribution -eq $maxValue) { $discosContribution += $diff }
+            elseif ($erroresContribution -eq $maxValue) { $erroresContribution += $diff }
+            elseif ($mantenimientosContribution -eq $maxValue) { $mantenimientosContribution += $diff }
+            elseif ($configTempdbContribution -eq $maxValue) { $configTempdbContribution += $diff }
+            else { $autogrowthContribution += $diff }
+            
+            $totalScore = $globalCap
+        }
+    }
+    else {
         $totalScore = $totalScoreBeforeCap
+    }
     
     $healthStatus = Get-HealthStatus -Score $totalScore
     $healthStatusDisplay = Get-HealthStatusDisplay -Status $healthStatus
@@ -1514,7 +1528,7 @@ foreach ($instanceName in $instances) {
         MantenimientosContribution = $mantenimientosContribution
         ConfiguracionTempdbContribution = $configTempdbContribution
         AutogrowthContribution = $autogrowthContribution
-        GlobalCap = 100  # Ya no se usa cap global, solo penalizaciones selectivas
+        GlobalCap = $globalCap
     }
     
     # Guardar en SQL
