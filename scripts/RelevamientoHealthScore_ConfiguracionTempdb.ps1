@@ -520,9 +520,21 @@ FROM sys.dm_os_sys_info;
         elseif ($result.TotalPhysicalMemoryMB -gt 512 -and $result.MaxServerMemoryMB -gt 0) {
             $calculatedPct = ($result.MaxServerMemoryMB * 100.0) / $result.TotalPhysicalMemoryMB
             
-            # Validar que el porcentaje sea razonable (0-200%)
-            if ($calculatedPct -ge 0 -and $calculatedPct -le 200) {
-                $result.MaxMemoryPctOfPhysical = [Math]::Round($calculatedPct, 2)
+            # Validar que el porcentaje sea razonable (>0%)
+            if ($calculatedPct -ge 0) {
+                # Truncar a 999.99 para evitar overflow en SQL (DECIMAL(5,2))
+                if ($calculatedPct -gt 999.99) {
+                    $result.MaxMemoryPctOfPhysical = 999.99
+                    Write-Warning "⚠️  Max Memory configurado EXCESIVAMENTE alto en ${InstanceName}: $([Math]::Round($calculatedPct, 2))% (MaxMem=$($result.MaxServerMemoryMB)MB > Total=$($result.TotalPhysicalMemoryMB)MB) - Posible error de configuración"
+                }
+                else {
+                    $result.MaxMemoryPctOfPhysical = [Math]::Round($calculatedPct, 2)
+                    
+                    # Advertir si está configurado por encima del 100% (no recomendado)
+                    if ($calculatedPct -gt 100) {
+                        Write-Warning "⚠️  Max Memory configurado por ENCIMA de RAM física en ${InstanceName}: $([Math]::Round($calculatedPct, 2))% (MaxMem=$($result.MaxServerMemoryMB)MB, Total=$($result.TotalPhysicalMemoryMB)MB)"
+                    }
+                }
                 
                 # Considerar óptimo si está entre 70% y 95%
                 if ($result.MaxMemoryPctOfPhysical -ge 70 -and $result.MaxMemoryPctOfPhysical -le 95) {
@@ -530,7 +542,8 @@ FROM sys.dm_os_sys_info;
                 }
             }
             else {
-                Write-Warning "Porcentaje de memoria inválido en ${InstanceName}: $calculatedPct% (MaxMem=$($result.MaxServerMemoryMB)MB, Total=$($result.TotalPhysicalMemoryMB)MB)"
+                # Porcentaje negativo (no debería pasar)
+                Write-Warning "❌ Porcentaje de memoria negativo en ${InstanceName}: $calculatedPct% - Datos incorrectos"
                 $result.MaxMemoryPctOfPhysical = 0
             }
         }
