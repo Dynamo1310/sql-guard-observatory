@@ -623,8 +623,9 @@ Write-Host ""
 Write-Host "2️⃣  Recolectando métricas de discos..." -ForegroundColor Yellow
 if ($EnableParallel) {
     Write-Host "   🚀 Modo PARALELO activado (ThrottleLimit: $ThrottleLimit)" -ForegroundColor Cyan
+    Write-Host "   ℹ️  Modo paralelo: Recolección simplificada de espacio en discos (sin análisis de archivos problemáticos)" -ForegroundColor DarkGray
 } else {
-    Write-Host "   🐌 Modo SECUENCIAL activado" -ForegroundColor DarkGray
+    Write-Host "   🐌 Modo SECUENCIAL activado - Recolección completa con todas las funciones" -ForegroundColor DarkGray
 }
 
 $results = @()
@@ -638,17 +639,137 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
         $instance = $_
         $instanceName = $instance.NombreInstancia
         $TimeoutSec = $using:TimeoutSec
+        $SqlServer = $using:SqlServer
+        $SqlDatabase = $using:SqlDatabase
         
         # Importar módulo en cada runspace paralelo
         Import-Module dbatools -ErrorAction SilentlyContinue
         
-        # Copiar funciones al runspace paralelo
-        ${function:ConvertTo-SafeInt} = ${using:function:ConvertTo-SafeInt}
-        ${function:ConvertTo-SafeDecimal} = ${using:function:ConvertTo-SafeDecimal}
-        ${function:Get-DiskMediaType} = ${using:function:Get-DiskMediaType}
-        ${function:Get-DiskMetrics} = ${using:function:Get-DiskMetrics}
-        ${function:Test-SqlConnection} = ${using:function:Test-SqlConnection}
-        ${function:Invoke-SqlQueryWithRetry} = ${using:function:Invoke-SqlQueryWithRetry}
+        # Redefinir funciones helper dentro del runspace paralelo
+        function ConvertTo-SafeInt {
+            param($Value, $Default = 0)
+            if ($null -eq $Value -or $Value -is [System.DBNull]) { return $Default }
+            try { return [int]$Value } catch { return $Default }
+        }
+        
+        function ConvertTo-SafeDecimal {
+            param($Value, $Default = 0.0)
+            if ($null -eq $Value -or $Value -is [System.DBNull]) { return $Default }
+            try { return [decimal]$Value } catch { return $Default }
+        }
+        
+        function Test-SqlConnection {
+            param([string]$InstanceName, [int]$TimeoutSec = 10, [int]$MaxRetries = 2)
+            $attempt = 0
+            while ($attempt -lt $MaxRetries) {
+                $attempt++
+                try {
+                    $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
+                    if ($connection.IsPingable) { return $true }
+                } catch {
+                    if ($attempt -lt $MaxRetries) { Start-Sleep -Seconds 2 }
+                }
+            }
+            return $false
+        }
+        
+        function Invoke-SqlQueryWithRetry {
+            param([string]$InstanceName, [string]$Query, [int]$TimeoutSec = 15, [int]$MaxRetries = 2)
+            $attempt = 0
+            $lastError = $null
+            while ($attempt -lt $MaxRetries) {
+                $attempt++
+                try {
+                    return Invoke-DbaQuery -SqlInstance $InstanceName -Query $Query -QueryTimeout $TimeoutSec -EnableException
+                } catch {
+                    $lastError = $_
+                    if ($_.Exception.Message -match "Timeout|Connection|Network|Transport") {
+                        if ($attempt -lt $MaxRetries) { Start-Sleep -Seconds 3; continue }
+                    }
+                    throw
+                }
+            }
+            throw $lastError
+        }
+        
+        # Función simplificada Get-DiskMetrics inline
+        function Get-DiskMetrics {
+            param([string]$InstanceName, [int]$TimeoutSec = 15)
+            
+            $result = @{
+                WorstFreePct = 100.0
+                DataDiskAvgFreePct = 100.0
+                LogDiskAvgFreePct = 100.0
+                TempDBDiskFreePct = 100.0
+                Volumes = @()
+                DataVolumes = @()
+                LogVolumes = @()
+                PageLifeExpectancy = 0
+                PageReadsPerSec = 0
+                PageWritesPerSec = 0
+                LazyWritesPerSec = 0
+                CheckpointPagesPerSec = 0
+                BatchRequestsPerSec = 0
+            }
+            
+            try {
+                # Query simplificado (sin Get-DiskMediaType para velocidad)
+                $querySpace = @"
+SELECT DISTINCT
+    vs.volume_mount_point AS MountPoint,
+    vs.logical_volume_name AS VolumeName,
+    CAST(vs.total_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS TotalGB,
+    CAST(vs.available_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
+    CAST((vs.available_bytes * 100.0 / vs.total_bytes) AS DECIMAL(5,2)) AS FreePct,
+    CASE 
+        WHEN mf.type_desc = 'LOG' THEN 'Log'
+        WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
+        WHEN mf.type_desc = 'ROWS' THEN 'Data'
+        ELSE 'Other'
+    END AS DiskRole
+FROM sys.master_files mf
+CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+ORDER BY FreePct ASC;
+"@
+                
+                $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpace -TimeoutSec $TimeoutSec -MaxRetries 2
+                
+                if ($dataSpace) {
+                    $uniqueVolumes = $dataSpace | Select-Object -Property MountPoint, VolumeName, TotalGB, FreeGB, FreePct -Unique
+                    $result.Volumes = $uniqueVolumes | ForEach-Object {
+                        @{
+                            MountPoint = $_.MountPoint
+                            VolumeName = $_.VolumeName
+                            TotalGB = ConvertTo-SafeDecimal $_.TotalGB
+                            FreeGB = ConvertTo-SafeDecimal $_.FreeGB
+                            FreePct = ConvertTo-SafeDecimal $_.FreePct
+                            ProblematicFileCount = 0  # Simplificado para velocidad
+                        }
+                    }
+                    
+                    $result.WorstFreePct = ConvertTo-SafeDecimal (($dataSpace | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
+                    
+                    $dataDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Data' } | Select-Object -Property MountPoint, FreePct -Unique
+                    if ($dataDisks) {
+                        $result.DataDiskAvgFreePct = ConvertTo-SafeDecimal (($dataDisks | Measure-Object -Property FreePct -Average).Average) 100.0
+                    }
+                    
+                    $logDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Log' } | Select-Object -Property MountPoint, FreePct -Unique
+                    if ($logDisks) {
+                        $result.LogDiskAvgFreePct = ConvertTo-SafeDecimal (($logDisks | Measure-Object -Property FreePct -Average).Average) 100.0
+                    }
+                    
+                    $tempdbDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'TempDB' } | Select-Object -Property MountPoint, FreePct -Unique
+                    if ($tempdbDisks) {
+                        $result.TempDBDiskFreePct = ConvertTo-SafeDecimal (($tempdbDisks | Measure-Object -Property FreePct -Average).Average) 100.0
+                    }
+                }
+            } catch {
+                Write-Warning "Error obteniendo disk metrics en ${InstanceName}: $($_.Exception.Message)"
+            }
+            
+            return $result
+        }
         
         $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
         $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
@@ -661,43 +782,19 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
         
         $diskMetrics = Get-DiskMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
         
-        # Contar archivos problemáticos
-        $totalProblematicFiles = 0
-        if ($diskMetrics.Volumes) {
-            foreach ($vol in $diskMetrics.Volumes) {
-                if ($vol.ProblematicFileCount) {
-                    $totalProblematicFiles += $vol.ProblematicFileCount
-                }
-            }
-        }
-        
-        # Lógica de alertas
+        # Lógica simplificada de alertas (modo paralelo rápido - sin análisis de archivos)
         $status = "✅"
-        $statusMessage = ""
-        
-        if ($totalProblematicFiles -gt 0) {
-            if ($diskMetrics.WorstFreePct -lt 10 -or $totalProblematicFiles -ge 5) {
-                $status = "🚨 CRÍTICO!"
-                $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
-            }
-            elseif ($diskMetrics.WorstFreePct -lt 20 -or $totalProblematicFiles -ge 2) {
-                $status = "⚠️ ADVERTENCIA"
-                $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
-            }
+        if ($diskMetrics.WorstFreePct -lt 5) {
+            $status = "🚨 CRÍTICO!"
         }
-        else {
-            if ($diskMetrics.WorstFreePct -lt 5) {
-                $status = "📊 Disco bajo (archivos OK)"
-            }
-            elseif ($diskMetrics.WorstFreePct -lt 10) {
-                $status = "📊 Disco bajo (archivos OK)"
-            }
-            elseif ($diskMetrics.WorstFreePct -lt 20) {
-                $status = "📊 Monitorear"
-            }
+        elseif ($diskMetrics.WorstFreePct -lt 10) {
+            $status = "⚠️ BAJO!"
+        }
+        elseif ($diskMetrics.WorstFreePct -lt 20) {
+            $status = "⚠️ ADVERTENCIA"
         }
         
-        Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%$statusMessage" -ForegroundColor Gray
+        Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%" -ForegroundColor Gray
         
         # Devolver resultado
         [PSCustomObject]@{
