@@ -682,79 +682,79 @@ export default function HealthScore() {
                             </div>
 
                             {/* Breakdown Compacto - 12 Categorías (4×3) */}
-                            <div className="bg-gradient-to-r from-blue-500/5 to-purple-500/5 border rounded-lg p-3">
-                              <div className="flex items-center justify-between mb-3">
-                                <span className="text-sm font-semibold flex items-center gap-2">
-                                  <Activity className="h-4 w-4" />
-                                  Category Contributions
+                            <div className="bg-gradient-to-r from-blue-500/5 to-purple-500/5 border rounded-lg p-2">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-semibold flex items-center gap-1.5">
+                                  <Activity className="h-3 w-3" />
+                                  Contribuciones por Categoría
                                 </span>
-                                <span className="text-xl font-mono font-bold">{score.healthScore}<span className="text-xs text-muted-foreground">/100</span></span>
+                                <span className="text-lg font-mono font-bold">{score.healthScore}<span className="text-[10px] text-muted-foreground">/100</span></span>
                               </div>
-                              <div className="grid grid-cols-4 gap-2">
+                              <div className="grid grid-cols-4 gap-1">
                                 {/* Fila 1: Availability & DR */}
-                                <div className="bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/30 rounded p-2 text-center">
-                                  <Database className="h-3 w-3 text-green-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-green-600">{score.backupsContribution || 0}<span className="text-xs">/18</span></p>
-                                  <p className="text-[10px] text-muted-foreground">Backups</p>
+                                <div className="bg-gradient-to-r from-green-500/10 to-green-500/5 border border-green-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <Database className="h-3 w-3 text-green-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">Backups</span>
+                                  <span className="text-xs font-mono font-bold text-green-600 whitespace-nowrap">{score.backupsContribution || 0}<span className="text-[9px]">/18</span></span>
                                 </div>
-                                <div className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/30 rounded p-2 text-center">
-                                  <Shield className="h-3 w-3 text-purple-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-purple-600">{score.alwaysOnContribution || 0}<span className="text-xs">/14</span></p>
-                                  <p className="text-[10px] text-muted-foreground">AlwaysOn</p>
+                                <div className="bg-gradient-to-r from-purple-500/10 to-purple-500/5 border border-purple-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <Shield className="h-3 w-3 text-purple-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">AlwaysOn</span>
+                                  <span className="text-xs font-mono font-bold text-purple-600 whitespace-nowrap">{score.alwaysOnContribution || 0}<span className="text-[9px]">/14</span></span>
                                 </div>
-                                <div className="bg-gradient-to-br from-amber-500/10 to-amber-500/5 border border-amber-500/30 rounded p-2 text-center">
-                                  <AlertCircle className="h-3 w-3 text-amber-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-amber-600">{score.logChainContribution || 0}<span className="text-xs">/5</span></p>
-                                  <p className="text-[10px] text-muted-foreground">LogChain</p>
+                                <div className="bg-gradient-to-r from-amber-500/10 to-amber-500/5 border border-amber-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <AlertCircle className="h-3 w-3 text-amber-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">LogChain</span>
+                                  <span className="text-xs font-mono font-bold text-amber-600 whitespace-nowrap">{score.logChainContribution || 0}<span className="text-[9px]">/5</span></span>
                                 </div>
-                                <div className="bg-gradient-to-br from-rose-500/10 to-rose-500/5 border border-rose-500/30 rounded p-2 text-center">
-                                  <AlertTriangle className="h-3 w-3 text-rose-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-rose-600">{score.databaseStatesContribution || 0}<span className="text-xs">/3</span></p>
-                                  <p className="text-[10px] text-muted-foreground">DB States</p>
+                                <div className="bg-gradient-to-r from-rose-500/10 to-rose-500/5 border border-rose-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <AlertTriangle className="h-3 w-3 text-rose-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">DB States</span>
+                                  <span className="text-xs font-mono font-bold text-rose-600 whitespace-nowrap">{score.databaseStatesContribution || 0}<span className="text-[9px]">/3</span></span>
                                 </div>
                                 
                                 {/* Fila 2: Performance */}
-                                <div className="bg-gradient-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/30 rounded p-2 text-center">
-                                  <Cpu className="h-3 w-3 text-orange-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-orange-600">{score.cpuContribution || 0}<span className="text-xs">/10</span></p>
-                                  <p className="text-[10px] text-muted-foreground">CPU</p>
+                                <div className="bg-gradient-to-r from-orange-500/10 to-orange-500/5 border border-orange-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <Cpu className="h-3 w-3 text-orange-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">CPU</span>
+                                  <span className="text-xs font-mono font-bold text-orange-600 whitespace-nowrap">{score.cpuContribution || 0}<span className="text-[9px]">/10</span></span>
                                 </div>
-                                <div className="bg-gradient-to-br from-pink-500/10 to-pink-500/5 border border-pink-500/30 rounded p-2 text-center">
-                                  <MemoryStick className="h-3 w-3 text-pink-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-pink-600">{score.memoriaContribution || 0}<span className="text-xs">/8</span></p>
-                                  <p className="text-[10px] text-muted-foreground">Memory</p>
+                                <div className="bg-gradient-to-r from-pink-500/10 to-pink-500/5 border border-pink-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <MemoryStick className="h-3 w-3 text-pink-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">Memory</span>
+                                  <span className="text-xs font-mono font-bold text-pink-600 whitespace-nowrap">{score.memoriaContribution || 0}<span className="text-[9px]">/8</span></span>
                                 </div>
-                                <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded p-2 text-center">
-                                  <Zap className="h-3 w-3 text-cyan-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-cyan-600">{score.ioContribution || 0}<span className="text-xs">/10</span></p>
-                                  <p className="text-[10px] text-muted-foreground">I/O</p>
+                                <div className="bg-gradient-to-r from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <Zap className="h-3 w-3 text-cyan-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">I/O</span>
+                                  <span className="text-xs font-mono font-bold text-cyan-600 whitespace-nowrap">{score.ioContribution || 0}<span className="text-[9px]">/10</span></span>
                                 </div>
-                                <div className="bg-gradient-to-br from-yellow-500/10 to-yellow-500/5 border border-yellow-500/30 rounded p-2 text-center">
-                                  <HardDrive className="h-3 w-3 text-yellow-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-yellow-600">{score.discosContribution || 0}<span className="text-xs">/7</span></p>
-                                  <p className="text-[10px] text-muted-foreground">Disk</p>
+                                <div className="bg-gradient-to-r from-yellow-500/10 to-yellow-500/5 border border-yellow-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <HardDrive className="h-3 w-3 text-yellow-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">Discos</span>
+                                  <span className="text-xs font-mono font-bold text-yellow-600 whitespace-nowrap">{score.discosContribution || 0}<span className="text-[9px]">/7</span></span>
                                 </div>
                                 
                                 {/* Fila 3: Maintenance & Config */}
-                                <div className="bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/30 rounded p-2 text-center">
-                                  <XCircle className="h-3 w-3 text-red-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-red-600">{score.erroresCriticosContribution || 0}<span className="text-xs">/7</span></p>
-                                  <p className="text-[10px] text-muted-foreground">Errors</p>
+                                <div className="bg-gradient-to-r from-red-500/10 to-red-500/5 border border-red-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <XCircle className="h-3 w-3 text-red-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">Errores</span>
+                                  <span className="text-xs font-mono font-bold text-red-600 whitespace-nowrap">{score.erroresCriticosContribution || 0}<span className="text-[9px]">/7</span></span>
                                 </div>
-                                <div className="bg-gradient-to-br from-teal-500/10 to-teal-500/5 border border-teal-500/30 rounded p-2 text-center">
-                                  <Wrench className="h-3 w-3 text-teal-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-teal-600">{score.mantenimientosContribution || 0}<span className="text-xs">/5</span></p>
-                                  <p className="text-[10px] text-muted-foreground">Maint</p>
+                                <div className="bg-gradient-to-r from-teal-500/10 to-teal-500/5 border border-teal-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <Wrench className="h-3 w-3 text-teal-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">Mant</span>
+                                  <span className="text-xs font-mono font-bold text-teal-600 whitespace-nowrap">{score.mantenimientosContribution || 0}<span className="text-[9px]">/5</span></span>
                                 </div>
-                                <div className="bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 border border-indigo-500/30 rounded p-2 text-center">
-                                  <Settings className="h-3 w-3 text-indigo-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-indigo-600">{score.configuracionTempdbContribution || 0}<span className="text-xs">/8</span></p>
-                                  <p className="text-[10px] text-muted-foreground">Config</p>
+                                <div className="bg-gradient-to-r from-indigo-500/10 to-indigo-500/5 border border-indigo-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <Settings className="h-3 w-3 text-indigo-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">Config</span>
+                                  <span className="text-xs font-mono font-bold text-indigo-600 whitespace-nowrap">{score.configuracionTempdbContribution || 0}<span className="text-[9px]">/8</span></span>
                                 </div>
-                                <div className="bg-gradient-to-br from-lime-500/10 to-lime-500/5 border border-lime-500/30 rounded p-2 text-center">
-                                  <TrendingUp className="h-3 w-3 text-lime-600 mx-auto mb-1" />
-                                  <p className="text-lg font-mono font-bold text-lime-600">{score.autogrowthContribution || 0}<span className="text-xs">/5</span></p>
-                                  <p className="text-[10px] text-muted-foreground">Autogrowth</p>
+                                <div className="bg-gradient-to-r from-lime-500/10 to-lime-500/5 border border-lime-500/30 rounded px-2 py-1 flex items-center gap-1.5">
+                                  <TrendingUp className="h-3 w-3 text-lime-600 flex-shrink-0" />
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">Autogrowth</span>
+                                  <span className="text-xs font-mono font-bold text-lime-600 whitespace-nowrap">{score.autogrowthContribution || 0}<span className="text-[9px]">/5</span></span>
                                 </div>
                               </div>
                             </div>
@@ -778,46 +778,120 @@ export default function HealthScore() {
 
                               {/* Tab 1: Availability & DR */}
                               <TabsContent value="availability" className="mt-3">
+                                {/* Acciones Sugeridas */}
+                                {(() => {
+                                  const suggestions: string[] = [];
+                                  const details = instanceDetails[score.instanceName];
+                                  
+                                  // Backups inteligentes
+                                  if (details.backupsDetails?.fullBackupBreached && details.backupsDetails?.lastFullBackup) {
+                                    const hoursSince = Math.floor((new Date().getTime() - new Date(details.backupsDetails.lastFullBackup).getTime()) / (1000 * 60 * 60));
+                                    suggestions.push(`⚠️ Backup Full vencido (hace ${hoursSince}h) → Ejecutar backup completo inmediatamente`);
+                                  } else if (details.backupsDetails?.fullBackupBreached) {
+                                    suggestions.push('⚠️ Backup Full vencido → Ejecutar backup completo inmediatamente');
+                                  }
+                                  
+                                  if (details.backupsDetails?.logBackupBreached && details.backupsDetails?.lastLogBackup) {
+                                    const hoursSince = Math.floor((new Date().getTime() - new Date(details.backupsDetails.lastLogBackup).getTime()) / (1000 * 60 * 60));
+                                    suggestions.push(`⚠️ Backup Log vencido (hace ${hoursSince}h) → Ejecutar backup de log de transacciones`);
+                                  } else if (details.backupsDetails?.logBackupBreached) {
+                                    suggestions.push('⚠️ Backup Log vencido → Ejecutar backup de log de transacciones');
+                                  }
+                                  
+                                  // AlwaysOn inteligente
+                                  if (details.alwaysOnDetails && details.alwaysOnDetails.alwaysOnEnabled) {
+                                    if (details.alwaysOnDetails.suspendedCount > 0) {
+                                      suggestions.push(`🔧 ${details.alwaysOnDetails.suspendedCount} réplica(s) suspendida(s) → Revisar estado de red y latencia entre nodos`);
+                                    }
+                                    if (details.alwaysOnDetails.maxSendQueueKB > 50000) {
+                                      const queueGB = (details.alwaysOnDetails.maxSendQueueKB / 1024 / 1024).toFixed(1);
+                                      suggestions.push(`🔧 Cola de envío crítica (${queueGB}GB) → Revisar ancho de banda o detener cargas pesadas temporalmente`);
+                                    } else if (details.alwaysOnDetails.maxSendQueueKB > 10000) {
+                                      const queueMB = (details.alwaysOnDetails.maxSendQueueKB / 1024).toFixed(0);
+                                      suggestions.push(`🔧 Cola de envío alta (${queueMB}MB) → Revisar ancho de banda entre nodos`);
+                                    }
+                                    if (details.alwaysOnDetails.maxSecondsBehind > 60) {
+                                      const lagMin = Math.floor(details.alwaysOnDetails.maxSecondsBehind / 60);
+                                      suggestions.push(`⏱️ Lag de sincronización alto (${lagMin}min) → Revisar latencia de red y REDO queue`);
+                                    }
+                                  }
+                                  
+                                  // Log Chain inteligente
+                                  if (details.logChainDetails && details.logChainDetails.brokenChainCount > 0) {
+                                    const broken = details.logChainDetails.brokenChainCount;
+                                    suggestions.push(`❌ ${broken} cadena(s) de log rota(s) → Ejecutar backup full en DBs afectadas para reiniciar cadena`);
+                                  }
+                                  if (details.logChainDetails && details.logChainDetails.fullDBsWithoutLogBackup > 0) {
+                                    const count = details.logChainDetails.fullDBsWithoutLogBackup;
+                                    suggestions.push(`⚠️ ${count} DB(s) FULL sin backup de log → Configurar backup de log o cambiar a SIMPLE`);
+                                  }
+                                  
+                                  // Database States inteligente
+                                  if (details.databaseStatesDetails) {
+                                    const problematic: string[] = [];
+                                    if (details.databaseStatesDetails.offlineCount > 0) problematic.push(`${details.databaseStatesDetails.offlineCount} Offline`);
+                                    if (details.databaseStatesDetails.suspectCount > 0) problematic.push(`${details.databaseStatesDetails.suspectCount} Suspect`);
+                                    if (details.databaseStatesDetails.emergencyCount > 0) problematic.push(`${details.databaseStatesDetails.emergencyCount} Emergency`);
+                                    
+                                    if (problematic.length > 0) {
+                                      suggestions.push(`🚨 Bases en estado crítico (${problematic.join(', ')}) → Revisar error log y restaurar urgentemente`);
+                                    }
+                                  }
+                                  
+                                  return suggestions.length > 0 ? (
+                                    <div className="mb-3 bg-amber-500/5 border border-amber-500/30 rounded-lg p-2">
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-xs font-semibold text-amber-600">💡 Acciones sugeridas:</span>
+                                        <div className="flex-1 space-y-0.5">
+                                          {suggestions.map((suggestion, idx) => (
+                                            <p key={idx} className="text-[11px] text-muted-foreground">{suggestion}</p>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : null;
+                                })()}
+                                
                                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-3">
                               
                               {/* Backups */}
                               <Card className="border-green-500/20">
-                                <CardHeader className="pb-2 bg-green-500/5 py-2">
+                                <CardHeader className="pb-1 bg-green-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <Database className="h-4 w-4 text-green-600" />
-                                    <span>Backup Status</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
-                                      Score: {score.score_Backups || 0}/100
-                                    </Badge>
+                                    <Database className="h-3.5 w-3.5 text-green-600" />
+                                    <span className="text-xs">Backups</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
+                                      {score.score_Backups || 0}/100
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].backupsDetails ? (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">Full Backup Status</span>
-                                        <Badge variant={instanceDetails[score.instanceName].backupsDetails.fullBackupBreached ? 'destructive' : 'outline'} className="text-xs">
-                                          {instanceDetails[score.instanceName].backupsDetails.fullBackupBreached ? 'Overdue' : 'OK'}
-                                        </Badge>
+                                        <span className="text-muted-foreground">Full</span>
+                                        <span className={`font-mono ${instanceDetails[score.instanceName].backupsDetails.fullBackupBreached ? 'text-red-500 font-semibold' : ''}`}>
+                                          {instanceDetails[score.instanceName].backupsDetails.fullBackupBreached ? 'Vencido 🔴' : 'OK'}
+                                        </span>
                                       </div>
                                       {instanceDetails[score.instanceName].backupsDetails.lastFullBackup && (
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Last FULL Backup</span>
-                                          <span className="font-mono">
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground">Últ Full</span>
+                                          <span className="font-mono text-[10px]">
                                             {formatDateUTC3(instanceDetails[score.instanceName].backupsDetails.lastFullBackup)}
                                           </span>
                                         </div>
                                       )}
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">Log Backup Status</span>
-                                        <Badge variant={instanceDetails[score.instanceName].backupsDetails.logBackupBreached ? 'destructive' : 'outline'} className="text-xs">
-                                          {instanceDetails[score.instanceName].backupsDetails.logBackupBreached ? 'Overdue' : 'OK'}
-                                        </Badge>
+                                        <span className="text-muted-foreground">Log</span>
+                                        <span className={`font-mono ${instanceDetails[score.instanceName].backupsDetails.logBackupBreached ? 'text-red-500 font-semibold' : ''}`}>
+                                          {instanceDetails[score.instanceName].backupsDetails.logBackupBreached ? 'Vencido 🔴' : 'OK'}
+                                        </span>
                                       </div>
                                       {instanceDetails[score.instanceName].backupsDetails.lastLogBackup && (
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Last LOG Backup</span>
-                                          <span className="font-mono">
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground">Últ Log</span>
+                                          <span className="font-mono text-[10px]">
                                             {formatDateUTC3(instanceDetails[score.instanceName].backupsDetails.lastLogBackup)}
                                           </span>
                                         </div>
@@ -831,58 +905,55 @@ export default function HealthScore() {
 
                                 {/* AlwaysOn */}
                                 <Card className="border-purple-500/20">
-                                  <CardHeader className="pb-2 bg-purple-500/5 py-2">
+                                  <CardHeader className="pb-1 bg-purple-500/5 py-1.5">
                                     <CardTitle className="text-sm flex items-center gap-2">
-                                      <Shield className="h-4 w-4 text-purple-600" />
-                                      <span>AlwaysOn AG</span>
-                                      <Badge variant="outline" className="ml-auto text-xs">
-                                        Score: {score.score_AlwaysOn || 0}/100
-                                      </Badge>
+                                      <Shield className="h-3.5 w-3.5 text-purple-600" />
+                                      <span className="text-xs">AlwaysOn AG</span>
+                                      <span className="ml-auto text-[10px] font-mono text-muted-foreground">
+                                        {score.score_AlwaysOn || 0}/100
+                                      </span>
                                     </CardTitle>
                                   </CardHeader>
-                                  <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                  <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                     {instanceDetails[score.instanceName].alwaysOnDetails ? (
                                       <>
                                         <div className="flex items-center justify-between">
-                                          <span className="text-muted-foreground font-medium">Status</span>
-                                          <Badge variant="outline" className="text-xs">
-                                            {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnEnabled ? 'Enabled' : 'Disabled'}
-                                          </Badge>
+                                          <span className="text-muted-foreground">Status</span>
+                                          <span className="font-mono">{instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnEnabled ? 'Enabled' : 'Disabled'}</span>
                                         </div>
                                         {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnEnabled && (
                                           <>
                                           <div className="flex items-center justify-between">
-                                              <span className="text-muted-foreground font-medium">Health State</span>
-                                            <Badge 
-                                              variant={
-                                                  instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState === 'HEALTHY' ? 'outline' : 
-                                                  instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState === 'WARNING' ? 'default' :
-                                                'destructive'
-                                              } 
-                                                className="text-xs"
-                                              >
+                                              <span className="text-muted-foreground">Estado</span>
+                                            <span className={`font-mono ${
+                                              instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState !== 'HEALTHY' ? 
+                                                (instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState === 'WARNING' ? 'text-amber-500' : 'text-red-500 font-semibold') 
+                                                : ''
+                                            }`}>
                                                 {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState || 'N/A'}
-                                            </Badge>
+                                                {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState !== 'HEALTHY' && ' ⚠️'}
+                                            </span>
                                           </div>
-                                        <div className="flex items-center justify-between text-xs">
-                                              <span className="text-muted-foreground">Synchronized Databases</span>
-                                              <span className="font-mono font-medium">{instanceDetails[score.instanceName].alwaysOnDetails.synchronizedCount} / {instanceDetails[score.instanceName].alwaysOnDetails.databaseCount}</span>
+                                        <div className="flex items-center justify-between text-[11px]">
+                                              <span className="text-muted-foreground">Sinc</span>
+                                              <span className="font-mono">{instanceDetails[score.instanceName].alwaysOnDetails.synchronizedCount}/{instanceDetails[score.instanceName].alwaysOnDetails.databaseCount}</span>
                                         </div>
-                                            <div className="flex items-center justify-between text-xs">
-                                              <span className="text-muted-foreground">Suspended</span>
-                                              <Badge variant={instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount > 0 ? 'destructive' : 'outline'} className="text-xs">
+                                            <div className="flex items-center justify-between text-[11px]">
+                                              <span className="text-muted-foreground">Suspendidas</span>
+                                              <span className={`font-mono ${instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount > 0 ? 'text-red-500 font-semibold' : ''}`}>
                                                 {instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount}
-                                              </Badge>
+                                                {instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount > 0 && ' 🔴'}
+                                              </span>
                                     </div>
-                                            <div className="flex items-center justify-between text-xs">
-                                              <span className="text-muted-foreground">Max Lag</span>
-                                              <Badge variant={instanceDetails[score.instanceName].alwaysOnDetails.maxSecondsBehind > 30 ? 'default' : 'outline'} className="text-xs">
+                                            <div className="flex items-center justify-between text-[11px]">
+                                              <span className="text-muted-foreground">Lag máx</span>
+                                              <span className={`font-mono ${instanceDetails[score.instanceName].alwaysOnDetails.maxSecondsBehind > 30 ? 'text-amber-500' : ''}`}>
                                                 {instanceDetails[score.instanceName].alwaysOnDetails.maxSecondsBehind}s
-                                              </Badge>
+                                              </span>
                                             </div>
-                                            <div className="flex items-center justify-between text-xs">
-                                              <span className="text-muted-foreground">Max Send Queue</span>
-                                              <span className="font-mono">{(instanceDetails[score.instanceName].alwaysOnDetails.maxSendQueueKB / 1024).toFixed(1)} MB</span>
+                                            <div className="flex items-center justify-between text-[11px]">
+                                              <span className="text-muted-foreground">Cola envío</span>
+                                              <span className="font-mono">{(instanceDetails[score.instanceName].alwaysOnDetails.maxSendQueueKB / 1024).toFixed(1)}MB</span>
                                             </div>
                                           </>
                                         )}
@@ -895,42 +966,40 @@ export default function HealthScore() {
 
                               {/* Log Chain Integrity */}
                               <Card className="border-amber-500/20">
-                                <CardHeader className="pb-2 bg-amber-500/5 py-2">
+                                <CardHeader className="pb-1 bg-amber-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <AlertCircle className="h-4 w-4 text-amber-600" />
-                                    <span>Log Chain Integrity</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                                    <span className="text-xs">Log Chain</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_LogChain || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].logChainDetails ? (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">Broken Chains</span>
-                                        <Badge variant={instanceDetails[score.instanceName].logChainDetails.brokenChainCount > 0 ? 'destructive' : 'outline'} className="text-xs">
+                                        <span className="text-muted-foreground">Rotas</span>
+                                        <span className={`font-mono ${instanceDetails[score.instanceName].logChainDetails.brokenChainCount > 0 ? 'text-red-500 font-semibold' : ''}`}>
                                           {instanceDetails[score.instanceName].logChainDetails.brokenChainCount}
-                                        </Badge>
+                                          {instanceDetails[score.instanceName].logChainDetails.brokenChainCount > 0 && ' 🔴'}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">FULL DBs w/o LOG Backup</span>
-                                        <Badge variant={instanceDetails[score.instanceName].logChainDetails.fullDBsWithoutLogBackup > 0 ? 'default' : 'outline'} className="text-xs">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Sin LOG bkp</span>
+                                        <span className={`font-mono ${instanceDetails[score.instanceName].logChainDetails.fullDBsWithoutLogBackup > 0 ? 'text-amber-500' : ''}`}>
                                           {instanceDetails[score.instanceName].logChainDetails.fullDBsWithoutLogBackup}
-                                        </Badge>
+                                        </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Max Hours Since LOG Backup</span>
-                                        <Badge 
-                                          variant={
-                                            instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup > 24 ? 'destructive' :
-                                            instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup > 12 ? 'default' :
-                                            'outline'
-                                          }
-                                          className="text-xs font-mono"
-                                        >
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Máx horas</span>
+                                        <span className={`font-mono ${
+                                          instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup > 24 ? 'text-red-500 font-semibold' :
+                                          instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup > 12 ? 'text-amber-500' : ''
+                                        }`}>
                                           {instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup.toFixed(1)}h
-                                        </Badge>
+                                          {instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup > 24 && ' ⚠️'}
+                                        </span>
                                       </div>
                                     </>
                                   ) : (
@@ -941,36 +1010,35 @@ export default function HealthScore() {
 
                               {/* Database States */}
                               <Card className="border-rose-500/20">
-                                <CardHeader className="pb-2 bg-rose-500/5 py-2">
+                                <CardHeader className="pb-1 bg-rose-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <AlertTriangle className="h-4 w-4 text-rose-600" />
-                                    <span>Database States</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
+                                    <span className="text-xs">DB States</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_DatabaseStates || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].databaseStatesDetails ? (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">Problematic States</span>
-                                        <Badge 
-                                          variant={
-                                            instanceDetails[score.instanceName].databaseStatesDetails.offlineCount > 0 ||
-                                            instanceDetails[score.instanceName].databaseStatesDetails.suspectCount > 0 ||
-                                            instanceDetails[score.instanceName].databaseStatesDetails.emergencyCount > 0
-                                            ? 'destructive' : 'outline'
-                                          } 
-                                          className="text-xs"
-                                        >
+                                        <span className="text-muted-foreground">Problemáticas</span>
+                                        <span className={`font-mono ${
+                                          (instanceDetails[score.instanceName].databaseStatesDetails.offlineCount + 
+                                           instanceDetails[score.instanceName].databaseStatesDetails.suspectCount + 
+                                           instanceDetails[score.instanceName].databaseStatesDetails.emergencyCount) > 0 ? 'text-red-500 font-semibold' : ''
+                                        }`}>
                                           {instanceDetails[score.instanceName].databaseStatesDetails.offlineCount + 
                                            instanceDetails[score.instanceName].databaseStatesDetails.suspectCount + 
                                            instanceDetails[score.instanceName].databaseStatesDetails.emergencyCount}
-                                        </Badge>
+                                          {(instanceDetails[score.instanceName].databaseStatesDetails.offlineCount + 
+                                           instanceDetails[score.instanceName].databaseStatesDetails.suspectCount + 
+                                           instanceDetails[score.instanceName].databaseStatesDetails.emergencyCount) > 0 && ' 🔴'}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Offline/Suspect/Emergency</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Off/Susp/Emrg</span>
                                         <span className="font-mono">
                                           {instanceDetails[score.instanceName].databaseStatesDetails.offlineCount}/
                                           {instanceDetails[score.instanceName].databaseStatesDetails.suspectCount}/
@@ -1000,101 +1068,182 @@ export default function HealthScore() {
 
                               {/* Tab 2: Performance & Resources */}
                               <TabsContent value="performance" className="mt-3">
+                                {/* Acciones Sugeridas */}
+                                {(() => {
+                                  const suggestions: string[] = [];
+                                  const details = instanceDetails[score.instanceName];
+                                  
+                                  // CPU inteligente
+                                  if (details.cpuDetails) {
+                                    const cpu = details.cpuDetails.sqlProcessUtilization;
+                                    const runnable = details.cpuDetails.runnableTasks;
+                                    
+                                    if (cpu > 90 && runnable > 10) {
+                                      suggestions.push(`🔥 CPU crítica (${cpu}%, ${runnable} tareas en cola) → Identificar queries más costosas urgentemente y considerar más cores`);
+                                    } else if (cpu > 80 && runnable > 5) {
+                                      suggestions.push(`🔥 CPU alta (${cpu}%, ${runnable} tareas esperando) → Revisar queries más costosas y optimizar índices`);
+                                    } else if (cpu > 80) {
+                                      suggestions.push(`🔥 CPU alta (${cpu}%) → Revisar queries más costosas y optimizar índices`);
+                                    } else if (runnable > 10) {
+                                      suggestions.push(`⚡ Muchas tareas en cola de CPU (${runnable}) → Considerar aumentar cores o reducir MAXDOP`);
+                                    } else if (runnable > 5) {
+                                      suggestions.push(`⚡ Tareas en cola de CPU (${runnable}) → Considerar aumentar cores o revisar MAXDOP`);
+                                    }
+                                  }
+                                  
+                                  // Memoria inteligente
+                                  if (details.memoriaDetails) {
+                                    const ple = details.memoriaDetails.pageLifeExpectancy;
+                                    const pleTarget = details.memoriaDetails.pleTarget;
+                                    const maxMem = details.memoriaDetails.maxServerMemoryMB;
+                                    const totalMem = details.memoriaDetails.totalServerMemoryMB;
+                                    const grants = details.memoriaDetails.memoryGrantsPending;
+                                    
+                                    if (ple < 100 && ple > 0) {
+                                      const plePct = pleTarget > 0 ? ((ple / pleTarget) * 100).toFixed(0) : 'N/A';
+                                      suggestions.push(`💾 PLE crítico (${ple}s, ${plePct}% del target) → Incrementar Max Server Memory urgentemente`);
+                                    } else if (ple < 300 && ple > 0) {
+                                      const plePct = pleTarget > 0 ? ((ple / pleTarget) * 100).toFixed(0) : 'N/A';
+                                      suggestions.push(`💾 PLE bajo (${ple}s, ${plePct}% del target) → Incrementar Max Server Memory si es posible`);
+                                    }
+                                    
+                                    if (grants > 5) {
+                                      suggestions.push(`⏳ ${grants} queries esperando memoria → Revisar queries con JOINs grandes o aumentar Max Memory`);
+                                    } else if (grants > 0) {
+                                      suggestions.push(`⏳ ${grants} query(ies) esperando memoria → Monitorear queries pesadas`);
+                                    }
+                                    
+                                    if (details.memoriaDetails.stolenServerMemoryMB && totalMem) {
+                                      const stolenPct = (details.memoriaDetails.stolenServerMemoryMB / totalMem) * 100;
+                                      const stolenGB = (details.memoriaDetails.stolenServerMemoryMB / 1024).toFixed(1);
+                                      if (stolenPct > 50) {
+                                        suggestions.push(`💡 Stolen Memory muy alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) → Limpiar plan cache: DBCC FREESYSTEMCACHE`);
+                                      } else if (stolenPct > 30) {
+                                        suggestions.push(`💡 Stolen Memory alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) → Revisar planes en caché y CLR usage`);
+                                      }
+                                    }
+                                  }
+                                  
+                                  // I/O inteligente
+                                  if (details.ioDetails) {
+                                    const readLat = details.ioDetails.avgReadLatencyMs;
+                                    const writeLat = details.ioDetails.avgWriteLatencyMs;
+                                    
+                                    if (readLat > 50) {
+                                      suggestions.push(`📊 Latencia de lectura crítica (${readLat.toFixed(1)}ms) → Migrar a SSD/NVMe urgentemente`);
+                                    } else if (readLat > 20) {
+                                      suggestions.push(`📊 Latencia de lectura alta (${readLat.toFixed(1)}ms) → Revisar discos y considerar SSD`);
+                                    } else if (readLat > 15) {
+                                      suggestions.push(`📊 Latencia de lectura moderada (${readLat.toFixed(1)}ms) → Monitorear subsistema de almacenamiento`);
+                                    }
+                                    
+                                    if (writeLat > 30) {
+                                      suggestions.push(`✍️ Latencia de escritura crítica (${writeLat.toFixed(1)}ms) → Revisar RAID, write cache y migrar a SSD`);
+                                    } else if (writeLat > 15) {
+                                      suggestions.push(`✍️ Latencia de escritura alta (${writeLat.toFixed(1)}ms) → Revisar subsistema de almacenamiento`);
+                                    } else if (writeLat > 10) {
+                                      suggestions.push(`✍️ Latencia de escritura moderada (${writeLat.toFixed(1)}ms) → Monitorear discos`);
+                                    }
+                                  }
+                                  
+                                  // Discos inteligente
+                                  if (details.discosDetails) {
+                                    const worstPct = details.discosDetails.worstFreePct;
+                                    if (worstPct < 10) {
+                                      suggestions.push(`💾 Espacio crítico en disco (${worstPct.toFixed(1)}% libre) → Liberar espacio o expandir volumen URGENTEMENTE`);
+                                    } else if (worstPct < 15) {
+                                      suggestions.push(`💾 Espacio muy bajo en disco (${worstPct.toFixed(1)}% libre) → Liberar espacio o expandir volumen pronto`);
+                                    } else if (worstPct < 20) {
+                                      suggestions.push(`💾 Espacio bajo en disco (${worstPct.toFixed(1)}% libre) → Planificar expansión de volumen`);
+                                    }
+                                  }
+                                  
+                                  return suggestions.length > 0 ? (
+                                    <div className="mb-3 bg-amber-500/5 border border-amber-500/30 rounded-lg p-2">
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-xs font-semibold text-amber-600">💡 Acciones sugeridas:</span>
+                                        <div className="flex-1 space-y-0.5">
+                                          {suggestions.map((suggestion, idx) => (
+                                            <p key={idx} className="text-[11px] text-muted-foreground">{suggestion}</p>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : null;
+                                })()}
+                                
                                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-3">
 
                               {/* CPU */}
                               <Card className="border-orange-500/20">
-                                <CardHeader className="pb-2 bg-orange-500/5 py-2">
+                                <CardHeader className="pb-1 bg-orange-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <Cpu className="h-4 w-4 text-orange-600" />
-                                    <span>CPU</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <Cpu className="h-3.5 w-3.5 text-orange-600" />
+                                    <span className="text-xs">CPU</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_CPU || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].cpuDetails ? (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">SQL Process Utilization</span>
-                                        <Badge 
-                                          variant={instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization > 80 ? 'destructive' : instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization > 60 ? 'default' : 'outline'} 
-                                          className="text-xs font-mono"
-                                        >
+                                        <span className="text-muted-foreground">SQL Process</span>
+                                        <span className={`font-mono ${
+                                          instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization > 80 ? 'text-red-500 font-semibold' : 
+                                          instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization > 60 ? 'text-amber-500' : 
+                                          ''
+                                        }`}>
                                           {instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization}%
-                                        </Badge>
+                                          {instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization > 80 && ' 🔴'}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">P95 CPU Utilization</span>
-                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].cpuDetails.p95CPUPercent}%</span>
-                                              </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Runnable Tasks</span>
-                                        <Badge variant={instanceDetails[score.instanceName].cpuDetails.runnableTasks > 5 ? 'destructive' : 'outline'} className="text-xs">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">P95</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].cpuDetails.p95CPUPercent}%</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Runnable</span>
+                                        <span className={`font-mono ${instanceDetails[score.instanceName].cpuDetails.runnableTasks > 5 ? 'text-red-500 font-semibold' : ''}`}>
                                           {instanceDetails[score.instanceName].cpuDetails.runnableTasks}
-                                        </Badge>
-                                            </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Avg CPU (10min)</span>
+                                          {instanceDetails[score.instanceName].cpuDetails.runnableTasks > 5 && ' ⚠️'}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Avg 10min</span>
                                         <span className="font-mono">{instanceDetails[score.instanceName].cpuDetails.avgCPUPercentLast10Min}%</span>
                                         </div>
                                       
-                                      {/* NUEVO: CPU Waits */}
-                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.totalWaitMs > 0 && (
-                                        <div className="mt-3 pt-2 border-t border-blue-500/10 space-y-1">
-                                          <div className="text-xs font-medium text-muted-foreground mb-2">
-                                            CPU Waits
-                                          </div>
-                                          
-                                          {/* CXPACKET (Parallelism) */}
-                                          {(() => {
-                                            const cxPct = (instanceDetails[score.instanceName].waitsDetails!.cxPacketWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
-                                            return cxPct > 0.1 && (
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="text-muted-foreground">CXPACKET (parallelism)</span>
-                                                <Badge 
-                                                  variant={cxPct > 15 ? 'destructive' : cxPct > 10 ? 'default' : 'outline'}
-                                                  className="text-xs font-mono"
-                                                >
+                                      {/* CPU Waits - Minimalista */}
+                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.totalWaitMs > 0 && (() => {
+                                        const cxPct = (instanceDetails[score.instanceName].waitsDetails!.cxPacketWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                        const sosPct = (instanceDetails[score.instanceName].waitsDetails!.sosSchedulerYieldMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                        const hasWaits = cxPct > 0.1 || sosPct > 0.1;
+                                        
+                                        return hasWaits && (
+                                          <div className="mt-2 pt-1.5 border-t border-orange-500/10 space-y-0.5">
+                                            {cxPct > 0.1 && (
+                                              <div className="flex items-center justify-between text-[11px]">
+                                                <span className="text-muted-foreground">CXPACKET</span>
+                                                <span className={`font-mono ${cxPct > 15 ? 'text-red-500 font-semibold' : cxPct > 10 ? 'text-amber-500' : ''}`}>
                                                   {cxPct.toFixed(1)}%
                                                   {cxPct > 15 && ' ⚠️'}
-                                                </Badge>
+                                                </span>
                                               </div>
-                                            );
-                                          })()}
-                                          
-                                          {/* SOS_SCHEDULER_YIELD (CPU Pressure) */}
-                                          {(() => {
-                                            const sosPct = (instanceDetails[score.instanceName].waitsDetails!.sosSchedulerYieldMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
-                                            return sosPct > 0.1 && (
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="text-muted-foreground">SOS_YIELD (CPU pressure)</span>
-                                                <Badge 
-                                                  variant={sosPct > 15 ? 'destructive' : sosPct > 10 ? 'default' : 'outline'}
-                                                  className="text-xs font-mono"
-                                                >
+                                            )}
+                                            {sosPct > 0.1 && (
+                                              <div className="flex items-center justify-between text-[11px]">
+                                                <span className="text-muted-foreground">SOS_YIELD</span>
+                                                <span className={`font-mono ${sosPct > 15 ? 'text-red-500 font-semibold' : sosPct > 10 ? 'text-amber-500' : ''}`}>
                                                   {sosPct.toFixed(1)}%
                                                   {sosPct > 15 && ' 🔥'}
-                                                </Badge>
+                                                </span>
                                               </div>
-                                            );
-                                          })()}
-                                          
-                                          {/* Mensaje si hay problemas */}
-                                          {(() => {
-                                            const cxPct = (instanceDetails[score.instanceName].waitsDetails!.cxPacketWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
-                                            const sosPct = (instanceDetails[score.instanceName].waitsDetails!.sosSchedulerYieldMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
-                                            if (cxPct > 15) {
-                                              return <p className="text-[9px] text-destructive italic mt-1">⚠️ Revisar MaxDOP o queries mal optimizadas</p>;
-                                            }
-                                            if (sosPct > 15) {
-                                              return <p className="text-[9px] text-destructive italic mt-1">🔥 CPU saturado - Optimización urgente</p>;
-                                            }
-                                            return null;
-                                          })()}
-                                        </div>
-                                      )}
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de CPU</p>
@@ -1104,115 +1253,81 @@ export default function HealthScore() {
 
                               {/* Memoria */}
                               <Card className="border-pink-500/20">
-                                <CardHeader className="pb-2 bg-pink-500/5 py-2">
+                                <CardHeader className="pb-1 bg-pink-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <MemoryStick className="h-4 w-4 text-pink-600" />
-                                    <span>Memory</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <MemoryStick className="h-3.5 w-3.5 text-pink-600" />
+                                    <span className="text-xs">Memory</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_Memoria || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].memoriaDetails ? (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">Page Life Expectancy</span>
-                                        <Badge 
-                                          variant={
-                                            instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy >= 300 ? 'outline' : 
-                                            instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy >= 100 ? 'default' : 
-                                            'destructive'
-                                          } 
-                                          className="text-xs font-mono"
-                                        >
+                                        <span className="text-muted-foreground">PLE</span>
+                                        <span className={`font-mono ${
+                                          instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy < 100 ? 'text-red-500 font-semibold' : 
+                                          instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy < 300 ? 'text-amber-500' : 
+                                          ''
+                                        }`}>
                                           {instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy}s
-                                        </Badge>
+                                          {instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy < 100 && ' 🔴'}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Buffer Cache Hit Ratio</span>
-                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].memoriaDetails.bufferCacheHitRatio.toFixed(2)}%</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Cache Hit</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].memoriaDetails.bufferCacheHitRatio.toFixed(1)}%</span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Memory Pressure</span>
-                                        <Badge variant={instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? 'destructive' : 'outline'} className="text-xs">
-                                          {instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? 'Detected' : 'Normal'}
-                                        </Badge>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Presión</span>
+                                        <span className={`font-mono ${instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? 'text-red-500 font-semibold' : ''}`}>
+                                          {instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? '⚠️ Sí' : 'No'}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Memory Grants Pending</span>
-                                        <Badge variant={instanceDetails[score.instanceName].memoriaDetails.memoryGrantsPending > 0 ? 'default' : 'outline'} className="text-xs">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Grants pend</span>
+                                        <span className={`font-mono ${instanceDetails[score.instanceName].memoriaDetails.memoryGrantsPending > 0 ? 'text-amber-500' : ''}`}>
                                           {instanceDetails[score.instanceName].memoriaDetails.memoryGrantsPending}
-                                        </Badge>
+                                        </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Target / Total Memory</span>
-                                        <span className="font-mono">{(instanceDetails[score.instanceName].memoriaDetails.targetServerMemoryMB / 1024).toFixed(1)} / {(instanceDetails[score.instanceName].memoriaDetails.totalServerMemoryMB / 1024).toFixed(1)} GB</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Target / Total</span>
+                                        <span className="font-mono">{(instanceDetails[score.instanceName].memoriaDetails.targetServerMemoryMB / 1024).toFixed(1)}/{(instanceDetails[score.instanceName].memoriaDetails.totalServerMemoryMB / 1024).toFixed(1)}GB</span>
                                       </div>
                                       
-                                      {/* NUEVO: Memory Waits & Stolen Memory */}
-                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.totalWaitMs > 0 && (
-                                        <div className="mt-3 pt-2 border-t border-pink-500/10 space-y-1">
-                                          {/* RESOURCE_SEMAPHORE (Memory Grants) */}
-                                          {(() => {
-                                            const resSemPct = (instanceDetails[score.instanceName].waitsDetails!.resourceSemaphoreWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
-                                            return resSemPct > 0.1 && (
-                                              <>
-                                                <div className="text-xs font-medium text-muted-foreground mb-2">
-                                                  Memory Waits
-                                                </div>
-                                                <div className="flex items-center justify-between text-xs">
-                                                  <span className="text-muted-foreground">RESOURCE_SEMAPHORE</span>
-                                                  <Badge 
-                                                    variant={resSemPct > 5 ? 'destructive' : resSemPct > 2 ? 'default' : 'outline'}
-                                                    className="text-xs font-mono"
-                                                  >
-                                                    {resSemPct.toFixed(1)}%
-                                                    {resSemPct > 5 && ' ⚠️'}
-                                                  </Badge>
-                                                </div>
-                                                {resSemPct > 5 && (
-                                                  <p className="text-[9px] text-destructive italic mt-1">⚠️ Agregar memoria o optimizar queries</p>
-                                                )}
-                                              </>
-                                            );
-                                          })()}
-                                        </div>
-                                      )}
-                                      
-                                      {/* Stolen Memory */}
-                                      {instanceDetails[score.instanceName].memoriaDetails.stolenServerMemoryMB > 0 && (
-                                        <div className="mt-3 pt-2 border-t border-pink-500/10 space-y-1">
-                                          <div className="text-xs font-medium text-muted-foreground mb-2">
-                                            Stolen Memory
+                                      {/* Memory Waits & Stolen Memory - Minimalista */}
+                                      {(() => {
+                                        const waits = instanceDetails[score.instanceName].waitsDetails;
+                                        const mem = instanceDetails[score.instanceName].memoriaDetails;
+                                        const resSemPct = waits && waits.totalWaitMs > 0 ? (waits.resourceSemaphoreWaitMs / waits.totalWaitMs) * 100 : 0;
+                                        const stolenPct = mem.totalServerMemoryMB > 0 ? (mem.stolenServerMemoryMB / mem.totalServerMemoryMB) * 100 : 0;
+                                        const hasWaitsOrStolen = resSemPct > 0.1 || mem.stolenServerMemoryMB > 0;
+                                        
+                                        return hasWaitsOrStolen && (
+                                          <div className="mt-2 pt-1.5 border-t border-pink-500/10 space-y-0.5">
+                                            {resSemPct > 0.1 && (
+                                              <div className="flex items-center justify-between text-[11px]">
+                                                <span className="text-muted-foreground">RES_SEMAPHORE</span>
+                                                <span className={`font-mono ${resSemPct > 5 ? 'text-red-500 font-semibold' : resSemPct > 2 ? 'text-amber-500' : ''}`}>
+                                                  {resSemPct.toFixed(1)}%
+                                                  {resSemPct > 5 && ' ⚠️'}
+                                                </span>
+                                              </div>
+                                            )}
+                                            {mem.stolenServerMemoryMB > 0 && (
+                                              <div className="flex items-center justify-between text-[11px]">
+                                                <span className="text-muted-foreground">Robada</span>
+                                                <span className={`font-mono ${stolenPct > 50 ? 'text-red-500 font-semibold' : stolenPct > 30 ? 'text-amber-500' : ''}`}>
+                                                  {mem.stolenServerMemoryMB}MB ({stolenPct.toFixed(0)}%)
+                                                  {stolenPct > 50 && ' 🔴'}
+                                                </span>
+                                              </div>
+                                            )}
                                           </div>
-                                          {(() => {
-                                            const stolenPct = instanceDetails[score.instanceName].memoriaDetails.totalServerMemoryMB > 0
-                                              ? (instanceDetails[score.instanceName].memoriaDetails.stolenServerMemoryMB / instanceDetails[score.instanceName].memoriaDetails.totalServerMemoryMB) * 100
-                                              : 0;
-                                            return (
-                                              <>
-                                                <div className="flex items-center justify-between text-xs">
-                                                  <span className="text-muted-foreground">{instanceDetails[score.instanceName].memoriaDetails.stolenServerMemoryMB}MB ({stolenPct.toFixed(1)}%)</span>
-                                                  <Badge 
-                                                    variant={stolenPct > 50 ? 'destructive' : stolenPct > 30 ? 'default' : 'outline'}
-                                                    className="text-xs"
-                                                  >
-                                                    {stolenPct > 50 ? '🔴 Crítico' : stolenPct > 30 ? '⚠️ Alto' : '✅ Normal'}
-                                                  </Badge>
-                                                </div>
-                                                <p className="text-[9px] text-muted-foreground italic">
-                                                  {stolenPct > 50 
-                                                    ? 'Plan cache bloat o CLR memory leak'
-                                                    : stolenPct > 30 
-                                                    ? 'Revisar plan cache con DMVs'
-                                                    : 'Memoria fuera del buffer pool (planes, locks, CLR)'}
-                                                </p>
-                                              </>
-                                            );
-                                          })()}
-                                        </div>
-                                      )}
+                                        );
+                                      })()}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de memoria</p>
@@ -1222,103 +1337,75 @@ export default function HealthScore() {
                               
                               {/* I/O Performance */}
                               <Card className="border-cyan-500/20">
-                                <CardHeader className="pb-2 bg-cyan-500/5 py-2">
+                                <CardHeader className="pb-1 bg-cyan-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <Zap className="h-4 w-4 text-cyan-600" />
-                                    <span>I/O</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <Zap className="h-3.5 w-3.5 text-cyan-600" />
+                                    <span className="text-xs">I/O</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_IO || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].ioDetails ? (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">Avg Read Latency</span>
-                                        <Badge 
-                                          variant={
-                                            instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs <= 10 ? 'outline' : 
-                                            instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs <= 20 ? 'default' : 
-                                            'destructive'
-                                          } 
-                                          className="text-xs font-mono"
-                                        >
-                                          {instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs.toFixed(1)} ms
-                                        </Badge>
+                                        <span className="text-muted-foreground">Lectura</span>
+                                        <span className={`font-mono ${
+                                          instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs > 20 ? 'text-red-500 font-semibold' : 
+                                          instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs > 10 ? 'text-amber-500' : 
+                                          ''
+                                        }`}>
+                                          {instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs.toFixed(1)}ms
+                                          {instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs > 20 && ' 🐌'}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Avg Write Latency</span>
-                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].ioDetails.avgWriteLatencyMs.toFixed(1)} ms</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Escritura</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.avgWriteLatencyMs.toFixed(1)}ms</span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Total IOPS</span>
-                                        <span className="font-mono font-medium">{instanceDetails[score.instanceName].ioDetails.totalIOPS}</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">IOPS</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.totalIOPS}</span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Data File Read</span>
-                                        <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.dataFileAvgReadMs.toFixed(1)} ms</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Data lect</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.dataFileAvgReadMs.toFixed(1)}ms</span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Log File Write</span>
-                                        <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.logFileAvgWriteMs.toFixed(1)} ms</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Log escr</span>
+                                        <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.logFileAvgWriteMs.toFixed(1)}ms</span>
                                       </div>
                                       
-                                      {/* NUEVO: I/O Waits */}
-                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.totalWaitMs > 0 && (
-                                        <div className="mt-3 pt-2 border-t border-cyan-500/10 space-y-1">
-                                          <div className="text-xs font-medium text-muted-foreground mb-2">
-                                            I/O Waits
-                                          </div>
-                                          
-                                          {/* PAGEIOLATCH (Data Page Reads) */}
-                                          {(() => {
-                                            const pageIOPct = (instanceDetails[score.instanceName].waitsDetails!.pageIOLatchWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
-                                            return pageIOPct > 0.1 && (
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="text-muted-foreground">PAGEIOLATCH (data reads)</span>
-                                                <Badge 
-                                                  variant={pageIOPct > 10 ? 'destructive' : pageIOPct > 5 ? 'default' : 'outline'}
-                                                  className="text-xs font-mono"
-                                                >
+                                      {/* I/O Waits - Minimalista */}
+                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.totalWaitMs > 0 && (() => {
+                                        const pageIOPct = (instanceDetails[score.instanceName].waitsDetails!.pageIOLatchWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                        const writeLogPct = (instanceDetails[score.instanceName].waitsDetails!.writeLogWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
+                                        const hasWaits = pageIOPct > 0.1 || writeLogPct > 0.1;
+                                        
+                                        return hasWaits && (
+                                          <div className="mt-2 pt-1.5 border-t border-cyan-500/10 space-y-0.5">
+                                            {pageIOPct > 0.1 && (
+                                              <div className="flex items-center justify-between text-[11px]">
+                                                <span className="text-muted-foreground">PAGEIOLATCH</span>
+                                                <span className={`font-mono ${pageIOPct > 10 ? 'text-red-500 font-semibold' : pageIOPct > 5 ? 'text-amber-500' : ''}`}>
                                                   {pageIOPct.toFixed(1)}%
                                                   {pageIOPct > 10 && ' 🐌'}
-                                                </Badge>
+                                                </span>
                                               </div>
-                                            );
-                                          })()}
-                                          
-                                          {/* WRITELOG (Transaction Log Writes) */}
-                                          {(() => {
-                                            const writeLogPct = (instanceDetails[score.instanceName].waitsDetails!.writeLogWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
-                                            return writeLogPct > 0.1 && (
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="text-muted-foreground">WRITELOG (log writes)</span>
-                                                <Badge 
-                                                  variant={writeLogPct > 10 ? 'destructive' : writeLogPct > 5 ? 'default' : 'outline'}
-                                                  className="text-xs font-mono"
-                                                >
+                                            )}
+                                            {writeLogPct > 0.1 && (
+                                              <div className="flex items-center justify-between text-[11px]">
+                                                <span className="text-muted-foreground">WRITELOG</span>
+                                                <span className={`font-mono ${writeLogPct > 10 ? 'text-red-500 font-semibold' : writeLogPct > 5 ? 'text-amber-500' : ''}`}>
                                                   {writeLogPct.toFixed(1)}%
                                                   {writeLogPct > 10 && ' 🐌'}
-                                                </Badge>
+                                                </span>
                                               </div>
-                                            );
-                                          })()}
-                                          
-                                          {/* Mensaje si hay problemas */}
-                                          {(() => {
-                                            const pageIOPct = (instanceDetails[score.instanceName].waitsDetails!.pageIOLatchWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
-                                            const writeLogPct = (instanceDetails[score.instanceName].waitsDetails!.writeLogWaitMs / instanceDetails[score.instanceName].waitsDetails!.totalWaitMs) * 100;
-                                            if (pageIOPct > 10) {
-                                              return <p className="text-[9px] text-destructive italic mt-1">🐌 Discos lentos - Considerar SSD o más índices</p>;
-                                            }
-                                            if (writeLogPct > 10) {
-                                              return <p className="text-[9px] text-destructive italic mt-1">🐌 Log I/O lento - Mover log a disco más rápido</p>;
-                                            }
-                                            return null;
-                                          })()}
-                                        </div>
-                                      )}
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de I/O</p>
@@ -1328,41 +1415,81 @@ export default function HealthScore() {
 
                               {/* Discos */}
                               <Card className="border-yellow-500/20">
-                                <CardHeader className="pb-2 bg-yellow-500/5 py-2">
+                                <CardHeader className="pb-1 bg-yellow-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <HardDrive className="h-4 w-4 text-yellow-600" />
-                                    <span>Disk Space</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <HardDrive className="h-3.5 w-3.5 text-yellow-600" />
+                                    <span className="text-xs">Disk Space</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_Discos || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].discosDetails ? (
                                     <>
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Peor Volumen</span>
+                                      {/* Resumen */}
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Peor volumen</span>
                                         <span className={cn(
-                                          'font-mono font-bold',
-                                          instanceDetails[score.instanceName].discosDetails.worstFreePct < 10 && 'text-destructive',
-                                          instanceDetails[score.instanceName].discosDetails.worstFreePct >= 10 && instanceDetails[score.instanceName].discosDetails.worstFreePct < 20 && 'text-warning',
-                                          instanceDetails[score.instanceName].discosDetails.worstFreePct >= 20 && 'text-success'
+                                          'font-mono font-semibold',
+                                          instanceDetails[score.instanceName].discosDetails.worstFreePct < 10 && 'text-red-500',
+                                          instanceDetails[score.instanceName].discosDetails.worstFreePct >= 10 && instanceDetails[score.instanceName].discosDetails.worstFreePct < 20 && 'text-amber-500'
                                         )}>
                                           {instanceDetails[score.instanceName].discosDetails.worstFreePct.toFixed(1)}% libre
+                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct < 10 && ' 🔴'}
+                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct >= 10 && instanceDetails[score.instanceName].discosDetails.worstFreePct < 20 && ' ⚠️'}
                                         </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs mt-2">
-                                        <span className="text-muted-foreground">Data disks avg</span>
-                                        <span className="font-mono">{instanceDetails[score.instanceName].discosDetails.dataDiskAvgFreePct.toFixed(1)}%</span>
-                                              </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Log disks avg</span>
-                                        <span className="font-mono">{instanceDetails[score.instanceName].discosDetails.logDiskAvgFreePct.toFixed(1)}%</span>
+                                      
+                                      {/* Detalle de volúmenes */}
+                                      {(() => {
+                                        try {
+                                          if (!instanceDetails[score.instanceName].discosDetails.volumesJson) return null;
+                                          
+                                          const volumes = JSON.parse(instanceDetails[score.instanceName].discosDetails.volumesJson);
+                                          if (!Array.isArray(volumes) || volumes.length === 0) return null;
+                                          
+                                          // Ordenar por espacio libre (menor a mayor)
+                                          const sortedVolumes = [...volumes].sort((a, b) => (a.FreeSpacePct || 100) - (b.FreeSpacePct || 100));
+                                          
+                                          // Categorizar volúmenes
+                                          const criticalVolumes = sortedVolumes.filter(v => v.FreeSpacePct < 10);
+                                          const warningVolumes = sortedVolumes.filter(v => v.FreeSpacePct >= 10 && v.FreeSpacePct < 20);
+                                          const okVolumes = sortedVolumes.filter(v => v.FreeSpacePct >= 20);
+                                          
+                                          return (
+                                            <div className="pt-1 mt-1 border-t border-yellow-500/10 space-y-0.5">
+                                              <p className="text-[10px] text-muted-foreground mb-1">Volúmenes ({volumes.length}):</p>
+                                              
+                                              {/* Críticos */}
+                                              {criticalVolumes.map((vol, idx) => (
+                                                <div key={`crit-${idx}`} className="flex items-center justify-between text-[11px] bg-red-500/5 px-1 rounded">
+                                                  <span className="font-mono text-red-600 font-semibold">{vol.VolumeName}</span>
+                                                  <span className="text-red-600 font-semibold">{vol.FreeSpacePct?.toFixed(1)}% 🔴</span>
+                                                </div>
+                                              ))}
+                                              
+                                              {/* Warning */}
+                                              {warningVolumes.map((vol, idx) => (
+                                                <div key={`warn-${idx}`} className="flex items-center justify-between text-[11px] bg-amber-500/5 px-1 rounded">
+                                                  <span className="font-mono text-amber-600">{vol.VolumeName}</span>
+                                                  <span className="text-amber-600">{vol.FreeSpacePct?.toFixed(1)}% ⚠️</span>
+                                                </div>
+                                              ))}
+                                              
+                                              {/* OK - Mostrar TODOS */}
+                                              {okVolumes.map((vol, idx) => (
+                                                <div key={`ok-${idx}`} className="flex items-center justify-between text-[11px]">
+                                                  <span className="font-mono text-muted-foreground">{vol.VolumeName}</span>
+                                                  <span className="text-muted-foreground">{vol.FreeSpacePct?.toFixed(1)}%</span>
+                                                </div>
+                                              ))}
                                             </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">TempDB disk</span>
-                                        <span className="font-mono">{instanceDetails[score.instanceName].discosDetails.tempDBDiskFreePct.toFixed(1)}%</span>
-                                        </div>
+                                          );
+                                        } catch (e) {
+                                          return null;
+                                        }
+                                      })()}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de discos</p>
@@ -1374,107 +1501,217 @@ export default function HealthScore() {
 
                               {/* Tab 3: Maintenance & Config */}
                               <TabsContent value="errors" className="mt-3">
+                                {/* Acciones Sugeridas */}
+                                {(() => {
+                                  const suggestions: string[] = [];
+                                  const details = instanceDetails[score.instanceName];
+                                  
+                                  // Errores críticos inteligente
+                                  if (details.erroresCriticosDetails) {
+                                    const sevCount = details.erroresCriticosDetails.severity20PlusCount;
+                                    const lastHour = details.erroresCriticosDetails.severity20PlusLast1h;
+                                    
+                                    if (lastHour > 0 && sevCount > 10) {
+                                      suggestions.push(`🚨 Errores críticos activos (${lastHour} en última hora, ${sevCount} en 24h) → Revisar error log URGENTEMENTE`);
+                                    } else if (lastHour > 0) {
+                                      suggestions.push(`🚨 ${lastHour} error(es) crítico(s) en última hora → Revisar error log inmediatamente`);
+                                    } else if (sevCount > 10) {
+                                      suggestions.push(`⚠️ ${sevCount} errores críticos en 24h → Revisar error log y tendencias`);
+                                    } else if (sevCount > 0) {
+                                      suggestions.push(`⚠️ ${sevCount} error(es) crítico(s) en 24h → Revisar error log`);
+                                    }
+                                  }
+                                  
+                                  // Bloqueos inteligente
+                                  if (details.waitsDetails) {
+                                    const blocked = details.waitsDetails.blockedSessionCount;
+                                    const maxBlockTime = details.waitsDetails.maxBlockTimeSeconds;
+                                    
+                                    if (blocked > 20 || maxBlockTime > 300) {
+                                      suggestions.push(`🔒 Bloqueos severos (${blocked} sesiones, máx ${Math.floor(maxBlockTime / 60)}min) → Identificar SPIDs bloqueadores urgentemente`);
+                                    } else if (blocked > 10 || maxBlockTime > 60) {
+                                      suggestions.push(`🔒 Bloqueos moderados (${blocked} sesiones, máx ${maxBlockTime}s) → Identificar SPIDs bloqueadores y optimizar queries`);
+                                    } else if (blocked > 5 || maxBlockTime > 30) {
+                                      suggestions.push(`⚠️ ${blocked} sesión(es) bloqueada(s) (máx ${maxBlockTime}s) → Monitorear bloqueos`);
+                                    }
+                                  }
+                                  // TempDB - Evaluar archivos y contención
+                                  if (details.configuracionTempdbDetails) {
+                                    const fileCount = details.configuracionTempdbDetails.tempDBFileCount;
+                                    const cpuCount = details.configuracionTempdbDetails.cpuCount;
+                                    const optimalFiles = Math.min(Math.max(cpuCount, 4), 8); // Mínimo 4, máximo 8
+                                    const score = details.configuracionTempdbDetails.tempDBContentionScore;
+                                    const sameSize = details.configuracionTempdbDetails.tempDBAllSameSize;
+                                    
+                                    // 1. Evaluar número de archivos INDEPENDIENTEMENTE del score
+                                    if (fileCount < optimalFiles) {
+                                      // Menos archivos de los necesarios
+                                      if (score < 40) {
+                                        suggestions.push(`🔥 Contención crítica en TempDB → Agregar más archivos urgentemente (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
+                                      } else if (score < 70) {
+                                        suggestions.push(`⚠️ Contención moderada en TempDB → Considerar agregar archivos (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
+                                      } else {
+                                        suggestions.push(`💡 TempDB con archivos insuficientes → Agregar archivos para mejorar (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
+                                      }
+                                    } else if (fileCount > optimalFiles) {
+                                      // Más archivos de los necesarios (overhead innecesario)
+                                      suggestions.push(`⚠️ TempDB con archivos de más → Considerar reducir a ${optimalFiles} archivos (tiene ${fileCount} para ${cpuCount} CPUs, overhead innecesario)`);
+                                    } else {
+                                      // Número de archivos OK, evaluar solo si hay problemas de contención
+                                      if (score < 40) {
+                                        suggestions.push('🔥 Contención crítica en TempDB → Número de archivos OK, revisar latencia de disco o queries costosas');
+                                      } else if (score < 70) {
+                                        suggestions.push('⚠️ Contención moderada en TempDB → Monitorear latencia de disco y PAGELATCH waits');
+                                      }
+                                    }
+                                    
+                                    // 2. Evaluar si archivos tienen el mismo tamaño
+                                    if (!sameSize) {
+                                      suggestions.push('⚠️ Archivos TempDB con distinto tamaño → Igualar tamaño de todos los archivos para proportional fill óptimo');
+                                    }
+                                  }
+                                  if (details.configuracionTempdbDetails && details.configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 50) {
+                                    const writeLat = details.configuracionTempdbDetails.tempDBAvgWriteLatencyMs.toFixed(0);
+                                    suggestions.push(`🐌 TempDB lento (${writeLat}ms escritura) → Mover a discos más rápidos (SSD/NVMe)`);
+                                  }
+                                  
+                                  // Max Memory inteligente
+                                  if (details.configuracionTempdbDetails && !details.configuracionTempdbDetails.maxMemoryWithinOptimal) {
+                                    const maxMemGB = (details.configuracionTempdbDetails.maxServerMemoryMB / 1024).toFixed(1);
+                                    const totalMemGB = (details.configuracionTempdbDetails.totalPhysicalMemoryMB / 1024).toFixed(1);
+                                    const currentPct = details.configuracionTempdbDetails.maxMemoryPctOfPhysical.toFixed(0);
+                                    const recommendedMin = Math.floor(details.configuracionTempdbDetails.totalPhysicalMemoryMB * 0.75 / 1024);
+                                    const recommendedMax = Math.floor(details.configuracionTempdbDetails.totalPhysicalMemoryMB * 0.90 / 1024);
+                                    
+                                    if (details.configuracionTempdbDetails.maxMemoryPctOfPhysical > 95) {
+                                      suggestions.push(`💾 Max Memory muy alto (${maxMemGB}GB, ${currentPct}% de ${totalMemGB}GB) → Reducir a ${recommendedMin}-${recommendedMax}GB para evitar presión en OS`);
+                                    } else if (details.configuracionTempdbDetails.maxMemoryPctOfPhysical < 50) {
+                                      suggestions.push(`💾 Max Memory muy bajo (${maxMemGB}GB, ${currentPct}% de ${totalMemGB}GB) → Incrementar a ${recommendedMin}-${recommendedMax}GB`);
+                                    } else {
+                                      suggestions.push(`💾 Max Memory no óptimo (${maxMemGB}GB, ${currentPct}% de ${totalMemGB}GB) → Ajustar a ${recommendedMin}-${recommendedMax}GB`);
+                                    }
+                                  }
+                                  
+                                  // Maintenance inteligente
+                                  if (details.maintenanceDetails) {
+                                    if (!details.maintenanceDetails.checkdbOk && details.maintenanceDetails.lastCheckdb) {
+                                      const daysSince = Math.floor((new Date().getTime() - new Date(details.maintenanceDetails.lastCheckdb).getTime()) / (1000 * 60 * 60 * 24));
+                                      suggestions.push(`⚠️ CHECKDB vencido (último hace ${daysSince} días) → Ejecutar DBCC CHECKDB para verificar integridad`);
+                                    } else if (!details.maintenanceDetails.checkdbOk) {
+                                      suggestions.push('⚠️ CHECKDB vencido → Ejecutar DBCC CHECKDB para verificar integridad');
+                                    }
+                                    
+                                    if (!details.maintenanceDetails.indexOptimizeOk && details.maintenanceDetails.lastIndexOptimize) {
+                                      const daysSince = Math.floor((new Date().getTime() - new Date(details.maintenanceDetails.lastIndexOptimize).getTime()) / (1000 * 60 * 60 * 24));
+                                      suggestions.push(`🔧 Mantenimiento de índices vencido (último hace ${daysSince} días) → Ejecutar IndexOptimize`);
+                                    } else if (!details.maintenanceDetails.indexOptimizeOk) {
+                                      suggestions.push('🔧 Mantenimiento de índices vencido → Ejecutar IndexOptimize');
+                                    }
+                                  }
+                                  
+                                  // Autogrowth inteligente
+                                  if (details.autogrowthDetails) {
+                                    const events = details.autogrowthDetails.autogrowthEventsLast24h;
+                                    const nearLimit = details.autogrowthDetails.filesNearLimit;
+                                    const badGrowth = details.autogrowthDetails.filesWithBadGrowth;
+                                    const worstPct = details.autogrowthDetails.worstPercentOfMax;
+                                    
+                                    if (nearLimit > 0 && worstPct > 95) {
+                                      suggestions.push(`⚠️ ${nearLimit} archivo(s) al límite (${worstPct.toFixed(0)}% usado) → Aumentar MaxSize urgentemente o migrar datos`);
+                                    } else if (nearLimit > 0) {
+                                      suggestions.push(`⚠️ ${nearLimit} archivo(s) cerca del límite (${worstPct.toFixed(0)}% usado) → Aumentar MaxSize o planificar migración`);
+                                    }
+                                    
+                                    if (events > 50) {
+                                      suggestions.push(`📈 Muchos autogrowths (${events} en 24h) → Aumentar tamaño inicial de archivos urgentemente`);
+                                    } else if (events > 20) {
+                                      suggestions.push(`📈 Autogrowths frecuentes (${events} en 24h) → Aumentar tamaño inicial de archivos`);
+                                    }
+                                    
+                                    if (badGrowth > 0) {
+                                      suggestions.push(`⚠️ ${badGrowth} archivo(s) con crecimiento % → Cambiar a crecimiento fijo en MB para mejor rendimiento`);
+                                    }
+                                  }
+                                  
+                                  return suggestions.length > 0 ? (
+                                    <div className="mb-3 bg-amber-500/5 border border-amber-500/30 rounded-lg p-2">
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-xs font-semibold text-amber-600">💡 Acciones sugeridas:</span>
+                                        <div className="flex-1 space-y-0.5">
+                                          {suggestions.map((suggestion, idx) => (
+                                            <p key={idx} className="text-[11px] text-muted-foreground">{suggestion}</p>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : null;
+                                })()}
+                                
                                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-3">
 
                               {/* Errores Críticos */}
                               <Card className="border-red-500/20">
-                                <CardHeader className="pb-2 bg-red-500/5 py-2">
+                                <CardHeader className="pb-1 bg-red-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <XCircle className="h-4 w-4 text-red-600" />
-                                    <span>Errores Críticos</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <XCircle className="h-3.5 w-3.5 text-red-600" />
+                                    <span className="text-xs">Errores Críticos</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_ErroresCriticos || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].erroresCriticosDetails ? (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">Severity 20+ (24h)</span>
-                                        <Badge variant={instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0 ? 'destructive' : 'outline'} className="text-xs font-mono">
+                                        <span className="text-muted-foreground">Sev 20+ (24h)</span>
+                                        <span className={`font-mono ${instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0 ? 'text-red-500 font-semibold' : ''}`}>
                                           {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount}
-                                        </Badge>
+                                          {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0 && ' 🔴'}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Last Hour</span>
-                                        <Badge variant={instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusLast1h > 0 ? 'destructive' : 'outline'} className="text-xs font-mono">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Última Hora</span>
+                                        <span className={`font-mono ${instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusLast1h > 0 ? 'text-red-500 font-semibold' : ''}`}>
                                           {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusLast1h}
-                                          </Badge>
+                                          {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusLast1h > 0 && ' ⚠️'}
+                                        </span>
                                       </div>
                                       {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0 && instanceDetails[score.instanceName].erroresCriticosDetails.mostRecentError && (
-                                        <div className="pt-2 border-t">
-                                          <p className="text-xs text-muted-foreground mb-1">Most Recent Error:</p>
-                                          <p className="text-xs font-mono">{formatDateUTC3(instanceDetails[score.instanceName].erroresCriticosDetails.mostRecentError)}</p>
+                                        <div className="pt-1 mt-1 border-t border-red-500/10">
+                                          <p className="text-[10px] text-muted-foreground">Últ: {formatDateUTC3(instanceDetails[score.instanceName].erroresCriticosDetails.mostRecentError)}</p>
                                         </div>
                                       )}
                                       {instanceDetails[score.instanceName].erroresCriticosDetails.errorDetails && (
-                                        <div className="pt-2 border-t">
-                                          <p className="text-xs text-muted-foreground line-clamp-3">{instanceDetails[score.instanceName].erroresCriticosDetails.errorDetails}</p>
+                                        <div className="pt-1 border-t border-red-500/10">
+                                          <p className="text-[10px] text-muted-foreground line-clamp-2">{instanceDetails[score.instanceName].erroresCriticosDetails.errorDetails}</p>
                                         </div>
                                       )}
                                       
-                                      {/* NUEVO: Blocking */}
-                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount > 0 && (
-                                        <div className="mt-3 pt-2 border-t border-red-500/20 space-y-1">
-                                          <div className="text-xs font-medium text-muted-foreground mb-2">
-                                            🔒 Blocking
-                                          </div>
-                                          <div className="flex items-center justify-between text-xs">
-                                            <span className="text-muted-foreground">
-                                              {instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount} sesiones bloqueadas
-                                            </span>
-                                            <Badge 
-                                              variant={
-                                                instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount > 10 || instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds > 30
-                                                  ? 'destructive'
-                                                  : instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount > 5 || instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds > 10
-                                                  ? 'default'
-                                                  : 'outline'
-                                              }
-                                              className="text-xs font-mono"
-                                            >
-                                              Max: {instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds}s
-                                              {(instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount > 10 || instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds > 30) && ' 🚨'}
-                                            </Badge>
-                                          </div>
-                                          
-                                          {/* Nivel de severidad */}
-                                          {(() => {
-                                            const blockedCount = instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount;
-                                            const maxBlockTime = instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds;
-                                            
-                                            if (blockedCount > 10 || maxBlockTime > 30) {
-                                              return (
-                                                <p className="text-[9px] text-destructive italic mt-1">
-                                                  🚨 Blocking severo - Investigar deadlocks con sp_WhoIsActive
-                                                </p>
-                                              );
-                                            }
-                                            if (blockedCount > 5 || maxBlockTime > 10) {
-                                              return (
-                                                <p className="text-[9px] text-amber-600 italic mt-1">
-                                                  ⚠️ Blocking alto - Revisar locks y transacciones
-                                                </p>
-                                              );
-                                            }
-                                            return (
-                                              <p className="text-[9px] text-muted-foreground italic mt-1">
-                                                Blocking leve - Probablemente temporal
-                                              </p>
-                                            );
-                                          })()}
-                                          
-                                          {/* Blocker Session IDs si están disponibles */}
-                                          {instanceDetails[score.instanceName].waitsDetails!.blockerSessionIds && (
-                                            <div className="mt-2 p-1 bg-muted/30 rounded">
-                                              <p className="text-[9px] text-muted-foreground">
-                                                <span className="font-semibold">Blocker SPIDs:</span> {instanceDetails[score.instanceName].waitsDetails!.blockerSessionIds}
-                                              </p>
+                                      {/* Blocking - Minimalista */}
+                                      {instanceDetails[score.instanceName].waitsDetails && instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount > 0 && (() => {
+                                        const blockedCount = instanceDetails[score.instanceName].waitsDetails!.blockedSessionCount;
+                                        const maxBlockTime = instanceDetails[score.instanceName].waitsDetails!.maxBlockTimeSeconds;
+                                        const isCritical = blockedCount > 10 || maxBlockTime > 30;
+                                        const isHigh = blockedCount > 5 || maxBlockTime > 10;
+                                        
+                                        return (
+                                          <div className="mt-2 pt-1.5 border-t border-red-500/10 space-y-0.5">
+                                            <div className="flex items-center justify-between text-[11px]">
+                                              <span className="text-muted-foreground">🔒 {blockedCount} bloq</span>
+                                              <span className={`font-mono ${isCritical ? 'text-red-500 font-semibold' : isHigh ? 'text-amber-500' : ''}`}>
+                                                {maxBlockTime}s
+                                                {isCritical && ' 🚨'}
+                                              </span>
                                             </div>
-                                          )}
-                                        </div>
-                                      )}
+                                            {instanceDetails[score.instanceName].waitsDetails!.blockerSessionIds && (
+                                              <div className="text-[10px] text-muted-foreground">
+                                                SPIDs: {instanceDetails[score.instanceName].waitsDetails!.blockerSessionIds}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de errores críticos</p>
@@ -1484,108 +1721,88 @@ export default function HealthScore() {
 
                               {/* Configuración & TempDB */}
                               <Card className="border-indigo-500/20">
-                                <CardHeader className="pb-2 bg-indigo-500/5 py-2">
+                                <CardHeader className="pb-1 bg-indigo-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <Settings className="h-4 w-4 text-indigo-600" />
-                                    <span>Configuración & TempDB</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <Settings className="h-3.5 w-3.5 text-indigo-600" />
+                                    <span className="text-xs">Config & TempDB</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_ConfiguracionTempdb || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-3 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-2 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].configuracionTempdbDetails ? (
                                     <>
-                                      {/* TempDB Health Score Compuesto */}
-                                      <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-lg p-2">
-                                        <div className="flex items-center justify-between mb-1">
-                                          <span className="text-xs font-semibold text-indigo-600">TempDB Health Score</span>
-                                          <Badge 
-                                            variant={
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 90 ? 'outline' :
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 70 ? 'default' :
-                                              'destructive'
-                                            } 
-                                            className="text-sm font-mono font-bold"
-                                          >
+                                      {/* TempDB Health Score Compuesto - Compacto */}
+                                      <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded p-1.5">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] font-semibold text-indigo-600">TempDB Score</span>
+                                          <span className={`text-xs font-mono font-bold ${
+                                            instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 90 ? '' :
+                                            instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 70 ? 'text-amber-500' :
+                                            'text-red-500'
+                                          }`}>
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore}/100
-                                          </Badge>
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore < 70 && ' ⚠️'}
+                                          </span>
                                         </div>
-                                        <p className="text-[10px] text-muted-foreground">
-                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 90 ? '✅ Óptimo' :
-                                           instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 70 ? '⚠️ Advertencia' :
-                                           instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore >= 40 ? '🚨 Problemas' :
-                                           '❌ Crítico'}
-                                        </p>
                                       </div>
 
-                                      {/* Archivos */}
-                                      <div className="space-y-1">
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-muted-foreground font-medium">TempDB Files</span>
-                                          <Badge 
-                                            variant={
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount >= Math.min(instanceDetails[score.instanceName].configuracionTempdbDetails.cpuCount, 8) ? 'outline' : 
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount >= 2 ? 'default' :
-                                              'destructive'
-                                            } 
-                                            className="text-xs"
-                                          >
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount} 
+                                      {/* Archivos - Compacto */}
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground">Archivos</span>
+                                          <span className={`font-mono ${
+                                            instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount === 1 ? 'text-amber-500' :
+                                            instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount < Math.min(instanceDetails[score.instanceName].configuracionTempdbDetails.cpuCount, 8) ? 'text-amber-500' : ''
+                                          }`}>
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount}
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount === 1 && ' ⚠️'}
-                                          </Badge>
+                                          </span>
                                         </div>
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Same Size & Growth & Config</span>
-                                          <div className="flex gap-1">
-                                            <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? 'outline' : 'destructive'} className="text-xs">
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground">Tam/Crec/Cfg</span>
+                                          <div className="flex gap-1 font-mono text-[10px]">
+                                            <span className={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? '' : 'text-red-500'}>
                                               {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? '✓' : '✗'}
-                                            </Badge>
-                                            <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? 'outline' : 'destructive'} className="text-xs">
+                                            </span>
+                                            <span className={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? '' : 'text-red-500'}>
                                               {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? '✓' : '✗'}
-                                            </Badge>
-                                            <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBGrowthConfigOK ? 'outline' : 'default'} className="text-xs">
+                                            </span>
+                                            <span className={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBGrowthConfigOK ? '' : 'text-amber-500'}>
                                               {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBGrowthConfigOK ? '✓' : '✗'}
-                                            </Badge>
+                                            </span>
                                           </div>
                                         </div>
                                       </div>
 
-                                      {/* Latencia */}
-                                      <div className="space-y-1">
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Read Latency</span>
-                                          <Badge 
-                                            variant={
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgReadLatencyMs <= 10 ? 'outline' :
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgReadLatencyMs <= 20 ? 'default' :
-                                              'destructive'
-                                            }
-                                            className="text-xs font-mono"
-                                          >
+                                      {/* Latencia - Compacto */}
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground">Lectura</span>
+                                          <span className={`font-mono ${
+                                            instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgReadLatencyMs > 20 ? 'text-red-500 font-semibold' :
+                                            instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgReadLatencyMs > 10 ? 'text-amber-500' : ''
+                                          }`}>
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgReadLatencyMs.toFixed(1)}ms
-                                          </Badge>
+                                          </span>
                                         </div>
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Write Latency</span>
-                                          <Badge 
-                                            variant={
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs <= 10 ? 'outline' :
-                                              instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs <= 20 ? 'default' :
-                                              'destructive'
-                                            }
-                                            className="text-xs font-mono"
-                                          >
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground">Escritura</span>
+                                          <span className={`font-mono ${
+                                            instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 20 ? 'text-red-500 font-semibold' :
+                                            instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 10 ? 'text-amber-500' : ''
+                                          }`}>
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs.toFixed(1)}ms
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 50 && ' 🐌'}
-                                          </Badge>
+                                          </span>
                                         </div>
                                       </div>
 
-                                      {/* Contención (PAGELATCH Waits) */}
-                                      <div className="space-y-1">
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground font-medium">PAGELATCH Waits</span>
+                                      {/* Contención (PAGELATCH Waits) - Compacto */}
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground">PAGELATCH</span>
                                           <Badge 
                                             variant={
                                               instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits === 0 ? 'outline' :
@@ -1601,10 +1818,13 @@ export default function HealthScore() {
                                           </Badge>
                                         </div>
                                         <p className="text-[9px] text-muted-foreground italic">
-                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits === 0 ? '✅ Sin contención' :
-                                           instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits < 1000 ? 'Contención baja' :
-                                           instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits < 10000 ? 'Contención moderada' :
-                                           '⚠️ Contención alta (40% del score)'}
+                                          {(() => {
+                                            const tempdbScore = instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore;
+                                            if (tempdbScore >= 90) return '✅ Óptimo';
+                                            if (tempdbScore >= 70) return 'Bueno';
+                                            if (tempdbScore >= 40) return '⚠️ Contención moderada (afecta 40% del score)';
+                                            return '🔴 Contención crítica (afecta 40% del score)';
+                                          })()}
                                         </p>
                                       </div>
 
@@ -1683,39 +1903,39 @@ export default function HealthScore() {
 
                               {/* Maintenance */}
                               <Card className="border-teal-500/20">
-                                <CardHeader className="pb-2 bg-teal-500/5 py-2">
+                                <CardHeader className="pb-1 bg-teal-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <Wrench className="h-4 w-4 text-teal-600" />
-                                    <span>Maintenance</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <Wrench className="h-3.5 w-3.5 text-teal-600" />
+                                    <span className="text-xs">Maintenance</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_Maintenance || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].maintenanceDetails ? (
                                     <>
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">CHECKDB Status</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">CHECKDB</span>
                                         <Badge variant={instanceDetails[score.instanceName].maintenanceDetails.checkdbOk ? 'outline' : 'destructive'} className="text-xs">
-                                          {instanceDetails[score.instanceName].maintenanceDetails.checkdbOk ? 'OK' : 'Overdue'}
+                                          {instanceDetails[score.instanceName].maintenanceDetails.checkdbOk ? 'OK' : 'Vencido'}
                                         </Badge>
                                       </div>
                                       {instanceDetails[score.instanceName].maintenanceDetails.lastCheckdb && (
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Last CHECKDB</span>
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground">Últ CheckDB</span>
                                           <span className="font-mono">{formatDateUTC3(instanceDetails[score.instanceName].maintenanceDetails.lastCheckdb)}</span>
                                         </div>
                                       )}
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">Index Optimize</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Index</span>
                                         <Badge variant={instanceDetails[score.instanceName].maintenanceDetails.indexOptimizeOk ? 'outline' : 'destructive'} className="text-xs">
-                                          {instanceDetails[score.instanceName].maintenanceDetails.indexOptimizeOk ? 'OK' : 'Overdue'}
+                                          {instanceDetails[score.instanceName].maintenanceDetails.indexOptimizeOk ? 'OK' : 'Vencido'}
                                         </Badge>
                                       </div>
                                       {instanceDetails[score.instanceName].maintenanceDetails.lastIndexOptimize && (
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Last Optimize</span>
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground">Últ Index</span>
                                           <span className="font-mono">{formatDateUTC3(instanceDetails[score.instanceName].maintenanceDetails.lastIndexOptimize)}</span>
                                         </div>
                                       )}
@@ -1728,20 +1948,20 @@ export default function HealthScore() {
 
                               {/* Autogrowth & Capacity */}
                               <Card className="border-lime-500/20">
-                                <CardHeader className="pb-2 bg-lime-500/5 py-2">
+                                <CardHeader className="pb-1 bg-lime-500/5 py-1.5">
                                   <CardTitle className="text-sm flex items-center gap-2">
-                                    <TrendingUp className="h-4 w-4 text-lime-600" />
-                                    <span>Autogrowth & Capacity</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
+                                    <TrendingUp className="h-3.5 w-3.5 text-lime-600" />
+                                    <span className="text-xs">Autogrowth</span>
+                                    <span className="ml-auto text-[10px] font-mono text-muted-foreground">
                                       {score.score_Autogrowth || 0}/100
-                                    </Badge>
+                                    </span>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-2 text-sm pt-3 pb-3">
+                                <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].autogrowthDetails ? (
                                     <>
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground font-medium">Autogrowth Events (24h)</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Eventos (24h)</span>
                                         <Badge 
                                           variant={
                                             instanceDetails[score.instanceName].autogrowthDetails.autogrowthEventsLast24h > 20 ? 'destructive' :
@@ -1753,20 +1973,20 @@ export default function HealthScore() {
                                           {instanceDetails[score.instanceName].autogrowthDetails.autogrowthEventsLast24h}
                                         </Badge>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Files Near Limit</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Archivos límite</span>
                                         <Badge variant={instanceDetails[score.instanceName].autogrowthDetails.filesNearLimit > 0 ? 'destructive' : 'outline'} className="text-xs">
                                           {instanceDetails[score.instanceName].autogrowthDetails.filesNearLimit}
                                         </Badge>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Files With Bad Growth</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Crec incorrecto</span>
                                         <Badge variant={instanceDetails[score.instanceName].autogrowthDetails.filesWithBadGrowth > 0 ? 'default' : 'outline'} className="text-xs">
                                           {instanceDetails[score.instanceName].autogrowthDetails.filesWithBadGrowth}
                                         </Badge>
                                       </div>
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Worst % of Max</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-muted-foreground">% máx usado</span>
                                         <Badge 
                                           variant={
                                             instanceDetails[score.instanceName].autogrowthDetails.worstPercentOfMax > 90 ? 'destructive' :

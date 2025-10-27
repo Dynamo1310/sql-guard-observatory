@@ -148,9 +148,13 @@ function Calculate-TempDBHealthScore {
     # 3. CONFIGURACIÓN (20 pts)
     $configScore = 100
     
-    # Número óptimo de archivos (1 por CPU core, máximo 8)
-    $optimalFiles = [Math]::Min($CPUCount, 8)
-    if ($optimalFiles -eq 0) { $optimalFiles = 4 }  # Default si no hay CPUCount
+    # Número óptimo de archivos (mínimo 4, máximo 8)
+    # Best practice moderna: MIN(MAX(CPUs, 4), 8)
+    if ($CPUCount -le 0) { 
+        $optimalFiles = 4  # Default si no hay CPUCount
+    } else {
+        $optimalFiles = [Math]::Min([Math]::Max($CPUCount, 4), 8)
+    }
     
     if ($FileCount -eq $optimalFiles) {
         # Perfecto
