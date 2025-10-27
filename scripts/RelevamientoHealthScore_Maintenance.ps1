@@ -648,7 +648,7 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $lastCheckdb,
     $(if ($row.CheckdbOk) {1} else {0}),
     $lastIndexOpt,

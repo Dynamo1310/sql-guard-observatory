@@ -667,7 +667,7 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     -- TempDB - Archivos
     $($row.TempDBFileCount),
     $(if ($row.TempDBAllSameSize) {1} else {0}),

@@ -199,7 +199,7 @@ INSERT INTO dbo.InstanceHealth_Autogrowth (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $($row.AutogrowthEventsLast24h),
     $($row.FilesNearLimit),
     $($row.FilesWithBadGrowth),

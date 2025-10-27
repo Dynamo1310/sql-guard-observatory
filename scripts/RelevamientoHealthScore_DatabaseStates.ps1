@@ -157,7 +157,7 @@ INSERT INTO dbo.InstanceHealth_DatabaseStates (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $($row.OfflineCount),
     $($row.SuspectCount),
     $($row.EmergencyCount),

@@ -278,7 +278,7 @@ INSERT INTO dbo.InstanceHealth_AlwaysOn (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $(if ($row.AlwaysOnEnabled) {1} else {0}),
     '$($row.AlwaysOnWorstState)',
     $($row.DatabaseCount),

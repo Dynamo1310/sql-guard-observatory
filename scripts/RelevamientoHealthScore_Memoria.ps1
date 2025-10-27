@@ -270,7 +270,7 @@ INSERT INTO dbo.InstanceHealth_Memoria (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $($row.PageLifeExpectancy),
     $($row.BufferCacheHitRatio),
     $($row.TotalServerMemoryMB),

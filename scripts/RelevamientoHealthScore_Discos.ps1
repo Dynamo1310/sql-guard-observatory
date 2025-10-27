@@ -585,7 +585,7 @@ INSERT INTO dbo.InstanceHealth_Discos (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $($row.WorstFreePct),
     $($row.DataDiskAvgFreePct),
     $($row.LogDiskAvgFreePct),

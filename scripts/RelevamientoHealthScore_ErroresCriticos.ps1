@@ -263,7 +263,7 @@ INSERT INTO dbo.InstanceHealth_ErroresCriticos (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $($row.Severity20PlusCount),
     $($row.Severity20PlusLast1h),
     $mostRecentError,

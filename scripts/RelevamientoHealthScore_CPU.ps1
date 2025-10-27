@@ -279,7 +279,7 @@ INSERT INTO dbo.InstanceHealth_CPU (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $($row.SQLProcessUtilization),
     $($row.SystemIdleProcess),
     $($row.OtherProcessUtilization),

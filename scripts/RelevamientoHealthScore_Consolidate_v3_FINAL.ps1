@@ -1234,7 +1234,7 @@ INSERT INTO dbo.InstanceHealth_Score (
     '$($ScoreData.Ambiente)',
     '$($ScoreData.HostingSite)',
     '$($ScoreData.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $($ScoreData.HealthScore),
     '$($ScoreData.HealthStatus)',
     -- Scores Individuales (0-100)

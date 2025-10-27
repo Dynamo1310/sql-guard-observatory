@@ -334,7 +334,7 @@ INSERT INTO dbo.InstanceHealth_LogChain (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $brokenChainCount,
     $fullDBsWithoutLog,
     $maxHoursSinceLog,

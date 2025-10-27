@@ -379,7 +379,7 @@ INSERT INTO dbo.InstanceHealth_Waits (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $($row.BlockedSessionCount),
     $($row.MaxBlockTimeSeconds),
     '$($row.BlockerSessionIds)',

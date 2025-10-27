@@ -420,7 +420,7 @@ INSERT INTO dbo.InstanceHealth_Backups (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $lastFull,
     $lastLog,
     $(if ($row.FullBackupBreached) {1} else {0}),

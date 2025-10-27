@@ -215,7 +215,7 @@ INSERT INTO dbo.InstanceHealth_IO (
     '$($row.Ambiente)',
     '$($row.HostingSite)',
     '$($row.SqlVersion)',
-    GETUTCDATE(),
+    GETDATE(),
     $($row.AvgReadLatencyMs),
     $($row.AvgWriteLatencyMs),
     $($row.MaxReadLatencyMs),
