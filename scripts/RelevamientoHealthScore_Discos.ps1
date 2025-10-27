@@ -75,6 +75,38 @@ $OnlyAWS = $false
 
 #region ===== FUNCIONES =====
 
+# Función para convertir valores que pueden ser DBNull a int de forma segura
+function ConvertTo-SafeInt {
+    param($Value, $Default = 0)
+    
+    if ($null -eq $Value -or $Value -is [System.DBNull]) {
+        return $Default
+    }
+    
+    try {
+        return [int]$Value
+    }
+    catch {
+        return $Default
+    }
+}
+
+# Función para convertir valores que pueden ser DBNull a decimal de forma segura
+function ConvertTo-SafeDecimal {
+    param($Value, $Default = 0.0)
+    
+    if ($null -eq $Value -or $Value -is [System.DBNull]) {
+        return $Default
+    }
+    
+    try {
+        return [decimal]$Value
+    }
+    catch {
+        return $Default
+    }
+}
+
 function Get-DiskMediaType {
     <#
     .SYNOPSIS
@@ -284,12 +316,12 @@ GROUP BY vs.volume_mount_point;
         
         # Almacenar métricas de I/O del sistema (globales)
         if ($dataIOLoad) {
-            $result.PageLifeExpectancy = [int]($dataIOLoad.PageLifeExpectancy ?? 0)
-            $result.PageReadsPerSec = [int]($dataIOLoad.PageReadsPerSec ?? 0)
-            $result.PageWritesPerSec = [int]($dataIOLoad.PageWritesPerSec ?? 0)
-            $result.LazyWritesPerSec = [int]($dataIOLoad.LazyWritesPerSec ?? 0)
-            $result.CheckpointPagesPerSec = [int]($dataIOLoad.CheckpointPagesPerSec ?? 0)
-            $result.BatchRequestsPerSec = [int]($dataIOLoad.BatchRequestsPerSec ?? 0)
+            $result.PageLifeExpectancy = ConvertTo-SafeInt $dataIOLoad.PageLifeExpectancy
+            $result.PageReadsPerSec = ConvertTo-SafeInt $dataIOLoad.PageReadsPerSec
+            $result.PageWritesPerSec = ConvertTo-SafeInt $dataIOLoad.PageWritesPerSec
+            $result.LazyWritesPerSec = ConvertTo-SafeInt $dataIOLoad.LazyWritesPerSec
+            $result.CheckpointPagesPerSec = ConvertTo-SafeInt $dataIOLoad.CheckpointPagesPerSec
+            $result.BatchRequestsPerSec = ConvertTo-SafeInt $dataIOLoad.BatchRequestsPerSec
         }
         
         if ($dataSpace) {
@@ -326,9 +358,9 @@ GROUP BY vs.volume_mount_point;
                 @{
                     MountPoint = $mountPoint
                     VolumeName = $_.VolumeName
-                    TotalGB = [decimal]$_.TotalGB
-                    FreeGB = [decimal]$_.FreeGB
-                    FreePct = [decimal]$_.FreePct
+                    TotalGB = ConvertTo-SafeDecimal $_.TotalGB
+                    FreeGB = ConvertTo-SafeDecimal $_.FreeGB
+                    FreePct = ConvertTo-SafeDecimal $_.FreePct
                     
                     # Flags de rol
                     IsTempDBDisk = $isTempDB
@@ -342,8 +374,8 @@ GROUP BY vs.volume_mount_point;
                     OperationalStatus = $diskTypeInfo.OperationalStatus
                     
                     # Competencia (cuántas DBs/archivos)
-                    DatabaseCount = if ($competition) { [int]$competition.DatabaseCount } else { 0 }
-                    FileCount = if ($competition) { [int]$competition.FileCount } else { 0 }
+                    DatabaseCount = if ($competition) { ConvertTo-SafeInt $competition.DatabaseCount } else { 0 }
+                    FileCount = if ($competition) { ConvertTo-SafeInt $competition.FileCount } else { 0 }
                     DatabaseList = if ($competition) { $competition.DatabaseList } else { "" }
                     
                     # Archivos problemáticos (poco espacio interno + growth habilitado)
@@ -352,24 +384,24 @@ GROUP BY vs.volume_mount_point;
             }
             
             # Peor porcentaje libre
-            $result.WorstFreePct = [decimal](($dataSpace | Measure-Object -Property FreePct -Minimum).Minimum)
+            $result.WorstFreePct = ConvertTo-SafeDecimal (($dataSpace | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
             
             # Promedio por rol
             $dataDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Data' } | Select-Object -Property MountPoint, FreePct -Unique
             if ($dataDisks) {
-                $result.DataDiskAvgFreePct = [decimal](($dataDisks | Measure-Object -Property FreePct -Average).Average)
+                $result.DataDiskAvgFreePct = ConvertTo-SafeDecimal (($dataDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                 $result.DataVolumes = $dataDisks | ForEach-Object { $_.MountPoint }
             }
             
             $logDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Log' } | Select-Object -Property MountPoint, FreePct -Unique
             if ($logDisks) {
-                $result.LogDiskAvgFreePct = [decimal](($logDisks | Measure-Object -Property FreePct -Average).Average)
+                $result.LogDiskAvgFreePct = ConvertTo-SafeDecimal (($logDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                 $result.LogVolumes = $logDisks | ForEach-Object { $_.MountPoint }
             }
             
             $tempdbDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'TempDB' } | Select-Object -Property MountPoint, FreePct -Unique
             if ($tempdbDisks) {
-                $result.TempDBDiskFreePct = [decimal](($tempdbDisks | Measure-Object -Property FreePct -Average).Average)
+                $result.TempDBDiskFreePct = ConvertTo-SafeDecimal (($tempdbDisks | Measure-Object -Property FreePct -Average).Average) 100.0
             }
         }
         
