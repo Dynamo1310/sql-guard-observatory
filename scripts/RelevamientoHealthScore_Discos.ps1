@@ -190,8 +190,41 @@ function Get-DiskMetrics {
     }
     
     try {
+        # Detectar versión de SQL Server primero
+        $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version"
+        $versionResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $versionQuery -TimeoutSec 5 -MaxRetries 1
+        $sqlVersion = $versionResult.Version
+        $majorVersion = [int]($sqlVersion -split '\.')[0]
+        
         # Query 1: Espacio en discos con clasificación por rol + archivos problemáticos
-        $querySpace = @"
+        if ($majorVersion -lt 10) {
+            # FALLBACK para SQL Server 2005 (usar xp_fixeddrives)
+            $querySpace = @"
+-- SQL 2005 compatible (usando xp_fixeddrives)
+CREATE TABLE #DriveSpace (
+    Drive VARCHAR(10),
+    MBFree INT
+)
+
+INSERT INTO #DriveSpace
+EXEC xp_fixeddrives
+
+SELECT 
+    Drive + ':' AS MountPoint,
+    'Drive ' + Drive AS VolumeName,
+    CAST(0 AS DECIMAL(10,2)) AS TotalGB,
+    CAST(MBFree / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
+    CAST(100 AS DECIMAL(5,2)) AS FreePct,
+    'Data' AS DiskRole,
+    'N/A' AS DatabaseName,
+    'ROWS' AS FileType
+FROM #DriveSpace
+
+DROP TABLE #DriveSpace
+"@
+        } else {
+            # SQL 2008+ (query normal con sys.dm_os_volume_stats)
+            $querySpace = @"
 -- Espacio en discos con clasificación por rol
 SELECT DISTINCT
     vs.volume_mount_point AS MountPoint,
@@ -212,6 +245,7 @@ FROM sys.master_files mf
 CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 ORDER BY FreePct ASC;
 "@
+        }
 
         # Query 1b: Archivos con poco espacio interno Y crecimiento habilitado (CRÍTICO)
         # Solo alertar si el archivo puede crecer (growth != 0) y tiene poco espacio libre interno
@@ -713,8 +747,41 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
             }
             
             try {
-                # Query simplificado (sin Get-DiskMediaType para velocidad)
-                $querySpace = @"
+                # Detectar versión de SQL Server
+                $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version"
+                $versionResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $versionQuery -TimeoutSec 5 -MaxRetries 1
+                $sqlVersion = $versionResult.Version
+                $majorVersion = [int]($sqlVersion -split '\.')[0]
+                
+                # SQL 2005 = version 9.x (no tiene sys.dm_os_volume_stats)
+                # SQL 2008+ = version 10.x+ (tiene sys.dm_os_volume_stats)
+                
+                if ($majorVersion -lt 10) {
+                    # FALLBACK para SQL Server 2005 (usar xp_fixeddrives)
+                    $querySpace = @"
+-- SQL 2005 compatible (usando xp_fixeddrives)
+CREATE TABLE #DriveSpace (
+    Drive VARCHAR(10),
+    MBFree INT
+)
+
+INSERT INTO #DriveSpace
+EXEC xp_fixeddrives
+
+SELECT 
+    Drive + ':' AS MountPoint,
+    'Drive ' + Drive AS VolumeName,
+    CAST(0 AS DECIMAL(10,2)) AS TotalGB,  -- xp_fixeddrives no da total
+    CAST(MBFree / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
+    CAST(100 AS DECIMAL(5,2)) AS FreePct,  -- No podemos calcular % sin total
+    'Data' AS DiskRole  -- Asumimos Data por defecto
+FROM #DriveSpace
+
+DROP TABLE #DriveSpace
+"@
+                } else {
+                    # SQL 2008+ (query normal con sys.dm_os_volume_stats)
+                    $querySpace = @"
 SELECT DISTINCT
     vs.volume_mount_point AS MountPoint,
     vs.logical_volume_name AS VolumeName,
@@ -731,6 +798,7 @@ FROM sys.master_files mf
 CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 ORDER BY FreePct ASC;
 "@
+                }
                 
                 $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpace -TimeoutSec $TimeoutSec -MaxRetries 2
                 
