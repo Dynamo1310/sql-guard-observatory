@@ -293,26 +293,26 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 GROUP BY vs.volume_mount_point;
 "@
         
-        # Ejecutar queries
-        $dataSpace = Invoke-DbaQuery -SqlInstance $InstanceName `
+        # Ejecutar queries con reintentos automáticos
+        $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
             -Query $querySpace `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TimeoutSec $TimeoutSec `
+            -MaxRetries 2
         
-        $dataProblematicFiles = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $dataProblematicFiles = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
             -Query $queryProblematicFiles `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TimeoutSec $TimeoutSec `
+            -MaxRetries 2
         
-        $dataIOLoad = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $dataIOLoad = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
             -Query $queryIOLoad `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TimeoutSec $TimeoutSec `
+            -MaxRetries 2
         
-        $dataCompetition = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $dataCompetition = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
             -Query $queryCompetition `
-            -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TimeoutSec $TimeoutSec `
+            -MaxRetries 2
         
         # Almacenar métricas de I/O del sistema (globales)
         if ($dataIOLoad) {
@@ -406,24 +406,99 @@ GROUP BY vs.volume_mount_point;
         }
         
     } catch {
-        Write-Warning "Error obteniendo disk metrics en ${InstanceName}: $($_.Exception.Message)"
+        $errorMsg = $_.Exception.Message
+        
+        # Identificar tipo de error
+        if ($errorMsg -match "Timeout") {
+            Write-Warning "⏱️  TIMEOUT obteniendo disk metrics en ${InstanceName} (después de reintentos)"
+        }
+        elseif ($errorMsg -match "Connection|Network|Transport") {
+            Write-Warning "🔌 ERROR DE CONEXIÓN obteniendo disk metrics en ${InstanceName}: $errorMsg"
+        }
+        else {
+            Write-Warning "Error obteniendo disk metrics en ${InstanceName}: $errorMsg"
+        }
     }
     
     return $result
 }
 
 function Test-SqlConnection {
+    <#
+    .SYNOPSIS
+        Prueba conexión con reintentos
+    #>
     param(
         [string]$InstanceName,
-        [int]$TimeoutSec = 10
+        [int]$TimeoutSec = 10,
+        [int]$MaxRetries = 2
     )
     
-    try {
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
-        return $connection.IsPingable
-    } catch {
-        return $false
+    $attempt = 0
+    while ($attempt -lt $MaxRetries) {
+        $attempt++
+        
+        try {
+            $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
+            if ($connection.IsPingable) {
+                return $true
+            }
+        } catch {
+            if ($attempt -lt $MaxRetries) {
+                Write-Verbose "Intento $attempt falló para $InstanceName, reintentando..."
+                Start-Sleep -Seconds 2
+            }
+        }
     }
+    
+    return $false
+}
+
+function Invoke-SqlQueryWithRetry {
+    <#
+    .SYNOPSIS
+        Ejecuta query SQL con reintentos automáticos en caso de timeout
+    #>
+    param(
+        [string]$InstanceName,
+        [string]$Query,
+        [int]$TimeoutSec = 15,
+        [int]$MaxRetries = 2
+    )
+    
+    $attempt = 0
+    $lastError = $null
+    
+    while ($attempt -lt $MaxRetries) {
+        $attempt++
+        
+        try {
+            $result = Invoke-DbaQuery -SqlInstance $InstanceName `
+                -Query $Query `
+                -QueryTimeout $TimeoutSec `
+                -EnableException
+            
+            return $result
+        }
+        catch {
+            $lastError = $_
+            
+            # Si es timeout o connection reset, reintentar
+            if ($_.Exception.Message -match "Timeout|Connection|Network|Transport") {
+                if ($attempt -lt $MaxRetries) {
+                    Write-Verbose "Query timeout/error en $InstanceName (intento $attempt/$MaxRetries), reintentando en 3s..."
+                    Start-Sleep -Seconds 3
+                    continue
+                }
+            }
+            
+            # Si es otro error, lanzar inmediatamente
+            throw
+        }
+    }
+    
+    # Si llegamos aquí, todos los reintentos fallaron
+    throw $lastError
 }
 
 function Write-ToSqlServer {
