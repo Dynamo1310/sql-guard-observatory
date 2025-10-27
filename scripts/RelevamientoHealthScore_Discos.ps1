@@ -1,12 +1,31 @@
 <#
 .SYNOPSIS
-    Health Score v3.0 - Recolección de métricas de ESPACIO EN DISCOS
+    Health Score v3.0 - Recolección de métricas de ESPACIO EN DISCOS Y DIAGNÓSTICO I/O
     
 .DESCRIPTION
     Script de frecuencia media (cada 10 minutos) que recolecta:
+    
+    ESPACIO EN DISCOS:
     - Espacio libre por disco/volumen
     - Clasificación por rol (Data, Log, Backup, TempDB)
     - Tendencia de crecimiento
+    
+    DIAGNÓSTICO DE DISCOS (NUEVO v3.1):
+    - Tipo de disco físico (HDD/SSD/NVMe) via PowerShell remoting
+    - Bus Type (SATA/SAS/NVMe/iSCSI)
+    - Health Status (Healthy/Warning/Unhealthy)
+    - Operational Status (Online/Offline/Degraded)
+    
+    MÉTRICAS DE CARGA I/O:
+    - Page Reads/Writes per sec
+    - Lazy Writes per sec (presión de memoria)
+    - Checkpoint Pages per sec
+    - Batch Requests per sec
+    
+    ANÁLISIS DE COMPETENCIA:
+    - Cuántas bases de datos por volumen
+    - Cuántos archivos por volumen
+    - Lista de bases de datos en cada disco
     
     Guarda en: InstanceHealth_Discos
     
@@ -14,14 +33,18 @@
     Criterios: ≥20% libre = 100, 15–19% = 80, 10–14% = 60, 5–9% = 40, <5% = 0
     Cap: Data o Log <10% libre => cap 40
     
+    NOTA: El tipo de disco físico requiere PowerShell remoting habilitado.
+    Si falla, el sistema inferirá el tipo por latencia en el Consolidador.
+    
 .NOTES
-    Versión: 3.0
+    Versión: 3.1 (Diagnóstico Inteligente de I/O)
     Frecuencia: Cada 10 minutos
     Timeout: 15 segundos
     
 .REQUIRES
     - dbatools (Install-Module -Name dbatools -Force)
     - PowerShell 5.1 o superior
+    - PowerShell Remoting habilitado (opcional, para tipo de disco)
 #>
 
 [CmdletBinding()]
@@ -52,6 +75,68 @@ $OnlyAWS = $false
 
 #region ===== FUNCIONES =====
 
+function Get-DiskMediaType {
+    <#
+    .SYNOPSIS
+        Obtiene el tipo de disco físico (HDD/SSD/NVMe) y su estado de salud
+    #>
+    param(
+        [string]$InstanceName,
+        [string]$MountPoint
+    )
+    
+    try {
+        # Obtener servidor físico (sin instancia nombrada)
+        $serverName = $InstanceName.Split('\')[0]
+        
+        # Limpiar mount point para obtener letra de unidad (E:\ -> E)
+        $driveLetter = $MountPoint.TrimEnd('\').TrimEnd(':')
+        
+        # Intentar obtener información del disco físico vía PowerShell remoting
+        $diskInfo = Invoke-Command -ComputerName $serverName -ScriptBlock {
+            param($drive)
+            
+            try {
+                # Obtener partición por letra de unidad
+                $partition = Get-Partition | Where-Object { $_.DriveLetter -eq $drive } | Select-Object -First 1
+                
+                if ($partition) {
+                    # Obtener disco físico
+                    $disk = Get-Disk -Number $partition.DiskNumber
+                    
+                    return @{
+                        MediaType = $disk.MediaType           # HDD, SSD, Unspecified
+                        BusType = $disk.BusType               # SATA, SAS, NVMe, iSCSI, etc.
+                        HealthStatus = $disk.HealthStatus     # Healthy, Warning, Unhealthy
+                        OperationalStatus = $disk.OperationalStatus  # Online, Offline, Degraded
+                    }
+                }
+                
+                return $null
+                
+            } catch {
+                return $null
+            }
+        } -ArgumentList $driveLetter -ErrorAction SilentlyContinue
+        
+        if ($diskInfo) {
+            return $diskInfo
+        }
+        
+    } catch {
+        # Si falla PowerShell remoting, no es crítico
+        # El sistema inferirá tipo de disco por latencia después
+    }
+    
+    # Fallback: valores desconocidos
+    return @{
+        MediaType = "Unknown"
+        BusType = "Unknown"
+        HealthStatus = "Unknown"
+        OperationalStatus = "Unknown"
+    }
+}
+
 function Get-DiskMetrics {
     param(
         [string]$InstanceName,
@@ -69,7 +154,8 @@ function Get-DiskMetrics {
     }
     
     try {
-        $query = @"
+        # Query 1: Espacio en discos con clasificación por rol
+        $querySpace = @"
 -- Espacio en discos con clasificación por rol
 SELECT DISTINCT
     vs.volume_mount_point AS MountPoint,
@@ -90,43 +176,150 @@ FROM sys.master_files mf
 CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 ORDER BY FreePct ASC;
 "@
+
+        # Query 2: Métricas de carga de I/O del sistema
+        $queryIOLoad = @"
+-- Métricas de carga de I/O
+SELECT 
+    -- Page Life Expectancy como indicador de presión de memoria -> más I/O
+    (SELECT cntr_value 
+     FROM sys.dm_os_performance_counters 
+     WHERE counter_name = 'Page life expectancy' 
+     AND object_name LIKE '%Buffer Manager%') AS PageLifeExpectancy,
+    
+    -- Page reads/writes per sec (carga actual de I/O)
+    (SELECT cntr_value 
+     FROM sys.dm_os_performance_counters 
+     WHERE counter_name = 'Page reads/sec' 
+     AND object_name LIKE '%Buffer Manager%') AS PageReadsPerSec,
+    
+    (SELECT cntr_value 
+     FROM sys.dm_os_performance_counters 
+     WHERE counter_name = 'Page writes/sec' 
+     AND object_name LIKE '%Buffer Manager%') AS PageWritesPerSec,
+    
+    -- Lazy writes (indicador de memoria presionada)
+    (SELECT cntr_value 
+     FROM sys.dm_os_performance_counters 
+     WHERE counter_name = 'Lazy writes/sec' 
+     AND object_name LIKE '%Buffer Manager%') AS LazyWritesPerSec,
+    
+    -- Checkpoint pages/sec (carga de escritura por checkpoints)
+    (SELECT cntr_value 
+     FROM sys.dm_os_performance_counters 
+     WHERE counter_name = 'Checkpoint pages/sec' 
+     AND object_name LIKE '%Buffer Manager%') AS CheckpointPagesPerSec,
+    
+    -- Batch Requests/sec (carga general del servidor)
+    (SELECT cntr_value 
+     FROM sys.dm_os_performance_counters 
+     WHERE counter_name = 'Batch Requests/sec' 
+     AND object_name LIKE '%SQL Statistics%') AS BatchRequestsPerSec;
+"@
+
+        # Query 3: Análisis de competencia por disco (cuántas DBs/archivos por volumen)
+        $queryCompetition = @"
+-- Análisis de competencia por volumen
+SELECT 
+    vs.volume_mount_point AS MountPoint,
+    COUNT(DISTINCT mf.database_id) AS DatabaseCount,
+    COUNT(mf.file_id) AS FileCount,
+    SUM(mf.size * 8.0 / 1024) AS TotalSizeMB,
+    STRING_AGG(DB_NAME(mf.database_id), ',') AS DatabaseList
+FROM sys.master_files mf
+CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+GROUP BY vs.volume_mount_point;
+"@
         
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
-            -Query $query `
+        # Ejecutar queries
+        $dataSpace = Invoke-DbaQuery -SqlInstance $InstanceName `
+            -Query $querySpace `
             -QueryTimeout $TimeoutSec `
             -EnableException
         
-        if ($data) {
-            # Procesar todos los volúmenes
-            $result.Volumes = $data | ForEach-Object {
+        $dataIOLoad = Invoke-DbaQuery -SqlInstance $InstanceName `
+            -Query $queryIOLoad `
+            -QueryTimeout $TimeoutSec `
+            -EnableException
+        
+        $dataCompetition = Invoke-DbaQuery -SqlInstance $InstanceName `
+            -Query $queryCompetition `
+            -QueryTimeout $TimeoutSec `
+            -EnableException
+        
+        # Almacenar métricas de I/O del sistema (globales)
+        if ($dataIOLoad) {
+            $result.PageLifeExpectancy = [int]($dataIOLoad.PageLifeExpectancy ?? 0)
+            $result.PageReadsPerSec = [int]($dataIOLoad.PageReadsPerSec ?? 0)
+            $result.PageWritesPerSec = [int]($dataIOLoad.PageWritesPerSec ?? 0)
+            $result.LazyWritesPerSec = [int]($dataIOLoad.LazyWritesPerSec ?? 0)
+            $result.CheckpointPagesPerSec = [int]($dataIOLoad.CheckpointPagesPerSec ?? 0)
+            $result.BatchRequestsPerSec = [int]($dataIOLoad.BatchRequestsPerSec ?? 0)
+        }
+        
+        if ($dataSpace) {
+            # Obtener volúmenes únicos para procesamiento
+            $uniqueVolumes = $dataSpace | Select-Object -Property MountPoint, VolumeName, TotalGB, FreeGB, FreePct -Unique
+            
+            # Procesar cada volumen único
+            $result.Volumes = $uniqueVolumes | ForEach-Object {
+                $mountPoint = $_.MountPoint
+                
+                # Obtener info de competencia para este volumen
+                $competition = $dataCompetition | Where-Object { $_.MountPoint -eq $mountPoint } | Select-Object -First 1
+                
+                # Determinar roles del volumen
+                $volumeRoles = $dataSpace | Where-Object { $_.MountPoint -eq $mountPoint }
+                $isTempDB = ($volumeRoles | Where-Object { $_.DiskRole -eq 'TempDB' }) -ne $null
+                $isData = ($volumeRoles | Where-Object { $_.DiskRole -eq 'Data' }) -ne $null
+                $isLog = ($volumeRoles | Where-Object { $_.DiskRole -eq 'Log' }) -ne $null
+                
+                # Obtener tipo de disco físico (puede ser lento, usar con precaución)
+                $diskTypeInfo = Get-DiskMediaType -InstanceName $InstanceName -MountPoint $mountPoint
+                
+                # Crear objeto de volumen enriquecido
                 @{
-                    MountPoint = $_.MountPoint
+                    MountPoint = $mountPoint
                     VolumeName = $_.VolumeName
                     TotalGB = [decimal]$_.TotalGB
                     FreeGB = [decimal]$_.FreeGB
                     FreePct = [decimal]$_.FreePct
-                    DiskRole = $_.DiskRole
-                    DatabaseName = $_.DatabaseName
+                    
+                    # Flags de rol
+                    IsTempDBDisk = $isTempDB
+                    IsDataDisk = $isData
+                    IsLogDisk = $isLog
+                    
+                    # Información de disco físico
+                    MediaType = $diskTypeInfo.MediaType
+                    BusType = $diskTypeInfo.BusType
+                    HealthStatus = $diskTypeInfo.HealthStatus
+                    OperationalStatus = $diskTypeInfo.OperationalStatus
+                    
+                    # Competencia (cuántas DBs/archivos)
+                    DatabaseCount = if ($competition) { [int]$competition.DatabaseCount } else { 0 }
+                    FileCount = if ($competition) { [int]$competition.FileCount } else { 0 }
+                    DatabaseList = if ($competition) { $competition.DatabaseList } else { "" }
                 }
             }
             
             # Peor porcentaje libre
-            $result.WorstFreePct = [decimal](($data | Measure-Object -Property FreePct -Minimum).Minimum)
+            $result.WorstFreePct = [decimal](($dataSpace | Measure-Object -Property FreePct -Minimum).Minimum)
             
             # Promedio por rol
-            $dataDisks = $data | Where-Object { $_.DiskRole -eq 'Data' } | Select-Object -Unique MountPoint, FreePct
+            $dataDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Data' } | Select-Object -Property MountPoint, FreePct -Unique
             if ($dataDisks) {
                 $result.DataDiskAvgFreePct = [decimal](($dataDisks | Measure-Object -Property FreePct -Average).Average)
                 $result.DataVolumes = $dataDisks | ForEach-Object { $_.MountPoint }
             }
             
-            $logDisks = $data | Where-Object { $_.DiskRole -eq 'Log' } | Select-Object -Unique MountPoint, FreePct
+            $logDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Log' } | Select-Object -Property MountPoint, FreePct -Unique
             if ($logDisks) {
                 $result.LogDiskAvgFreePct = [decimal](($logDisks | Measure-Object -Property FreePct -Average).Average)
                 $result.LogVolumes = $logDisks | ForEach-Object { $_.MountPoint }
             }
             
-            $tempdbDisks = $data | Where-Object { $_.DiskRole -eq 'TempDB' } | Select-Object -Unique MountPoint, FreePct
+            $tempdbDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'TempDB' } | Select-Object -Property MountPoint, FreePct -Unique
             if ($tempdbDisks) {
                 $result.TempDBDiskFreePct = [decimal](($tempdbDisks | Measure-Object -Property FreePct -Average).Average)
             }
@@ -165,8 +358,16 @@ function Write-ToSqlServer {
     
     try {
         foreach ($row in $Data) {
-            # Convertir volumes a JSON
+            # Convertir volumes a JSON (ahora incluye mucha más información)
             $volumesJson = ($row.Volumes | ConvertTo-Json -Compress -Depth 3) -replace "'", "''"
+            
+            # Valores para métricas de I/O (globales)
+            $pageLifeExp = if ($row.PageLifeExpectancy) { $row.PageLifeExpectancy } else { 0 }
+            $pageReadsPerSec = if ($row.PageReadsPerSec) { $row.PageReadsPerSec } else { 0 }
+            $pageWritesPerSec = if ($row.PageWritesPerSec) { $row.PageWritesPerSec } else { 0 }
+            $lazyWritesPerSec = if ($row.LazyWritesPerSec) { $row.LazyWritesPerSec } else { 0 }
+            $checkpointPagesPerSec = if ($row.CheckpointPagesPerSec) { $row.CheckpointPagesPerSec } else { 0 }
+            $batchRequestsPerSec = if ($row.BatchRequestsPerSec) { $row.BatchRequestsPerSec } else { 0 }
             
             $query = @"
 INSERT INTO dbo.InstanceHealth_Discos (
@@ -179,7 +380,13 @@ INSERT INTO dbo.InstanceHealth_Discos (
     DataDiskAvgFreePct,
     LogDiskAvgFreePct,
     TempDBDiskFreePct,
-    VolumesJson
+    VolumesJson,
+    PageLifeExpectancy,
+    PageReadsPerSec,
+    PageWritesPerSec,
+    LazyWritesPerSec,
+    CheckpointPagesPerSec,
+    BatchRequestsPerSec
 ) VALUES (
     '$($row.InstanceName)',
     '$($row.Ambiente)',
@@ -190,7 +397,13 @@ INSERT INTO dbo.InstanceHealth_Discos (
     $($row.DataDiskAvgFreePct),
     $($row.LogDiskAvgFreePct),
     $($row.TempDBDiskFreePct),
-    '$volumesJson'
+    '$volumesJson',
+    $pageLifeExp,
+    $pageReadsPerSec,
+    $pageWritesPerSec,
+    $lazyWritesPerSec,
+    $checkpointPagesPerSec,
+    $batchRequestsPerSec
 );
 "@
             
@@ -298,6 +511,14 @@ foreach ($instance in $instances) {
         LogDiskAvgFreePct = $diskMetrics.LogDiskAvgFreePct
         TempDBDiskFreePct = $diskMetrics.TempDBDiskFreePct
         Volumes = $diskMetrics.Volumes
+        
+        # Nuevas métricas de I/O (globales)
+        PageLifeExpectancy = $diskMetrics.PageLifeExpectancy
+        PageReadsPerSec = $diskMetrics.PageReadsPerSec
+        PageWritesPerSec = $diskMetrics.PageWritesPerSec
+        LazyWritesPerSec = $diskMetrics.LazyWritesPerSec
+        CheckpointPagesPerSec = $diskMetrics.CheckpointPagesPerSec
+        BatchRequestsPerSec = $diskMetrics.BatchRequestsPerSec
     }
 }
 

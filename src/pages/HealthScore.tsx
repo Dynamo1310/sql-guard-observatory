@@ -1558,10 +1558,30 @@ export default function HealthScore() {
                                       suggestions.push(`⚠️ TempDB con archivos de más → Considerar reducir a ${optimalFiles} archivos (tiene ${fileCount} para ${cpuCount} CPUs, overhead innecesario)`);
                                     } else {
                                       // Número de archivos OK, evaluar solo si hay problemas de contención
-                                      if (score < 40) {
-                                        suggestions.push('🔥 Contención crítica en TempDB → Número de archivos OK, revisar latencia de disco o queries costosas');
-                                      } else if (score < 70) {
-                                        suggestions.push('⚠️ Contención moderada en TempDB → Monitorear latencia de disco y PAGELATCH waits');
+                                      if (score < 70) {
+                                        // Diagnosticar la causa real de la contención
+                                        const readLat = details.configuracionTempdbDetails.tempDBAvgReadLatencyMs || 0;
+                                        const writeLat = details.configuracionTempdbDetails.tempDBAvgWriteLatencyMs || 0;
+                                        const hasSlowDisk = readLat > 10 || writeLat > 10;
+                                        
+                                        if (score < 40) {
+                                          if (hasSlowDisk) {
+                                            if (writeLat > 50) {
+                                              suggestions.push(`🔥 Contención crítica en TempDB → Disco lento (${writeLat.toFixed(1)}ms escritura). Si es HDD, migrar a SSD urgentemente. Si es SSD, revisar sobrecarga`);
+                                            } else {
+                                              suggestions.push('🔥 Contención crítica en TempDB → Número de archivos y disco OK, revisar queries costosas que usan TempDB');
+                                            }
+                                          } else {
+                                            suggestions.push('🔥 Contención crítica en TempDB → Número de archivos y disco OK, revisar queries costosas que usan TempDB');
+                                          }
+                                        } else {
+                                          // Score 40-69 (moderado)
+                                          if (hasSlowDisk) {
+                                            suggestions.push(`⚠️ Contención moderada en TempDB → Disco lento (${writeLat.toFixed(1)}ms escritura). Revisar tipo de disco y carga de IOPS`);
+                                          } else {
+                                            suggestions.push('⚠️ Contención moderada en TempDB → Archivos y disco OK, revisar queries con sorts/spills a TempDB');
+                                          }
+                                        }
                                       }
                                     }
                                     
@@ -1571,8 +1591,15 @@ export default function HealthScore() {
                                     }
                                   }
                                   if (details.configuracionTempdbDetails && details.configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 50) {
-                                    const writeLat = details.configuracionTempdbDetails.tempDBAvgWriteLatencyMs.toFixed(0);
-                                    suggestions.push(`🐌 TempDB lento (${writeLat}ms escritura) → Mover a discos más rápidos (SSD/NVMe)`);
+                                    const writeLat = details.configuracionTempdbDetails.tempDBAvgWriteLatencyMs;
+                                    
+                                    if (writeLat > 100) {
+                                      // Muy lento - probablemente HDD o problema serio
+                                      suggestions.push(`🐌 TempDB muy lento (${writeLat.toFixed(0)}ms escritura) → Si es HDD, migrar a SSD/NVMe. Si ya es SSD, revisar sobrecarga o problemas de hardware`);
+                                    } else if (writeLat > 50) {
+                                      // Lento - podría ser SSD sobrecargado
+                                      suggestions.push(`⚠️ TempDB lento (${writeLat.toFixed(0)}ms escritura) → Revisar carga de disco. Si es HDD, migrar a SSD. Si es SSD, revisar IOPS y competencia por storage`);
+                                    }
                                   }
                                   
                                   // Max Memory inteligente
@@ -1747,6 +1774,118 @@ export default function HealthScore() {
                                           </span>
                                         </div>
                                       </div>
+
+                                      {/* Diagnóstico Inteligente de I/O (v3.1) */}
+                                      {score.tempDBIOSuggestion && (
+                                        <div className={`rounded-md p-2 border ${
+                                          score.tempDBIOSeverity === 'CRITICAL' ? 'bg-red-500/10 border-red-500/30' :
+                                          score.tempDBIOSeverity === 'HIGH' ? 'bg-orange-500/10 border-orange-500/30' :
+                                          score.tempDBIOSeverity === 'MEDIUM' ? 'bg-yellow-500/10 border-yellow-500/30' :
+                                          'bg-blue-500/10 border-blue-500/30'
+                                        }`}>
+                                          <div className="space-y-1">
+                                            {score.tempDBIODiagnosis && (
+                                              <div className="text-[10px] font-semibold text-muted-foreground">
+                                                🧠 Diagnóstico: {score.tempDBIODiagnosis}
+                                              </div>
+                                            )}
+                                            <div className={`text-[10px] ${
+                                              score.tempDBIOSeverity === 'CRITICAL' ? 'text-red-400' :
+                                              score.tempDBIOSeverity === 'HIGH' ? 'text-orange-400' :
+                                              score.tempDBIOSeverity === 'MEDIUM' ? 'text-yellow-400' :
+                                              'text-blue-400'
+                                            }`}>
+                                              {score.tempDBIOSuggestion}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Tipo de Disco y Competencia */}
+                                      {instanceDetails[score.instanceName].discosDetails?.volumesJson && (
+                                        (() => {
+                                          try {
+                                            const volumes = JSON.parse(instanceDetails[score.instanceName].discosDetails.volumesJson);
+                                            const tempdbVolume = volumes.find((v: any) => 
+                                              v.MountPoint === instanceDetails[score.instanceName].configuracionTempdbDetails?.tempDBMountPoint
+                                            );
+                                            
+                                            if (tempdbVolume) {
+                                              return (
+                                                <div className="space-y-1 bg-slate-500/5 border border-slate-500/20 rounded p-1.5">
+                                                  {/* Tipo de Disco */}
+                                                  {tempdbVolume.MediaType && tempdbVolume.MediaType !== 'Unknown' && (
+                                                    <div className="flex items-center justify-between text-[11px]">
+                                                      <span className="text-muted-foreground">💾 Tipo disco</span>
+                                                      <span className={`font-semibold ${
+                                                        tempdbVolume.MediaType === 'NVMe' ? 'text-green-400' :
+                                                        tempdbVolume.MediaType === 'SSD' ? 'text-blue-400' :
+                                                        tempdbVolume.MediaType === 'HDD' ? 'text-orange-400' :
+                                                        'text-gray-400'
+                                                      }`}>
+                                                        {tempdbVolume.MediaType}
+                                                        {tempdbVolume.BusType && ` (${tempdbVolume.BusType})`}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                  
+                                                  {/* Disco Dedicado o Compartido */}
+                                                  {tempdbVolume.DatabaseCount > 0 && (
+                                                    <div className="flex items-center justify-between text-[11px]">
+                                                      <span className="text-muted-foreground">🗄️ DBs en disco</span>
+                                                      <span className={`font-semibold ${
+                                                        tempdbVolume.DatabaseCount === 1 ? 'text-green-400' : 
+                                                        tempdbVolume.DatabaseCount <= 3 ? 'text-yellow-400' : 
+                                                        'text-red-400'
+                                                      }`}>
+                                                        {tempdbVolume.DatabaseCount}
+                                                        {tempdbVolume.DatabaseCount === 1 ? ' (DEDICADO) ✅' : 
+                                                         tempdbVolume.DatabaseCount > 5 ? ' (COMPARTIDO) 🚨' :
+                                                         ' (COMPARTIDO) ⚠️'}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                  
+                                                  {/* Health Status del Disco */}
+                                                  {tempdbVolume.HealthStatus && 
+                                                   tempdbVolume.HealthStatus !== 'Healthy' && 
+                                                   tempdbVolume.HealthStatus !== 'Unknown' && (
+                                                    <div className="flex items-center justify-between text-[11px]">
+                                                      <span className="text-muted-foreground">⚕️ Estado disco</span>
+                                                      <Badge variant={
+                                                        tempdbVolume.HealthStatus === 'Unhealthy' ? 'destructive' : 'default'
+                                                      } className="text-xs">
+                                                        {tempdbVolume.HealthStatus}
+                                                      </Badge>
+                                                    </div>
+                                                  )}
+                                                  
+                                                  {/* Lazy Writes (si es significativo) */}
+                                                  {instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec && 
+                                                   instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 20 && (
+                                                    <div className="flex items-center justify-between text-[11px]">
+                                                      <span className="text-muted-foreground">💾 Lazy Writes</span>
+                                                      <span className={`font-semibold ${
+                                                        instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 100 ? 'text-red-400' :
+                                                        instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 50 ? 'text-yellow-400' :
+                                                        'text-gray-400'
+                                                      }`}>
+                                                        {instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec}/s
+                                                        {instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 100 && ' 🚨'}
+                                                        {instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 50 && 
+                                                         instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec <= 100 && ' ⚠️'}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            }
+                                          } catch (e) {
+                                            // Error parseando JSON, ignorar
+                                          }
+                                          return null;
+                                        })()
+                                      )}
 
                                       {/* Archivos - Compacto */}
                                       <div className="space-y-0.5">

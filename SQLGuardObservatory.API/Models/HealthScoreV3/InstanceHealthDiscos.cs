@@ -38,5 +38,13 @@ public class InstanceHealthDiscos
     public decimal TempDBDiskFreePct { get; set; }
     
     public string? VolumesJson { get; set; }
+    
+    // Métricas de I/O del Sistema (v3.1)
+    public int? PageLifeExpectancy { get; set; }
+    public int? PageReadsPerSec { get; set; }
+    public int? PageWritesPerSec { get; set; }
+    public int? LazyWritesPerSec { get; set; }
+    public int? CheckpointPagesPerSec { get; set; }
+    public int? BatchRequestsPerSec { get; set; }
 }
 

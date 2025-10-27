@@ -41,6 +41,9 @@ public class InstanceHealthConfiguracionTempdb
     [Column(TypeName = "decimal(10,2)")]
     public decimal TempDBAvgWriteLatencyMs { get; set; }
     
+    [MaxLength(10)]
+    public string? TempDBMountPoint { get; set; }
+    
     public int TempDBPageLatchWaits { get; set; }
     public int TempDBContentionScore { get; set; }
     public int TempDBVersionStoreMB { get; set; }

@@ -799,6 +799,11 @@ export interface HealthScoreV3Dto {
   score_ConfiguracionTempdb?: number; // 8%
   score_Autogrowth?: number;        // 5%
   
+  // Diagnóstico Inteligente de I/O para TempDB (v3.1)
+  tempDBIODiagnosis?: string;
+  tempDBIOSuggestion?: string;
+  tempDBIOSeverity?: string;
+  
   // Contribuciones ponderadas (0-peso máximo)
   // TAB 1: Availability & DR
   backupsContribution?: number;           // Max: 18
@@ -906,6 +911,14 @@ export interface DiscosDetails {
   logDiskAvgFreePct: number;
   tempDBDiskFreePct: number;
   volumesJson?: string;
+  
+  // Métricas de I/O del Sistema (v3.1)
+  pageLifeExpectancy?: number;
+  pageReadsPerSec?: number;
+  pageWritesPerSec?: number;
+  lazyWritesPerSec?: number;
+  checkpointPagesPerSec?: number;
+  batchRequestsPerSec?: number;
 }
 
 export interface MemoriaDetails {
@@ -951,6 +964,7 @@ export interface ConfiguracionTempdbDetails {
   // TempDB - Rendimiento
   tempDBAvgReadLatencyMs: number;
   tempDBAvgWriteLatencyMs: number;
+  tempDBMountPoint?: string;
   tempDBPageLatchWaits: number;
   tempDBContentionScore: number;  // Score compuesto (0-100)
   tempDBVersionStoreMB: number;

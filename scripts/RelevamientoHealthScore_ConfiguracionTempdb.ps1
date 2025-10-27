@@ -257,6 +257,7 @@ function Get-ConfigTempdbMetrics {
         # TempDB - Rendimiento
         TempDBAvgReadLatencyMs = 0
         TempDBAvgWriteLatencyMs = 0
+        TempDBMountPoint = ""
         TempDBPageLatchWaits = 0
         TempDBContentionScore = 100
         TempDBVersionStoreMB = 0
@@ -324,11 +325,16 @@ WHERE database_id = DB_ID('tempdb')
             }
         }
         
-        # Query 2: TempDB Latency (separar read/write para mejor diagnóstico)
+        # Query 2: TempDB Latency y Mount Point (para diagnóstico de disco)
         $queryLatency = @"
 SELECT 
     AVG(CASE WHEN vfs.num_of_reads = 0 THEN 0 ELSE (vfs.io_stall_read_ms * 1.0 / vfs.num_of_reads) END) AS AvgReadLatencyMs,
-    AVG(CASE WHEN vfs.num_of_writes = 0 THEN 0 ELSE (vfs.io_stall_write_ms * 1.0 / vfs.num_of_writes) END) AS AvgWriteLatencyMs
+    AVG(CASE WHEN vfs.num_of_writes = 0 THEN 0 ELSE (vfs.io_stall_write_ms * 1.0 / vfs.num_of_writes) END) AS AvgWriteLatencyMs,
+    (SELECT TOP 1 vs.volume_mount_point 
+     FROM sys.master_files mf2
+     CROSS APPLY sys.dm_os_volume_stats(mf2.database_id, mf2.file_id) vs
+     WHERE mf2.database_id = DB_ID('tempdb') AND mf2.type = 0
+     ORDER BY mf2.file_id) AS MountPoint
 FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
 INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
 WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
@@ -338,6 +344,7 @@ WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
         if ($latency) {
             $result.TempDBAvgReadLatencyMs = if ($latency.AvgReadLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgReadLatencyMs, 2) } else { 0 }
             $result.TempDBAvgWriteLatencyMs = if ($latency.AvgWriteLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgWriteLatencyMs, 2) } else { 0 }
+            $result.TempDBMountPoint = if ($latency.MountPoint -ne [DBNull]::Value) { $latency.MountPoint.ToString().Trim() } else { "" }
             
             # Diagnóstico de disco
             if ($result.TempDBAvgWriteLatencyMs -gt 50) {
@@ -580,6 +587,7 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     -- TempDB - Rendimiento
     TempDBAvgReadLatencyMs,
     TempDBAvgWriteLatencyMs,
+    TempDBMountPoint,
     TempDBPageLatchWaits,
     TempDBContentionScore,
     TempDBVersionStoreMB,
@@ -611,6 +619,7 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     -- TempDB - Rendimiento
     $($row.TempDBAvgReadLatencyMs),
     $($row.TempDBAvgWriteLatencyMs),
+    '$($row.TempDBMountPoint)',
     $($row.TempDBPageLatchWaits),
     $($row.TempDBContentionScore),
     $($row.TempDBVersionStoreMB),
@@ -803,6 +812,7 @@ foreach ($instance in $instances) {
         # TempDB - Rendimiento
         TempDBAvgReadLatencyMs = $configMetrics.TempDBAvgReadLatencyMs
         TempDBAvgWriteLatencyMs = $configMetrics.TempDBAvgWriteLatencyMs
+        TempDBMountPoint = $configMetrics.TempDBMountPoint
         TempDBPageLatchWaits = $configMetrics.TempDBPageLatchWaits
         TempDBContentionScore = $configMetrics.TempDBContentionScore
         TempDBVersionStoreMB = $configMetrics.TempDBVersionStoreMB

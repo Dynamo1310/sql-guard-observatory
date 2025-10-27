@@ -626,6 +626,207 @@ function Calculate-MantenimientosScore {
     return @{ Score = $score; Cap = $cap }
 }
 
+# DIAGNÓSTICO INTELIGENTE DE I/O PARA TEMPDB
+function Get-IODiagnosisForTempDB {
+    <#
+    .SYNOPSIS
+        Genera diagnóstico inteligente de I/O para TempDB basado en tipo de disco, latencia, y carga
+    .DESCRIPTION
+        Analiza el tipo de disco (HDD/SSD/NVMe), latencias, carga del sistema, y competencia
+        para determinar la causa raíz de problemas de I/O en TempDB
+    #>
+    param(
+        [decimal]$WriteLatencyMs,
+        [decimal]$ReadLatencyMs,
+        [string]$MountPoint,
+        [string]$VolumesJson,
+        [int]$PageLifeExpectancy,
+        [int]$PageWritesPerSec,
+        [int]$LazyWritesPerSec,
+        [int]$CPUCount
+    )
+    
+    $diagnosis = @{
+        Problem = $null
+        Severity = "OK"
+        Suggestion = $null
+        Icon = "✅"
+        MediaType = "Unknown"
+        HealthStatus = "Unknown"
+        DatabaseCount = 0
+        IsDedicated = $false
+    }
+    
+    # Si no hay latencia, asumir OK
+    if ($WriteLatencyMs -eq 0 -and $ReadLatencyMs -eq 0) {
+        return $diagnosis
+    }
+    
+    # Parsear VolumesJson para obtener info del disco de TempDB
+    if (![string]::IsNullOrWhiteSpace($VolumesJson) -and ![string]::IsNullOrWhiteSpace($MountPoint)) {
+        try {
+            $volumes = $VolumesJson | ConvertFrom-Json
+            $tempdbVolume = $volumes | Where-Object { $_.MountPoint -eq $MountPoint } | Select-Object -First 1
+            
+            if ($tempdbVolume) {
+                $diagnosis.MediaType = if ($tempdbVolume.MediaType) { $tempdbVolume.MediaType } else { "Unknown" }
+                $diagnosis.HealthStatus = if ($tempdbVolume.HealthStatus) { $tempdbVolume.HealthStatus } else { "Unknown" }
+                $diagnosis.DatabaseCount = if ($tempdbVolume.DatabaseCount) { [int]$tempdbVolume.DatabaseCount } else { 0 }
+                
+                # Detectar si TempDB está en disco dedicado (solo 1 DB en el disco)
+                $diagnosis.IsDedicated = ($diagnosis.DatabaseCount -eq 1)
+            }
+        } catch {
+            # Si falla el parseo, continuar con valores Unknown
+        }
+    }
+    
+    # --- CASO 1: Disco no saludable ---
+    if ($diagnosis.HealthStatus -in @("Warning", "Unhealthy", "Degraded")) {
+        $diagnosis.Problem = "Hardware degradado o fallando"
+        $diagnosis.Severity = "CRITICAL"
+        $diagnosis.Suggestion = "El disco físico reporta problemas de hardware. Revisar SMART, RAID, o reemplazar disco urgentemente"
+        $diagnosis.Icon = "🚨"
+        return $diagnosis
+    }
+    
+    # --- CASO 2: HDD con latencia alta ---
+    if ($diagnosis.MediaType -eq "HDD") {
+        if ($WriteLatencyMs -gt 50) {
+            $diagnosis.Problem = "Disco HDD mecánico (lento por naturaleza)"
+            $diagnosis.Severity = "HIGH"
+            $diagnosis.Suggestion = "TempDB en disco HDD ($([int]$WriteLatencyMs)ms escritura). Migrar a SSD/NVMe urgentemente"
+            $diagnosis.Icon = "🐌"
+            return $diagnosis
+        }
+        elseif ($WriteLatencyMs -gt 20) {
+            $diagnosis.Problem = "Disco HDD (considerar actualizar)"
+            $diagnosis.Severity = "MEDIUM"
+            $diagnosis.Suggestion = "TempDB en HDD. Migrar a SSD para mejor rendimiento (latencia: $([int]$WriteLatencyMs)ms)"
+            $diagnosis.Icon = "⚠️"
+            return $diagnosis
+        }
+    }
+    
+    # --- CASO 3: SSD con latencia alta (problema real) ---
+    if ($diagnosis.MediaType -in @("SSD", "Unspecified") -and $WriteLatencyMs -gt 10) {
+        
+        # CRÍTICO: SSD con >100ms
+        if ($WriteLatencyMs -gt 100) {
+            # Diagnosticar causa específica
+            
+            # CASO: Disco compartido con muchas DBs
+            if (-not $diagnosis.IsDedicated -and $diagnosis.DatabaseCount -gt 5) {
+                $diagnosis.Problem = "TempDB en disco COMPARTIDO con $($diagnosis.DatabaseCount) DBs"
+                $diagnosis.Severity = "CRITICAL"
+                $diagnosis.Suggestion = "🚨 TempDB compartiendo disco SSD con $($diagnosis.DatabaseCount) bases de datos ($([int]$WriteLatencyMs)ms). Mover TempDB a disco DEDICADO urgentemente"
+                $diagnosis.Icon = "🚨"
+            }
+            # CASO: Presión de memoria (incluso en disco dedicado)
+            elseif ($LazyWritesPerSec -gt 100) {
+                $dedicatedText = if ($diagnosis.IsDedicated) { "en disco DEDICADO" } else { "en disco compartido" }
+                $diagnosis.Problem = "Presión de memoria generando lazy writes ($LazyWritesPerSec/s)"
+                $diagnosis.Severity = "CRITICAL"
+                $diagnosis.Suggestion = "🚨 TempDB $dedicatedText con alta escritura por presión de memoria ($([int]$WriteLatencyMs)ms, $LazyWritesPerSec lazy writes/s). Revisar PLE y considerar más RAM"
+                $diagnosis.Icon = "🚨"
+            }
+            # CASO: Disco dedicado con problemas
+            elseif ($diagnosis.IsDedicated) {
+                $diagnosis.Problem = "TempDB en disco DEDICADO pero con latencia muy alta"
+                $diagnosis.Severity = "CRITICAL"
+                $diagnosis.Suggestion = "🚨 TempDB en disco DEDICADO SSD pero con $([int]$WriteLatencyMs)ms. Revisar: RAID cache, BBU, storage backend, firmware, o problemas de hardware"
+                $diagnosis.Icon = "🚨"
+            }
+            # CASO: Problema general
+            else {
+                $diagnosis.Problem = "Posible problema de hardware, RAID, o storage backend"
+                $diagnosis.Severity = "CRITICAL"
+                $diagnosis.Suggestion = "🚨 SSD con latencia anormal ($([int]$WriteLatencyMs)ms). Si es HDD, migrar a SSD/NVMe. Si ya es SSD, revisar sobrecarga o problemas de hardware"
+                $diagnosis.Icon = "🚨"
+            }
+            return $diagnosis
+        }
+        
+        # ADVERTENCIA: SSD con 50-100ms
+        if ($WriteLatencyMs -gt 50) {
+            # CASO: Disco compartido
+            if (-not $diagnosis.IsDedicated -and $diagnosis.DatabaseCount -gt 2) {
+                $diagnosis.Problem = "TempDB en disco COMPARTIDO con $($diagnosis.DatabaseCount) DBs"
+                $diagnosis.Severity = "MEDIUM"
+                $diagnosis.Suggestion = "⚠️ TempDB compartiendo disco ($([int]$WriteLatencyMs)ms) con $($diagnosis.DatabaseCount) bases de datos. Considerar mover a disco DEDICADO"
+                $diagnosis.Icon = "⚠️"
+            }
+            # CASO: Presión de memoria
+            elseif ($LazyWritesPerSec -gt 50) {
+                $dedicatedText = if ($diagnosis.IsDedicated) { "DEDICADO" } else { "compartido" }
+                $diagnosis.Problem = "Presión de memoria incrementando I/O ($LazyWritesPerSec lazy writes/s)"
+                $diagnosis.Severity = "MEDIUM"
+                $diagnosis.Suggestion = "⚠️ TempDB en disco $dedicatedText con escritura incrementada por presión de memoria ($([int]$WriteLatencyMs)ms). Revisar PLE y considerar más RAM"
+                $diagnosis.Icon = "⚠️"
+            }
+            # CASO: Disco dedicado con performance subóptima
+            elseif ($diagnosis.IsDedicated) {
+                $diagnosis.Problem = "Disco DEDICADO con rendimiento por debajo del esperado"
+                $diagnosis.Severity = "MEDIUM"
+                $diagnosis.Suggestion = "⚠️ TempDB en disco DEDICADO pero con $([int]$WriteLatencyMs)ms. Revisar: carga de disco, IOPS provisionados, o tipo de storage (si es HDD migrar a SSD)"
+                $diagnosis.Icon = "⚠️"
+            }
+            # CASO: General
+            else {
+                $diagnosis.Problem = "Storage más lento de lo esperado"
+                $diagnosis.Severity = "MEDIUM"
+                $diagnosis.Suggestion = "⚠️ SSD más lento de lo esperado ($([int]$WriteLatencyMs)ms). Revisar: carga de disco. Si es HDD, migrar a SSD. Si es SSD, revisar IOPS y competencia por storage"
+                $diagnosis.Icon = "⚠️"
+            }
+            return $diagnosis
+        }
+        
+        # MONITOREO: SSD con 10-50ms
+        if ($WriteLatencyMs -gt 10) {
+            $diagnosis.Problem = "Rendimiento por debajo del ideal"
+            $diagnosis.Severity = "LOW"
+            $diagnosis.Suggestion = "SSD con rendimiento aceptable pero mejorable ($([int]$WriteLatencyMs)ms). Monitorear tendencia"
+            $diagnosis.Icon = "📊"
+            return $diagnosis
+        }
+    }
+    
+    # --- CASO 4: Tipo desconocido (inferir por latencia) ---
+    if ($diagnosis.MediaType -in @("Unspecified", "Unknown", "")) {
+        if ($WriteLatencyMs -gt 100) {
+            # Probablemente HDD o problema grave
+            $diagnosis.Problem = "Latencia muy alta (tipo de disco desconocido)"
+            $diagnosis.Severity = "CRITICAL"
+            $diagnosis.Suggestion = "TempDB muy lento ($([int]$WriteLatencyMs)ms). Si es HDD, migrar a SSD/NVMe urgentemente. Si ya es SSD, revisar sobrecarga o problemas de hardware"
+            $diagnosis.Icon = "🚨"
+            return $diagnosis
+        }
+        elseif ($WriteLatencyMs -gt 50) {
+            # Probablemente HDD o SSD con problemas
+            $diagnosis.Problem = "Latencia alta (posible HDD o SSD sobrecargado)"
+            $diagnosis.Severity = "MEDIUM"
+            $diagnosis.Suggestion = "TempDB lento ($([int]$WriteLatencyMs)ms). Verificar tipo de disco. Si es HDD, migrar a SSD. Si es SSD, revisar IOPS y competencia por storage"
+            $diagnosis.Icon = "⚠️"
+            return $diagnosis
+        }
+        elseif ($WriteLatencyMs -lt 10) {
+            # Probablemente SSD - todo bien
+            $diagnosis.Problem = $null
+            $diagnosis.Severity = "OK"
+            $diagnosis.Suggestion = $null
+            $diagnosis.Icon = "✅"
+            return $diagnosis
+        }
+    }
+    
+    # --- CASO 5: Todo OK ---
+    $diagnosis.Problem = $null
+    $diagnosis.Severity = "OK"
+    $diagnosis.Suggestion = $null
+    $diagnosis.Icon = "✅"
+    return $diagnosis
+}
+
 # 11. CONFIGURACIÓN & TEMPDB (8%)
 function Calculate-ConfiguracionTempdbScore {
     <#
@@ -877,6 +1078,10 @@ SELECT
     d.WorstFreePct,
     d.DataDiskAvgFreePct,
     d.LogDiskAvgFreePct,
+    d.VolumesJson,
+    d.PageLifeExpectancy AS DiskPageLifeExpectancy,
+    d.PageWritesPerSec AS DiskPageWritesPerSec,
+    d.LazyWritesPerSec AS DiskLazyWritesPerSec,
     -- Memoria
     mem.PageLifeExpectancy,
     mem.BufferPoolSizeMB,
@@ -895,13 +1100,14 @@ SELECT
     cfg.TempDBGrowthConfigOK,
     cfg.TempDBAvgReadLatencyMs,
     cfg.TempDBAvgWriteLatencyMs,
+    cfg.TempDBMountPoint,
     cfg.TempDBContentionScore,
     cfg.TempDBFreeSpacePct,
+    cfg.CPUCount,
     cfg.TempDBVersionStoreMB,
     cfg.TempDBTotalSizeMB,
     cfg.TempDBUsedSpaceMB,
     cfg.MaxMemoryWithinOptimal,
-    cfg.CPUCount,
     -- Autogrowth
     au.AutogrowthEventsLast24h,
     au.FilesNearLimit,
@@ -1005,6 +1211,10 @@ INSERT INTO dbo.InstanceHealth_Score (
     MantenimientosScore,
     ConfiguracionTempdbScore,
     AutogrowthScore,
+    -- Diagnóstico Inteligente de I/O
+    TempDBIODiagnosis,
+    TempDBIOSuggestion,
+    TempDBIOSeverity,
     -- Contribuciones Ponderadas (0-peso máximo)
     BackupsContribution,
     AlwaysOnContribution,
@@ -1040,6 +1250,10 @@ INSERT INTO dbo.InstanceHealth_Score (
     $($ScoreData.MantenimientosScore),
     $($ScoreData.ConfiguracionTempdbScore),
     $($ScoreData.AutogrowthScore),
+    -- Diagnóstico Inteligente de I/O
+    $(if ([string]::IsNullOrEmpty($ScoreData.TempDBIODiagnosis)) { 'NULL' } else { "'$($ScoreData.TempDBIODiagnosis -replace "'", "''")'" }),
+    $(if ([string]::IsNullOrEmpty($ScoreData.TempDBIOSuggestion)) { 'NULL' } else { "'$($ScoreData.TempDBIOSuggestion -replace "'", "''")'" }),
+    $(if ([string]::IsNullOrEmpty($ScoreData.TempDBIOSeverity)) { 'NULL' } else { "'$($ScoreData.TempDBIOSeverity)'" }),
     -- Contribuciones Ponderadas (ya redondeadas a entero en el cálculo)
     $($ScoreData.BackupsContribution),
     $($ScoreData.AlwaysOnContribution),
@@ -1129,6 +1343,17 @@ foreach ($instanceName in $instances) {
     $mantenimientosResult = Calculate-MantenimientosScore -Data $data
     $configTempdbResult = Calculate-ConfiguracionTempdbScore -Data $data
     $autogrowthResult = Calculate-AutogrowthScore -Data $data
+    
+    # Generar diagnóstico inteligente de I/O para TempDB
+    $ioDiagnosis = Get-IODiagnosisForTempDB `
+        -WriteLatencyMs (Get-SafeNumeric -Value $data.TempDBAvgWriteLatencyMs -Default 0) `
+        -ReadLatencyMs (Get-SafeNumeric -Value $data.TempDBAvgReadLatencyMs -Default 0) `
+        -MountPoint ($data.TempDBMountPoint -as [string]) `
+        -VolumesJson ($data.VolumesJson -as [string]) `
+        -PageLifeExpectancy (Get-SafeNumeric -Value $data.DiskPageLifeExpectancy -Default 0) `
+        -PageWritesPerSec (Get-SafeNumeric -Value $data.DiskPageWritesPerSec -Default 0) `
+        -LazyWritesPerSec (Get-SafeNumeric -Value $data.DiskLazyWritesPerSec -Default 0) `
+        -CPUCount (Get-SafeNumeric -Value $data.CPUCount -Default 0)
     
     # Aplicar caps individuales
     $backupsScore = Apply-Cap -Score $backupsResult.Score -Cap $backupsResult.Cap
@@ -1270,6 +1495,12 @@ foreach ($instanceName in $instances) {
         MantenimientosScore = $mantenimientosScore
         ConfiguracionTempdbScore = $configTempdbScore
         AutogrowthScore = $autogrowthScore
+        
+        # Diagnóstico inteligente de I/O para TempDB
+        TempDBIODiagnosis = $ioDiagnosis.Problem
+        TempDBIOSuggestion = $ioDiagnosis.Suggestion
+        TempDBIOSeverity = $ioDiagnosis.Severity
+        
         BackupsContribution = $backupsContribution
         AlwaysOnContribution = $alwaysOnContribution
         LogChainContribution = $logChainContribution

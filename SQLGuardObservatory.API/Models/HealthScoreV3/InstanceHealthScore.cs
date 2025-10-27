@@ -50,6 +50,16 @@ public class InstanceHealthScore
     public int ConfiguracionTempdbScore { get; set; } // 8%
     public int AutogrowthScore { get; set; }        // 5%
     
+    // Diagnóstico Inteligente de I/O para TempDB (v3.1)
+    [MaxLength(200)]
+    public string? TempDBIODiagnosis { get; set; }
+    
+    [MaxLength(500)]
+    public string? TempDBIOSuggestion { get; set; }
+    
+    [MaxLength(20)]
+    public string? TempDBIOSeverity { get; set; }
+    
     // Contribuciones Ponderadas (0-peso máximo: Score × Peso, redondeadas a entero)
     // TAB 1: Availability & DR
     public int BackupsContribution { get; set; }           // Max: 18
