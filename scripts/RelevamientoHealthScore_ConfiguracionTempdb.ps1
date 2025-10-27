@@ -245,6 +245,19 @@ function Get-ConfigTempdbMetrics {
         [int]$TimeoutSec = 15
     )
     
+    # Detectar versión de SQL Server primero
+    $isSql2005 = $false
+    try {
+        $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version"
+        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
+        $sqlVersion = $versionResult.Version
+        $majorVersion = [int]($sqlVersion -split '\.')[0]
+        $isSql2005 = ($majorVersion -lt 10)  # SQL 2005 = version 9.x
+    } catch {
+        # Si falla, asumir que no es SQL 2005
+        $isSql2005 = $false
+    }
+    
     $result = @{
         # TempDB - Archivos
         TempDBFileCount = 0
@@ -326,7 +339,23 @@ WHERE database_id = DB_ID('tempdb')
         }
         
         # Query 2: TempDB Latency y Mount Point (para diagnóstico de disco)
-        $queryLatency = @"
+        if ($isSql2005) {
+            # FALLBACK para SQL 2005 (sin sys.dm_os_volume_stats)
+            $queryLatency = @"
+SELECT 
+    AVG(CASE WHEN vfs.num_of_reads = 0 THEN 0 ELSE (vfs.io_stall_read_ms * 1.0 / vfs.num_of_reads) END) AS AvgReadLatencyMs,
+    AVG(CASE WHEN vfs.num_of_writes = 0 THEN 0 ELSE (vfs.io_stall_write_ms * 1.0 / vfs.num_of_writes) END) AS AvgWriteLatencyMs,
+    (SELECT TOP 1 LEFT(physical_name, 3)
+     FROM sys.master_files
+     WHERE database_id = DB_ID('tempdb') AND type = 0
+     ORDER BY file_id) AS MountPoint
+FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
+INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
+WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
+"@
+        } else {
+            # SQL 2008+ (query normal con sys.dm_os_volume_stats)
+            $queryLatency = @"
 SELECT 
     AVG(CASE WHEN vfs.num_of_reads = 0 THEN 0 ELSE (vfs.io_stall_read_ms * 1.0 / vfs.num_of_reads) END) AS AvgReadLatencyMs,
     AVG(CASE WHEN vfs.num_of_writes = 0 THEN 0 ELSE (vfs.io_stall_write_ms * 1.0 / vfs.num_of_writes) END) AS AvgWriteLatencyMs,
@@ -339,12 +368,15 @@ FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
 INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
 WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
 "@
+        }
         
         $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
         if ($latency) {
             $result.TempDBAvgReadLatencyMs = if ($latency.AvgReadLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgReadLatencyMs, 2) } else { 0 }
             $result.TempDBAvgWriteLatencyMs = if ($latency.AvgWriteLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgWriteLatencyMs, 2) } else { 0 }
-            $result.TempDBMountPoint = if ($latency.MountPoint -ne [DBNull]::Value) { $latency.MountPoint.ToString().Trim() } else { "" }
+            # Limitar MountPoint a máximo 10 caracteres para evitar truncamiento SQL
+            $mountPoint = if ($latency.MountPoint -ne [DBNull]::Value) { $latency.MountPoint.ToString().Trim() } else { "" }
+            $result.TempDBMountPoint = if ($mountPoint.Length -gt 10) { $mountPoint.Substring(0, 10) } else { $mountPoint }
             
             # Diagnóstico de disco
             if ($result.TempDBAvgWriteLatencyMs -gt 50) {
