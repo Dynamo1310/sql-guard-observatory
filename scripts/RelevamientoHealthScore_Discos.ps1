@@ -218,14 +218,22 @@ SELECT
 "@
 
         # Query 3: Análisis de competencia por disco (cuántas DBs/archivos por volumen)
+        # Usar FOR XML PATH para compatibilidad con SQL 2008+
         $queryCompetition = @"
--- Análisis de competencia por volumen
+-- Análisis de competencia por volumen (compatible SQL 2008+)
 SELECT 
     vs.volume_mount_point AS MountPoint,
     COUNT(DISTINCT mf.database_id) AS DatabaseCount,
     COUNT(mf.file_id) AS FileCount,
     SUM(mf.size * 8.0 / 1024) AS TotalSizeMB,
-    STRING_AGG(DB_NAME(mf.database_id), ',') AS DatabaseList
+    STUFF((
+        SELECT ',' + DB_NAME(mf2.database_id)
+        FROM sys.master_files mf2
+        CROSS APPLY sys.dm_os_volume_stats(mf2.database_id, mf2.file_id) vs2
+        WHERE vs2.volume_mount_point = vs.volume_mount_point
+        GROUP BY mf2.database_id
+        FOR XML PATH(''), TYPE
+    ).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS DatabaseList
 FROM sys.master_files mf
 CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 GROUP BY vs.volume_mount_point;
