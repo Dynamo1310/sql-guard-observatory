@@ -71,6 +71,10 @@ $TestMode = $false
 $IncludeAWS = $false
 $OnlyAWS = $false
 
+# Configuración de paralelismo
+$EnableParallel = $true      # $true para procesamiento paralelo, $false para secuencial
+$ThrottleLimit = 10           # Número de instancias a procesar simultáneamente (5-15 recomendado)
+
 #endregion
 
 #region ===== FUNCIONES =====
@@ -617,93 +621,198 @@ try {
 # 2. Procesar cada instancia
 Write-Host ""
 Write-Host "2️⃣  Recolectando métricas de discos..." -ForegroundColor Yellow
-
-$results = @()
-$counter = 0
-
-foreach ($instance in $instances) {
-    $counter++
-    $instanceName = $instance.NombreInstancia
-    
-    Write-Progress -Activity "Recolectando métricas" `
-        -Status "$counter de $($instances.Count): $instanceName" `
-        -PercentComplete (($counter / $instances.Count) * 100)
-    
-    $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
-    $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
-    $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
-    
-    if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
-        continue
-    }
-    
-    $diskMetrics = Get-DiskMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
-    
-    # Contar archivos problemáticos (con poco espacio interno Y crecimiento habilitado)
-    $totalProblematicFiles = 0
-    if ($diskMetrics.Volumes) {
-        foreach ($vol in $diskMetrics.Volumes) {
-            if ($vol.ProblematicFileCount) {
-                $totalProblematicFiles += $vol.ProblematicFileCount
-            }
-        }
-    }
-    
-    # Lógica de alertas inteligente:
-    # - Si hay archivos problemáticos (< 30MB libres internos + growth habilitado) → CRÍTICO/ADVERTENCIA
-    # - Si NO hay archivos problemáticos pero disco bajo → Solo informativo (los archivos no pueden crecer o tienen espacio)
-    $status = "✅"
-    $statusMessage = ""
-    
-    if ($totalProblematicFiles -gt 0) {
-        # HAY archivos con poco espacio interno que pueden crecer → PROBLEMA REAL
-        if ($diskMetrics.WorstFreePct -lt 10 -or $totalProblematicFiles -ge 5) {
-            $status = "🚨 CRÍTICO!"
-            $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
-        }
-        elseif ($diskMetrics.WorstFreePct -lt 20 -or $totalProblematicFiles -ge 2) {
-            $status = "⚠️ ADVERTENCIA"
-            $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
-        }
-    }
-    else {
-        # NO hay archivos problemáticos → Solo informativo del espacio del disco
-        if ($diskMetrics.WorstFreePct -lt 5) {
-            $status = "📊 Disco bajo (archivos OK)"
-        }
-        elseif ($diskMetrics.WorstFreePct -lt 10) {
-            $status = "📊 Disco bajo (archivos OK)"
-        }
-        elseif ($diskMetrics.WorstFreePct -lt 20) {
-            $status = "📊 Monitorear"
-        }
-    }
-    
-    Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%$statusMessage" -ForegroundColor Gray
-    
-    $results += [PSCustomObject]@{
-        InstanceName = $instanceName
-        Ambiente = $ambiente
-        HostingSite = $hostingSite
-        SqlVersion = $sqlVersion
-        WorstFreePct = $diskMetrics.WorstFreePct
-        DataDiskAvgFreePct = $diskMetrics.DataDiskAvgFreePct
-        LogDiskAvgFreePct = $diskMetrics.LogDiskAvgFreePct
-        TempDBDiskFreePct = $diskMetrics.TempDBDiskFreePct
-        Volumes = $diskMetrics.Volumes
-        
-        # Nuevas métricas de I/O (globales)
-        PageLifeExpectancy = $diskMetrics.PageLifeExpectancy
-        PageReadsPerSec = $diskMetrics.PageReadsPerSec
-        PageWritesPerSec = $diskMetrics.PageWritesPerSec
-        LazyWritesPerSec = $diskMetrics.LazyWritesPerSec
-        CheckpointPagesPerSec = $diskMetrics.CheckpointPagesPerSec
-        BatchRequestsPerSec = $diskMetrics.BatchRequestsPerSec
-    }
+if ($EnableParallel) {
+    Write-Host "   🚀 Modo PARALELO activado (ThrottleLimit: $ThrottleLimit)" -ForegroundColor Cyan
+} else {
+    Write-Host "   🐌 Modo SECUENCIAL activado" -ForegroundColor DarkGray
 }
 
-Write-Progress -Activity "Recolectando métricas" -Completed
+$results = @()
+
+if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
+    #region ===== PROCESAMIENTO PARALELO (PowerShell 7+) =====
+    
+    Write-Host "   ℹ️  Usando ForEach-Object -Parallel (PS 7+)" -ForegroundColor DarkGray
+    
+    $results = $instances | ForEach-Object -ThrottleLimit $ThrottleLimit -Parallel {
+        $instance = $_
+        $instanceName = $instance.NombreInstancia
+        $TimeoutSec = $using:TimeoutSec
+        
+        # Importar módulo en cada runspace paralelo
+        Import-Module dbatools -ErrorAction SilentlyContinue
+        
+        # Copiar funciones al runspace paralelo
+        ${function:ConvertTo-SafeInt} = $using:function:ConvertTo-SafeInt
+        ${function:ConvertTo-SafeDecimal} = $using:function:ConvertTo-SafeDecimal
+        ${function:Get-DiskMediaType} = $using:function:Get-DiskMediaType
+        ${function:Get-DiskMetrics} = $using:function:Get-DiskMetrics
+        ${function:Test-SqlConnection} = $using:function:Test-SqlConnection
+        ${function:Invoke-SqlQueryWithRetry} = $using:function:Invoke-SqlQueryWithRetry
+        
+        $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
+        $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+        $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+        
+        if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
+            Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+            return $null
+        }
+        
+        $diskMetrics = Get-DiskMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
+        
+        # Contar archivos problemáticos
+        $totalProblematicFiles = 0
+        if ($diskMetrics.Volumes) {
+            foreach ($vol in $diskMetrics.Volumes) {
+                if ($vol.ProblematicFileCount) {
+                    $totalProblematicFiles += $vol.ProblematicFileCount
+                }
+            }
+        }
+        
+        # Lógica de alertas
+        $status = "✅"
+        $statusMessage = ""
+        
+        if ($totalProblematicFiles -gt 0) {
+            if ($diskMetrics.WorstFreePct -lt 10 -or $totalProblematicFiles -ge 5) {
+                $status = "🚨 CRÍTICO!"
+                $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
+            }
+            elseif ($diskMetrics.WorstFreePct -lt 20 -or $totalProblematicFiles -ge 2) {
+                $status = "⚠️ ADVERTENCIA"
+                $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
+            }
+        }
+        else {
+            if ($diskMetrics.WorstFreePct -lt 5) {
+                $status = "📊 Disco bajo (archivos OK)"
+            }
+            elseif ($diskMetrics.WorstFreePct -lt 10) {
+                $status = "📊 Disco bajo (archivos OK)"
+            }
+            elseif ($diskMetrics.WorstFreePct -lt 20) {
+                $status = "📊 Monitorear"
+            }
+        }
+        
+        Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%$statusMessage" -ForegroundColor Gray
+        
+        # Devolver resultado
+        [PSCustomObject]@{
+            InstanceName = $instanceName
+            Ambiente = $ambiente
+            HostingSite = $hostingSite
+            SqlVersion = $sqlVersion
+            WorstFreePct = $diskMetrics.WorstFreePct
+            DataDiskAvgFreePct = $diskMetrics.DataDiskAvgFreePct
+            LogDiskAvgFreePct = $diskMetrics.LogDiskAvgFreePct
+            TempDBDiskFreePct = $diskMetrics.TempDBDiskFreePct
+            Volumes = $diskMetrics.Volumes
+            PageLifeExpectancy = $diskMetrics.PageLifeExpectancy
+            PageReadsPerSec = $diskMetrics.PageReadsPerSec
+            PageWritesPerSec = $diskMetrics.PageWritesPerSec
+            LazyWritesPerSec = $diskMetrics.LazyWritesPerSec
+            CheckpointPagesPerSec = $diskMetrics.CheckpointPagesPerSec
+            BatchRequestsPerSec = $diskMetrics.BatchRequestsPerSec
+        }
+    }
+    
+    # Filtrar nulos (instancias sin conexión)
+    $results = $results | Where-Object { $_ -ne $null }
+    
+    #endregion
+}
+else {
+    #region ===== PROCESAMIENTO SECUENCIAL (PowerShell 5.1 o $EnableParallel = $false) =====
+    
+    if ($EnableParallel -and $PSVersionTable.PSVersion.Major -lt 7) {
+        Write-Host "   ⚠️  Procesamiento paralelo requiere PowerShell 7+. Usando modo secuencial." -ForegroundColor Yellow
+    }
+    
+    $counter = 0
+    
+    foreach ($instance in $instances) {
+        $counter++
+        $instanceName = $instance.NombreInstancia
+        
+        Write-Progress -Activity "Recolectando métricas" `
+            -Status "$counter de $($instances.Count): $instanceName" `
+            -PercentComplete (($counter / $instances.Count) * 100)
+        
+        $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
+        $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
+        $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
+        
+        if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
+            Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+            continue
+        }
+        
+        $diskMetrics = Get-DiskMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
+        
+        # Contar archivos problemáticos
+        $totalProblematicFiles = 0
+        if ($diskMetrics.Volumes) {
+            foreach ($vol in $diskMetrics.Volumes) {
+                if ($vol.ProblematicFileCount) {
+                    $totalProblematicFiles += $vol.ProblematicFileCount
+                }
+            }
+        }
+        
+        # Lógica de alertas
+        $status = "✅"
+        $statusMessage = ""
+        
+        if ($totalProblematicFiles -gt 0) {
+            if ($diskMetrics.WorstFreePct -lt 10 -or $totalProblematicFiles -ge 5) {
+                $status = "🚨 CRÍTICO!"
+                $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
+            }
+            elseif ($diskMetrics.WorstFreePct -lt 20 -or $totalProblematicFiles -ge 2) {
+                $status = "⚠️ ADVERTENCIA"
+                $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
+            }
+        }
+        else {
+            if ($diskMetrics.WorstFreePct -lt 5) {
+                $status = "📊 Disco bajo (archivos OK)"
+            }
+            elseif ($diskMetrics.WorstFreePct -lt 10) {
+                $status = "📊 Disco bajo (archivos OK)"
+            }
+            elseif ($diskMetrics.WorstFreePct -lt 20) {
+                $status = "📊 Monitorear"
+            }
+        }
+        
+        Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%$statusMessage" -ForegroundColor Gray
+        
+        $results += [PSCustomObject]@{
+            InstanceName = $instanceName
+            Ambiente = $ambiente
+            HostingSite = $hostingSite
+            SqlVersion = $sqlVersion
+            WorstFreePct = $diskMetrics.WorstFreePct
+            DataDiskAvgFreePct = $diskMetrics.DataDiskAvgFreePct
+            LogDiskAvgFreePct = $diskMetrics.LogDiskAvgFreePct
+            TempDBDiskFreePct = $diskMetrics.TempDBDiskFreePct
+            Volumes = $diskMetrics.Volumes
+            PageLifeExpectancy = $diskMetrics.PageLifeExpectancy
+            PageReadsPerSec = $diskMetrics.PageReadsPerSec
+            PageWritesPerSec = $diskMetrics.PageWritesPerSec
+            LazyWritesPerSec = $diskMetrics.LazyWritesPerSec
+            CheckpointPagesPerSec = $diskMetrics.CheckpointPagesPerSec
+            BatchRequestsPerSec = $diskMetrics.BatchRequestsPerSec
+        }
+    }
+    
+    Write-Progress -Activity "Recolectando métricas" -Completed
+    
+    #endregion
+}
 
 # 3. Guardar en SQL
 Write-Host ""
