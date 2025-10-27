@@ -643,12 +643,12 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
         Import-Module dbatools -ErrorAction SilentlyContinue
         
         # Copiar funciones al runspace paralelo
-        ${function:ConvertTo-SafeInt} = $using:function:ConvertTo-SafeInt
-        ${function:ConvertTo-SafeDecimal} = $using:function:ConvertTo-SafeDecimal
-        ${function:Get-DiskMediaType} = $using:function:Get-DiskMediaType
-        ${function:Get-DiskMetrics} = $using:function:Get-DiskMetrics
-        ${function:Test-SqlConnection} = $using:function:Test-SqlConnection
-        ${function:Invoke-SqlQueryWithRetry} = $using:function:Invoke-SqlQueryWithRetry
+        ${function:ConvertTo-SafeInt} = ${using:function:ConvertTo-SafeInt}
+        ${function:ConvertTo-SafeDecimal} = ${using:function:ConvertTo-SafeDecimal}
+        ${function:Get-DiskMediaType} = ${using:function:Get-DiskMediaType}
+        ${function:Get-DiskMetrics} = ${using:function:Get-DiskMetrics}
+        ${function:Test-SqlConnection} = ${using:function:Test-SqlConnection}
+        ${function:Invoke-SqlQueryWithRetry} = ${using:function:Invoke-SqlQueryWithRetry}
         
         $ambiente = if ($instance.PSObject.Properties.Name -contains "ambiente") { $instance.ambiente } else { "N/A" }
         $hostingSite = if ($instance.PSObject.Properties.Name -contains "hostingSite") { $instance.hostingSite } else { "N/A" }
