@@ -336,23 +336,13 @@ WHERE database_id = DB_ID('tempdb')
         }
         
         # Query 2: TempDB Latency y Mount Point (para diagnóstico de disco)
-        if ($isSql2005) {
-            # FALLBACK para SQL 2005 (sin sys.dm_os_volume_stats)
-            $queryLatency = @"
-SELECT 
-    AVG(CASE WHEN vfs.num_of_reads = 0 THEN 0 ELSE (vfs.io_stall_read_ms * 1.0 / vfs.num_of_reads) END) AS AvgReadLatencyMs,
-    AVG(CASE WHEN vfs.num_of_writes = 0 THEN 0 ELSE (vfs.io_stall_write_ms * 1.0 / vfs.num_of_writes) END) AS AvgWriteLatencyMs,
-    (SELECT TOP 1 LEFT(physical_name, 3)
-     FROM sys.master_files
-     WHERE database_id = DB_ID('tempdb') AND type = 0
-     ORDER BY file_id) AS MountPoint
-FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
-INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
-WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
-"@
-        } else {
-            # SQL 2008+ (query normal con sys.dm_os_volume_stats)
-            $queryLatency = @"
+        # Intentar primero con sys.dm_os_volume_stats, si falla usar fallback
+        $latencySuccess = $false
+        
+        if (-not $isSql2005) {
+            # Intentar SQL 2008+ (query con sys.dm_os_volume_stats)
+            try {
+                $queryLatency = @"
 SELECT 
     AVG(CASE WHEN vfs.num_of_reads = 0 THEN 0 ELSE (vfs.io_stall_read_ms * 1.0 / vfs.num_of_reads) END) AS AvgReadLatencyMs,
     AVG(CASE WHEN vfs.num_of_writes = 0 THEN 0 ELSE (vfs.io_stall_write_ms * 1.0 / vfs.num_of_writes) END) AS AvgWriteLatencyMs,
@@ -365,10 +355,37 @@ FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
 INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
 WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
 "@
+                $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
+                $latencySuccess = $true
+            } catch {
+                # Si falla (permisos, DMV no disponible, etc.), usar fallback
+                Write-Verbose "sys.dm_os_volume_stats no disponible en ${InstanceName}, usando fallback"
+            }
         }
         
-        $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
-        if ($latency) {
+        # FALLBACK: Si es SQL 2005 o si falló el query anterior
+        if (-not $latencySuccess) {
+            try {
+                $queryLatency = @"
+SELECT 
+    AVG(CASE WHEN vfs.num_of_reads = 0 THEN 0 ELSE (vfs.io_stall_read_ms * 1.0 / vfs.num_of_reads) END) AS AvgReadLatencyMs,
+    AVG(CASE WHEN vfs.num_of_writes = 0 THEN 0 ELSE (vfs.io_stall_write_ms * 1.0 / vfs.num_of_writes) END) AS AvgWriteLatencyMs,
+    (SELECT TOP 1 LEFT(physical_name, 3)
+     FROM sys.master_files
+     WHERE database_id = DB_ID('tempdb') AND type = 0
+     ORDER BY file_id) AS MountPoint
+FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
+INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
+WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
+"@
+                $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
+                $latencySuccess = $true
+            } catch {
+                Write-Warning "No se pudo obtener latencia de TempDB en ${InstanceName}: $($_.Exception.Message)"
+            }
+        }
+        
+        if ($latencySuccess -and $latency) {
             $result.TempDBAvgReadLatencyMs = if ($latency.AvgReadLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgReadLatencyMs, 2) } else { 0 }
             $result.TempDBAvgWriteLatencyMs = if ($latency.AvgWriteLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgWriteLatencyMs, 2) } else { 0 }
             # Limitar MountPoint a máximo 10 caracteres para evitar truncamiento SQL

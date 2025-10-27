@@ -8,23 +8,34 @@
 
 ## 🎯 Correcciones Implementadas
 
-### **1. Script TempDB: Fallback SQL Server 2005** ✅
+### **1. Script TempDB: Fallback SQL Server 2005** ✅ (Corrección Final)
 
 **Archivo**: `scripts/RelevamientoHealthScore_ConfiguracionTempdb.ps1`
 
-**Problema**:
+**Problema Inicial**:
 ```
 WARNING: Error obteniendo config/tempdb metrics en BD04SER: Invalid object name 'sys.dm_os_volume_stats'.
 ```
 
-**Solución**:
-- Detección automática de versión SQL Server
+**Problema Persistente**: El error seguía apareciendo debido a **doble detección de versión** con variables conflictuantes.
+
+**Causa Raíz**:
+- Primera detección establecía `$isSql2005`
+- Segunda detección sobrescribía `$majorVersion` pero NO actualizaba `$isSql2005`
+- Resultado: Variables desincronizadas
+
+**Solución Final**:
+- **Consolidación**: Una sola detección de versión al inicio
+- **Inicialización segura**: Variables con valores por defecto antes del try
+- **Try-catch anidado**: Manejo robusto de errores en detección
 - Fallback para SQL 2005 usando `LEFT(physical_name, 3)` para obtener drive letter
 - SQL 2008+ usa `sys.dm_os_volume_stats` para mount points completos
 
 **Instancias Beneficiadas**: BD04SER, SSMCS-02, SSCC03 (SQL 2005)
 
-**Documentación**: `CORRECCION_TEMPDB_SQL2005_Y_TRUNCAMIENTO.md`
+**Documentación**: 
+- `CORRECCION_TEMPDB_SQL2005_Y_TRUNCAMIENTO.md` (Primera implementación)
+- `CORRECCION_FINAL_SQL2005_TEMPDB.md` (Corrección definitiva)
 
 ---
 
@@ -203,21 +214,26 @@ ORDER BY MaxMemoryPctOfPhysical DESC
 ## 📚 Documentación Generada
 
 1. ✅ **`CORRECCION_TEMPDB_SQL2005_Y_TRUNCAMIENTO.md`**
-   - Fallback SQL 2005
+   - Fallback SQL 2005 (primera implementación)
    - Truncamiento de MountPoint
    - Ejemplos de queries SQL
 
-2. ✅ **`CORRECCION_PORCENTAJE_MEMORIA_INVALIDO.md`**
+2. ✅ **`CORRECCION_FINAL_SQL2005_TEMPDB.md`**
+   - Corrección definitiva del fallback SQL 2005
+   - Consolidación de detección de versión
+   - Análisis de causa raíz (doble detección)
+
+3. ✅ **`CORRECCION_PORCENTAJE_MEMORIA_INVALIDO.md`**
    - Lógica de validación actualizada
    - Warnings contextuales
    - Recomendaciones para DBAs
 
-3. ✅ **`CORRECCION_SUGERENCIA_DISCO_SSD_INTELIGENTE.md`**
+4. ✅ **`CORRECCION_SUGERENCIA_DISCO_SSD_INTELIGENTE.md`**
    - Comparación antes/después
    - Lógica del diagnóstico inteligente
    - Guía de testing
 
-4. ✅ **`RESUMEN_CORRECCIONES_27ENE2025_SESION2.md`** (este documento)
+5. ✅ **`RESUMEN_CORRECCIONES_27ENE2025_SESION2.md`** (este documento)
 
 ---
 
