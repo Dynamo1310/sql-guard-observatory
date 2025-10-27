@@ -245,18 +245,9 @@ function Get-ConfigTempdbMetrics {
         [int]$TimeoutSec = 15
     )
     
-    # Detectar versión de SQL Server primero
+    # Inicializar variables de versión con valores por defecto seguros
     $isSql2005 = $false
-    try {
-        $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version"
-        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
-        $sqlVersion = $versionResult.Version
-        $majorVersion = [int]($sqlVersion -split '\.')[0]
-        $isSql2005 = ($majorVersion -lt 10)  # SQL 2005 = version 9.x
-    } catch {
-        # Si falla, asumir que no es SQL 2005
-        $isSql2005 = $false
-    }
+    $majorVersion = 10  # Asumir SQL 2008+ por defecto
     
     $result = @{
         # TempDB - Archivos
@@ -291,11 +282,17 @@ function Get-ConfigTempdbMetrics {
     }
     
     try {
-        # Detectar versión de SQL Server para compatibilidad
-        $versionQuery = "SELECT SERVERPROPERTY('ProductVersion') AS Version, @@VERSION AS VersionString"
-        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
-        $version = $versionResult.Version
-        $majorVersion = [int]($version.Split('.')[0])
+        # Detectar versión de SQL Server para compatibilidad (una sola vez)
+        try {
+            $versionQuery = "SELECT SERVERPROPERTY('ProductVersion') AS Version, @@VERSION AS VersionString"
+            $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
+            $version = $versionResult.Version
+            $majorVersion = [int]($version.Split('.')[0])
+            $isSql2005 = ($majorVersion -lt 10)  # SQL 2005 = version 9.x, SQL 2008 = version 10.x
+        } catch {
+            # Si falla la detección, usar valores por defecto (SQL 2008+)
+            Write-Verbose "No se pudo detectar versión de SQL Server en ${InstanceName}, asumiendo SQL 2008+"
+        }
         
         # Query 1: TempDB Files (extendido con más métricas)
         $queryTempDBFiles = @"

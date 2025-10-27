@@ -1540,15 +1540,15 @@ export default function HealthScore() {
                                     const fileCount = details.configuracionTempdbDetails.tempDBFileCount;
                                     const cpuCount = details.configuracionTempdbDetails.cpuCount;
                                     const optimalFiles = Math.min(Math.max(cpuCount, 4), 8); // Mínimo 4, máximo 8
-                                    const score = details.configuracionTempdbDetails.tempDBContentionScore;
+                                    const tempdbScore = details.configuracionTempdbDetails.tempDBContentionScore; // Renombrado para evitar shadowing
                                     const sameSize = details.configuracionTempdbDetails.tempDBAllSameSize;
                                     
                                     // 1. Evaluar número de archivos INDEPENDIENTEMENTE del score
                                     if (fileCount < optimalFiles) {
                                       // Menos archivos de los necesarios
-                                      if (score < 40) {
+                                      if (tempdbScore < 40) {
                                         suggestions.push(`🔥 Contención crítica en TempDB → Agregar más archivos urgentemente (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
-                                      } else if (score < 70) {
+                                      } else if (tempdbScore < 70) {
                                         suggestions.push(`⚠️ Contención moderada en TempDB → Considerar agregar archivos (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
                                       } else {
                                         suggestions.push(`💡 TempDB con archivos insuficientes → Agregar archivos para mejorar (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
@@ -1558,29 +1558,18 @@ export default function HealthScore() {
                                       suggestions.push(`⚠️ TempDB con archivos de más → Considerar reducir a ${optimalFiles} archivos (tiene ${fileCount} para ${cpuCount} CPUs, overhead innecesario)`);
                                     } else {
                                       // Número de archivos OK, evaluar solo si hay problemas de contención
-                                      if (score < 70) {
-                                        // Diagnosticar la causa real de la contención
-                                        const readLat = details.configuracionTempdbDetails.tempDBAvgReadLatencyMs || 0;
-                                        const writeLat = details.configuracionTempdbDetails.tempDBAvgWriteLatencyMs || 0;
-                                        const hasSlowDisk = readLat > 10 || writeLat > 10;
-                                        
-                                        if (score < 40) {
-                                          if (hasSlowDisk) {
-                                            if (writeLat > 50) {
-                                              suggestions.push(`🔥 Contención crítica en TempDB → Disco lento (${writeLat.toFixed(1)}ms escritura). Si es HDD, migrar a SSD urgentemente. Si es SSD, revisar sobrecarga`);
-                                            } else {
-                                              suggestions.push('🔥 Contención crítica en TempDB → Número de archivos y disco OK, revisar queries costosas que usan TempDB');
-                                            }
-                                          } else {
-                                            suggestions.push('🔥 Contención crítica en TempDB → Número de archivos y disco OK, revisar queries costosas que usan TempDB');
-                                          }
+                                      if (tempdbScore < 70) {
+                                        // Usar diagnóstico inteligente del consolidador (valida tipo de disco)
+                                        if (score.tempDBIOSuggestion) {
+                                          // Usar el diagnóstico inteligente que YA validó HDD vs SSD
+                                          const emoji = tempdbScore < 40 ? '🔥' : '⚠️';
+                                          const level = tempdbScore < 40 ? 'crítica' : 'moderada';
+                                          suggestions.push(`${emoji} Contención ${level} en TempDB → ${score.tempDBIOSuggestion}`);
                                         } else {
-                                          // Score 40-69 (moderado)
-                                          if (hasSlowDisk) {
-                                            suggestions.push(`⚠️ Contención moderada en TempDB → Disco lento (${writeLat.toFixed(1)}ms escritura). Revisar tipo de disco y carga de IOPS`);
-                                          } else {
-                                            suggestions.push('⚠️ Contención moderada en TempDB → Archivos y disco OK, revisar queries con sorts/spills a TempDB');
-                                          }
+                                          // Fallback si no hay diagnóstico inteligente
+                                          const emoji = tempdbScore < 40 ? '🔥' : '⚠️';
+                                          const level = tempdbScore < 40 ? 'crítica' : 'moderada';
+                                          suggestions.push(`${emoji} Contención ${level} en TempDB → Revisar queries con sorts/spills a TempDB y carga de disco`);
                                         }
                                       }
                                     }
@@ -1590,17 +1579,9 @@ export default function HealthScore() {
                                       suggestions.push('⚠️ Archivos TempDB con distinto tamaño → Igualar tamaño de todos los archivos para proportional fill óptimo');
                                     }
                                   }
-                                  if (details.configuracionTempdbDetails && details.configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 50) {
-                                    const writeLat = details.configuracionTempdbDetails.tempDBAvgWriteLatencyMs;
-                                    
-                                    if (writeLat > 100) {
-                                      // Muy lento - probablemente HDD o problema serio
-                                      suggestions.push(`🐌 TempDB muy lento (${writeLat.toFixed(0)}ms escritura) → Si es HDD, migrar a SSD/NVMe. Si ya es SSD, revisar sobrecarga o problemas de hardware`);
-                                    } else if (writeLat > 50) {
-                                      // Lento - podría ser SSD sobrecargado
-                                      suggestions.push(`⚠️ TempDB lento (${writeLat.toFixed(0)}ms escritura) → Revisar carga de disco. Si es HDD, migrar a SSD. Si es SSD, revisar IOPS y competencia por storage`);
-                                    }
-                                  }
+                                  
+                                  // NOTA: La lógica de latencia de TempDB ahora está cubierta por el diagnóstico inteligente
+                                  // (tempDBIOSuggestion) que SÍ valida el tipo de disco (HDD/SSD/NVMe)
                                   
                                   // Max Memory inteligente
                                   if (details.configuracionTempdbDetails && !details.configuracionTempdbDetails.maxMemoryWithinOptimal) {
