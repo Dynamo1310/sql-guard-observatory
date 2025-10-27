@@ -154,7 +154,7 @@ function Get-DiskMetrics {
     }
     
     try {
-        # Query 1: Espacio en discos con clasificación por rol
+        # Query 1: Espacio en discos con clasificación por rol + archivos problemáticos
         $querySpace = @"
 -- Espacio en discos con clasificación por rol
 SELECT DISTINCT
@@ -175,6 +175,28 @@ SELECT DISTINCT
 FROM sys.master_files mf
 CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 ORDER BY FreePct ASC;
+"@
+
+        # Query 1b: Archivos con poco espacio interno Y crecimiento habilitado (CRÍTICO)
+        # Solo alertar si el archivo puede crecer (growth != 0) y tiene poco espacio libre interno
+        $queryProblematicFiles = @"
+-- Archivos con poco espacio interno Y crecimiento habilitado (compatible SQL 2008+)
+-- Basado en la lógica del usuario: solo alertar si growth != 0 y espacio interno < 30MB
+SELECT 
+    DB_NAME(mf.database_id) AS DatabaseName,
+    mf.name AS FileName,
+    mf.type_desc AS FileType,
+    SUBSTRING(mf.physical_name, 1, 3) AS DriveLetter,
+    CAST(mf.size * 8.0 / 1024 AS DECIMAL(10,2)) AS FileSizeMB,
+    CAST((mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 AS DECIMAL(10,2)) AS FreeSpaceInFileMB,
+    CAST(mf.growth * 8.0 / 1024 AS DECIMAL(10,2)) AS GrowthMB,
+    mf.is_percent_growth AS IsPercentGrowth,
+    mf.max_size AS MaxSize
+FROM sys.master_files mf
+WHERE DB_NAME(mf.database_id) NOT IN ('master', 'model', 'msdb', 'tempdb')
+  AND mf.growth != 0  -- Solo archivos con crecimiento habilitado
+  AND (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 < 30  -- Menos de 30MB libres internos
+ORDER BY FreeSpaceInFileMB ASC;
 "@
 
         # Query 2: Métricas de carga de I/O del sistema
@@ -245,6 +267,11 @@ GROUP BY vs.volume_mount_point;
             -QueryTimeout $TimeoutSec `
             -EnableException
         
+        $dataProblematicFiles = Invoke-DbaQuery -SqlInstance $InstanceName `
+            -Query $queryProblematicFiles `
+            -QueryTimeout $TimeoutSec `
+            -EnableException
+        
         $dataIOLoad = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $queryIOLoad `
             -QueryTimeout $TimeoutSec `
@@ -282,6 +309,16 @@ GROUP BY vs.volume_mount_point;
                 $isData = ($volumeRoles | Where-Object { $_.DiskRole -eq 'Data' }) -ne $null
                 $isLog = ($volumeRoles | Where-Object { $_.DiskRole -eq 'Log' }) -ne $null
                 
+                # Obtener archivos problemáticos en este volumen (poco espacio interno + growth habilitado)
+                $driveLetter = $mountPoint.TrimEnd('\').TrimEnd(':') + ':'
+                $problematicFilesInVolume = @()
+                if ($dataProblematicFiles) {
+                    $problematicFilesInVolume = $dataProblematicFiles | Where-Object { 
+                        $_.DriveLetter -eq $driveLetter 
+                    }
+                }
+                $problematicFileCount = if ($problematicFilesInVolume) { $problematicFilesInVolume.Count } else { 0 }
+                
                 # Obtener tipo de disco físico (puede ser lento, usar con precaución)
                 $diskTypeInfo = Get-DiskMediaType -InstanceName $InstanceName -MountPoint $mountPoint
                 
@@ -308,6 +345,9 @@ GROUP BY vs.volume_mount_point;
                     DatabaseCount = if ($competition) { [int]$competition.DatabaseCount } else { 0 }
                     FileCount = if ($competition) { [int]$competition.FileCount } else { 0 }
                     DatabaseList = if ($competition) { $competition.DatabaseList } else { "" }
+                    
+                    # Archivos problemáticos (poco espacio interno + growth habilitado)
+                    ProblematicFileCount = $problematicFileCount
                 }
             }
             
@@ -493,21 +533,47 @@ foreach ($instance in $instances) {
     
     $diskMetrics = Get-DiskMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
-    $status = "✅"
-    if ($diskMetrics.WorstFreePct -lt 5) {
-        $status = "🚨 CRÍTICO!"
-    }
-    elseif ($diskMetrics.DataDiskAvgFreePct -lt 10 -or $diskMetrics.LogDiskAvgFreePct -lt 10) {
-        $status = "🚨 DATA/LOG BAJO!"
-    }
-    elseif ($diskMetrics.WorstFreePct -lt 10) {
-        $status = "⚠️ BAJO!"
-    }
-    elseif ($diskMetrics.WorstFreePct -lt 20) {
-        $status = "⚠️ ADVERTENCIA"
+    # Contar archivos problemáticos (con poco espacio interno Y crecimiento habilitado)
+    $totalProblematicFiles = 0
+    if ($diskMetrics.Volumes) {
+        foreach ($vol in $diskMetrics.Volumes) {
+            if ($vol.ProblematicFileCount) {
+                $totalProblematicFiles += $vol.ProblematicFileCount
+            }
+        }
     }
     
-    Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%" -ForegroundColor Gray
+    # Lógica de alertas inteligente:
+    # - Si hay archivos problemáticos (< 30MB libres internos + growth habilitado) → CRÍTICO/ADVERTENCIA
+    # - Si NO hay archivos problemáticos pero disco bajo → Solo informativo (los archivos no pueden crecer o tienen espacio)
+    $status = "✅"
+    $statusMessage = ""
+    
+    if ($totalProblematicFiles -gt 0) {
+        # HAY archivos con poco espacio interno que pueden crecer → PROBLEMA REAL
+        if ($diskMetrics.WorstFreePct -lt 10 -or $totalProblematicFiles -ge 5) {
+            $status = "🚨 CRÍTICO!"
+            $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
+        }
+        elseif ($diskMetrics.WorstFreePct -lt 20 -or $totalProblematicFiles -ge 2) {
+            $status = "⚠️ ADVERTENCIA"
+            $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
+        }
+    }
+    else {
+        # NO hay archivos problemáticos → Solo informativo del espacio del disco
+        if ($diskMetrics.WorstFreePct -lt 5) {
+            $status = "📊 Disco bajo (archivos OK)"
+        }
+        elseif ($diskMetrics.WorstFreePct -lt 10) {
+            $status = "📊 Disco bajo (archivos OK)"
+        }
+        elseif ($diskMetrics.WorstFreePct -lt 20) {
+            $status = "📊 Monitorear"
+        }
+    }
+    
+    Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%$statusMessage" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -553,10 +619,65 @@ Write-Host "║  Worst % promedio:     $([int]$avgWorst)%".PadRight(53) "║" -F
 Write-Host "║  Data % promedio:      $([int]$avgData)%".PadRight(53) "║" -ForegroundColor White
 Write-Host "║  Log % promedio:       $([int]$avgLog)%".PadRight(53) "║" -ForegroundColor White
 
+# Contar instancias con archivos problemáticos (< 30MB libres internos + growth habilitado)
+$instancesWithProblematicFiles = 0
+$totalProblematicFilesCount = 0
+foreach ($r in $results) {
+    if ($r.Volumes) {
+        $instanceFiles = 0
+        foreach ($vol in $r.Volumes) {
+            if ($vol.ProblematicFileCount) {
+                $instanceFiles += $vol.ProblematicFileCount
+            }
+        }
+        if ($instanceFiles -gt 0) {
+            $instancesWithProblematicFiles++
+            $totalProblematicFilesCount += $instanceFiles
+        }
+    }
+}
+
+Write-Host "║" -NoNewline -ForegroundColor Green
+Write-Host "" -ForegroundColor White
 $critical = ($results | Where-Object {$_.WorstFreePct -lt 10}).Count
 Write-Host "║  Discos críticos (<10%): $critical".PadRight(53) "║" -ForegroundColor White
 
+Write-Host "║  Instancias con archivos problemáticos: $instancesWithProblematicFiles".PadRight(53) "║" -ForegroundColor $(if ($instancesWithProblematicFiles -gt 0) { "Yellow" } else { "White" })
+Write-Host "║  Total archivos con <30MB libres: $totalProblematicFilesCount".PadRight(53) "║" -ForegroundColor $(if ($totalProblematicFilesCount -gt 0) { "Yellow" } else { "White" })
+Write-Host "║  (Solo archivos con growth habilitado)".PadRight(53) "║" -ForegroundColor DarkGray
+
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+
+# Mostrar TOP instancias con archivos problemáticos si existen
+if ($instancesWithProblematicFiles -gt 0) {
+    Write-Host ""
+    Write-Host "🚨 TOP INSTANCIAS CON ARCHIVOS PROBLEMÁTICOS (<30MB libres + growth habilitado):" -ForegroundColor Red
+    
+    $topProblematic = @()
+    foreach ($r in $results) {
+        if ($r.Volumes) {
+            $instanceFiles = 0
+            foreach ($vol in $r.Volumes) {
+                if ($vol.ProblematicFileCount) {
+                    $instanceFiles += $vol.ProblematicFileCount
+                }
+            }
+            if ($instanceFiles -gt 0) {
+                $topProblematic += [PSCustomObject]@{
+                    InstanceName = $r.InstanceName
+                    ProblematicFileCount = $instanceFiles
+                    WorstFreePct = $r.WorstFreePct
+                }
+            }
+        }
+    }
+    
+    $topProblematic | Sort-Object -Property ProblematicFileCount -Descending | Select-Object -First 10 | ForEach-Object {
+        $emoji = if ($_.ProblematicFileCount -ge 5) { "🚨" } elseif ($_.ProblematicFileCount -ge 2) { "⚠️" } else { "📊" }
+        Write-Host "   $emoji $($_.InstanceName.PadRight(30)) - $($_.ProblematicFileCount) archivos - Worst: $([int]$_.WorstFreePct)%" -ForegroundColor Yellow
+    }
+}
+
 Write-Host ""
 Write-Host "✅ Script completado!" -ForegroundColor Green
 
