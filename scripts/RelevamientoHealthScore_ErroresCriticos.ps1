@@ -16,7 +16,7 @@
 .NOTES
     Versión: 3.0
     Frecuencia: Cada 15 minutos
-    Timeout: 30 segundos (60 segundos en retry para instancias lentas)
+    Timeout: 30 segundos (90 segundos en retry para instancias lentas)
     
 .REQUIRES
     - dbatools (Install-Module -Name dbatools -Force)
@@ -46,7 +46,7 @@ $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
 $SqlDatabase = "SQLNova"
 $TimeoutSec = 30           # Timeout inicial
-$TimeoutSecRetry = 60      # Timeout para retry en caso de fallo
+$TimeoutSecRetry = 90      # Timeout para retry en caso de fallo (aumentado a 90s)
 $TestMode = $false         # $true = solo 5 instancias para testing
 $IncludeAWS = $false       # Cambiar a $true para incluir AWS
 $OnlyAWS = $false          # Cambiar a $true para SOLO AWS
@@ -72,6 +72,7 @@ function Get-ErrorlogStatus {
     
     try {
         $query = @"
+-- Query optimizada: filtrar desde el inicio para reducir trabajo
 CREATE TABLE #ErrorLog (
     LogDate DATETIME,
     ProcessInfo NVARCHAR(128),
@@ -81,37 +82,35 @@ CREATE TABLE #ErrorLog (
 INSERT INTO #ErrorLog
 EXEC sp_readerrorlog 0;
 
--- Contar errores en últimas 24 horas
+-- Filtrar solo errores críticos (Severity 20+) en una sola pasada
 SELECT 
-    COUNT(*) AS Severity20Count
-FROM #ErrorLog
-WHERE [Text] LIKE '%Severity: 2[0-9]%'
-  AND LogDate >= DATEADD(HOUR, -24, GETDATE());
-
--- Contar errores en última hora (para penalización adicional)
-SELECT 
-    COUNT(*) AS Severity20Count1h
-FROM #ErrorLog
-WHERE [Text] LIKE '%Severity: 2[0-9]%'
-  AND LogDate >= DATEADD(HOUR, -1, GETDATE());
-
--- Error más reciente
-SELECT TOP 1
     LogDate,
     [Text]
+INTO #CriticalErrors
 FROM #ErrorLog
-WHERE [Text] LIKE '%Severity: 2[0-9]%'
+WHERE ([Text] LIKE '%Severity: 2[0-9]%' OR [Text] LIKE '%Severity: 20%' OR [Text] LIKE '%Severity: 21%' 
+       OR [Text] LIKE '%Severity: 22%' OR [Text] LIKE '%Severity: 23%' OR [Text] LIKE '%Severity: 24%' OR [Text] LIKE '%Severity: 25%')
+  AND LogDate >= DATEADD(HOUR, -24, GETDATE());
+
+-- Contar errores en últimas 24 horas
+SELECT COUNT(*) AS Severity20Count FROM #CriticalErrors;
+
+-- Contar errores en última hora
+SELECT COUNT(*) AS Severity20Count1h 
+FROM #CriticalErrors
+WHERE LogDate >= DATEADD(HOUR, -1, GETDATE());
+
+-- Error más reciente
+SELECT TOP 1 LogDate, [Text]
+FROM #CriticalErrors
 ORDER BY LogDate DESC;
 
 -- Top 5 errores para detalles
-SELECT TOP 5 
-    LogDate,
-    [Text]
-FROM #ErrorLog
-WHERE [Text] LIKE '%Severity: 2[0-9]%'
-  AND LogDate >= DATEADD(HOUR, -24, GETDATE())
+SELECT TOP 5 LogDate, [Text]
+FROM #CriticalErrors
 ORDER BY LogDate DESC;
 
+DROP TABLE #CriticalErrors;
 DROP TABLE #ErrorLog;
 "@
         
@@ -126,7 +125,7 @@ DROP TABLE #ErrorLog;
             
             try {
                 if ($attemptCount -eq 2) {
-                    Write-Verbose "Reintentando ErrorLog en $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
+                    Write-Host "      ⏱️  Reintentando $InstanceName con timeout extendido (${RetryTimeoutSec}s)..." -ForegroundColor DarkYellow
                 }
                 
                 $data = Invoke-DbaQuery -SqlInstance $InstanceName `
@@ -139,11 +138,11 @@ DROP TABLE #ErrorLog;
             } catch {
                 $lastError = $_
                 if ($attemptCount -eq 1) {
-                    Write-Verbose "Timeout en ErrorLog $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
+                    # Primer intento falló, reintentar silenciosamente
                     Start-Sleep -Milliseconds 500
                 } else {
                     # Segundo intento falló, capturar detalles
-                    Write-Verbose "Error en ErrorLog: $($_.Exception.Message)"
+                    Write-Verbose "Error en ErrorLog después de 2 intentos: $($_.Exception.Message)"
                     if ($_.Exception.InnerException) {
                         Write-Verbose "Inner: $($_.Exception.InnerException.Message)"
                     }
@@ -157,7 +156,7 @@ DROP TABLE #ErrorLog;
             if ($lastError.Exception.InnerException) {
                 $errorMsg += " | Inner: $($lastError.Exception.InnerException.Message)"
             }
-            Write-Warning "Error obteniendo errorlog en ${InstanceName}: $errorMsg"
+            Write-Warning "Error obteniendo errorlog en ${InstanceName} (después de 2 intentos con ${RetryTimeoutSec}s timeout): $errorMsg"
             return $result
         }
         
