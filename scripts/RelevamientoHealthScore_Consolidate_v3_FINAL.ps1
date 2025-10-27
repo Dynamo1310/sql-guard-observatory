@@ -274,11 +274,15 @@ function Calculate-CPUScore {
     $score = 100
     $cap = 100
     
+    # Obtener valores seguros
+    $p95CPU = Get-SafeNumeric -Value $Data.P95CPUPercent -Default 0
+    $runnableTasks = Get-SafeInt -Value $Data.RunnableTasks -Default 0
+    
     # p95 ≤80% = 100, 81–90 = 70, >90 = 40
-    if ($Data.P95CPUPercent -le 80) {
+    if ($p95CPU -le 80) {
         $score = 100
     }
-    elseif ($Data.P95CPUPercent -le 90) {
+    elseif ($p95CPU -le 90) {
         $score = 70
     }
     else {
@@ -286,7 +290,7 @@ function Calculate-CPUScore {
     }
     
     # RunnableTask >1 sostenido => cap 70
-    if ($Data.RunnableTasks -gt 1) {
+    if ($runnableTasks -gt 1) {
         $cap = 70
     }
     
@@ -499,14 +503,19 @@ function Calculate-DiscosScore {
     $score = 100
     $cap = 100
     
+    # Obtener valores seguros con default 100 (asumir OK si no hay datos)
+    $dataDiskFreePct = Get-SafeNumeric -Value $Data.DataDiskAvgFreePct -Default 100
+    $logDiskFreePct = Get-SafeNumeric -Value $Data.LogDiskAvgFreePct -Default 100
+    $worstFreePct = Get-SafeNumeric -Value $Data.WorstFreePct -Default 100
+    
     # Promedio ponderado: priorizar Data y Log
     $dataWeight = 0.5
     $logWeight = 0.3
     $otherWeight = 0.2
     
-    $weightedFreePct = ($Data.DataDiskAvgFreePct * $dataWeight) + 
-                       ($Data.LogDiskAvgFreePct * $logWeight) + 
-                       ($Data.WorstFreePct * $otherWeight)
+    $weightedFreePct = ($dataDiskFreePct * $dataWeight) + 
+                       ($logDiskFreePct * $logWeight) + 
+                       ($worstFreePct * $otherWeight)
     
     # ≥20% = 100, 15–19% = 80, 10–14% = 60, 5–9% = 40, <5% = 0
     if ($weightedFreePct -ge 20) {
@@ -526,7 +535,7 @@ function Calculate-DiscosScore {
     }
     
     # Data o Log <10% => cap 40
-    if ($Data.DataDiskAvgFreePct -lt 10 -or $Data.LogDiskAvgFreePct -lt 10) {
+    if ($dataDiskFreePct -lt 10 -or $logDiskFreePct -lt 10) {
         $cap = 40
     }
     
@@ -886,20 +895,26 @@ function Calculate-AutogrowthScore {
     $score = 100
     $cap = 100
     
+    # Convertir valores nulos o vacíos a 0 para comparaciones seguras usando funciones helper
+    $autogrowthEvents = Get-SafeInt -Value $Data.AutogrowthEventsLast24h -Default 0
+    $worstPercentOfMax = Get-SafeNumeric -Value $Data.WorstPercentOfMax -Default 0
+    $filesNearLimit = Get-SafeInt -Value $Data.FilesNearLimit -Default 0
+    $filesWithBadGrowth = Get-SafeInt -Value $Data.FilesWithBadGrowth -Default 0
+    
     # Autogrowth events
-    if ($Data.AutogrowthEventsLast24h -eq 0) {
+    if ($autogrowthEvents -eq 0) {
         $score = 100
     }
-    elseif ($Data.AutogrowthEventsLast24h -le 10) {
+    elseif ($autogrowthEvents -le 10) {
         $score = 100
     }
-    elseif ($Data.AutogrowthEventsLast24h -le 50) {
+    elseif ($autogrowthEvents -le 50) {
         $score = 80
     }
-    elseif ($Data.AutogrowthEventsLast24h -le 100) {
+    elseif ($autogrowthEvents -le 100) {
         $score = 60
     }
-    elseif ($Data.AutogrowthEventsLast24h -le 500) {
+    elseif ($autogrowthEvents -le 500) {
         $score = 40
     }
     else {
@@ -907,17 +922,17 @@ function Calculate-AutogrowthScore {
     }
     
     # Files near limit
-    if ($Data.WorstPercentOfMax -gt 90) {
+    if ($worstPercentOfMax -gt 90) {
         $score = 0
         $cap = 50
     }
-    elseif ($Data.FilesNearLimit -gt 0) {
+    elseif ($filesNearLimit -gt 0) {
         $score -= 30
         if ($score -lt 0) { $score = 0 }
     }
     
     # Bad growth config
-    if ($Data.FilesWithBadGrowth -gt 0) {
+    if ($filesWithBadGrowth -gt 0) {
         $score -= 20
         if ($score -lt 0) { $score = 0 }
     }
