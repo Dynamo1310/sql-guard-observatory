@@ -192,16 +192,42 @@ function Get-DiskMetrics {
     
     try {
         # Detectar versión de SQL Server primero
-        $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version"
+        $versionQuery = @"
+SELECT 
+    CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version,
+    CAST(SERVERPROPERTY('ProductLevel') AS VARCHAR(20)) AS ServicePack,
+    CAST(SERVERPROPERTY('Edition') AS VARCHAR(100)) AS Edition
+"@
         $versionResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $versionQuery -TimeoutSec 5 -MaxRetries 1
         $sqlVersion = $versionResult.Version
+        $servicePack = $versionResult.ServicePack
+        $edition = $versionResult.Edition
         $majorVersion = [int]($sqlVersion -split '\.')[0]
+        $minorVersion = [int]($sqlVersion -split '\.')[1]
+        
+        # Verificar si sys.dm_os_volume_stats está disponible
+        # SQL 2008 RTM (10.0.x) puede no tenerlo, pero SQL 2008 R2 (10.50.x) sí
+        $hasVolumeStats = $true
+        if ($majorVersion -eq 10 -and $minorVersion -lt 50) {
+            # SQL 2008 RTM/SP1/SP2/SP3 (10.0.x - 10.49.x) puede no tener sys.dm_os_volume_stats
+            # Verificar si existe
+            try {
+                $checkQuery = "SELECT 1 FROM sys.system_objects WHERE name = 'dm_os_volume_stats'"
+                $checkResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $checkQuery -TimeoutSec 5 -MaxRetries 1
+                $hasVolumeStats = ($checkResult -ne $null)
+            } catch {
+                $hasVolumeStats = $false
+            }
+        }
         
         # Query 1: Espacio en discos con clasificación por rol + archivos problemáticos
-        if ($majorVersion -lt 10) {
-            # FALLBACK para SQL Server 2005 (usar xp_fixeddrives)
+        if ($majorVersion -lt 10 -or -not $hasVolumeStats) {
+            # FALLBACK para SQL Server 2005 o SQL 2008 sin sys.dm_os_volume_stats
+            if (-not $hasVolumeStats) {
+                Write-Verbose "      ℹ️  ${InstanceName}: sys.dm_os_volume_stats no disponible (SQL $sqlVersion $servicePack), usando xp_fixeddrives"
+            }
             $querySpace = @"
--- SQL 2005 compatible (usando xp_fixeddrives)
+-- SQL 2005/2008 compatible (usando xp_fixeddrives)
 CREATE TABLE #DriveSpace (
     Drive VARCHAR(10),
     MBFree INT
@@ -343,10 +369,10 @@ GROUP BY vs.volume_mount_point;
             -TimeoutSec $TimeoutSec `
             -MaxRetries 2
         
-        # Query de archivos problemáticos: solo para SQL 2008+ y con manejo de errores explícito
+        # Query de archivos problemáticos: solo para SQL 2008+ con sys.dm_os_volume_stats
         $dataProblematicFiles = $null
         $problematicFilesQueryFailed = $false
-        if ($majorVersion -ge 10) {
+        if ($majorVersion -ge 10 -and $hasVolumeStats) {
             try {
                 $dataProblematicFiles = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
                     -Query $queryProblematicFiles `
@@ -357,8 +383,12 @@ GROUP BY vs.volume_mount_point;
                 Write-Warning "      ⚠️  No se pudo obtener archivos problemáticos en ${InstanceName}: $($_.Exception.Message)"
             }
         } else {
-            # SQL 2005: No soportado para archivos problemáticos (requiere FILEPROPERTY con contexto correcto)
-            Write-Verbose "      ℹ️  Archivos problemáticos no disponible en SQL 2005 para ${InstanceName}"
+            # SQL 2005 o SQL 2008 sin sys.dm_os_volume_stats: No soportado
+            if (-not $hasVolumeStats) {
+                Write-Verbose "      ℹ️  Archivos problemáticos no disponible en ${InstanceName} (SQL $sqlVersion - falta sys.dm_os_volume_stats)"
+            } else {
+                Write-Verbose "      ℹ️  Archivos problemáticos no disponible en SQL 2005 para ${InstanceName}"
+            }
         }
         
         $dataIOLoad = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
@@ -366,10 +396,14 @@ GROUP BY vs.volume_mount_point;
             -TimeoutSec $TimeoutSec `
             -MaxRetries 2
         
-        $dataCompetition = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
-            -Query $queryCompetition `
-            -TimeoutSec $TimeoutSec `
-            -MaxRetries 2
+        # Query de competition: solo si tiene sys.dm_os_volume_stats
+        $dataCompetition = $null
+        if ($hasVolumeStats) {
+            $dataCompetition = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
+                -Query $queryCompetition `
+                -TimeoutSec $TimeoutSec `
+                -MaxRetries 2
+        }
         
         # Almacenar métricas de I/O del sistema (globales)
         if ($dataIOLoad) {
@@ -468,15 +502,25 @@ GROUP BY vs.volume_mount_point;
     } catch {
         $errorMsg = $_.Exception.Message
         
+        # Construir mensaje con información de versión si está disponible
+        $versionInfo = if ($sqlVersion) { 
+            "SQL $sqlVersion $servicePack" 
+        } else { 
+            "versión desconocida" 
+        }
+        
         # Identificar tipo de error
         if ($errorMsg -match "Timeout") {
-            Write-Warning "⏱️  TIMEOUT obteniendo disk metrics en ${InstanceName} (después de reintentos)"
+            Write-Warning "⏱️  TIMEOUT obteniendo disk metrics en ${InstanceName} ($versionInfo) (después de reintentos)"
         }
         elseif ($errorMsg -match "Connection|Network|Transport") {
-            Write-Warning "🔌 ERROR DE CONEXIÓN obteniendo disk metrics en ${InstanceName}: $errorMsg"
+            Write-Warning "🔌 ERROR DE CONEXIÓN obteniendo disk metrics en ${InstanceName} ($versionInfo): $errorMsg"
+        }
+        elseif ($errorMsg -match "sys\.dm_os_volume_stats") {
+            Write-Warning "⚠️  ERROR obteniendo disk metrics en ${InstanceName} ($versionInfo): sys.dm_os_volume_stats no disponible. Usa SQL 2008 R2+ o verifica permisos VIEW SERVER STATE."
         }
         else {
-            Write-Warning "Error obteniendo disk metrics en ${InstanceName}: $errorMsg"
+            Write-Warning "Error obteniendo disk metrics en ${InstanceName} ($versionInfo): $errorMsg"
         }
     }
     
