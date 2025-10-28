@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronRight, HardDrive, Database, AlertCircle, Info, TrendingUp, Shield, Server, Wrench, Cpu, Zap, MemoryStick, Settings } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronRight, HardDrive, Database, AlertCircle, Info, TrendingUp, Shield, Server, Wrench, Cpu, Zap, MemoryStick, Settings, Lightbulb, Clock, Flame, BarChart3, Edit3, Hourglass, Check, X, Lock, Heart, Circle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -786,44 +786,44 @@ export default function HealthScore() {
                                   // Backups inteligentes
                                   if (details.backupsDetails?.fullBackupBreached && details.backupsDetails?.lastFullBackup) {
                                     const hoursSince = Math.floor((new Date().getTime() - new Date(details.backupsDetails.lastFullBackup).getTime()) / (1000 * 60 * 60));
-                                    suggestions.push(`⚠️ Backup Full vencido (hace ${hoursSince}h) → Ejecutar backup completo inmediatamente`);
+                                    suggestions.push(`Backup Full vencido (hace ${hoursSince}h) - Ejecutar backup completo inmediatamente`);
                                   } else if (details.backupsDetails?.fullBackupBreached) {
-                                    suggestions.push('⚠️ Backup Full vencido → Ejecutar backup completo inmediatamente');
+                                    suggestions.push('Backup Full vencido - Ejecutar backup completo inmediatamente');
                                   }
                                   
                                   if (details.backupsDetails?.logBackupBreached && details.backupsDetails?.lastLogBackup) {
                                     const hoursSince = Math.floor((new Date().getTime() - new Date(details.backupsDetails.lastLogBackup).getTime()) / (1000 * 60 * 60));
-                                    suggestions.push(`⚠️ Backup Log vencido (hace ${hoursSince}h) → Ejecutar backup de log de transacciones`);
+                                    suggestions.push(`Backup Log vencido (hace ${hoursSince}h) - Ejecutar backup de log de transacciones`);
                                   } else if (details.backupsDetails?.logBackupBreached) {
-                                    suggestions.push('⚠️ Backup Log vencido → Ejecutar backup de log de transacciones');
+                                    suggestions.push('Backup Log vencido - Ejecutar backup de log de transacciones');
                                   }
                                   
                                   // AlwaysOn inteligente
                                   if (details.alwaysOnDetails && details.alwaysOnDetails.alwaysOnEnabled) {
                                     if (details.alwaysOnDetails.suspendedCount > 0) {
-                                      suggestions.push(`🔧 ${details.alwaysOnDetails.suspendedCount} réplica(s) suspendida(s) → Revisar estado de red y latencia entre nodos`);
+                                      suggestions.push(`${details.alwaysOnDetails.suspendedCount} réplica(s) suspendida(s) - Revisar estado de red y latencia entre nodos`);
                                     }
                                     if (details.alwaysOnDetails.maxSendQueueKB > 50000) {
                                       const queueGB = (details.alwaysOnDetails.maxSendQueueKB / 1024 / 1024).toFixed(1);
-                                      suggestions.push(`🔧 Cola de envío crítica (${queueGB}GB) → Revisar ancho de banda o detener cargas pesadas temporalmente`);
+                                      suggestions.push(`Cola de envío crítica (${queueGB}GB) - Revisar ancho de banda o detener cargas pesadas temporalmente`);
                                     } else if (details.alwaysOnDetails.maxSendQueueKB > 10000) {
                                       const queueMB = (details.alwaysOnDetails.maxSendQueueKB / 1024).toFixed(0);
-                                      suggestions.push(`🔧 Cola de envío alta (${queueMB}MB) → Revisar ancho de banda entre nodos`);
+                                      suggestions.push(`Cola de envío alta (${queueMB}MB) - Revisar ancho de banda entre nodos`);
                                     }
                                     if (details.alwaysOnDetails.maxSecondsBehind > 60) {
                                       const lagMin = Math.floor(details.alwaysOnDetails.maxSecondsBehind / 60);
-                                      suggestions.push(`⏱️ Lag de sincronización alto (${lagMin}min) → Revisar latencia de red y REDO queue`);
+                                      suggestions.push(`Lag de sincronización alto (${lagMin}min) - Revisar latencia de red y REDO queue`);
                                     }
                                   }
                                   
                                   // Log Chain inteligente
                                   if (details.logChainDetails && details.logChainDetails.brokenChainCount > 0) {
                                     const broken = details.logChainDetails.brokenChainCount;
-                                    suggestions.push(`❌ ${broken} cadena(s) de log rota(s) → Ejecutar backup full en DBs afectadas para reiniciar cadena`);
+                                    suggestions.push(`${broken} cadena(s) de log rota(s) - Ejecutar backup full en DBs afectadas para reiniciar cadena`);
                                   }
                                   if (details.logChainDetails && details.logChainDetails.fullDBsWithoutLogBackup > 0) {
                                     const count = details.logChainDetails.fullDBsWithoutLogBackup;
-                                    suggestions.push(`⚠️ ${count} DB(s) FULL sin backup de log → Configurar backup de log o cambiar a SIMPLE`);
+                                    suggestions.push(`${count} DB(s) FULL sin backup de log - Configurar backup de log o cambiar a SIMPLE`);
                                   }
                                   
                                   // Database States inteligente
@@ -834,15 +834,16 @@ export default function HealthScore() {
                                     if (details.databaseStatesDetails.emergencyCount > 0) problematic.push(`${details.databaseStatesDetails.emergencyCount} Emergency`);
                                     
                                     if (problematic.length > 0) {
-                                      suggestions.push(`🚨 Bases en estado crítico (${problematic.join(', ')}) → Revisar error log y restaurar urgentemente`);
+                                      suggestions.push(`Bases en estado crítico (${problematic.join(', ')}) - Revisar error log y restaurar urgentemente`);
                                     }
                                   }
                                   
                                   return suggestions.length > 0 ? (
                                     <div className="mb-3 bg-amber-500/5 border border-amber-500/30 rounded-lg p-2">
                                       <div className="flex items-start gap-2">
-                                        <span className="text-xs font-semibold text-amber-600">💡 Acciones sugeridas:</span>
+                                        <Lightbulb className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
                                         <div className="flex-1 space-y-0.5">
+                                          <span className="text-xs font-semibold text-amber-600 block mb-1">Acciones sugeridas:</span>
                                           {suggestions.map((suggestion, idx) => (
                                             <p key={idx} className="text-[11px] text-muted-foreground">{suggestion}</p>
                                           ))}
@@ -871,7 +872,7 @@ export default function HealthScore() {
                                       <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground">Full</span>
                                         <span className={`font-mono ${instanceDetails[score.instanceName].backupsDetails.fullBackupBreached ? 'text-red-500 font-semibold' : ''}`}>
-                                          {instanceDetails[score.instanceName].backupsDetails.fullBackupBreached ? 'Vencido 🔴' : 'OK'}
+                                          {instanceDetails[score.instanceName].backupsDetails.fullBackupBreached ? 'Vencido' : 'OK'}
                                         </span>
                                       </div>
                                       {instanceDetails[score.instanceName].backupsDetails.lastFullBackup && (
@@ -885,7 +886,7 @@ export default function HealthScore() {
                                       <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground">Log</span>
                                         <span className={`font-mono ${instanceDetails[score.instanceName].backupsDetails.logBackupBreached ? 'text-red-500 font-semibold' : ''}`}>
-                                          {instanceDetails[score.instanceName].backupsDetails.logBackupBreached ? 'Vencido 🔴' : 'OK'}
+                                          {instanceDetails[score.instanceName].backupsDetails.logBackupBreached ? 'Vencido' : 'OK'}
                                         </span>
                                       </div>
                                       {instanceDetails[score.instanceName].backupsDetails.lastLogBackup && (
@@ -931,7 +932,7 @@ export default function HealthScore() {
                                                 : ''
                                             }`}>
                                                 {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState || 'N/A'}
-                                                {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState !== 'HEALTHY' && ' ⚠️'}
+                                                {instanceDetails[score.instanceName].alwaysOnDetails.alwaysOnWorstState !== 'HEALTHY'}
                                             </span>
                                           </div>
                                         <div className="flex items-center justify-between text-[11px]">
@@ -942,7 +943,7 @@ export default function HealthScore() {
                                               <span className="text-muted-foreground">Suspendidas</span>
                                               <span className={`font-mono ${instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount > 0 ? 'text-red-500 font-semibold' : ''}`}>
                                                 {instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount}
-                                                {instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount > 0 && ' 🔴'}
+                                                {instanceDetails[score.instanceName].alwaysOnDetails.suspendedCount > 0}
                                               </span>
                                     </div>
                                             <div className="flex items-center justify-between text-[11px]">
@@ -982,7 +983,7 @@ export default function HealthScore() {
                                         <span className="text-muted-foreground">Rotas</span>
                                         <span className={`font-mono ${instanceDetails[score.instanceName].logChainDetails.brokenChainCount > 0 ? 'text-red-500 font-semibold' : ''}`}>
                                           {instanceDetails[score.instanceName].logChainDetails.brokenChainCount}
-                                          {instanceDetails[score.instanceName].logChainDetails.brokenChainCount > 0 && ' 🔴'}
+                                          {instanceDetails[score.instanceName].logChainDetails.brokenChainCount > 0}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
@@ -998,7 +999,7 @@ export default function HealthScore() {
                                           instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup > 12 ? 'text-amber-500' : ''
                                         }`}>
                                           {instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup.toFixed(1)}h
-                                          {instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup > 24 && ' ⚠️'}
+                                          {instanceDetails[score.instanceName].logChainDetails.maxHoursSinceLogBackup > 24}
                                         </span>
                                       </div>
                                     </>
@@ -1034,7 +1035,7 @@ export default function HealthScore() {
                                            instanceDetails[score.instanceName].databaseStatesDetails.emergencyCount}
                                           {(instanceDetails[score.instanceName].databaseStatesDetails.offlineCount + 
                                            instanceDetails[score.instanceName].databaseStatesDetails.suspectCount + 
-                                           instanceDetails[score.instanceName].databaseStatesDetails.emergencyCount) > 0 && ' 🔴'}
+                                           instanceDetails[score.instanceName].databaseStatesDetails.emergencyCount) > 0}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
@@ -1079,15 +1080,15 @@ export default function HealthScore() {
                                     const runnable = details.cpuDetails.runnableTasks;
                                     
                                     if (cpu > 90 && runnable > 10) {
-                                      suggestions.push(`🔥 CPU crítica (${cpu}%, ${runnable} tareas en cola) → Identificar queries más costosas urgentemente y considerar más cores`);
+                                      suggestions.push(`CPU crítica (${cpu}%, ${runnable} tareas en cola) - Identificar queries más costosas urgentemente y considerar más cores`);
                                     } else if (cpu > 80 && runnable > 5) {
-                                      suggestions.push(`🔥 CPU alta (${cpu}%, ${runnable} tareas esperando) → Revisar queries más costosas y optimizar índices`);
+                                      suggestions.push(`CPU alta (${cpu}%, ${runnable} tareas esperando) - Revisar queries más costosas y optimizar índices`);
                                     } else if (cpu > 80) {
-                                      suggestions.push(`🔥 CPU alta (${cpu}%) → Revisar queries más costosas y optimizar índices`);
+                                      suggestions.push(`CPU alta (${cpu}%) - Revisar queries más costosas y optimizar índices`);
                                     } else if (runnable > 10) {
-                                      suggestions.push(`⚡ Muchas tareas en cola de CPU (${runnable}) → Considerar aumentar cores o reducir MAXDOP`);
+                                      suggestions.push(`Muchas tareas en cola de CPU (${runnable}) - Considerar aumentar cores o reducir MAXDOP`);
                                     } else if (runnable > 5) {
-                                      suggestions.push(`⚡ Tareas en cola de CPU (${runnable}) → Considerar aumentar cores o revisar MAXDOP`);
+                                      suggestions.push(`Tareas en cola de CPU (${runnable}) - Considerar aumentar cores o revisar MAXDOP`);
                                     }
                                   }
                                   
@@ -1101,25 +1102,25 @@ export default function HealthScore() {
                                     
                                     if (ple < 100 && ple > 0) {
                                       const plePct = pleTarget > 0 ? ((ple / pleTarget) * 100).toFixed(0) : 'N/A';
-                                      suggestions.push(`💾 PLE crítico (${ple}s, ${plePct}% del target) → Incrementar Max Server Memory urgentemente`);
+                                      suggestions.push(`PLE crítico (${ple}s, ${plePct}% del target) - Incrementar Max Server Memory urgentemente`);
                                     } else if (ple < 300 && ple > 0) {
                                       const plePct = pleTarget > 0 ? ((ple / pleTarget) * 100).toFixed(0) : 'N/A';
-                                      suggestions.push(`💾 PLE bajo (${ple}s, ${plePct}% del target) → Incrementar Max Server Memory si es posible`);
+                                      suggestions.push(`PLE bajo (${ple}s, ${plePct}% del target) - Incrementar Max Server Memory si es posible`);
                                     }
                                     
                                     if (grants > 5) {
-                                      suggestions.push(`⏳ ${grants} queries esperando memoria → Revisar queries con JOINs grandes o aumentar Max Memory`);
+                                      suggestions.push(`${grants} queries esperando memoria - Revisar queries con JOINs grandes o aumentar Max Memory`);
                                     } else if (grants > 0) {
-                                      suggestions.push(`⏳ ${grants} query(ies) esperando memoria → Monitorear queries pesadas`);
+                                      suggestions.push(`${grants} query(ies) esperando memoria - Monitorear queries pesadas`);
                                     }
                                     
                                     if (details.memoriaDetails.stolenServerMemoryMB && totalMem) {
                                       const stolenPct = (details.memoriaDetails.stolenServerMemoryMB / totalMem) * 100;
                                       const stolenGB = (details.memoriaDetails.stolenServerMemoryMB / 1024).toFixed(1);
                                       if (stolenPct > 50) {
-                                        suggestions.push(`💡 Stolen Memory muy alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) → Limpiar plan cache: DBCC FREESYSTEMCACHE`);
+                                        suggestions.push(`Stolen Memory muy alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) - Limpiar plan cache: DBCC FREESYSTEMCACHE`);
                                       } else if (stolenPct > 30) {
-                                        suggestions.push(`💡 Stolen Memory alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) → Revisar planes en caché y CLR usage`);
+                                        suggestions.push(`Stolen Memory alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) - Revisar planes en caché y CLR usage`);
                                       }
                                     }
                                   }
@@ -1130,19 +1131,19 @@ export default function HealthScore() {
                                     const writeLat = details.ioDetails.avgWriteLatencyMs;
                                     
                                     if (readLat > 50) {
-                                      suggestions.push(`📊 Latencia de lectura crítica (${readLat.toFixed(1)}ms) → Migrar a SSD/NVMe urgentemente`);
+                                      suggestions.push(`Latencia de lectura crítica (${readLat.toFixed(1)}ms) - Migrar a SSD/NVMe urgentemente`);
                                     } else if (readLat > 20) {
-                                      suggestions.push(`📊 Latencia de lectura alta (${readLat.toFixed(1)}ms) → Revisar discos y considerar SSD`);
+                                      suggestions.push(`Latencia de lectura alta (${readLat.toFixed(1)}ms) - Revisar discos y considerar SSD`);
                                     } else if (readLat > 15) {
-                                      suggestions.push(`📊 Latencia de lectura moderada (${readLat.toFixed(1)}ms) → Monitorear subsistema de almacenamiento`);
+                                      suggestions.push(`Latencia de lectura moderada (${readLat.toFixed(1)}ms) - Monitorear subsistema de almacenamiento`);
                                     }
                                     
                                     if (writeLat > 30) {
-                                      suggestions.push(`✍️ Latencia de escritura crítica (${writeLat.toFixed(1)}ms) → Revisar RAID, write cache y migrar a SSD`);
+                                      suggestions.push(`Latencia de escritura crítica (${writeLat.toFixed(1)}ms) - Revisar RAID, write cache y migrar a SSD`);
                                     } else if (writeLat > 15) {
-                                      suggestions.push(`✍️ Latencia de escritura alta (${writeLat.toFixed(1)}ms) → Revisar subsistema de almacenamiento`);
+                                      suggestions.push(`Latencia de escritura alta (${writeLat.toFixed(1)}ms) - Revisar subsistema de almacenamiento`);
                                     } else if (writeLat > 10) {
-                                      suggestions.push(`✍️ Latencia de escritura moderada (${writeLat.toFixed(1)}ms) → Monitorear discos`);
+                                      suggestions.push(`Latencia de escritura moderada (${writeLat.toFixed(1)}ms) - Monitorear discos`);
                                     }
                                   }
                                   
@@ -1150,19 +1151,20 @@ export default function HealthScore() {
                                   if (details.discosDetails) {
                                     const worstPct = details.discosDetails.worstFreePct;
                                     if (worstPct < 10) {
-                                      suggestions.push(`💾 Espacio crítico en disco (${worstPct.toFixed(1)}% libre) → Liberar espacio o expandir volumen URGENTEMENTE`);
+                                      suggestions.push(`Espacio crítico en disco (${worstPct.toFixed(1)}% libre) - Liberar espacio o expandir volumen URGENTEMENTE`);
                                     } else if (worstPct < 15) {
-                                      suggestions.push(`💾 Espacio muy bajo en disco (${worstPct.toFixed(1)}% libre) → Liberar espacio o expandir volumen pronto`);
+                                      suggestions.push(`Espacio muy bajo en disco (${worstPct.toFixed(1)}% libre) - Liberar espacio o expandir volumen pronto`);
                                     } else if (worstPct < 20) {
-                                      suggestions.push(`💾 Espacio bajo en disco (${worstPct.toFixed(1)}% libre) → Planificar expansión de volumen`);
+                                      suggestions.push(`Espacio bajo en disco (${worstPct.toFixed(1)}% libre) - Planificar expansión de volumen`);
                                     }
                                   }
                                   
                                   return suggestions.length > 0 ? (
                                     <div className="mb-3 bg-amber-500/5 border border-amber-500/30 rounded-lg p-2">
                                       <div className="flex items-start gap-2">
-                                        <span className="text-xs font-semibold text-amber-600">💡 Acciones sugeridas:</span>
+                                        <Lightbulb className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
                                         <div className="flex-1 space-y-0.5">
+                                          <span className="text-xs font-semibold text-amber-600 block mb-1">Acciones sugeridas:</span>
                                           {suggestions.map((suggestion, idx) => (
                                             <p key={idx} className="text-[11px] text-muted-foreground">{suggestion}</p>
                                           ))}
@@ -1196,7 +1198,7 @@ export default function HealthScore() {
                                           ''
                                         }`}>
                                           {instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization}%
-                                          {instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization > 80 && ' 🔴'}
+                                          {instanceDetails[score.instanceName].cpuDetails.sqlProcessUtilization > 80}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
@@ -1207,7 +1209,7 @@ export default function HealthScore() {
                                         <span className="text-muted-foreground">Runnable</span>
                                         <span className={`font-mono ${instanceDetails[score.instanceName].cpuDetails.runnableTasks > 5 ? 'text-red-500 font-semibold' : ''}`}>
                                           {instanceDetails[score.instanceName].cpuDetails.runnableTasks}
-                                          {instanceDetails[score.instanceName].cpuDetails.runnableTasks > 5 && ' ⚠️'}
+                                          {instanceDetails[score.instanceName].cpuDetails.runnableTasks > 5}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
@@ -1228,7 +1230,7 @@ export default function HealthScore() {
                                                 <span className="text-muted-foreground">CXPACKET</span>
                                                 <span className={`font-mono ${cxPct > 15 ? 'text-red-500 font-semibold' : cxPct > 10 ? 'text-amber-500' : ''}`}>
                                                   {cxPct.toFixed(1)}%
-                                                  {cxPct > 15 && ' ⚠️'}
+                                                  {cxPct > 15}
                                                 </span>
                                               </div>
                                             )}
@@ -1237,7 +1239,7 @@ export default function HealthScore() {
                                                 <span className="text-muted-foreground">SOS_YIELD</span>
                                                 <span className={`font-mono ${sosPct > 15 ? 'text-red-500 font-semibold' : sosPct > 10 ? 'text-amber-500' : ''}`}>
                                                   {sosPct.toFixed(1)}%
-                                                  {sosPct > 15 && ' 🔥'}
+                                                  {sosPct > 15}
                                                 </span>
                                               </div>
                                             )}
@@ -1273,7 +1275,7 @@ export default function HealthScore() {
                                           ''
                                         }`}>
                                           {instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy}s
-                                          {instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy < 100 && ' 🔴'}
+                                          {instanceDetails[score.instanceName].memoriaDetails.pageLifeExpectancy < 100}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
@@ -1282,8 +1284,13 @@ export default function HealthScore() {
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
                                         <span className="text-muted-foreground">Presión</span>
-                                        <span className={`font-mono ${instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? 'text-red-500 font-semibold' : ''}`}>
-                                          {instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? '⚠️ Sí' : 'No'}
+                                        <span className={`font-mono flex items-center gap-1 ${instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? 'text-red-500 font-semibold' : ''}`}>
+                                          {instanceDetails[score.instanceName].memoriaDetails.memoryPressure ? (
+                                            <>
+                                              <AlertTriangle className="h-3 w-3" />
+                                              Sí
+                                            </>
+                                          ) : 'No'}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
@@ -1312,7 +1319,7 @@ export default function HealthScore() {
                                                 <span className="text-muted-foreground">RES_SEMAPHORE</span>
                                                 <span className={`font-mono ${resSemPct > 5 ? 'text-red-500 font-semibold' : resSemPct > 2 ? 'text-amber-500' : ''}`}>
                                                   {resSemPct.toFixed(1)}%
-                                                  {resSemPct > 5 && ' ⚠️'}
+                                                  {resSemPct > 5}
                                                 </span>
                                               </div>
                                             )}
@@ -1321,7 +1328,7 @@ export default function HealthScore() {
                                                 <span className="text-muted-foreground">Robada</span>
                                                 <span className={`font-mono ${stolenPct > 50 ? 'text-red-500 font-semibold' : stolenPct > 30 ? 'text-amber-500' : ''}`}>
                                                   {mem.stolenServerMemoryMB}MB ({stolenPct.toFixed(0)}%)
-                                                  {stolenPct > 50 && ' 🔴'}
+                                                  {stolenPct > 50}
                                                 </span>
                                               </div>
                                             )}
@@ -1357,7 +1364,7 @@ export default function HealthScore() {
                                           ''
                                         }`}>
                                           {instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs.toFixed(1)}ms
-                                          {instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs > 20 && ' 🐌'}
+                                          {instanceDetails[score.instanceName].ioDetails.avgReadLatencyMs > 20}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
@@ -1390,7 +1397,7 @@ export default function HealthScore() {
                                                 <span className="text-muted-foreground">PAGEIOLATCH</span>
                                                 <span className={`font-mono ${pageIOPct > 10 ? 'text-red-500 font-semibold' : pageIOPct > 5 ? 'text-amber-500' : ''}`}>
                                                   {pageIOPct.toFixed(1)}%
-                                                  {pageIOPct > 10 && ' 🐌'}
+                                                  {pageIOPct > 10}
                                                 </span>
                                               </div>
                                             )}
@@ -1399,7 +1406,7 @@ export default function HealthScore() {
                                                 <span className="text-muted-foreground">WRITELOG</span>
                                                 <span className={`font-mono ${writeLogPct > 10 ? 'text-red-500 font-semibold' : writeLogPct > 5 ? 'text-amber-500' : ''}`}>
                                                   {writeLogPct.toFixed(1)}%
-                                                  {writeLogPct > 10 && ' 🐌'}
+                                                  {writeLogPct > 10}
                                                 </span>
                                               </div>
                                             )}
@@ -1436,8 +1443,8 @@ export default function HealthScore() {
                                           instanceDetails[score.instanceName].discosDetails.worstFreePct >= 10 && instanceDetails[score.instanceName].discosDetails.worstFreePct < 20 && 'text-amber-500'
                                         )}>
                                           {instanceDetails[score.instanceName].discosDetails.worstFreePct.toFixed(1)}% libre
-                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct < 10 && ' 🔴'}
-                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct >= 10 && instanceDetails[score.instanceName].discosDetails.worstFreePct < 20 && ' ⚠️'}
+                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct < 10}
+                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct >= 10 && instanceDetails[score.instanceName].discosDetails.worstFreePct < 20}
                                         </span>
                                       </div>
                                       
@@ -1465,7 +1472,7 @@ export default function HealthScore() {
                                               {criticalVolumes.map((vol, idx) => (
                                                 <div key={`crit-${idx}`} className="flex items-center justify-between text-[11px] bg-red-500/5 px-1 rounded">
                                                   <span className="font-mono text-red-600 font-semibold">{vol.VolumeName}</span>
-                                                  <span className="text-red-600 font-semibold">{vol.FreeSpacePct?.toFixed(1)}% 🔴</span>
+                                                  <span className="text-red-600 font-semibold">{vol.FreeSpacePct?.toFixed(1)}%</span>
                                                 </div>
                                               ))}
                                               
@@ -1473,7 +1480,7 @@ export default function HealthScore() {
                                               {warningVolumes.map((vol, idx) => (
                                                 <div key={`warn-${idx}`} className="flex items-center justify-between text-[11px] bg-amber-500/5 px-1 rounded">
                                                   <span className="font-mono text-amber-600">{vol.VolumeName}</span>
-                                                  <span className="text-amber-600">{vol.FreeSpacePct?.toFixed(1)}% ⚠️</span>
+                                                  <span className="text-amber-600">{vol.FreeSpacePct?.toFixed(1)}%</span>
                                                 </div>
                                               ))}
                                               
@@ -1512,13 +1519,13 @@ export default function HealthScore() {
                                     const lastHour = details.erroresCriticosDetails.severity20PlusLast1h;
                                     
                                     if (lastHour > 0 && sevCount > 10) {
-                                      suggestions.push(`🚨 Errores críticos activos (${lastHour} en última hora, ${sevCount} en 24h) → Revisar error log URGENTEMENTE`);
+                                      suggestions.push(`Errores críticos activos (${lastHour} en última hora, ${sevCount} en 24h) - Revisar error log URGENTEMENTE`);
                                     } else if (lastHour > 0) {
-                                      suggestions.push(`🚨 ${lastHour} error(es) crítico(s) en última hora → Revisar error log inmediatamente`);
+                                      suggestions.push(`${lastHour} error(es) crítico(s) en última hora - Revisar error log inmediatamente`);
                                     } else if (sevCount > 10) {
-                                      suggestions.push(`⚠️ ${sevCount} errores críticos en 24h → Revisar error log y tendencias`);
+                                      suggestions.push(`${sevCount} errores críticos en 24h - Revisar error log y tendencias`);
                                     } else if (sevCount > 0) {
-                                      suggestions.push(`⚠️ ${sevCount} error(es) crítico(s) en 24h → Revisar error log`);
+                                      suggestions.push(`${sevCount} error(es) crítico(s) en 24h - Revisar error log`);
                                     }
                                   }
                                   
@@ -1528,11 +1535,11 @@ export default function HealthScore() {
                                     const maxBlockTime = details.waitsDetails.maxBlockTimeSeconds;
                                     
                                     if (blocked > 20 || maxBlockTime > 300) {
-                                      suggestions.push(`🔒 Bloqueos severos (${blocked} sesiones, máx ${Math.floor(maxBlockTime / 60)}min) → Identificar SPIDs bloqueadores urgentemente`);
+                                      suggestions.push(`Bloqueos severos (${blocked} sesiones, máx ${Math.floor(maxBlockTime / 60)}min) - Identificar SPIDs bloqueadores urgentemente`);
                                     } else if (blocked > 10 || maxBlockTime > 60) {
-                                      suggestions.push(`🔒 Bloqueos moderados (${blocked} sesiones, máx ${maxBlockTime}s) → Identificar SPIDs bloqueadores y optimizar queries`);
+                                      suggestions.push(`Bloqueos moderados (${blocked} sesiones, máx ${maxBlockTime}s) - Identificar SPIDs bloqueadores y optimizar queries`);
                                     } else if (blocked > 5 || maxBlockTime > 30) {
-                                      suggestions.push(`⚠️ ${blocked} sesión(es) bloqueada(s) (máx ${maxBlockTime}s) → Monitorear bloqueos`);
+                                      suggestions.push(`${blocked} sesión(es) bloqueada(s) (máx ${maxBlockTime}s) - Monitorear bloqueos`);
                                     }
                                   }
                                   // TempDB - Evaluar archivos y contención
@@ -1547,36 +1554,34 @@ export default function HealthScore() {
                                     if (fileCount < optimalFiles) {
                                       // Menos archivos de los necesarios
                                       if (tempdbScore < 40) {
-                                        suggestions.push(`🔥 Contención crítica en TempDB → Agregar más archivos urgentemente (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
+                                        suggestions.push(`Contención crítica en TempDB - Agregar más archivos urgentemente (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
                                       } else if (tempdbScore < 70) {
-                                        suggestions.push(`⚠️ Contención moderada en TempDB → Considerar agregar archivos (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
+                                        suggestions.push(`Contención moderada en TempDB - Considerar agregar archivos (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
                                       } else {
-                                        suggestions.push(`💡 TempDB con archivos insuficientes → Agregar archivos para mejorar (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
+                                        suggestions.push(`TempDB con archivos insuficientes - Agregar archivos para mejorar (tiene ${fileCount}, óptimo: ${optimalFiles} para ${cpuCount} CPUs)`);
                                       }
                                     } else if (fileCount > optimalFiles) {
                                       // Más archivos de los necesarios (overhead innecesario)
-                                      suggestions.push(`⚠️ TempDB con archivos de más → Considerar reducir a ${optimalFiles} archivos (tiene ${fileCount} para ${cpuCount} CPUs, overhead innecesario)`);
+                                      suggestions.push(`TempDB con archivos de más - Considerar reducir a ${optimalFiles} archivos (tiene ${fileCount} para ${cpuCount} CPUs, overhead innecesario)`);
                                     } else {
                                       // Número de archivos OK, evaluar solo si hay problemas de contención
                                       if (tempdbScore < 70) {
                                         // Usar diagnóstico inteligente del consolidador (valida tipo de disco)
                                         if (score.tempDBIOSuggestion) {
                                           // Usar el diagnóstico inteligente que YA validó HDD vs SSD
-                                          const emoji = tempdbScore < 40 ? '🔥' : '⚠️';
                                           const level = tempdbScore < 40 ? 'crítica' : 'moderada';
-                                          suggestions.push(`${emoji} Contención ${level} en TempDB → ${score.tempDBIOSuggestion}`);
+                                          suggestions.push(`Contención ${level} en TempDB - ${score.tempDBIOSuggestion}`);
                                         } else {
                                           // Fallback si no hay diagnóstico inteligente
-                                          const emoji = tempdbScore < 40 ? '🔥' : '⚠️';
                                           const level = tempdbScore < 40 ? 'crítica' : 'moderada';
-                                          suggestions.push(`${emoji} Contención ${level} en TempDB → Revisar queries con sorts/spills a TempDB y carga de disco`);
+                                          suggestions.push(`Contención ${level} en TempDB - Revisar queries con sorts/spills a TempDB y carga de disco`);
                                         }
                                       }
                                     }
                                     
                                     // 2. Evaluar si archivos tienen el mismo tamaño
                                     if (!sameSize) {
-                                      suggestions.push('⚠️ Archivos TempDB con distinto tamaño → Igualar tamaño de todos los archivos para proportional fill óptimo');
+                                      suggestions.push('Archivos TempDB con distinto tamaño - Igualar tamaño de todos los archivos para proportional fill óptimo');
                                     }
                                   }
                                   
@@ -1584,19 +1589,28 @@ export default function HealthScore() {
                                   // (tempDBIOSuggestion) que SÍ valida el tipo de disco (HDD/SSD/NVMe)
                                   
                                   // Max Memory inteligente
-                                  if (details.configuracionTempdbDetails && !details.configuracionTempdbDetails.maxMemoryWithinOptimal) {
-                                    const maxMemGB = (details.configuracionTempdbDetails.maxServerMemoryMB / 1024).toFixed(1);
+                                  if (details.configuracionTempdbDetails) {
+                                    const isUnlimited = details.configuracionTempdbDetails.maxServerMemoryMB === 0 && 
+                                                       details.configuracionTempdbDetails.configDetails?.includes('UNLIMITED');
                                     const totalMemGB = (details.configuracionTempdbDetails.totalPhysicalMemoryMB / 1024).toFixed(1);
-                                    const currentPct = details.configuracionTempdbDetails.maxMemoryPctOfPhysical.toFixed(0);
                                     const recommendedMin = Math.floor(details.configuracionTempdbDetails.totalPhysicalMemoryMB * 0.75 / 1024);
                                     const recommendedMax = Math.floor(details.configuracionTempdbDetails.totalPhysicalMemoryMB * 0.90 / 1024);
                                     
-                                    if (details.configuracionTempdbDetails.maxMemoryPctOfPhysical > 95) {
-                                      suggestions.push(`💾 Max Memory muy alto (${maxMemGB}GB, ${currentPct}% de ${totalMemGB}GB) → Reducir a ${recommendedMin}-${recommendedMax}GB para evitar presión en OS`);
-                                    } else if (details.configuracionTempdbDetails.maxMemoryPctOfPhysical < 50) {
-                                      suggestions.push(`💾 Max Memory muy bajo (${maxMemGB}GB, ${currentPct}% de ${totalMemGB}GB) → Incrementar a ${recommendedMin}-${recommendedMax}GB`);
-                                    } else {
-                                      suggestions.push(`💾 Max Memory no óptimo (${maxMemGB}GB, ${currentPct}% de ${totalMemGB}GB) → Ajustar a ${recommendedMin}-${recommendedMax}GB`);
+                                    if (isUnlimited) {
+                                      // Max Memory sin configurar (UNLIMITED)
+                                      suggestions.push(`Max Memory sin configurar (UNLIMITED) - Configurar a ${recommendedMin}-${recommendedMax}GB (75-90% de ${totalMemGB}GB RAM física) para evitar que SQL Server consuma toda la memoria del OS`);
+                                    } else if (!details.configuracionTempdbDetails.maxMemoryWithinOptimal) {
+                                      // Max Memory configurado pero no óptimo
+                                      const maxMemGB = (details.configuracionTempdbDetails.maxServerMemoryMB / 1024).toFixed(1);
+                                      const currentPct = details.configuracionTempdbDetails.maxMemoryPctOfPhysical.toFixed(0);
+                                      
+                                      if (details.configuracionTempdbDetails.maxMemoryPctOfPhysical > 95) {
+                                        suggestions.push(`Max Memory muy alto (${maxMemGB}GB, ${currentPct}% de ${totalMemGB}GB) - Reducir a ${recommendedMin}-${recommendedMax}GB para evitar presión en OS`);
+                                      } else if (details.configuracionTempdbDetails.maxMemoryPctOfPhysical < 50) {
+                                        suggestions.push(`Max Memory muy bajo (${maxMemGB}GB, ${currentPct}% de ${totalMemGB}GB) - Incrementar a ${recommendedMin}-${recommendedMax}GB`);
+                                      } else {
+                                        suggestions.push(`Max Memory no óptimo (${maxMemGB}GB, ${currentPct}% de ${totalMemGB}GB) - Ajustar a ${recommendedMin}-${recommendedMax}GB`);
+                                      }
                                     }
                                   }
                                   
@@ -1604,16 +1618,16 @@ export default function HealthScore() {
                                   if (details.maintenanceDetails) {
                                     if (!details.maintenanceDetails.checkdbOk && details.maintenanceDetails.lastCheckdb) {
                                       const daysSince = Math.floor((new Date().getTime() - new Date(details.maintenanceDetails.lastCheckdb).getTime()) / (1000 * 60 * 60 * 24));
-                                      suggestions.push(`⚠️ CHECKDB vencido (último hace ${daysSince} días) → Ejecutar DBCC CHECKDB para verificar integridad`);
+                                      suggestions.push(`CHECKDB vencido (último hace ${daysSince} días) - Ejecutar DBCC CHECKDB para verificar integridad`);
                                     } else if (!details.maintenanceDetails.checkdbOk) {
-                                      suggestions.push('⚠️ CHECKDB vencido → Ejecutar DBCC CHECKDB para verificar integridad');
+                                      suggestions.push('CHECKDB vencido - Ejecutar DBCC CHECKDB para verificar integridad');
                                     }
                                     
                                     if (!details.maintenanceDetails.indexOptimizeOk && details.maintenanceDetails.lastIndexOptimize) {
                                       const daysSince = Math.floor((new Date().getTime() - new Date(details.maintenanceDetails.lastIndexOptimize).getTime()) / (1000 * 60 * 60 * 24));
-                                      suggestions.push(`🔧 Mantenimiento de índices vencido (último hace ${daysSince} días) → Ejecutar IndexOptimize`);
+                                      suggestions.push(`Mantenimiento de índices vencido (último hace ${daysSince} días) - Ejecutar IndexOptimize`);
                                     } else if (!details.maintenanceDetails.indexOptimizeOk) {
-                                      suggestions.push('🔧 Mantenimiento de índices vencido → Ejecutar IndexOptimize');
+                                      suggestions.push('Mantenimiento de índices vencido - Ejecutar IndexOptimize');
                                     }
                                   }
                                   
@@ -1625,27 +1639,28 @@ export default function HealthScore() {
                                     const worstPct = details.autogrowthDetails.worstPercentOfMax;
                                     
                                     if (nearLimit > 0 && worstPct > 95) {
-                                      suggestions.push(`⚠️ ${nearLimit} archivo(s) al límite (${worstPct.toFixed(0)}% usado) → Aumentar MaxSize urgentemente o migrar datos`);
+                                      suggestions.push(`${nearLimit} archivo(s) al límite (${worstPct.toFixed(0)}% usado) - Aumentar MaxSize urgentemente o migrar datos`);
                                     } else if (nearLimit > 0) {
-                                      suggestions.push(`⚠️ ${nearLimit} archivo(s) cerca del límite (${worstPct.toFixed(0)}% usado) → Aumentar MaxSize o planificar migración`);
+                                      suggestions.push(`${nearLimit} archivo(s) cerca del límite (${worstPct.toFixed(0)}% usado) - Aumentar MaxSize o planificar migración`);
                                     }
                                     
                                     if (events > 50) {
-                                      suggestions.push(`📈 Muchos autogrowths (${events} en 24h) → Aumentar tamaño inicial de archivos urgentemente`);
+                                      suggestions.push(`Muchos autogrowths (${events} en 24h) - Aumentar tamaño inicial de archivos urgentemente`);
                                     } else if (events > 20) {
-                                      suggestions.push(`📈 Autogrowths frecuentes (${events} en 24h) → Aumentar tamaño inicial de archivos`);
+                                      suggestions.push(`Autogrowths frecuentes (${events} en 24h) - Aumentar tamaño inicial de archivos`);
                                     }
                                     
                                     if (badGrowth > 0) {
-                                      suggestions.push(`⚠️ ${badGrowth} archivo(s) con crecimiento % → Cambiar a crecimiento fijo en MB para mejor rendimiento`);
+                                      suggestions.push(`${badGrowth} archivo(s) con crecimiento % - Cambiar a crecimiento fijo en MB para mejor rendimiento`);
                                     }
                                   }
                                   
                                   return suggestions.length > 0 ? (
                                     <div className="mb-3 bg-amber-500/5 border border-amber-500/30 rounded-lg p-2">
                                       <div className="flex items-start gap-2">
-                                        <span className="text-xs font-semibold text-amber-600">💡 Acciones sugeridas:</span>
+                                        <Lightbulb className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
                                         <div className="flex-1 space-y-0.5">
+                                          <span className="text-xs font-semibold text-amber-600 block mb-1">Acciones sugeridas:</span>
                                           {suggestions.map((suggestion, idx) => (
                                             <p key={idx} className="text-[11px] text-muted-foreground">{suggestion}</p>
                                           ))}
@@ -1675,14 +1690,14 @@ export default function HealthScore() {
                                         <span className="text-muted-foreground">Sev 20+ (24h)</span>
                                         <span className={`font-mono ${instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0 ? 'text-red-500 font-semibold' : ''}`}>
                                           {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount}
-                                          {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0 && ' 🔴'}
+                                          {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
                                         <span className="text-muted-foreground">Última Hora</span>
                                         <span className={`font-mono ${instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusLast1h > 0 ? 'text-red-500 font-semibold' : ''}`}>
                                           {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusLast1h}
-                                          {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusLast1h > 0 && ' ⚠️'}
+                                          {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusLast1h > 0}
                                         </span>
                                       </div>
                                       {instanceDetails[score.instanceName].erroresCriticosDetails.severity20PlusCount > 0 && instanceDetails[score.instanceName].erroresCriticosDetails.mostRecentError && (
@@ -1706,10 +1721,12 @@ export default function HealthScore() {
                                         return (
                                           <div className="mt-2 pt-1.5 border-t border-red-500/10 space-y-0.5">
                                             <div className="flex items-center justify-between text-[11px]">
-                                              <span className="text-muted-foreground">🔒 {blockedCount} bloq</span>
+                                              <span className="text-muted-foreground flex items-center gap-1">
+                                                <Lock className="h-3 w-3" />
+                                                {blockedCount} bloq
+                                              </span>
                                               <span className={`font-mono ${isCritical ? 'text-red-500 font-semibold' : isHigh ? 'text-amber-500' : ''}`}>
                                                 {maxBlockTime}s
-                                                {isCritical && ' 🚨'}
                                               </span>
                                             </div>
                                             {instanceDetails[score.instanceName].waitsDetails!.blockerSessionIds && (
@@ -1751,7 +1768,7 @@ export default function HealthScore() {
                                             'text-red-500'
                                           }`}>
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore}/100
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore < 70 && ' ⚠️'}
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore < 70}
                                           </span>
                                         </div>
                                       </div>
@@ -1766,8 +1783,9 @@ export default function HealthScore() {
                                         }`}>
                                           <div className="space-y-1">
                                             {score.tempDBIODiagnosis && (
-                                              <div className="text-[10px] font-semibold text-muted-foreground">
-                                                🧠 Diagnóstico: {score.tempDBIODiagnosis}
+                                              <div className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
+                                                <Activity className="h-3 w-3" />
+                                                Diagnóstico: {score.tempDBIODiagnosis}
                                               </div>
                                             )}
                                             <div className={`text-[10px] ${
@@ -1797,7 +1815,10 @@ export default function HealthScore() {
                                                   {/* Tipo de Disco */}
                                                   {tempdbVolume.MediaType && tempdbVolume.MediaType !== 'Unknown' && (
                                                     <div className="flex items-center justify-between text-[11px]">
-                                                      <span className="text-muted-foreground">💾 Tipo disco</span>
+                                                      <span className="text-muted-foreground flex items-center gap-1">
+                                                        <HardDrive className="h-3 w-3" />
+                                                        Tipo disco
+                                                      </span>
                                                       <span className={`font-semibold ${
                                                         tempdbVolume.MediaType === 'NVMe' ? 'text-green-400' :
                                                         tempdbVolume.MediaType === 'SSD' ? 'text-blue-400' :
@@ -1813,16 +1834,17 @@ export default function HealthScore() {
                                                   {/* Disco Dedicado o Compartido */}
                                                   {tempdbVolume.DatabaseCount > 0 && (
                                                     <div className="flex items-center justify-between text-[11px]">
-                                                      <span className="text-muted-foreground">🗄️ DBs en disco</span>
+                                                      <span className="text-muted-foreground flex items-center gap-1">
+                                                        <Database className="h-3 w-3" />
+                                                        DBs en disco
+                                                      </span>
                                                       <span className={`font-semibold ${
                                                         tempdbVolume.DatabaseCount === 1 ? 'text-green-400' : 
                                                         tempdbVolume.DatabaseCount <= 3 ? 'text-yellow-400' : 
                                                         'text-red-400'
                                                       }`}>
                                                         {tempdbVolume.DatabaseCount}
-                                                        {tempdbVolume.DatabaseCount === 1 ? ' (DEDICADO) ✅' : 
-                                                         tempdbVolume.DatabaseCount > 5 ? ' (COMPARTIDO) 🚨' :
-                                                         ' (COMPARTIDO) ⚠️'}
+                                                        {tempdbVolume.DatabaseCount === 1 ? ' (DEDICADO)' : ' (COMPARTIDO)'}
                                                       </span>
                                                     </div>
                                                   )}
@@ -1832,7 +1854,10 @@ export default function HealthScore() {
                                                    tempdbVolume.HealthStatus !== 'Healthy' && 
                                                    tempdbVolume.HealthStatus !== 'Unknown' && (
                                                     <div className="flex items-center justify-between text-[11px]">
-                                                      <span className="text-muted-foreground">⚕️ Estado disco</span>
+                                                      <span className="text-muted-foreground flex items-center gap-1">
+                                                        <Heart className="h-3 w-3" />
+                                                        Estado disco
+                                                      </span>
                                                       <Badge variant={
                                                         tempdbVolume.HealthStatus === 'Unhealthy' ? 'destructive' : 'default'
                                                       } className="text-xs">
@@ -1845,16 +1870,19 @@ export default function HealthScore() {
                                                   {instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec && 
                                                    instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 20 && (
                                                     <div className="flex items-center justify-between text-[11px]">
-                                                      <span className="text-muted-foreground">💾 Lazy Writes</span>
+                                                      <span className="text-muted-foreground flex items-center gap-1">
+                                                        <Edit3 className="h-3 w-3" />
+                                                        Lazy Writes
+                                                      </span>
                                                       <span className={`font-semibold ${
                                                         instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 100 ? 'text-red-400' :
                                                         instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 50 ? 'text-yellow-400' :
                                                         'text-gray-400'
                                                       }`}>
                                                         {instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec}/s
-                                                        {instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 100 && ' 🚨'}
+                                                        {instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 100}
                                                         {instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec > 50 && 
-                                                         instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec <= 100 && ' ⚠️'}
+                                                         instanceDetails[score.instanceName].discosDetails.lazyWritesPerSec <= 100}
                                                       </span>
                                                     </div>
                                                   )}
@@ -1877,20 +1905,32 @@ export default function HealthScore() {
                                             instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount < Math.min(instanceDetails[score.instanceName].configuracionTempdbDetails.cpuCount, 8) ? 'text-amber-500' : ''
                                           }`}>
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount}
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount === 1 && ' ⚠️'}
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFileCount === 1}
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between text-[11px]">
                                           <span className="text-muted-foreground">Tam/Crec/Cfg</span>
                                           <div className="flex gap-1 font-mono text-[10px]">
-                                            <span className={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? '' : 'text-red-500'}>
-                                              {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? '✓' : '✗'}
+                                            <span className={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? 'text-green-500' : 'text-red-500'}>
+                                              {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameSize ? (
+                                                <Check className="h-3 w-3 inline" />
+                                              ) : (
+                                                <X className="h-3 w-3 inline" />
+                                              )}
                                             </span>
-                                            <span className={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? '' : 'text-red-500'}>
-                                              {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? '✓' : '✗'}
+                                            <span className={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? 'text-green-500' : 'text-red-500'}>
+                                              {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAllSameGrowth ? (
+                                                <Check className="h-3 w-3 inline" />
+                                              ) : (
+                                                <X className="h-3 w-3 inline" />
+                                              )}
                                             </span>
-                                            <span className={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBGrowthConfigOK ? '' : 'text-amber-500'}>
-                                              {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBGrowthConfigOK ? '✓' : '✗'}
+                                            <span className={instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBGrowthConfigOK ? 'text-green-500' : 'text-amber-500'}>
+                                              {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBGrowthConfigOK ? (
+                                                <Check className="h-3 w-3 inline" />
+                                              ) : (
+                                                <X className="h-3 w-3 inline" />
+                                              )}
                                             </span>
                                           </div>
                                         </div>
@@ -1914,7 +1954,7 @@ export default function HealthScore() {
                                             instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 10 ? 'text-amber-500' : ''
                                           }`}>
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs.toFixed(1)}ms
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 50 && ' 🐌'}
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBAvgWriteLatencyMs > 50}
                                           </span>
                                         </div>
                                       </div>
@@ -1934,86 +1974,153 @@ export default function HealthScore() {
                                             className="text-xs font-mono"
                                           >
                                             {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits.toLocaleString()}
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits >= 10000 && ' ⚠️'}
+                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBPageLatchWaits >= 10000}
                                           </Badge>
                                         </div>
                                         <p className="text-[9px] text-muted-foreground italic">
-                                          {(() => {
+                                          {                                          (() => {
                                             const tempdbScore = instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBContentionScore;
-                                            if (tempdbScore >= 90) return '✅ Óptimo';
+                                            if (tempdbScore >= 90) return 'Óptimo';
                                             if (tempdbScore >= 70) return 'Bueno';
-                                            if (tempdbScore >= 40) return '⚠️ Contención moderada (afecta 40% del score)';
-                                            return '🔴 Contención crítica (afecta 40% del score)';
+                                            if (tempdbScore >= 40) return 'Contención moderada (afecta 40% del score)';
+                                            return 'Contención crítica (afecta 40% del score)';
                                           })()}
                                         </p>
                                       </div>
 
                                       {/* Espacio y Recursos */}
-                                      {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBTotalSizeMB > 0 || 
-                                        instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct > 0 ||
-                                        instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB > 0) ? (
-                                        <div className="space-y-1">
-                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBTotalSizeMB > 0 && (
-                                            <div className="flex items-center justify-between text-xs">
-                                              <span className="text-muted-foreground">TempDB Size / Used</span>
-                                              <span className="font-mono">{(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBTotalSizeMB / 1024).toFixed(1)} / {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBUsedSpaceMB / 1024).toFixed(1)} GB</span>
+                                      {(() => {
+                                        const details = instanceDetails[score.instanceName].configuracionTempdbDetails;
+                                        const hasNoActivity = details.configDetails?.includes('TempDB-NoActivity');
+                                        const hasSpaceData = details.tempDBTotalSizeMB > 0 || details.tempDBFreeSpacePct > 0 || details.tempDBVersionStoreMB > 0;
+                                        
+                                        if (!hasSpaceData && !hasNoActivity) {
+                                          return (
+                                            <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2">
+                                              <p className="text-[10px] text-muted-foreground text-center flex items-center justify-center gap-1">
+                                                <Info className="h-3 w-3" />
+                                                Métricas extendidas disponibles después de la próxima recolección
+                                              </p>
                                             </div>
-                                          )}
-                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct > 0 && (
-                                            <div className="flex items-center justify-between text-xs">
-                                              <span className="text-muted-foreground">Free Space</span>
-                                              <Badge 
-                                                variant={
-                                                  instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct >= 20 ? 'outline' :
-                                                  instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct >= 10 ? 'default' :
-                                                  'destructive'
-                                                }
-                                                className="text-xs font-mono"
-                                              >
-                                                {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct.toFixed(1)}%
-                                                {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBFreeSpacePct < 10 && ' ⚠️'}
-                                              </Badge>
-                                            </div>
-                                          )}
-                                          {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB > 0 && (
-                                            <div className="flex items-center justify-between text-xs">
-                                              <span className="text-muted-foreground">Version Store</span>
-                                              <Badge 
-                                                variant={
-                                                  instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB < 1024 ? 'outline' :
-                                                  instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB < 2048 ? 'default' :
-                                                  'destructive'
-                                                }
-                                                className="text-xs font-mono"
-                                              >
-                                                {(instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB / 1024).toFixed(2)} GB
-                                                {instanceDetails[score.instanceName].configuracionTempdbDetails.tempDBVersionStoreMB > 2048 && ' ⚠️'}
-                                              </Badge>
-                                            </div>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2">
-                                          <p className="text-[10px] text-muted-foreground text-center">
-                                            ℹ️ Métricas extendidas disponibles después de la próxima recolección
-                                          </p>
-                                        </div>
-                                      )}
+                                          );
+                                        }
+                                        
+                                        return (
+                                          <div className="space-y-1">
+                                            {/* TempDB Sin Actividad */}
+                                            {hasNoActivity && (
+                                              <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2 mb-2">
+                                                <div className="flex items-start gap-2">
+                                                  <Info className="h-3 w-3 text-blue-400 mt-0.5 flex-shrink-0" />
+                                                  <div className="space-y-1">
+                                                    <p className="text-[10px] text-blue-400 font-medium">TempDB sin actividad reciente</p>
+                                                    <p className="text-[9px] text-muted-foreground">
+                                                      Espacio libre estimado: ~95% (sin actividad detectada en DMV)
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )}
+                                            
+                                            {details.tempDBTotalSizeMB > 0 && (
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted-foreground">TempDB Size / Used</span>
+                                                <span className="font-mono">{(details.tempDBTotalSizeMB / 1024).toFixed(1)} / {(details.tempDBUsedSpaceMB / 1024).toFixed(1)} GB</span>
+                                              </div>
+                                            )}
+                                            
+                                            {details.tempDBFreeSpacePct > 0 && (
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted-foreground">Free Space</span>
+                                                <Badge 
+                                                  variant={
+                                                    details.tempDBFreeSpacePct >= 20 ? 'outline' :
+                                                    details.tempDBFreeSpacePct >= 10 ? 'default' :
+                                                    'destructive'
+                                                  }
+                                                  className="text-xs font-mono"
+                                                >
+                                                  {details.tempDBFreeSpacePct.toFixed(1)}%
+                                                  {hasNoActivity && ' ~'}
+                                                  {details.tempDBFreeSpacePct < 10 && !hasNoActivity}
+                                                </Badge>
+                                              </div>
+                                            )}
+                                            
+                                            {details.tempDBVersionStoreMB > 0 && (
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted-foreground">Version Store</span>
+                                                <Badge 
+                                                  variant={
+                                                    details.tempDBVersionStoreMB < 1024 ? 'outline' :
+                                                    details.tempDBVersionStoreMB < 2048 ? 'default' :
+                                                    'destructive'
+                                                  }
+                                                  className="text-xs font-mono"
+                                                >
+                                                  {(details.tempDBVersionStoreMB / 1024).toFixed(2)} GB
+                                                  {details.tempDBVersionStoreMB > 2048}
+                                                </Badge>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
 
                                       {/* Max Memory */}
-                                      <div className="pt-2 border-t space-y-1">
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">Max Server Memory</span>
-                                          <span className="font-mono">{(instanceDetails[score.instanceName].configuracionTempdbDetails.maxServerMemoryMB / 1024).toFixed(1)} GB</span>
-                                        </div>
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-muted-foreground">% of Physical</span>
-                                          <Badge variant={instanceDetails[score.instanceName].configuracionTempdbDetails.maxMemoryWithinOptimal ? 'outline' : 'default'} className="text-xs">
-                                            {instanceDetails[score.instanceName].configuracionTempdbDetails.maxMemoryPctOfPhysical.toFixed(1)}%
-                                            {!instanceDetails[score.instanceName].configuracionTempdbDetails.maxMemoryWithinOptimal && ' ⚠️'}
-                                          </Badge>
-                                        </div>
-                                      </div>
+                                      {(() => {
+                                        const memDetails = instanceDetails[score.instanceName].configuracionTempdbDetails;
+                                        const isUnlimited = memDetails.maxServerMemoryMB === 0 && memDetails.configDetails?.includes('UNLIMITED');
+                                        const hasError = memDetails.maxServerMemoryMB === 0 && memDetails.configDetails?.includes('MaxMemQueryFailed');
+                                        
+                                        return (
+                                          <div className="pt-2 border-t space-y-1">
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-muted-foreground">Max Server Memory</span>
+                                              {isUnlimited ? (
+                                                <div className="flex items-center gap-1">
+                                                  <Badge variant="secondary" className="text-xs font-mono">
+                                                    UNLIMITED
+                                                  </Badge>
+                                                  <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                                                </div>
+                                              ) : hasError ? (
+                                                <Badge variant="destructive" className="text-xs">
+                                                  Error
+                                                </Badge>
+                                              ) : (
+                                                <span className="font-mono">{(memDetails.maxServerMemoryMB / 1024).toFixed(1)} GB</span>
+                                              )}
+                                            </div>
+                                            
+                                            {isUnlimited ? (
+                                              <div className="bg-yellow-500/5 border border-yellow-500/20 rounded p-2">
+                                                <div className="flex items-start gap-2">
+                                                  <AlertTriangle className="h-3 w-3 text-yellow-500 mt-0.5 flex-shrink-0" />
+                                                  <div className="space-y-1">
+                                                    <p className="text-[10px] text-yellow-600 font-medium">Not Configured (Default Value)</p>
+                                                    <p className="text-[9px] text-muted-foreground">
+                                                      Recomendado: ~{Math.floor(memDetails.totalPhysicalMemoryMB * 0.80 / 1024)} GB 
+                                                      ({' '}80% de {(memDetails.totalPhysicalMemoryMB / 1024).toFixed(0)} GB RAM{' '})
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted-foreground">% of Physical</span>
+                                                <Badge 
+                                                  variant={memDetails.maxMemoryWithinOptimal ? 'outline' : 'default'} 
+                                                  className="text-xs"
+                                                >
+                                                  {memDetails.maxMemoryPctOfPhysical.toFixed(1)}%
+                                                  {!memDetails.maxMemoryWithinOptimal}
+                                                </Badge>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </>
                                   ) : (
                                     <p className="text-xs text-muted-foreground">Sin datos de configuración</p>
