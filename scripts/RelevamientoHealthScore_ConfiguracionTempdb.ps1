@@ -312,27 +312,39 @@ WHERE database_id = DB_ID('tempdb')
   AND type_desc = 'ROWS';
 "@
         
-        $tempdbFiles = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryTempDBFiles -QueryTimeout $TimeoutSec -EnableException
-        if ($tempdbFiles) {
-            $result.TempDBFileCount = [int]$tempdbFiles.FileCount
-            $result.TempDBTotalSizeMB = [int]$tempdbFiles.TotalSizeMB
-            $result.TempDBAvgFileSizeMB = [int]$tempdbFiles.AvgSizeMB
-            $result.TempDBMinFileSizeMB = [int]$tempdbFiles.MinSizeMB
-            $result.TempDBMaxFileSizeMB = [int]$tempdbFiles.MaxSizeMB
-            $result.TempDBAllSameSize = ([int]$tempdbFiles.AllSameSize -eq 1)
-            $result.TempDBAllSameGrowth = ([int]$tempdbFiles.AllSameGrowth -eq 1)
-            $result.TempDBGrowthConfigOK = ([int]$tempdbFiles.GrowthConfigOK -eq 1)
-            
-            $result.Details += "Files=$($result.TempDBFileCount)"
-            if (-not $result.TempDBAllSameSize) {
-                $result.Details += "SizeMismatch=$($tempdbFiles.MinSizeMB)MB-$($tempdbFiles.MaxSizeMB)MB"
+        try {
+            $tempdbFiles = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryTempDBFiles -QueryTimeout $TimeoutSec -EnableException
+            if ($tempdbFiles) {
+                $result.TempDBFileCount = [int]$tempdbFiles.FileCount
+                $result.TempDBTotalSizeMB = [int]$tempdbFiles.TotalSizeMB
+                $result.TempDBAvgFileSizeMB = [int]$tempdbFiles.AvgSizeMB
+                $result.TempDBMinFileSizeMB = [int]$tempdbFiles.MinSizeMB
+                $result.TempDBMaxFileSizeMB = [int]$tempdbFiles.MaxSizeMB
+                $result.TempDBAllSameSize = ([int]$tempdbFiles.AllSameSize -eq 1)
+                $result.TempDBAllSameGrowth = ([int]$tempdbFiles.AllSameGrowth -eq 1)
+                $result.TempDBGrowthConfigOK = ([int]$tempdbFiles.GrowthConfigOK -eq 1)
+                
+                $result.Details += "Files=$($result.TempDBFileCount)"
+                if (-not $result.TempDBAllSameSize) {
+                    $result.Details += "SizeMismatch=$($tempdbFiles.MinSizeMB)MB-$($tempdbFiles.MaxSizeMB)MB"
+                }
+                if (-not $result.TempDBAllSameGrowth) {
+                    $result.Details += "GrowthMismatch"
+                }
+                if (-not $result.TempDBGrowthConfigOK) {
+                    $result.Details += "SmallGrowth"
+                }
+                
+                Write-Verbose "${InstanceName}: TempDB Files = $($result.TempDBFileCount), Total Size = $($result.TempDBTotalSizeMB) MB"
             }
-            if (-not $result.TempDBAllSameGrowth) {
-                $result.Details += "GrowthMismatch"
+            else {
+                Write-Warning "⚠️  ${InstanceName}: Query de archivos TempDB no retornó datos"
+                $result.Details += "TempDBFilesQueryEmpty"
             }
-            if (-not $result.TempDBGrowthConfigOK) {
-                $result.Details += "SmallGrowth"
-            }
+        }
+        catch {
+            Write-Warning "⚠️  ${InstanceName}: Error obteniendo archivos de TempDB: $($_.Exception.Message)"
+            $result.Details += "TempDBFilesQueryFailed"
         }
         
         # Query 2: TempDB Latency y Mount Point (para diagnóstico de disco)
@@ -447,10 +459,20 @@ WHERE database_id = DB_ID('tempdb');
                         $result.Details += "LargeVersionStore(>1GB)"
                     }
                 }
+                else {
+                    Write-Warning "⚠️  ${InstanceName}: sys.dm_db_file_space_usage no retornó datos"
+                    $result.Details += "NoSpaceData"
+                }
             }
             catch {
-                # sys.dm_db_file_space_usage puede no estar disponible en algunas versiones
+                Write-Warning "⚠️  ${InstanceName}: Error obteniendo espacio de TempDB: $($_.Exception.Message)"
+                $result.Details += "SpaceQueryFailed"
             }
+        }
+        else {
+            # SQL 2008 o anterior - no tiene sys.dm_db_file_space_usage
+            Write-Verbose "${InstanceName}: SQL $majorVersion - sys.dm_db_file_space_usage no disponible (requiere SQL 2012+)"
+            $result.Details += "SQL2008-NoSpaceData"
         }
         
         # Query 4: Max Server Memory
@@ -460,19 +482,31 @@ FROM sys.configurations
 WHERE name = 'max server memory (MB)';
 "@
         
-        $maxMem = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryMaxMem -QueryTimeout $TimeoutSec -EnableException
-        if ($maxMem -and $maxMem.MaxServerMemoryMB -ne [DBNull]::Value) {
-            $maxMemValue = [int]$maxMem.MaxServerMemoryMB
-            
-            # Detectar valor por defecto "unlimited" (2147483647 = 2^31-1)
-            # Este es el máximo de INT32 y significa que no está configurado
-            if ($maxMemValue -eq 2147483647) {
-                $result.MaxServerMemoryMB = 0  # Marcar como no configurado
-                $result.Details += "MaxMem=UNLIMITED(NotSet)"
+        try {
+            $maxMem = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryMaxMem -QueryTimeout $TimeoutSec -EnableException
+            if ($maxMem -and $maxMem.MaxServerMemoryMB -ne [DBNull]::Value) {
+                $maxMemValue = [int]$maxMem.MaxServerMemoryMB
+                
+                # Detectar valor por defecto "unlimited" (2147483647 = 2^31-1)
+                # Este es el máximo de INT32 y significa que no está configurado
+                if ($maxMemValue -eq 2147483647) {
+                    $result.MaxServerMemoryMB = 0  # Marcar como no configurado
+                    $result.Details += "MaxMem=UNLIMITED(NotSet)"
+                    Write-Verbose "${InstanceName}: Max Server Memory = UNLIMITED (valor por defecto, no configurado)"
+                }
+                else {
+                    $result.MaxServerMemoryMB = $maxMemValue
+                    Write-Verbose "${InstanceName}: Max Server Memory = $maxMemValue MB"
+                }
             }
             else {
-                $result.MaxServerMemoryMB = $maxMemValue
+                Write-Warning "⚠️  ${InstanceName}: Query de Max Memory no retornó datos"
+                $result.Details += "MaxMemQueryEmpty"
             }
+        }
+        catch {
+            Write-Warning "⚠️  ${InstanceName}: Error obteniendo Max Server Memory: $($_.Exception.Message)"
+            $result.Details += "MaxMemQueryFailed"
         }
         
         # Query 5: System Info (compatible con SQL 2008+)
@@ -516,13 +550,19 @@ FROM sys.dm_os_sys_info;
                         }
                     }
                     catch {
-                        # SQL 2008 no tiene sys.dm_os_sys_memory
+                        Write-Warning "⚠️  ${InstanceName}: sys.dm_os_sys_memory no disponible (SQL 2008 o anterior)"
                     }
                 }
             }
             if ($sysInfo.CPUCount -ne [DBNull]::Value) {
                 $result.CPUCount = [int]$sysInfo.CPUCount
             }
+            
+            Write-Verbose "${InstanceName}: Physical Memory = $($result.TotalPhysicalMemoryMB) MB, CPU Count = $($result.CPUCount)"
+        }
+        else {
+            Write-Warning "⚠️  ${InstanceName}: Query de System Info no retornó datos"
+            $result.Details += "SysInfoQueryEmpty"
         }
         
         # Calcular si Max Memory está dentro del rango óptimo (con validaciones)
@@ -568,7 +608,8 @@ FROM sys.dm_os_sys_info;
         }
         
     } catch {
-        Write-Warning "Error obteniendo config/tempdb metrics en ${InstanceName}: $($_.Exception.Message)"
+        Write-Warning "❌ Error GENERAL obteniendo config/tempdb metrics en ${InstanceName}: $($_.Exception.Message)"
+        $result.Details += "GeneralError"
     }
     
     # Calcular TempDB Health Score Compuesto (considerando TODAS las métricas)

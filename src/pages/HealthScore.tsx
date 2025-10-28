@@ -115,7 +115,7 @@ export default function HealthScore() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'Healthy': return <CheckCircle2 className="h-4 w-4 text-green-600" />;
-      case 'Warning': return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+      case 'Warning': return <AlertTriangle className="h-4 w-4 text-amber-500" />;
       case 'Risk': return <AlertCircle className="h-4 w-4 text-orange-600" />;
       case 'Critical': return <XCircle className="h-4 w-4 text-red-600" />;
       default: return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
@@ -124,10 +124,10 @@ export default function HealthScore() {
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
-      'Healthy': 'bg-green-500/10 text-green-700 border-green-500/20',
-      'Warning': 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20',
-      'Risk': 'bg-orange-500/10 text-orange-700 border-orange-500/20',
-      'Critical': 'bg-red-500/10 text-red-700 border-red-500/20',
+      'Healthy': 'bg-green-600/20 text-green-700 border-green-600/40 font-semibold',
+      'Warning': 'bg-amber-500/20 text-amber-600 border-amber-500/40 font-semibold',
+      'Risk': 'bg-orange-600/20 text-orange-700 border-orange-600/40 font-semibold',
+      'Critical': 'bg-red-600/20 text-red-700 border-red-600/40 font-semibold',
     };
 
     return (
@@ -192,25 +192,25 @@ export default function HealthScore() {
                 <CardContent className="p-4">
                   <h4 className="font-semibold text-sm mb-3">Health Status Levels</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+                    <div className="bg-green-600/20 border-2 border-green-600/40 rounded-lg p-3">
                       <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-green-600">HEALTHY</p>
                       <p className="text-center text-lg font-mono font-bold text-green-600">90-100 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">Optimal performance</p>
                     </div>
-                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                      <AlertTriangle className="h-6 w-6 text-yellow-600 mx-auto mb-2" />
-                      <p className="text-center text-xs font-bold text-yellow-600">WARNING</p>
-                      <p className="text-center text-lg font-mono font-bold text-yellow-600">75-89 pts</p>
+                    <div className="bg-amber-500/20 border-2 border-amber-500/40 rounded-lg p-3">
+                      <AlertTriangle className="h-6 w-6 text-amber-500 mx-auto mb-2" />
+                      <p className="text-center text-xs font-bold text-amber-500">WARNING</p>
+                      <p className="text-center text-lg font-mono font-bold text-amber-500">75-89 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">Requires attention</p>
                     </div>
-                    <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+                    <div className="bg-orange-600/20 border-2 border-orange-600/40 rounded-lg p-3">
                       <AlertCircle className="h-6 w-6 text-orange-600 mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-orange-600">RISK</p>
                       <p className="text-center text-lg font-mono font-bold text-orange-600">60-74 pts</p>
                       <p className="text-center text-xs text-muted-foreground mt-1">Action required</p>
                     </div>
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                    <div className="bg-red-600/20 border-2 border-red-600/40 rounded-lg p-3">
                       <XCircle className="h-6 w-6 text-red-600 mx-auto mb-2" />
                       <p className="text-center text-xs font-bold text-red-600">CRITICAL</p>
                       <p className="text-center text-lg font-mono font-bold text-red-600">{'<'}60 pts</p>
@@ -420,7 +420,7 @@ export default function HealthScore() {
           </CardContent>
         </Card>
 
-        <Card className="gradient-card shadow-card border-green-500/30">
+        <Card className="gradient-card shadow-card border-green-600/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -432,19 +432,19 @@ export default function HealthScore() {
           </CardContent>
         </Card>
 
-        <Card className="gradient-card shadow-card border-yellow-500/30">
+        <Card className="gradient-card shadow-card border-amber-500/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Warning</p>
-                <p className="text-2xl font-bold font-mono text-yellow-600">{stats.warning}</p>
+                <p className="text-2xl font-bold font-mono text-amber-500">{stats.warning}</p>
               </div>
-              <AlertTriangle className="h-8 w-8 text-yellow-600" />
+              <AlertTriangle className="h-8 w-8 text-amber-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="gradient-card shadow-card border-orange-500/30">
+        <Card className="gradient-card shadow-card border-orange-600/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -456,7 +456,7 @@ export default function HealthScore() {
           </CardContent>
         </Card>
 
-        <Card className="gradient-card shadow-card border-red-500/30">
+        <Card className="gradient-card shadow-card border-red-600/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -607,7 +607,7 @@ export default function HealthScore() {
                         <span className={cn(
                           'font-mono text-sm font-bold',
                           score.healthScore >= 90 && 'text-green-600',
-                          score.healthScore >= 75 && score.healthScore < 90 && 'text-yellow-600',
+                          score.healthScore >= 75 && score.healthScore < 90 && 'text-amber-500',
                           score.healthScore >= 60 && score.healthScore < 75 && 'text-orange-600',
                           score.healthScore < 60 && 'text-red-600'
                         )}>
@@ -622,7 +622,7 @@ export default function HealthScore() {
                             className={cn(
                               'h-2 w-24',
                               score.healthScore >= 90 && '[&>div]:bg-green-600',
-                              score.healthScore >= 75 && score.healthScore < 90 && '[&>div]:bg-yellow-600',
+                              score.healthScore >= 75 && score.healthScore < 90 && '[&>div]:bg-amber-500',
                               score.healthScore >= 60 && score.healthScore < 75 && '[&>div]:bg-orange-600',
                               score.healthScore < 60 && '[&>div]:bg-red-600'
                             )}
