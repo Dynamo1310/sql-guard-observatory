@@ -31,7 +31,29 @@ Si `MaxServerMemoryMB = 0` o `TotalPhysicalMemoryMB = 0`, el porcentaje también
 
 ## ✅ Soluciones Implementadas
 
-### 1. **Logging Detallado**
+### 1. **Manejo Robusto de NULL en sys.dm_db_file_space_usage** (⭐ SOLUCIÓN PRINCIPAL)
+La DMV `sys.dm_db_file_space_usage` puede devolver NULL cuando TempDB no tiene actividad reciente (recién reiniciado, servidor inactivo, etc.). Ahora el script:
+
+```powershell
+# Detectar si DMV tiene datos reales
+$hasRealData = ($spaceUsage.RowCount -gt 0) -and ($spaceUsage.TotalSizeMB -gt 0)
+
+if ($hasRealData) {
+    # Usar valores reales de la DMV
+    $result.TempDBUsedSpaceMB = [int]$spaceUsage.UsedSpaceMB
+    $result.TempDBFreeSpacePct = [decimal]$spaceUsage.FreeSpacePct
+}
+else {
+    # Fallback: TempDB sin actividad - usar valores estimados
+    $result.TempDBUsedSpaceMB = 0
+    $result.TempDBFreeSpacePct = 95.0  # Estimación conservadora
+    $result.Details += "TempDB-NoActivity"
+}
+```
+
+**Resultado:** Ya no habrá valores en 0 confusos. Si TempDB no tiene actividad, se asume 95% libre (lógico para un TempDB recién reiniciado).
+
+### 2. **Logging Detallado**
 Se agregaron `Write-Warning` y `Write-Verbose` en todos los bloques críticos:
 
 ```powershell
@@ -188,6 +210,7 @@ SERVER03\SQL2022      | 8192              | 0                 | Files=8|MaxMemQu
 |---------|---------------|----------|
 | **Max Memory = 0, ConfigDetails contiene "UNLIMITED"** | Valor por defecto (no configurado) | ✅ Normal. Considerar configurar Max Memory |
 | **TempDB Size = 0, ConfigDetails contiene "SQL2008"** | SQL Server 2008 o anterior | ✅ Esperado. DMV no disponible en esa versión |
+| **TempDB Size/Used = 0, ConfigDetails contiene "TempDB-NoActivity"** | TempDB sin actividad reciente | ✅ NORMAL. Script asume 95% libre. Datos reales aparecerán en próxima recolección |
 | **TempDB Size = 0, ConfigDetails contiene "NoSpaceData"** | Query vacía o sin permisos | ❌ Revisar permisos `VIEW SERVER STATE` |
 | **ConfigDetails contiene "SpaceQueryFailed"** | Error ejecutando query | ❌ Revisar logs con `-Verbose`, aumentar timeout |
 | **Todos los valores en 0, ConfigDetails contiene "GeneralError"** | Error catastrófico | ❌ Revisar conectividad, versión SQL, credenciales |

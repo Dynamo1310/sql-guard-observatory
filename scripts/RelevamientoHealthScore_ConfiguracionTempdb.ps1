@@ -442,7 +442,7 @@ SELECT
         THEN CAST((SUM(total_page_count) - SUM(allocated_extent_page_count)) * 100.0 / SUM(total_page_count) AS DECIMAL(5,2))
         ELSE 0 
     END AS FreeSpacePct,
-    COUNT(*) AS RowCount  -- Para detectar si la DMV tiene datos
+    COUNT(*) AS RecordCount  -- Para detectar si la DMV tiene datos
 FROM sys.dm_db_file_space_usage
 WHERE database_id = DB_ID('tempdb');
 "@
@@ -450,8 +450,8 @@ WHERE database_id = DB_ID('tempdb');
             try {
                 $spaceUsage = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySpaceUsage -QueryTimeout $TimeoutSec -EnableException
                 if ($spaceUsage) {
-                    # Verificar si la DMV tiene datos reales (RowCount > 0 y valores no nulos)
-                    $hasRealData = ($spaceUsage.RowCount -gt 0) -and ($spaceUsage.TotalSizeMB -gt 0)
+                    # Verificar si la DMV tiene datos reales (RecordCount > 0 y valores no nulos)
+                    $hasRealData = ($spaceUsage.RecordCount -gt 0) -and ($spaceUsage.TotalSizeMB -gt 0)
                     
                     if ($hasRealData) {
                         # DMV con datos válidos - usar esos valores

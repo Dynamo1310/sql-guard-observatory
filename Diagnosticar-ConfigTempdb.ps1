@@ -130,9 +130,9 @@ if ($majorVersion -ge 11) {
     try {
         $querySpaceUsage = @"
 SELECT 
-    SUM(total_page_count) * 8 / 1024 AS TotalSizeMB,
-    SUM(allocated_extent_page_count) * 8 / 1024 AS UsedSpaceMB,
-    SUM(version_store_reserved_page_count) * 8 / 1024 AS VersionStoreMB,
+    ISNULL(SUM(total_page_count) * 8 / 1024, 0) AS TotalSizeMB,
+    ISNULL(SUM(allocated_extent_page_count) * 8 / 1024, 0) AS UsedSpaceMB,
+    ISNULL(SUM(version_store_reserved_page_count) * 8 / 1024, 0) AS VersionStoreMB,
     CASE 
         WHEN SUM(total_page_count) > 0 
         THEN CAST((SUM(total_page_count) - SUM(allocated_extent_page_count)) * 100.0 / SUM(total_page_count) AS DECIMAL(5,2))
@@ -146,25 +146,23 @@ WHERE database_id = DB_ID('tempdb');
         if ($spaceUsage) {
             Write-Host "✅ Query exitosa" -ForegroundColor Green
             
-            # Detectar NULL vs 0
-            $totalMB = if ($spaceUsage.TotalSizeMB -eq [DBNull]::Value -or $null -eq $spaceUsage.TotalSizeMB) { "[NULL]" } else { "$($spaceUsage.TotalSizeMB) MB" }
-            $usedMB = if ($spaceUsage.UsedSpaceMB -eq [DBNull]::Value -or $null -eq $spaceUsage.UsedSpaceMB) { "[NULL]" } else { "$($spaceUsage.UsedSpaceMB) MB" }
-            $freePct = if ($spaceUsage.FreeSpacePct -eq [DBNull]::Value -or $null -eq $spaceUsage.FreeSpacePct) { "[NULL]" } else { "$($spaceUsage.FreeSpacePct)%" }
-            $versionMB = if ($spaceUsage.VersionStoreMB -eq [DBNull]::Value -or $null -eq $spaceUsage.VersionStoreMB) { "[NULL]" } else { "$($spaceUsage.VersionStoreMB) MB" }
+            # Con ISNULL ahora siempre retorna 0, no NULL
+            # Detectar si es 0 real (sin actividad) vs 0 porque está vacío
+            $totalMB = $spaceUsage.TotalSizeMB
+            $usedMB = $spaceUsage.UsedSpaceMB
+            $freePct = $spaceUsage.FreeSpacePct
+            $versionMB = $spaceUsage.VersionStoreMB
             
-            Write-Host "   Tamaño total: $totalMB" -ForegroundColor White
-            Write-Host "   Usado: $usedMB" -ForegroundColor White
-            Write-Host "   Libre: $freePct" -ForegroundColor White
-            Write-Host "   Version Store: $versionMB" -ForegroundColor White
+            Write-Host "   Tamaño total: $totalMB MB" -ForegroundColor White
+            Write-Host "   Usado: $usedMB MB" -ForegroundColor White
+            Write-Host "   Libre: $freePct%" -ForegroundColor White
+            Write-Host "   Version Store: $versionMB MB" -ForegroundColor White
             
             # Detectar problemas
-            if ($totalMB -eq "[NULL]" -or $usedMB -eq "[NULL]") {
-                Write-Host "   ❌ VALORES NULL DETECTADOS - TempDB sin actividad o DMV vacía" -ForegroundColor Red
+            if ($totalMB -eq 0 -and $usedMB -eq 0) {
+                Write-Host "   ⚠️  VALORES EN 0 - TempDB sin actividad reciente" -ForegroundColor Yellow
                 Write-Host "      → La DMV sys.dm_db_file_space_usage requiere actividad en TempDB" -ForegroundColor Yellow
-                Write-Host "      → Ejecutar: USE tempdb; CREATE TABLE #t(id INT); DROP TABLE #t;" -ForegroundColor Cyan
-            }
-            elseif ($spaceUsage.UsedSpaceMB -eq 0 -and $spaceUsage.TotalSizeMB -eq 0) {
-                Write-Host "   ⚠️  AMBOS = 0 MB (TempDB sin actividad reciente)" -ForegroundColor Yellow
+                Write-Host "      → El script collector asumirá 95% libre (estimación)" -ForegroundColor Cyan
             }
         }
         else {
