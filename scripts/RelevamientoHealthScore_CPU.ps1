@@ -38,9 +38,6 @@ if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-# Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force
-
 #region ===== CONFIGURACIÓN =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
