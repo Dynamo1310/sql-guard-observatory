@@ -81,20 +81,18 @@ function Get-CPUMetrics {
         # Para SQL 2005/2008 (versiones 9.x y 10.x), usar query simplificada
         if ($version -le 10) {
             $query = @"
--- CPU actual basado en schedulers activos (compatible SQL 2005+)
--- Aproximación: suma de work_queue_count como indicador de presión de CPU
+-- Aproximación de CPU basada en schedulers activos (SQL 2005/2008)
+-- Usar current_tasks_count y work_queue_count como indicadores
 SELECT 
-    CASE 
-        WHEN SUM(current_workers_count) = 0 THEN 0
-        ELSE CAST((SUM(current_workers_count) * 100.0 / NULLIF(SUM(max_workers_count), 0)) AS INT)
-    END AS ApproxCPUPercent,
-    ISNULL(SUM(current_workers_count), 0) AS CurrentWorkers,
-    ISNULL(SUM(runnable_tasks_count), 0) AS RunnableTasksTotal
+    ISNULL(SUM(current_tasks_count), 0) AS TotalCurrentTasks,
+    ISNULL(SUM(work_queue_count), 0) AS TotalWorkQueue,
+    ISNULL(SUM(runnable_tasks_count), 0) AS RunnableTasksTotal,
+    COUNT(*) AS ActiveSchedulers
 FROM sys.dm_os_schedulers WITH (NOLOCK)
 WHERE scheduler_id < 255
   AND status = 'VISIBLE ONLINE';
 
--- Runnable tasks (tareas esperando CPU) - Compatible con SQL 2005+
+-- Runnable tasks (schedulers con tareas esperando CPU) - Compatible con SQL 2005+
 SELECT 
     ISNULL(COUNT(*), 0) AS RunnableTasksCount
 FROM sys.dm_os_schedulers WITH (NOLOCK)
@@ -162,30 +160,43 @@ WHERE scheduler_id < 255;
             
             if ($version -le 10) {
                 # SQL 2005/2008: Procesar resultsets simplificados
-                # ResultSet 1: CPU aproximado basado en workers
+                # ResultSet 1: Métricas de schedulers
                 if ($resultSets.Count -ge 1 -and $resultSets[0].Rows.Count -gt 0) {
-                    $cpuData = $resultSets[0].Rows[0]
-                    if ($cpuData.ApproxCPUPercent -ne [DBNull]::Value) {
-                        $cpuValue = [int]$cpuData.ApproxCPUPercent
-                        # Limitar a un rango razonable (0-100)
-                        if ($cpuValue -gt 100) { $cpuValue = 100 }
-                        if ($cpuValue -lt 0) { $cpuValue = 0 }
+                    $schedulerData = $resultSets[0].Rows[0]
+                    
+                    $totalTasks = if ($schedulerData.TotalCurrentTasks -ne [DBNull]::Value) { [int]$schedulerData.TotalCurrentTasks } else { 0 }
+                    $workQueue = if ($schedulerData.TotalWorkQueue -ne [DBNull]::Value) { [int]$schedulerData.TotalWorkQueue } else { 0 }
+                    $runnableTotal = if ($schedulerData.RunnableTasksTotal -ne [DBNull]::Value) { [int]$schedulerData.RunnableTasksTotal } else { 0 }
+                    $schedulers = if ($schedulerData.ActiveSchedulers -ne [DBNull]::Value) { [int]$schedulerData.ActiveSchedulers } else { 1 }
+                    
+                    # Aproximación de CPU basada en carga de schedulers
+                    # Fórmula: (tareas_activas / schedulers) * factor_ajuste
+                    # Factor de ajuste: 12 (para aproximar % de CPU cuando hay carga)
+                    if ($schedulers -gt 0) {
+                        $approxCPU = [int](($totalTasks / $schedulers) * 12)
+                        # Agregar factor por work queue (indica presión adicional)
+                        if ($workQueue -gt 0) {
+                            $approxCPU += [int](($workQueue / $schedulers) * 5)
+                        }
+                        # Limitar a rango 0-100
+                        if ($approxCPU -gt 100) { $approxCPU = 100 }
+                        if ($approxCPU -lt 0) { $approxCPU = 0 }
                         
-                        # Usar el valor aproximado como promedio y p95 (no hay histórico en SQL 2005/2008)
-                        $result.SQLProcessUtilization = $cpuValue
-                        $result.AvgCPUPercentLast10Min = $cpuValue
-                        $result.P95CPUPercent = $cpuValue
+                        # Si hay tareas pero calculamos 0, al menos poner 1%
+                        if ($approxCPU -eq 0 -and $totalTasks -gt 0) {
+                            $approxCPU = 1
+                        }
+                        
+                        $result.SQLProcessUtilization = $approxCPU
+                        $result.AvgCPUPercentLast10Min = $approxCPU
+                        $result.P95CPUPercent = $approxCPU
                         $result.SystemIdleProcess = 0  # No disponible en SQL 2005/2008
                         $result.OtherProcessUtilization = 0
                     }
                     
-                    # También obtener RunnableTasksTotal si está disponible
-                    if ($cpuData.RunnableTasksTotal -ne [DBNull]::Value) {
-                        $runnableTotal = [int]$cpuData.RunnableTasksTotal
-                        # Este es el total de tareas en cola, usar como respaldo si ResultSet 2 falla
-                        if ($runnableTotal -gt 0) {
-                            $result.RunnableTasks = $runnableTotal
-                        }
+                    # Obtener RunnableTasksTotal
+                    if ($runnableTotal -gt 0) {
+                        $result.RunnableTasks = $runnableTotal
                     }
                 }
                 
