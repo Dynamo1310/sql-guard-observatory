@@ -429,17 +429,20 @@ WHERE wait_type LIKE 'PAGELATCH%'
         }
         
         # Query 3.5: Espacio usado en TempDB (SQL 2012+)
+        # IMPORTANTE: sys.dm_db_file_space_usage puede devolver NULL si TempDB no tiene actividad
+        # En ese caso, usar TotalSizeMB de sys.master_files (ya obtenido en Query 1)
         if ($majorVersion -ge 11) {
             $querySpaceUsage = @"
 SELECT 
-    SUM(total_page_count) * 8 / 1024 AS TotalSizeMB,
-    SUM(allocated_extent_page_count) * 8 / 1024 AS UsedSpaceMB,
-    SUM(version_store_reserved_page_count) * 8 / 1024 AS VersionStoreMB,
+    ISNULL(SUM(total_page_count) * 8 / 1024, 0) AS TotalSizeMB,
+    ISNULL(SUM(allocated_extent_page_count) * 8 / 1024, 0) AS UsedSpaceMB,
+    ISNULL(SUM(version_store_reserved_page_count) * 8 / 1024, 0) AS VersionStoreMB,
     CASE 
         WHEN SUM(total_page_count) > 0 
         THEN CAST((SUM(total_page_count) - SUM(allocated_extent_page_count)) * 100.0 / SUM(total_page_count) AS DECIMAL(5,2))
         ELSE 0 
-    END AS FreeSpacePct
+    END AS FreeSpacePct,
+    COUNT(*) AS RowCount  -- Para detectar si la DMV tiene datos
 FROM sys.dm_db_file_space_usage
 WHERE database_id = DB_ID('tempdb');
 "@
@@ -447,20 +450,46 @@ WHERE database_id = DB_ID('tempdb');
             try {
                 $spaceUsage = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySpaceUsage -QueryTimeout $TimeoutSec -EnableException
                 if ($spaceUsage) {
-                    $result.TempDBUsedSpaceMB = if ($spaceUsage.UsedSpaceMB -ne [DBNull]::Value) { [int]$spaceUsage.UsedSpaceMB } else { 0 }
-                    $result.TempDBFreeSpacePct = if ($spaceUsage.FreeSpacePct -ne [DBNull]::Value) { [decimal]$spaceUsage.FreeSpacePct } else { 0 }
-                    $result.TempDBVersionStoreMB = if ($spaceUsage.VersionStoreMB -ne [DBNull]::Value) { [int]$spaceUsage.VersionStoreMB } else { 0 }
+                    # Verificar si la DMV tiene datos reales (RowCount > 0 y valores no nulos)
+                    $hasRealData = ($spaceUsage.RowCount -gt 0) -and ($spaceUsage.TotalSizeMB -gt 0)
                     
-                    # Alertas
-                    if ($result.TempDBFreeSpacePct -lt 10) {
-                        $result.Details += "LowFreeSpace(<10%)"
+                    if ($hasRealData) {
+                        # DMV con datos válidos - usar esos valores
+                        $result.TempDBUsedSpaceMB = [int]$spaceUsage.UsedSpaceMB
+                        $result.TempDBFreeSpacePct = [decimal]$spaceUsage.FreeSpacePct
+                        $result.TempDBVersionStoreMB = [int]$spaceUsage.VersionStoreMB
+                        
+                        Write-Verbose "${InstanceName}: TempDB UsedSpace = $($result.TempDBUsedSpaceMB) MB (from DMV)"
                     }
-                    if ($result.TempDBVersionStoreMB -gt 1024) {
-                        $result.Details += "LargeVersionStore(>1GB)"
+                    else {
+                        # DMV vacía o sin actividad - calcular FreeSpace estimado desde sys.master_files
+                        if ($result.TempDBTotalSizeMB -gt 0) {
+                            # Asumir que está mayormente libre si no hay actividad
+                            $result.TempDBUsedSpaceMB = 0
+                            $result.TempDBFreeSpacePct = 95.0  # Estimación conservadora
+                            $result.TempDBVersionStoreMB = 0
+                            
+                            Write-Verbose "${InstanceName}: TempDB sin actividad en DMV - usando valores por defecto (FreeSpace estimado: 95%)"
+                            $result.Details += "TempDB-NoActivity"
+                        }
+                        else {
+                            Write-Warning "⚠️  ${InstanceName}: sys.dm_db_file_space_usage vacía Y TotalSizeMB=0"
+                            $result.Details += "TempDB-NoData"
+                        }
+                    }
+                    
+                    # Alertas (solo si hay datos reales)
+                    if ($hasRealData) {
+                        if ($result.TempDBFreeSpacePct -lt 10) {
+                            $result.Details += "LowFreeSpace(<10%)"
+                        }
+                        if ($result.TempDBVersionStoreMB -gt 1024) {
+                            $result.Details += "LargeVersionStore(>1GB)"
+                        }
                     }
                 }
                 else {
-                    Write-Warning "⚠️  ${InstanceName}: sys.dm_db_file_space_usage no retornó datos"
+                    Write-Warning "⚠️  ${InstanceName}: sys.dm_db_file_space_usage no retornó filas"
                     $result.Details += "NoSpaceData"
                 }
             }
@@ -889,8 +918,14 @@ foreach ($instance in $instances) {
         
         # Información de espacio si está disponible
         $spaceInfo = ""
-        if ($configMetrics.TempDBFreeSpacePct -gt 0 -and $configMetrics.TempDBFreeSpacePct -lt 10) {
+        if ($configMetrics.Details -contains "TempDB-NoActivity") {
+            $spaceInfo = " [NoActivity~95%]"
+        }
+        elseif ($configMetrics.TempDBFreeSpacePct -gt 0 -and $configMetrics.TempDBFreeSpacePct -lt 10) {
             $spaceInfo = " [Free:$([Math]::Round($configMetrics.TempDBFreeSpacePct, 0))%⚠️]"
+        }
+        elseif ($configMetrics.TempDBFreeSpacePct -gt 0) {
+            $spaceInfo = " [Free:$([Math]::Round($configMetrics.TempDBFreeSpacePct, 0))%]"
         }
         
         Write-Host "   $status $instanceName" -ForegroundColor Gray -NoNewline

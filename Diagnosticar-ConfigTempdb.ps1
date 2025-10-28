@@ -145,13 +145,26 @@ WHERE database_id = DB_ID('tempdb');
         $spaceUsage = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySpaceUsage -QueryTimeout $TimeoutSec -EnableException
         if ($spaceUsage) {
             Write-Host "✅ Query exitosa" -ForegroundColor Green
-            Write-Host "   Tamaño total: $($spaceUsage.TotalSizeMB) MB" -ForegroundColor White
-            Write-Host "   Usado: $($spaceUsage.UsedSpaceMB) MB" -ForegroundColor White
-            Write-Host "   Libre: $($spaceUsage.FreeSpacePct)%" -ForegroundColor White
-            Write-Host "   Version Store: $($spaceUsage.VersionStoreMB) MB" -ForegroundColor White
             
-            if ($spaceUsage.UsedSpaceMB -eq 0 -and $spaceUsage.TotalSizeMB -eq 0) {
-                Write-Host "   ⚠️  AMBOS = 0 MB (dato sospechoso)" -ForegroundColor Yellow
+            # Detectar NULL vs 0
+            $totalMB = if ($spaceUsage.TotalSizeMB -eq [DBNull]::Value -or $null -eq $spaceUsage.TotalSizeMB) { "[NULL]" } else { "$($spaceUsage.TotalSizeMB) MB" }
+            $usedMB = if ($spaceUsage.UsedSpaceMB -eq [DBNull]::Value -or $null -eq $spaceUsage.UsedSpaceMB) { "[NULL]" } else { "$($spaceUsage.UsedSpaceMB) MB" }
+            $freePct = if ($spaceUsage.FreeSpacePct -eq [DBNull]::Value -or $null -eq $spaceUsage.FreeSpacePct) { "[NULL]" } else { "$($spaceUsage.FreeSpacePct)%" }
+            $versionMB = if ($spaceUsage.VersionStoreMB -eq [DBNull]::Value -or $null -eq $spaceUsage.VersionStoreMB) { "[NULL]" } else { "$($spaceUsage.VersionStoreMB) MB" }
+            
+            Write-Host "   Tamaño total: $totalMB" -ForegroundColor White
+            Write-Host "   Usado: $usedMB" -ForegroundColor White
+            Write-Host "   Libre: $freePct" -ForegroundColor White
+            Write-Host "   Version Store: $versionMB" -ForegroundColor White
+            
+            # Detectar problemas
+            if ($totalMB -eq "[NULL]" -or $usedMB -eq "[NULL]") {
+                Write-Host "   ❌ VALORES NULL DETECTADOS - TempDB sin actividad o DMV vacía" -ForegroundColor Red
+                Write-Host "      → La DMV sys.dm_db_file_space_usage requiere actividad en TempDB" -ForegroundColor Yellow
+                Write-Host "      → Ejecutar: USE tempdb; CREATE TABLE #t(id INT); DROP TABLE #t;" -ForegroundColor Cyan
+            }
+            elseif ($spaceUsage.UsedSpaceMB -eq 0 -and $spaceUsage.TotalSizeMB -eq 0) {
+                Write-Host "   ⚠️  AMBOS = 0 MB (TempDB sin actividad reciente)" -ForegroundColor Yellow
             }
         }
         else {
@@ -282,8 +295,10 @@ Write-Host ""
 Write-Host "💡 PRÓXIMOS PASOS:" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "1. Si ves errores de permisos → Ejecutar el script con cuenta con VIEW SERVER STATE" -ForegroundColor White
-Write-Host "2. Si Max Memory = UNLIMITED → Es correcto que aparezca 0 GB (no configurado)" -ForegroundColor White
-Write-Host "3. Si TempDB Size = 0 pero FileCount > 0 → Revisar query de sys.master_files" -ForegroundColor White
-Write-Host "4. Si todos los tests fallan → Problema de conectividad o versión no soportada" -ForegroundColor White
+Write-Host "2. Si Max Memory = UNLIMITED → Es correcto que aparezca 0 GB (NO configurado)" -ForegroundColor White
+Write-Host "   💡 RECOMENDADO: Configurar Max Memory a ~80% de RAM física" -ForegroundColor Cyan
+Write-Host "3. Si TempDB retorna [NULL] → DMV sin datos, generar actividad en TempDB" -ForegroundColor White
+Write-Host "4. Si TempDB tiene 1 solo archivo → CREAR MÁS ARCHIVOS (mínimo 4 con 4 CPUs)" -ForegroundColor White
+Write-Host "5. Si todos los tests fallan → Problema de conectividad o versión no soportada" -ForegroundColor White
 Write-Host ""
 
