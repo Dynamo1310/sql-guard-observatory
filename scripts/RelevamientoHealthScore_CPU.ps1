@@ -81,6 +81,19 @@ function Get-CPUMetrics {
         # Para SQL 2005/2008 (versiones 9.x y 10.x), usar query simplificada
         if ($version -le 10) {
             $query = @"
+-- CPU actual basado en schedulers activos (compatible SQL 2005+)
+-- Aproximación: suma de work_queue_count como indicador de presión de CPU
+SELECT 
+    CASE 
+        WHEN SUM(current_workers_count) = 0 THEN 0
+        ELSE CAST((SUM(current_workers_count) * 100.0 / NULLIF(SUM(max_workers_count), 0)) AS INT)
+    END AS ApproxCPUPercent,
+    ISNULL(SUM(current_workers_count), 0) AS CurrentWorkers,
+    ISNULL(SUM(runnable_tasks_count), 0) AS RunnableTasksTotal
+FROM sys.dm_os_schedulers WITH (NOLOCK)
+WHERE scheduler_id < 255
+  AND status = 'VISIBLE ONLINE';
+
 -- Runnable tasks (tareas esperando CPU) - Compatible con SQL 2005+
 SELECT 
     ISNULL(COUNT(*), 0) AS RunnableTasksCount
@@ -93,13 +106,6 @@ SELECT
     ISNULL(SUM(pending_disk_io_count), 0) AS PendingDiskIO
 FROM sys.dm_os_schedulers WITH (NOLOCK)
 WHERE scheduler_id < 255;
-
--- CPU Snapshot actual de Performance Counter
-SELECT 
-    CAST(ISNULL(cntr_value, 0) AS INT) AS CPUValue
-FROM sys.dm_os_performance_counters WITH (NOLOCK)
-WHERE counter_name LIKE 'CPU usage %'
-  AND instance_name = 'default';
 "@
         } else {
             # Para SQL 2012+ (versiones 11.x+), usar query completa
@@ -156,33 +162,50 @@ WHERE scheduler_id < 255;
             
             if ($version -le 10) {
                 # SQL 2005/2008: Procesar resultsets simplificados
-                # ResultSet 1: Runnable tasks
+                # ResultSet 1: CPU aproximado basado en workers
                 if ($resultSets.Count -ge 1 -and $resultSets[0].Rows.Count -gt 0) {
-                    $runnableData = $resultSets[0].Rows[0]
-                    if ($runnableData.RunnableTasksCount -ne [DBNull]::Value) {
-                        $result.RunnableTasks = [int]$runnableData.RunnableTasksCount
-                    }
-                }
-                
-                # ResultSet 2: Pending I/O
-                if ($resultSets.Count -ge 2 -and $resultSets[1].Rows.Count -gt 0) {
-                    $ioData = $resultSets[1].Rows[0]
-                    if ($ioData.PendingDiskIO -ne [DBNull]::Value) {
-                        $result.PendingDiskIOCount = [int]$ioData.PendingDiskIO
-                    }
-                }
-                
-                # ResultSet 3: CPU Value (snapshot actual)
-                if ($resultSets.Count -ge 3 -and $resultSets[2].Rows.Count -gt 0) {
-                    $cpuData = $resultSets[2].Rows[0]
-                    if ($cpuData.CPUValue -ne [DBNull]::Value) {
-                        $cpuValue = [int]$cpuData.CPUValue
-                        # Usar el valor actual como promedio y p95 (no hay histórico)
+                    $cpuData = $resultSets[0].Rows[0]
+                    if ($cpuData.ApproxCPUPercent -ne [DBNull]::Value) {
+                        $cpuValue = [int]$cpuData.ApproxCPUPercent
+                        # Limitar a un rango razonable (0-100)
+                        if ($cpuValue -gt 100) { $cpuValue = 100 }
+                        if ($cpuValue -lt 0) { $cpuValue = 0 }
+                        
+                        # Usar el valor aproximado como promedio y p95 (no hay histórico en SQL 2005/2008)
                         $result.SQLProcessUtilization = $cpuValue
                         $result.AvgCPUPercentLast10Min = $cpuValue
                         $result.P95CPUPercent = $cpuValue
                         $result.SystemIdleProcess = 0  # No disponible en SQL 2005/2008
                         $result.OtherProcessUtilization = 0
+                    }
+                    
+                    # También obtener RunnableTasksTotal si está disponible
+                    if ($cpuData.RunnableTasksTotal -ne [DBNull]::Value) {
+                        $runnableTotal = [int]$cpuData.RunnableTasksTotal
+                        # Este es el total de tareas en cola, usar como respaldo si ResultSet 2 falla
+                        if ($runnableTotal -gt 0) {
+                            $result.RunnableTasks = $runnableTotal
+                        }
+                    }
+                }
+                
+                # ResultSet 2: Runnable tasks (contador de schedulers con tareas)
+                if ($resultSets.Count -ge 2 -and $resultSets[1].Rows.Count -gt 0) {
+                    $runnableData = $resultSets[1].Rows[0]
+                    if ($runnableData.RunnableTasksCount -ne [DBNull]::Value) {
+                        $runnableCount = [int]$runnableData.RunnableTasksCount
+                        # Sobrescribir solo si tenemos un valor válido
+                        if ($runnableCount -gt 0) {
+                            $result.RunnableTasks = $runnableCount
+                        }
+                    }
+                }
+                
+                # ResultSet 3: Pending I/O
+                if ($resultSets.Count -ge 3 -and $resultSets[2].Rows.Count -gt 0) {
+                    $ioData = $resultSets[2].Rows[0]
+                    if ($ioData.PendingDiskIO -ne [DBNull]::Value) {
+                        $result.PendingDiskIOCount = [int]$ioData.PendingDiskIO
                     }
                 }
                 

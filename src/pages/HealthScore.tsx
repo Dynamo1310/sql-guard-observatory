@@ -1118,9 +1118,9 @@ export default function HealthScore() {
                                       const stolenPct = (details.memoriaDetails.stolenServerMemoryMB / totalMem) * 100;
                                       const stolenGB = (details.memoriaDetails.stolenServerMemoryMB / 1024).toFixed(1);
                                       if (stolenPct > 50) {
-                                        suggestions.push(`Stolen Memory muy alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) - Limpiar plan cache: DBCC FREESYSTEMCACHE`);
+                                        suggestions.push(`Memoria No-Buffer muy alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) - Limpiar plan cache: DBCC FREESYSTEMCACHE`);
                                       } else if (stolenPct > 30) {
-                                        suggestions.push(`Stolen Memory alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) - Revisar planes en caché y CLR usage`);
+                                        suggestions.push(`Memoria No-Buffer alta (${stolenGB}GB, ${stolenPct.toFixed(0)}%) - Revisar planes en caché y CLR usage`);
                                       }
                                     }
                                   }
@@ -1325,7 +1325,7 @@ export default function HealthScore() {
                                             )}
                                             {mem.stolenServerMemoryMB > 0 && (
                                               <div className="flex items-center justify-between text-[11px]">
-                                                <span className="text-muted-foreground">Robada</span>
+                                                <span className="text-muted-foreground">No-Buffer</span>
                                                 <span className={`font-mono ${stolenPct > 50 ? 'text-red-500 font-semibold' : stolenPct > 30 ? 'text-amber-500' : ''}`}>
                                                   {mem.stolenServerMemoryMB}MB ({stolenPct.toFixed(0)}%)
                                                   {stolenPct > 50}
@@ -1372,16 +1372,26 @@ export default function HealthScore() {
                                         <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.avgWriteLatencyMs.toFixed(1)}ms</span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
-                                        <span className="text-muted-foreground">IOPS</span>
-                                        <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.totalIOPS}</span>
-                                      </div>
-                                      <div className="flex items-center justify-between text-[11px]">
                                         <span className="text-muted-foreground">Data lect</span>
                                         <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.dataFileAvgReadMs.toFixed(1)}ms</span>
                                       </div>
                                       <div className="flex items-center justify-between text-[11px]">
                                         <span className="text-muted-foreground">Log escr</span>
                                         <span className="font-mono">{instanceDetails[score.instanceName].ioDetails.logFileAvgWriteMs.toFixed(1)}ms</span>
+                                      </div>
+                                      
+                                      {/* IOPS - Sección separada */}
+                                      <div className="pt-1.5 mt-1.5 border-t border-cyan-500/10 space-y-0.5">
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-muted-foreground font-semibold">IOPS Total</span>
+                                          <span className="font-mono font-semibold">{Math.round(instanceDetails[score.instanceName].ioDetails.totalIOPS).toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-[10px]">
+                                          <span className="text-muted-foreground">Read / Write</span>
+                                          <span className="font-mono text-muted-foreground">
+                                            {Math.round(instanceDetails[score.instanceName].ioDetails.readIOPS).toLocaleString()} / {Math.round(instanceDetails[score.instanceName].ioDetails.writeIOPS).toLocaleString()}
+                                          </span>
+                                        </div>
                                       </div>
                                       
                                       {/* I/O Waits - Minimalista */}
@@ -1451,18 +1461,36 @@ export default function HealthScore() {
                                       {/* Detalle de volúmenes */}
                                       {(() => {
                                         try {
-                                          if (!instanceDetails[score.instanceName].discosDetails.volumesJson) return null;
+                                          const volumesJson = instanceDetails[score.instanceName].discosDetails.volumesJson;
                                           
-                                          const volumes = JSON.parse(instanceDetails[score.instanceName].discosDetails.volumesJson);
-                                          if (!Array.isArray(volumes) || volumes.length === 0) return null;
+                                          if (!volumesJson || volumesJson.trim() === '' || volumesJson === '[]') {
+                                            return (
+                                              <div className="pt-1 mt-1 border-t border-yellow-500/10">
+                                                <p className="text-[10px] text-muted-foreground italic text-center py-2">
+                                                  No hay datos de volúmenes disponibles
+                                                </p>
+                                              </div>
+                                            );
+                                          }
+                                          
+                                          const volumes = JSON.parse(volumesJson);
+                                          if (!Array.isArray(volumes) || volumes.length === 0) {
+                                            return (
+                                              <div className="pt-1 mt-1 border-t border-yellow-500/10">
+                                                <p className="text-[10px] text-muted-foreground italic text-center py-2">
+                                                  No hay volúmenes para mostrar
+                                                </p>
+                                              </div>
+                                            );
+                                          }
                                           
                                           // Ordenar por espacio libre (menor a mayor)
-                                          const sortedVolumes = [...volumes].sort((a, b) => (a.FreeSpacePct || 100) - (b.FreeSpacePct || 100));
+                                          const sortedVolumes = [...volumes].sort((a, b) => (a.FreePct || 100) - (b.FreePct || 100));
                                           
                                           // Categorizar volúmenes
-                                          const criticalVolumes = sortedVolumes.filter(v => v.FreeSpacePct < 10);
-                                          const warningVolumes = sortedVolumes.filter(v => v.FreeSpacePct >= 10 && v.FreeSpacePct < 20);
-                                          const okVolumes = sortedVolumes.filter(v => v.FreeSpacePct >= 20);
+                                          const criticalVolumes = sortedVolumes.filter(v => v.FreePct < 10);
+                                          const warningVolumes = sortedVolumes.filter(v => v.FreePct >= 10 && v.FreePct < 20);
+                                          const okVolumes = sortedVolumes.filter(v => v.FreePct >= 20);
                                           
                                           return (
                                             <div className="pt-1 mt-1 border-t border-yellow-500/10 space-y-0.5">
@@ -1471,30 +1499,37 @@ export default function HealthScore() {
                                               {/* Críticos */}
                                               {criticalVolumes.map((vol, idx) => (
                                                 <div key={`crit-${idx}`} className="flex items-center justify-between text-[11px] bg-red-500/5 px-1 rounded">
-                                                  <span className="font-mono text-red-600 font-semibold">{vol.VolumeName}</span>
-                                                  <span className="text-red-600 font-semibold">{vol.FreeSpacePct?.toFixed(1)}%</span>
+                                                  <span className="font-mono text-red-600 font-semibold">{vol.MountPoint || vol.VolumeName || 'N/A'}</span>
+                                                  <span className="text-red-600 font-semibold">{vol.FreePct?.toFixed(1) || '?'}% ({vol.FreeGB?.toFixed(0) || '?'}GB)</span>
                                                 </div>
                                               ))}
                                               
                                               {/* Warning */}
                                               {warningVolumes.map((vol, idx) => (
                                                 <div key={`warn-${idx}`} className="flex items-center justify-between text-[11px] bg-amber-500/5 px-1 rounded">
-                                                  <span className="font-mono text-amber-600">{vol.VolumeName}</span>
-                                                  <span className="text-amber-600">{vol.FreeSpacePct?.toFixed(1)}%</span>
+                                                  <span className="font-mono text-amber-600">{vol.MountPoint || vol.VolumeName || 'N/A'}</span>
+                                                  <span className="text-amber-600">{vol.FreePct?.toFixed(1) || '?'}% ({vol.FreeGB?.toFixed(0) || '?'}GB)</span>
                                                 </div>
                                               ))}
                                               
                                               {/* OK - Mostrar TODOS */}
                                               {okVolumes.map((vol, idx) => (
                                                 <div key={`ok-${idx}`} className="flex items-center justify-between text-[11px]">
-                                                  <span className="font-mono text-muted-foreground">{vol.VolumeName}</span>
-                                                  <span className="text-muted-foreground">{vol.FreeSpacePct?.toFixed(1)}%</span>
+                                                  <span className="font-mono text-muted-foreground">{vol.MountPoint || vol.VolumeName || 'N/A'}</span>
+                                                  <span className="text-muted-foreground">{vol.FreePct?.toFixed(1) || '?'}% ({vol.FreeGB?.toFixed(0) || '?'}GB)</span>
                                                 </div>
                                               ))}
                                             </div>
                                           );
                                         } catch (e) {
-                                          return null;
+                                          console.error('Error parseando volumesJson:', e, instanceDetails[score.instanceName].discosDetails.volumesJson);
+                                          return (
+                                            <div className="pt-1 mt-1 border-t border-yellow-500/10">
+                                              <p className="text-[10px] text-red-400 italic text-center py-2">
+                                                Error al cargar volúmenes (ver consola)
+                                              </p>
+                                            </div>
+                                          );
                                         }
                                       })()}
                                     </>
