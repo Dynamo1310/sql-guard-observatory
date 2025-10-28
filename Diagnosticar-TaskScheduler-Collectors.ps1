@@ -321,7 +321,7 @@ try {
             Write-Host "      Último registro: $($lastRecord.CollectedAtUtc) ($minutesAgo min atrás)" -ForegroundColor $color
             Write-Host "      Total registros: $($lastRecord.TotalRows)" -ForegroundColor Gray
         } else {
-            Write-Host "   $table: ❌ SIN DATOS" -ForegroundColor Red
+            Write-Host "   ${table}: ❌ SIN DATOS" -ForegroundColor Red
         }
     }
     
