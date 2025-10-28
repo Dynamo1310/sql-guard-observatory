@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SQLGuardObservatory.API.Data;
+using SQLGuardObservatory.API.Hubs;
 using SQLGuardObservatory.API.Models;
 using SQLGuardObservatory.API.Services;
 using System.Text;
@@ -17,6 +18,14 @@ builder.Host.UseWindowsService();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// ========== SIGNALR CONFIGURATION ==========
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true; // Solo en desarrollo
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+});
 
 // Configurar DbContext para SQL Server
 builder.Services.AddDbContext<SQLNovaDbContext>(options =>
@@ -139,6 +148,9 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Mapear Hub de SignalR para notificaciones en tiempo real
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.Run();
 

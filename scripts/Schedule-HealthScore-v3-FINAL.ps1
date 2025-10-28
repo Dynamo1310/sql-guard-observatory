@@ -1,30 +1,43 @@
 <#
 .SYNOPSIS
-    Schedule Health Score v3.0 FINAL (12 Categorías) - Windows Task Scheduler Setup
+    Schedule Health Score v3.2 - Windows Task Scheduler Setup con SignalR Notifications
     
 .DESCRIPTION
     Crea/Actualiza Scheduled Tasks para ejecutar automáticamente:
-    - 12 scripts de recolección de métricas individuales
+    - 13 scripts de recolección de métricas individuales
     - 1 script de consolidación
     
-    FRECUENCIAS:
-    - Conectividad: Cada 1 minuto (eliminado - solo indicador)
-    - AlwaysOn: Cada 2 minutos
-    - Log Chain: Cada 5 minutos
-    - Database States: Cada 5 minutos
-    - Errores Críticos: Cada 5 minutos
-    - CPU: Cada 2 minutos
-    - Memoria: Cada 3 minutos
-    - I/O: Cada 3 minutos
-    - Discos: Cada 10 minutos
-    - Mantenimientos: Cada 30 minutos
-    - Config & TempDB: Cada 60 minutos
-    - Autogrowth: Cada 30 minutos
-    - Backups: Cada 15 minutos
-    - Consolidate: Cada 2 minutos (después de recolección)
+    FRECUENCIAS OPTIMIZADAS (150 instancias, 10 cores, 16GB RAM):
+    ⚡ CRÍTICO (Cada 5 minutos):
+    - AlwaysOn, CPU, Memoria, I/O, Discos, DatabaseStates
+    
+    🟡 IMPORTANTE (Cada 30 minutos):
+    - Backups, Waits
+    
+    🔵 PERIÓDICO (Cada 4 horas):
+    - Maintenance, ErroresCriticos, ConfiguracionTempdb, Autogrowth, LogChain
+    
+    🔄 CONSOLIDADOR (Cada 10 minutos):
+    - Consolidate_v3_FINAL (calcula HealthScore final)
+    
+    NOTIFICACIONES SIGNALR:
+    Cada collector notifica al backend al terminar para actualización en tiempo real del frontend.
+    
+.PARAMETER ScriptsPath
+    Ruta donde se encuentran los scripts collectors
+    
+.PARAMETER TaskPrefix
+    Prefijo para nombrar las tareas en Task Scheduler
+    
+.PARAMETER ApiBaseUrl
+    URL base del backend API para notificaciones SignalR (default: http://localhost:5000)
     
 .NOTES
     Ejecutar con permisos de Administrador
+    Hardware recomendado: 10+ cores, 16GB+ RAM
+    
+.EXAMPLE
+    .\Schedule-HealthScore-v3-FINAL.ps1 -ApiBaseUrl "http://asprbm-nov-01:5000"
 #>
 
 #Requires -RunAsAdministrator
@@ -32,15 +45,16 @@
 [CmdletBinding()]
 param(
     [string]$ScriptsPath = "C:\SQLGuardCollectors\scripts",
-    [string]$TaskPrefix = "HealthScore_v3_FINAL"
+    [string]$TaskPrefix = "HealthScore_v3.2",
+    [string]$ApiBaseUrl = "http://localhost:5000"
 )
 
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Cyan
-Write-Host " Health Score v3.0 FINAL - Configuración de Tareas Programadas" -ForegroundColor Cyan
-Write-Host " 12 Categorías Balanceadas" -ForegroundColor Cyan
+Write-Host " Health Score v3.2 - Configuración de Tareas Programadas" -ForegroundColor Cyan
+Write-Host " 13 Collectors + SignalR Real-Time Notifications" -ForegroundColor Cyan
 Write-Host "==========================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -50,29 +64,59 @@ if (-not (Test-Path $ScriptsPath)) {
     exit 1
 }
 
-# Definición de tareas
+Write-Host "[INFO] Configuración:" -ForegroundColor Yellow
+Write-Host "  Scripts Path: $ScriptsPath" -ForegroundColor Gray
+Write-Host "  API Base URL: $ApiBaseUrl" -ForegroundColor Gray
+Write-Host "  Throttle: 16 threads (optimizado para 10 cores)" -ForegroundColor Gray
+Write-Host ""
+
+# Definición de tareas con frecuencias optimizadas
 $tasks = @(
-    # TAB 1: AVAILABILITY & DR (4 categorías)
-    @{
-        Name = "Backups"
-        Script = "RelevamientoHealthScore_Backups.ps1"
-        Interval = 15  # minutos
-        Description = "Recolección de estado de backups (FULL, LOG)"
-        Priority = "High"
-    },
+    # ⚡ CRÍTICO - Cada 5 minutos (6 collectors)
     @{
         Name = "AlwaysOn"
         Script = "RelevamientoHealthScore_AlwaysOn.ps1"
-        Interval = 2
-        Description = "Recolección de estado de AlwaysOn AG"
+        Interval = 5
+        Description = "Recolección de estado de AlwaysOn AG (sincronización crítica)"
         Priority = "High"
+        Category = "Availability"
+        Offset = 0  # Ejecuta a las :00, :05, :10...
     },
     @{
-        Name = "LogChain"
-        Script = "RelevamientoHealthScore_LogChain.ps1"
+        Name = "CPU"
+        Script = "RelevamientoHealthScore_CPU.ps1"
         Interval = 5
-        Description = "Verificación de integridad de cadena de logs"
+        Description = "Monitoreo de uso de CPU (detección de spikes)"
         Priority = "High"
+        Category = "Performance"
+        Offset = 1  # Ejecuta a las :01, :06, :11...
+    },
+    @{
+        Name = "Memoria"
+        Script = "RelevamientoHealthScore_Memoria.ps1"
+        Interval = 5
+        Description = "Monitoreo de memoria (PLE, memory pressure)"
+        Priority = "High"
+        Category = "Performance"
+        Offset = 2  # Ejecuta a las :02, :07, :12...
+    },
+    @{
+        Name = "IO"
+        Script = "RelevamientoHealthScore_IO.ps1"
+        Interval = 5
+        Description = "Monitoreo de latencia de I/O (performance crítica)"
+        Priority = "High"
+        Category = "Performance"
+        Offset = 3  # Ejecuta a las :03, :08, :13...
+    },
+    @{
+        Name = "Discos"
+        Script = "RelevamientoHealthScore_Discos.ps1"
+        Interval = 5
+        Description = "Monitoreo de espacio en discos (prevención de llenado)"
+        Priority = "High"
+        Category = "Resources"
+        Offset = 4  # Ejecuta a las :04, :09, :14...
     },
     @{
         Name = "DatabaseStates"
@@ -80,81 +124,148 @@ $tasks = @(
         Interval = 5
         Description = "Detección de databases en estados problemáticos"
         Priority = "High"
+        Category = "Availability"
+        Offset = 0  # Ejecuta a las :00, :05, :10... (junto con AlwaysOn)
     },
     
-    # TAB 2: PERFORMANCE (4 categorías)
+    # 🟡 IMPORTANTE - Cada 30 minutos (2 collectors)
     @{
-        Name = "CPU"
-        Script = "RelevamientoHealthScore_CPU.ps1"
-        Interval = 2
-        Description = "Monitoreo de uso de CPU"
-        Priority = "Medium"
-    },
-    @{
-        Name = "Memoria"
-        Script = "RelevamientoHealthScore_Memoria.ps1"
-        Interval = 3
-        Description = "Monitoreo de memoria (PLE, Grants)"
-        Priority = "Medium"
-    },
-    @{
-        Name = "IO"
-        Script = "RelevamientoHealthScore_IO.ps1"
-        Interval = 3
-        Description = "Monitoreo de latencia de I/O"
-        Priority = "Medium"
-    },
-    @{
-        Name = "Discos"
-        Script = "RelevamientoHealthScore_Discos.ps1"
-        Interval = 10
-        Description = "Monitoreo de espacio en discos"
-        Priority = "Medium"
-    },
-    
-    # TAB 3: MAINTENANCE & CONFIG (4 categorías)
-    @{
-        Name = "ErroresCriticos"
-        Script = "RelevamientoHealthScore_ErroresCriticos.ps1"
-        Interval = 5
-        Description = "Detección de errores severity >= 20"
+        Name = "Backups"
+        Script = "RelevamientoHealthScore_Backups.ps1"
+        Interval = 30
+        Description = "Recolección de estado de backups (FULL, LOG)"
         Priority = "High"
+        Category = "Availability"
+        Offset = 5  # Ejecuta a las :05, :35
     },
+    @{
+        Name = "Waits"
+        Script = "RelevamientoHealthScore_Waits.ps1"
+        Interval = 30
+        Description = "Recolección de wait statistics (acumulación de stats)"
+        Priority = "Medium"
+        Category = "Performance"
+        Offset = 8  # Ejecuta a las :08, :38
+    },
+    
+    # 🔵 PERIÓDICO - Cada 4 horas (5 collectors)
     @{
         Name = "Maintenance"
         Script = "RelevamientoHealthScore_Maintenance.ps1"
-        Interval = 30
+        Interval = 240  # 4 horas
         Description = "Estado de mantenimientos (CHECKDB, Index, Stats)"
         Priority = "Low"
+        Category = "Maintenance"
+        Offset = 10  # Ejecuta a las :10
+    },
+    @{
+        Name = "ErroresCriticos"
+        Script = "RelevamientoHealthScore_ErroresCriticos.ps1"
+        Interval = 240
+        Description = "Detección de errores severity >= 20"
+        Priority = "Medium"
+        Category = "Errors"
+        Offset = 15  # Ejecuta a las :15
     },
     @{
         Name = "ConfiguracionTempdb"
         Script = "RelevamientoHealthScore_ConfiguracionTempdb.ps1"
-        Interval = 60
+        Interval = 240
         Description = "Verificación de configuración de TempDB"
         Priority = "Low"
+        Category = "Configuration"
+        Offset = 20  # Ejecuta a las :20
     },
     @{
         Name = "Autogrowth"
         Script = "RelevamientoHealthScore_Autogrowth.ps1"
-        Interval = 30
+        Interval = 240
         Description = "Monitoreo de autogrowth events y capacity"
         Priority = "Medium"
+        Category = "Capacity"
+        Offset = 25  # Ejecuta a las :25
+    },
+    @{
+        Name = "LogChain"
+        Script = "RelevamientoHealthScore_LogChain.ps1"
+        Interval = 240
+        Description = "Verificación de integridad de cadena de logs"
+        Priority = "Medium"
+        Category = "Availability"
+        Offset = 30  # Ejecuta a las :30
     },
     
-    # Consolidación (debe ejecutarse después)
+    # 🔄 CONSOLIDADOR - Cada 10 minutos
     @{
         Name = "Consolidate"
         Script = "RelevamientoHealthScore_Consolidate_v3_FINAL.ps1"
-        Interval = 2
-        Description = "Consolidación y cálculo de Health Score final"
+        Interval = 10
+        Description = "Consolidación y cálculo de Health Score final (0-100)"
         Priority = "High"
-        Delay = 30  # segundos de delay para esperar a que terminen las recolecciones
+        Category = "Consolidation"
+        Offset = 6  # Ejecuta a las :06, :16, :26... (1 min después del último collector crítico)
     }
 )
 
-Write-Host "[INFO] Se configurarán $($tasks.Count) tareas programadas" -ForegroundColor Yellow
+Write-Host "[INFO] Se configurarán $($tasks.Count) tareas programadas:" -ForegroundColor Yellow
+Write-Host "  ⚡ Crítico (5 min):   6 collectors" -ForegroundColor Red
+Write-Host "  🟡 Importante (30 min): 2 collectors" -ForegroundColor Yellow
+Write-Host "  🔵 Periódico (4 horas): 5 collectors" -ForegroundColor Blue
+Write-Host "  🔄 Consolidador (10 min): 1 script" -ForegroundColor Cyan
 Write-Host ""
+
+# Crear módulo de notificación SignalR si no existe
+$signalRModulePath = Join-Path $ScriptsPath "Send-SignalRNotification.ps1"
+if (-not (Test-Path $signalRModulePath)) {
+    Write-Host "[INFO] Creando módulo de notificación SignalR..." -ForegroundColor Yellow
+    
+    $signalRModuleContent = @'
+<#
+.SYNOPSIS
+    Envía notificación al backend para actualización en tiempo real vía SignalR
+
+.PARAMETER CollectorName
+    Nombre del collector que terminó de ejecutarse
+
+.PARAMETER ApiBaseUrl
+    URL base del backend API
+    
+.PARAMETER InstanceCount
+    Número de instancias procesadas (opcional)
+#>
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$CollectorName,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$ApiBaseUrl = "http://localhost:5000",
+    
+    [Parameter(Mandatory=$false)]
+    [int]$InstanceCount = 0
+)
+
+try {
+    $notificationUrl = "$ApiBaseUrl/api/healthscore/notify"
+    
+    $body = @{
+        collectorName = $CollectorName
+        timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+        instanceCount = $InstanceCount
+    } | ConvertTo-Json
+    
+    # Timeout corto (2 segundos) para no bloquear el collector
+    $response = Invoke-RestMethod -Uri $notificationUrl -Method Post -Body $body -ContentType "application/json" -TimeoutSec 2 -ErrorAction SilentlyContinue
+    
+    Write-Verbose "[SignalR] Notificación enviada: $CollectorName"
+} catch {
+    # Fallar silenciosamente para no interrumpir el collector
+    Write-Verbose "[SignalR] No se pudo enviar notificación (backend offline o timeout): $_"
+}
+'@
+    
+    Set-Content -Path $signalRModulePath -Value $signalRModuleContent -Encoding UTF8
+    Write-Host "  ✓ Módulo creado: $signalRModulePath" -ForegroundColor Green
+}
 
 $successCount = 0
 $errorCount = 0
@@ -170,9 +281,18 @@ foreach ($task in $tasks) {
         continue
     }
     
+    # Mostrar info de la tarea
+    $frequencyText = switch ($task.Interval) {
+        5 { "⚡ 5 min" }
+        10 { "🔄 10 min" }
+        30 { "🟡 30 min" }
+        240 { "🔵 4 horas" }
+        default { "$($task.Interval) min" }
+    }
+    
     Write-Host "  Configurando: $taskName" -ForegroundColor Cyan
     Write-Host "    Script: $($task.Script)" -ForegroundColor Gray
-    Write-Host "    Frecuencia: Cada $($task.Interval) minutos" -ForegroundColor Gray
+    Write-Host "    Frecuencia: $frequencyText (offset: :$($task.Offset.ToString('00')))" -ForegroundColor Gray
     
     try {
         # Eliminar tarea existente si existe
@@ -182,18 +302,27 @@ foreach ($task in $tasks) {
             Write-Host "    ✓ Tarea existente eliminada" -ForegroundColor DarkGray
         }
         
-        # Acción: Ejecutar PowerShell con el script
+        # Calcular el tiempo de inicio basado en el offset
+        $now = Get-Date
+        $startTime = $now.Date.AddHours($now.Hour).AddMinutes($task.Offset)
+        if ($startTime -lt $now) {
+            # Si el tiempo ya pasó en esta hora, programar para la próxima ejecución
+            $startTime = $startTime.AddMinutes($task.Interval)
+        }
+        
+        # Acción: Ejecutar PowerShell con el script Y notificar al backend
+        # TODOS los collectors (incluido Consolidate) notifican cuando terminan
+        # Esto permite al frontend mostrar actualizaciones en tiempo real
+        $scriptBlock = @"
+& '$scriptPath'; if (`$?) { & '$signalRModulePath' -NotificationType 'HealthScore' -CollectorName '$($task.Name)' -ApiBaseUrl '$ApiBaseUrl' -Verbose }
+"@
+        
         $action = New-ScheduledTaskAction `
             -Execute "PowerShell.exe" `
-            -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+            -Argument "-NoProfile -ExecutionPolicy Bypass -Command `"$scriptBlock`""
         
         # Trigger: Repetir cada X minutos
-        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes $task.Interval)
-        
-        # Si la tarea tiene delay (Consolidate), agregar delay al trigger
-        if ($task.PSObject.Properties['Delay']) {
-            $trigger.Delay = "PT$($task.Delay)S"  # ISO 8601 duration format
-        }
+        $trigger = New-ScheduledTaskTrigger -Once -At $startTime -RepetitionInterval (New-TimeSpan -Minutes $task.Interval)
         
         # Configuración: Ejecutar como SYSTEM, siempre activo
         $settings = New-ScheduledTaskSettingsSet `
@@ -204,7 +333,7 @@ foreach ($task in $tasks) {
             -ExecutionTimeLimit (New-TimeSpan -Hours 1) `
             -MultipleInstances Queue
         
-        # Prioridad
+        # Prioridad basada en criticidad
         if ($task.Priority -eq "High") {
             $settings.Priority = 4
         }
@@ -226,7 +355,7 @@ foreach ($task in $tasks) {
             -RunLevel Highest `
             | Out-Null
         
-        Write-Host "    ✓ Tarea creada exitosamente" -ForegroundColor Green
+        Write-Host "    ✓ Tarea creada exitosamente (próxima: $($startTime.ToString('HH:mm')))" -ForegroundColor Green
         $successCount++
     }
     catch {
@@ -248,13 +377,46 @@ Write-Host ""
 
 if ($successCount -gt 0) {
     Write-Host "[INFO] Las tareas comenzarán a ejecutarse automáticamente" -ForegroundColor Yellow
-    Write-Host "[INFO] Puedes verificarlas en: Task Scheduler > Task Scheduler Library" -ForegroundColor Yellow
+    Write-Host "[INFO] Cada collector notificará al backend en: $ApiBaseUrl/api/healthscore/notify" -ForegroundColor Yellow
+    Write-Host "[INFO] El frontend recibirá actualizaciones en tiempo real vía SignalR" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Tareas configuradas:" -ForegroundColor Cyan
+    
     Get-ScheduledTask | Where-Object { $_.TaskName -like "$TaskPrefix*" } | 
-        Select-Object TaskName, State, @{N='NextRunTime';E={$_.Triggers[0].StartBoundary}} | 
-        Format-Table -AutoSize
+        ForEach-Object {
+            $taskInfo = Get-ScheduledTaskInfo $_
+            [PSCustomObject]@{
+                Tarea = $_.TaskName
+                Estado = $_.State
+                'Próxima Ejecución' = $taskInfo.NextRunTime
+                'Última Ejecución' = $taskInfo.LastRunTime
+            }
+        } | Format-Table -AutoSize
+    
+    Write-Host ""
+    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Host " PRÓXIMOS PASOS PARA SIGNALR" -ForegroundColor Cyan
+    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "1. BACKEND (.NET):" -ForegroundColor Yellow
+    Write-Host "   - Crear SignalR Hub en: SQLGuardObservatory.API/Hubs/HealthScoreHub.cs" -ForegroundColor Gray
+    Write-Host "   - Crear endpoint POST: /api/healthscore/notify" -ForegroundColor Gray
+    Write-Host "   - Configurar SignalR en Program.cs" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "2. FRONTEND (React):" -ForegroundColor Yellow
+    Write-Host "   - Instalar: npm install @microsoft/signalr" -ForegroundColor Gray
+    Write-Host "   - Conectar a hub en HealthScore.tsx" -ForegroundColor Gray
+    Write-Host "   - Suscribirse a evento 'HealthScoreUpdated'" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Ver archivos de implementación creados en este mismo directorio." -ForegroundColor Gray
+    Write-Host ""
 }
 
 Write-Host "[OK] Configuración completada!" -ForegroundColor Green
-
+Write-Host ""
+Write-Host "[TIP] Para verificar ejecución:" -ForegroundColor Cyan
+Write-Host "  Get-ScheduledTask -TaskName '$TaskPrefix*' | Get-ScheduledTaskInfo" -ForegroundColor Gray
+Write-Host ""
+Write-Host "[TIP] Para forzar ejecución manual de un collector:" -ForegroundColor Cyan
+Write-Host "  Start-ScheduledTask -TaskName '$TaskPrefix`_CPU'" -ForegroundColor Gray
+Write-Host ""

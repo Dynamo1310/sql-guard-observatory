@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useHealthScoreNotifications } from '@/hooks/useSignalRNotifications';
 
 export default function HealthScore() {
   const navigate = useNavigate();
@@ -30,6 +31,18 @@ export default function HealthScore() {
   const [filterHosting, setFilterHosting] = useState<string>('All');
 
   const { sortedData, requestSort, getSortIndicator } = useTableSort(healthScores);
+
+  // ========== SIGNALR: Actualizaciones en tiempo real ==========
+  useHealthScoreNotifications(
+    (data) => {
+      console.log(`[HealthScore] Collector ${data.collectorName} completó: ${data.instanceCount} instancias`);
+      
+      // Si es el consolidador, refrescar toda la tabla (tiene el score final calculado)
+      if (data.collectorName === 'Consolidate') {
+        fetchHealthScores();
+      }
+    }
+  );
 
   useEffect(() => {
     fetchHealthScores();

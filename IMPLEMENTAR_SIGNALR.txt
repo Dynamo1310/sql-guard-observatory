@@ -1,0 +1,121 @@
+========================================
+IMPLEMENTACIÓN DE SIGNALR COMPLETADA
+========================================
+
+✅ TODO EL CÓDIGO YA ESTÁ IMPLEMENTADO
+
+Ahora solo necesitas ejecutar estos comandos:
+
+========================================
+1. BACKEND (.NET)
+========================================
+
+cd SQLGuardObservatory.API
+
+# Instalar paquete SignalR
+dotnet add package Microsoft.AspNetCore.SignalR
+
+# Compilar
+dotnet build
+
+# Ejecutar (para probar)
+dotnet run
+
+# Probar endpoint de test
+curl http://localhost:5000/api/notifications/test
+
+========================================
+2. FRONTEND (React)
+========================================
+
+# Instalar dependencia de SignalR
+npm install
+
+# Ejecutar frontend
+npm run dev
+
+# Abrir en navegador
+http://localhost:5173
+
+# Verificar en DevTools Console que aparezca:
+[SignalR] Conectado exitosamente
+[SignalR] Suscrito a evento: HealthScoreUpdated
+
+========================================
+3. POWERSHELL COLLECTORS (EN EL SERVIDOR)
+========================================
+
+# Abrir PowerShell como Administrador
+cd C:\SQLGuardCollectors\scripts
+
+# Ejecutar configurador (ajusta las rutas si es necesario)
+.\Schedule-HealthScore-v3-FINAL.ps1 `
+    -ScriptsPath "C:\SQLGuardCollectors\scripts" `
+    -ApiBaseUrl "http://asprbm-nov-01:5000"
+
+# Esto creará:
+# - 14 Scheduled Tasks (13 collectors + 1 consolidador)
+# - Send-SignalRNotification.ps1
+
+# Verificar que se crearon las tareas
+Get-ScheduledTask -TaskName 'HealthScore_v3.2*' | Format-Table TaskName, State, NextRunTime
+
+# Probar una tarea manualmente
+Start-ScheduledTask -TaskName 'HealthScore_v3.2_Consolidate'
+
+========================================
+4. VERIFICACIÓN COMPLETA
+========================================
+
+1. Backend corriendo en localhost:5000 ✓
+2. Frontend corriendo en localhost:5173 ✓
+3. Abrir HealthScore en navegador ✓
+4. Ejecutar collector manualmente:
+   Start-ScheduledTask -TaskName 'HealthScore_v3.2_Consolidate'
+5. Ver en console del navegador:
+   [HealthScore] Collector Consolidate completó: 150 instancias
+6. La tabla debe actualizarse automáticamente
+
+========================================
+ARCHIVOS MODIFICADOS/CREADOS
+========================================
+
+BACKEND:
+✅ SQLGuardObservatory.API/Program.cs (modificado con SignalR)
+✅ SQLGuardObservatory.API/Hubs/NotificationHub.cs (nuevo)
+✅ SQLGuardObservatory.API/Controllers/NotificationController.cs (nuevo)
+
+FRONTEND:
+✅ src/App.tsx (modificado con SignalRProvider)
+✅ src/pages/HealthScore.tsx (modificado con notificaciones)
+✅ src/contexts/SignalRContext.tsx (nuevo)
+✅ src/hooks/useSignalRNotifications.ts (nuevo)
+✅ src/components/SignalRStatus.tsx (nuevo, opcional)
+✅ src/components/CollectorActivity.tsx (nuevo, opcional)
+✅ .env.local (nuevo)
+✅ package.json (agregado @microsoft/signalr)
+
+POWERSHELL:
+✅ scripts/Schedule-HealthScore-v3-FINAL.ps1 (configurador de tasks)
+✅ scripts/Send-SignalRNotification.ps1 (módulo de notificación)
+
+========================================
+TROUBLESHOOTING
+========================================
+
+Si no se conecta SignalR:
+- Verificar que el backend esté corriendo
+- Verificar en Network tab → WS (WebSocket)
+- Verificar CORS en Program.cs
+
+Si no llegan notificaciones:
+- Probar: .\Send-SignalRNotification.ps1 -NotificationType 'HealthScore' -CollectorName 'TEST' -ApiBaseUrl 'http://localhost:5000' -Verbose
+- Verificar logs del backend
+
+Si hay error de compilación en backend:
+- Verificar que se instaló: dotnet list package | findstr SignalR
+
+========================================
+¡TODO LISTO! Solo ejecuta los comandos
+========================================
+
