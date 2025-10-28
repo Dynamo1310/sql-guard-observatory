@@ -21,7 +21,7 @@ Write-Host "[ANTES] Contando registros en la base de datos..." -ForegroundColor 
 $countBefore = 0
 $tableName = "InstanceHealth_$CollectorName"
 try {
-    $query = "SELECT COUNT(*) as Count FROM $tableName WHERE FechaRelevamiento >= DATEADD(MINUTE, -10, GETDATE())"
+    $query = "SELECT COUNT(*) as Count FROM $tableName WHERE CollectedAtUtc >= DATEADD(MINUTE, -10, GETUTCDATE())"
     $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -TrustServerCertificate -ErrorAction Stop
     $countBefore = $result.Count
     Write-Host "  Tabla: $tableName" -ForegroundColor Gray
