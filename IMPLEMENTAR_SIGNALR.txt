@@ -46,11 +46,11 @@ http://localhost:5173
 ========================================
 
 # Abrir PowerShell como Administrador
-cd C:\SQLGuardCollectors\scripts
+cd C:\Apps\SQLGuardObservatory\Scripts
 
-# Ejecutar configurador (ajusta las rutas si es necesario)
+# Ejecutar configurador
 .\Schedule-HealthScore-v3-FINAL.ps1 `
-    -ScriptsPath "C:\SQLGuardCollectors\scripts" `
+    -ScriptsPath "C:\Apps\SQLGuardObservatory\Scripts" `
     -ApiBaseUrl "http://asprbm-nov-01:5000"
 
 # Esto creará:

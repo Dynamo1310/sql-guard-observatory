@@ -44,7 +44,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$ScriptsPath = "C:\SQLGuardCollectors\scripts",
+    [string]$ScriptsPath = "C:\Apps\SQLGuardObservatory\Scripts",
     [string]$TaskPrefix = "HealthScore_v3.2",
     [string]$ApiBaseUrl = "http://localhost:5000"
 )
