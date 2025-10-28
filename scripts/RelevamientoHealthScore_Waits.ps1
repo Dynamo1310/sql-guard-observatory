@@ -1,25 +1,25 @@
-﻿<#
+<#
 .SYNOPSIS
-    Health Score v3.1 - RecolecciÃ³n de WAIT STATISTICS & BLOCKING
+    Health Score v3.1 - Recolección de WAIT STATISTICS & BLOCKING
     
 .DESCRIPTION
     Script de alta frecuencia (cada 5 minutos) que recolecta:
     - Wait Statistics (PAGEIOLATCH, RESOURCE_SEMAPHORE, CXPACKET, WRITELOG, etc.)
     - Blocking activo (sesiones bloqueadas, tiempo de bloqueo)
     - Top 10 wait types por instancia
-    - Aggregates por categorÃ­a (CPU waits, Memory waits, I/O waits, Lock waits)
+    - Aggregates por categoría (CPU waits, Memory waits, I/O waits, Lock waits)
     
     Guarda en: InstanceHealth_Waits
     
     Impacto en Health Score v3.1:
-    - BLOCKING â†’ Errores & Blocking (7%)
-    - PAGEIOLATCH â†’ I/O (7%)
-    - RESOURCE_SEMAPHORE â†’ Memoria (7%)
-    - CXPACKET â†’ CPU (10%)
-    - WRITELOG â†’ I/O (7%)
+    - BLOCKING → Errores & Blocking (7%)
+    - PAGEIOLATCH → I/O (7%)
+    - RESOURCE_SEMAPHORE → Memoria (7%)
+    - CXPACKET → CPU (10%)
+    - WRITELOG → I/O (7%)
     
 .NOTES
-    VersiÃ³n: 3.1.0 (Waits & Blocking)
+    Versión: 3.1.0 (Waits & Blocking)
     Frecuencia: Cada 5 minutos
     Timeout: 15 segundos
     
@@ -32,7 +32,7 @@
 param()
 
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
@@ -40,9 +40,9 @@ if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-Import-Module dbatools -Force
+Import-Module dbatools -Force -ErrorAction Stop
 
-#region ===== CONFIGURACIÃ“N =====
+#region ===== CONFIGURACIÓN =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -175,9 +175,9 @@ AND wait_time_ms > 0
 ORDER BY wait_time_ms DESC;
 "@
         
-        # Query 3: Wait Aggregates por CategorÃ­a
+        # Query 3: Wait Aggregates por Categoría
         $queryWaitAggregates = @"
--- Waits agregados por categorÃ­a
+-- Waits agregados por categoría
 SELECT
     -- I/O Waits
     SUM(CASE WHEN wait_type LIKE 'PAGEIOLATCH%' THEN waiting_tasks_count ELSE 0 END) AS PageIOLatchCount,
@@ -229,25 +229,25 @@ WHERE name = 'max degree of parallelism';
 "@
         
         # Ejecutar queries
-        $dataBlocking = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $dataBlocking = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $queryBlocking `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
-        $dataTopWaits = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $dataTopWaits = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $queryTopWaits `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
-        $dataAggregates = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $dataAggregates = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $queryWaitAggregates `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
-        $dataMaxDOP = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $dataMaxDOP = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $queryMaxDOP `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
         # Procesar Blocking
         if ($dataBlocking) {
@@ -321,7 +321,7 @@ function Test-SqlConnection {
     )
     
     try {
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         return $connection.IsPingable
     } catch {
         return $false
@@ -402,15 +402,14 @@ INSERT INTO dbo.InstanceHealth_Waits (
 );
 "@
             
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
-                | Out-Null
+                -EnableException | Out-Null
         }
         
-        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -423,14 +422,14 @@ INSERT INTO dbo.InstanceHealth_Waits (
 
 Clear-Host
 
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
-Write-Host "â•‘  Health Score v3.1 - WAIT STATISTICS & BLOCKING     â•‘" -ForegroundColor Cyan
-Write-Host "â•‘  Frecuencia: 5 minutos                                â•‘" -ForegroundColor Cyan
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  Health Score v3.1 - WAIT STATISTICS & BLOCKING     ║" -ForegroundColor Cyan
+Write-Host "║  Frecuencia: 5 minutos                                ║" -ForegroundColor Cyan
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener instancias desde la API
-Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -460,7 +459,7 @@ try {
 }
 
 # 2. Recolectar wait statistics
-Write-Host "`n2ï¸âƒ£  Recolectando wait statistics..." -ForegroundColor Yellow
+Write-Host "`n2️⃣  Recolectando wait statistics..." -ForegroundColor Yellow
 
 $results = @()
 
@@ -472,7 +471,7 @@ foreach ($instance in $instances) {
         $canConnect = Test-SqlConnection -InstanceName $instanceName -TimeoutSec 10
         
         if (-not $canConnect) {
-            Write-Host "   âŒ NO CONECTA $instanceName" -ForegroundColor Red
+            Write-Host "   ❌ NO CONECTA $instanceName" -ForegroundColor Red
             continue
         }
         
@@ -488,7 +487,7 @@ foreach ($instance in $instances) {
         $results += [PSCustomObject]$waits
         
         # Console output
-        $status = "âœ…"
+        $status = "✅"
         $alerts = @()
         $metrics = @()
         
@@ -506,24 +505,24 @@ foreach ($instance in $instances) {
         
         # Blocking
         if ($waits.BlockedSessionCount -gt 10) {
-            $status = "ðŸš¨ BLOCKING!"
+            $status = "🚨 BLOCKING!"
             $alerts += "Blocked:$($waits.BlockedSessionCount)"
         }
         elseif ($waits.BlockedSessionCount -gt 0) {
-            $status = "âš ï¸ Blocking"
+            $status = "⚠️ Blocking"
             $alerts += "Blocked:$($waits.BlockedSessionCount)"
         }
         
         if ($waits.TotalWaits -gt 0 -and $waits.TotalWaitMs -gt 0) {
-            # PAGEIOLATCH - thresholds mÃ¡s sensibles
+            # PAGEIOLATCH - thresholds más sensibles
             if ($waits.PageIOLatchWaitMs -gt 0) {
                 $pct = [Math]::Round([decimal](($waits.PageIOLatchWaitMs / $waits.TotalWaitMs) * 100), 2)
                 if ($pct -gt 10) {
-                    $status = "ðŸš¨ I/O WAITS!"
+                    $status = "🚨 I/O WAITS!"
                     $alerts += "PAGEIOLATCH:${pct}%"
                 }
                 elseif ($pct -gt 5) {
-                    if ($status -eq "âœ…") { $status = "âš ï¸ I/O" }
+                    if ($status -eq "✅") { $status = "⚠️ I/O" }
                     $alerts += "PAGEIOLATCH:${pct}%"
                 }
                 elseif ($pct -gt 1) {
@@ -531,15 +530,15 @@ foreach ($instance in $instances) {
                 }
             }
             
-            # CXPACKET - thresholds mÃ¡s sensibles
+            # CXPACKET - thresholds más sensibles
             if ($waits.CXPacketWaitMs -gt 0) {
                 $pct = [Math]::Round([decimal](($waits.CXPacketWaitMs / $waits.TotalWaitMs) * 100), 2)
                 if ($pct -gt 15) {
-                    $status = "ðŸš¨ PARALLELISM!"
+                    $status = "🚨 PARALLELISM!"
                     $alerts += "CXPACKET:${pct}%"
                 }
                 elseif ($pct -gt 10) {
-                    if ($status -eq "âœ…") { $status = "âš ï¸ CXPACKET" }
+                    if ($status -eq "✅") { $status = "⚠️ CXPACKET" }
                     $alerts += "CXPACKET:${pct}%"
                 }
                 elseif ($pct -gt 1) {
@@ -547,15 +546,15 @@ foreach ($instance in $instances) {
                 }
             }
             
-            # RESOURCE_SEMAPHORE - thresholds mÃ¡s sensibles
+            # RESOURCE_SEMAPHORE - thresholds más sensibles
             if ($waits.ResourceSemaphoreWaitMs -gt 0) {
                 $pct = [Math]::Round([decimal](($waits.ResourceSemaphoreWaitMs / $waits.TotalWaitMs) * 100), 2)
                 if ($pct -gt 5) {
-                    $status = "ðŸš¨ MEMORY GRANTS!"
+                    $status = "🚨 MEMORY GRANTS!"
                     $alerts += "RESOURCE_SEM:${pct}%"
                 }
                 elseif ($pct -gt 2) {
-                    if ($status -eq "âœ…") { $status = "âš ï¸ MemGrant" }
+                    if ($status -eq "✅") { $status = "⚠️ MemGrant" }
                     $alerts += "RESOURCE_SEM:${pct}%"
                 }
                 elseif ($pct -gt 0.5) {
@@ -563,11 +562,11 @@ foreach ($instance in $instances) {
                 }
             }
             
-            # WRITELOG - alto en tÃ©rminos absolutos
+            # WRITELOG - alto en términos absolutos
             if ($waits.WriteLogWaitMs -gt 0) {
                 $pct = [Math]::Round([decimal](($waits.WriteLogWaitMs / $waits.TotalWaitMs) * 100), 2)
                 if ($pct -gt 10) {
-                    if ($status -eq "âœ…") { $status = "âš ï¸ WriteLog" }
+                    if ($status -eq "✅") { $status = "⚠️ WriteLog" }
                     $alerts += "WRITELOG:${pct}%"
                 }
                 elseif ($pct -gt 5) {
@@ -575,12 +574,12 @@ foreach ($instance in $instances) {
                 }
             }
             
-            # THREADPOOL - crÃ­tico solo si es significativo
+            # THREADPOOL - crítico solo si es significativo
             if ($waits.ThreadPoolWaitMs -gt 0) {
                 $pct = [Math]::Round([decimal](($waits.ThreadPoolWaitMs / $waits.TotalWaitMs) * 100), 2)
-                # Solo alertar si el porcentaje es > 0.01% (mÃ¡s de 1 en 10,000 waits)
+                # Solo alertar si el porcentaje es > 0.01% (más de 1 en 10,000 waits)
                 if ($pct -gt 0.01) {
-                    $status = "ðŸš¨ THREADPOOL!"
+                    $status = "🚨 THREADPOOL!"
                     $alerts += "THREADPOOL:${pct}%"
                 }
             }
@@ -589,7 +588,7 @@ foreach ($instance in $instances) {
             if ($waits.SOSSchedulerYieldMs -gt 0) {
                 $pct = [Math]::Round([decimal](($waits.SOSSchedulerYieldMs / $waits.TotalWaitMs) * 100), 2)
                 if ($pct -gt 10) {
-                    if ($status -eq "âœ…") { $status = "âš ï¸ CPU Pressure" }
+                    if ($status -eq "✅") { $status = "⚠️ CPU Pressure" }
                     $alerts += "SOS_YIELD:${pct}%"
                 }
                 elseif ($pct -gt 5) {
@@ -600,72 +599,72 @@ foreach ($instance in $instances) {
         
         $alertText = if ($alerts.Count -gt 0) { " [$($alerts -join ', ')]" } else { "" }
         $metricsText = if ($metrics.Count -gt 0) { " | $($metrics -join ', ')" } else { "" }
-        Write-Host "   $status $instanceName$alertText$metricsText" -ForegroundColor $(if ($status -like "*ðŸš¨*") { "Red" } elseif ($status -like "*âš ï¸*") { "Yellow" } else { "Gray" })
+        Write-Host "   $status $instanceName$alertText$metricsText" -ForegroundColor $(if ($status -like "*🚨*") { "Red" } elseif ($status -like "*⚠️*") { "Yellow" } else { "Gray" })
         
     } catch {
-        Write-Host "   âŒ ERROR $instanceName - $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "   ❌ ERROR $instanceName - $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
 # 3. Guardar en SQL Server
-Write-Host "`n3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "`n3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
-Write-Host "â•‘  RESUMEN - WAIT STATISTICS & BLOCKING                â•‘" -ForegroundColor Cyan
-Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Cyan
-Write-Host "â•‘  Total instancias:        $($results.Count.ToString().PadLeft(3))                       â•‘" -ForegroundColor Cyan
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  RESUMEN - WAIT STATISTICS & BLOCKING                ║" -ForegroundColor Cyan
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Cyan
+Write-Host "║  Total instancias:        $($results.Count.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
 
 # Blocking
 $withBlocking = ($results | Where-Object {$_.BlockedSessionCount -gt 0}).Count
 $severeBlocking = ($results | Where-Object {$_.BlockedSessionCount -gt 10}).Count
-Write-Host "â•‘  Con blocking:            $(${withBlocking}.ToString().PadLeft(3))                       â•‘" -ForegroundColor Cyan
-Write-Host "â•‘  Blocking severo (>10):   $(${severeBlocking}.ToString().PadLeft(3))                       â•‘" -ForegroundColor Cyan
+Write-Host "║  Con blocking:            $(${withBlocking}.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
+Write-Host "║  Blocking severo (>10):   $(${severeBlocking}.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
 
 # PAGEIOLATCH (I/O waits) - ajustado a nuevos thresholds
 $pageIOHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -gt 10}).Count
 $pageIOModerate = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -gt 5 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -le 10}).Count
 $pageIOLow = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -gt 1 -and ($_.PageIOLatchWaitMs / $_.TotalWaitMs * 100) -le 5}).Count
-Write-Host "â•‘  PAGEIOLATCH >10%:        $(${pageIOHigh}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($pageIOHigh -gt 0) { "Red" } else { "Cyan" })
-Write-Host "â•‘  PAGEIOLATCH 5-10%:       $(${pageIOModerate}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($pageIOModerate -gt 0) { "Yellow" } else { "Cyan" })
-Write-Host "â•‘  PAGEIOLATCH 1-5%:        $(${pageIOLow}.ToString().PadLeft(3))                       â•‘" -ForegroundColor Cyan
+Write-Host "║  PAGEIOLATCH >10%:        $(${pageIOHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($pageIOHigh -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  PAGEIOLATCH 5-10%:       $(${pageIOModerate}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($pageIOModerate -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  PAGEIOLATCH 1-5%:        $(${pageIOLow}.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
 
 # CXPACKET (parallelism waits) - ajustado a nuevos thresholds
 $cxpacketHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -gt 15}).Count
 $cxpacketModerate = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -gt 10 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -le 15}).Count
 $cxpacketLow = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -gt 1 -and ($_.CXPacketWaitMs / $_.TotalWaitMs * 100) -le 10}).Count
-Write-Host "â•‘  CXPACKET >15%:           $(${cxpacketHigh}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($cxpacketHigh -gt 0) { "Red" } else { "Cyan" })
-Write-Host "â•‘  CXPACKET 10-15%:         $(${cxpacketModerate}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($cxpacketModerate -gt 0) { "Yellow" } else { "Cyan" })
-Write-Host "â•‘  CXPACKET 1-10%:          $(${cxpacketLow}.ToString().PadLeft(3))                       â•‘" -ForegroundColor Cyan
+Write-Host "║  CXPACKET >15%:           $(${cxpacketHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($cxpacketHigh -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  CXPACKET 10-15%:         $(${cxpacketModerate}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($cxpacketModerate -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  CXPACKET 1-10%:          $(${cxpacketLow}.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
 
 # RESOURCE_SEMAPHORE (memory grants)
 $memGrantsHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.ResourceSemaphoreWaitMs / $_.TotalWaitMs * 100) -gt 5}).Count
 $memGrantsModerate = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.ResourceSemaphoreWaitMs / $_.TotalWaitMs * 100) -gt 2 -and ($_.ResourceSemaphoreWaitMs / $_.TotalWaitMs * 100) -le 5}).Count
-Write-Host "â•‘  RESOURCE_SEM >5%:        $(${memGrantsHigh}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($memGrantsHigh -gt 0) { "Red" } else { "Cyan" })
-Write-Host "â•‘  RESOURCE_SEM 2-5%:       $(${memGrantsModerate}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($memGrantsModerate -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  RESOURCE_SEM >5%:        $(${memGrantsHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($memGrantsHigh -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  RESOURCE_SEM 2-5%:       $(${memGrantsModerate}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($memGrantsModerate -gt 0) { "Yellow" } else { "Cyan" })
 
 # WRITELOG
 $writeLogHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.WriteLogWaitMs / $_.TotalWaitMs * 100) -gt 10}).Count
-Write-Host "â•‘  WRITELOG >10%:           $(${writeLogHigh}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($writeLogHigh -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  WRITELOG >10%:           $(${writeLogHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($writeLogHigh -gt 0) { "Yellow" } else { "Cyan" })
 
 # THREADPOOL (solo si es significativo: >0.01%)
 $threadPoolSignificant = ($results | Where-Object {
     $_.ThreadPoolWaitMs -gt 0 -and $_.TotalWaitMs -gt 0 -and 
     (($_.ThreadPoolWaitMs / $_.TotalWaitMs * 100) -gt 0.01)
 }).Count
-Write-Host "â•‘  THREADPOOL >0.01%:       $(${threadPoolSignificant}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($threadPoolSignificant -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  THREADPOOL >0.01%:       $(${threadPoolSignificant}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($threadPoolSignificant -gt 0) { "Red" } else { "Cyan" })
 
 # SOS_SCHEDULER_YIELD (CPU pressure)
 $sosYieldHigh = ($results | Where-Object {$_.TotalWaitMs -gt 0 -and ($_.SOSSchedulerYieldMs / $_.TotalWaitMs * 100) -gt 10}).Count
-Write-Host "â•‘  SOS_YIELD >10%:          $(${sosYieldHigh}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($sosYieldHigh -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  SOS_YIELD >10%:          $(${sosYieldHigh}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($sosYieldHigh -gt 0) { "Yellow" } else { "Cyan" })
 
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 
 # Top 5 instancias por wait time
-Write-Host "`nðŸ“Š TOP 5 INSTANCIAS POR WAIT TIME:" -ForegroundColor Yellow
+Write-Host "`n📊 TOP 5 INSTANCIAS POR WAIT TIME:" -ForegroundColor Yellow
 $top5 = $results | Sort-Object -Property TotalWaitMs -Descending | Select-Object -First 5
 foreach ($inst in $top5) {
     if ($inst.TotalWaitMs -gt 0) {
@@ -675,8 +674,7 @@ foreach ($inst in $top5) {
     }
 }
 
-Write-Host "`nâœ… Script completado!" -ForegroundColor Green
+Write-Host "`n✅ Script completado!" -ForegroundColor Green
 
 #endregion
-
 

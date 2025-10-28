@@ -1,28 +1,28 @@
-﻿<#
+<#
 .SYNOPSIS
-    Health Score v3.0 - RecolecciÃ³n de mÃ©tricas de CONFIGURACIÃ“N & TEMPDB
+    Health Score v3.0 - Recolección de métricas de CONFIGURACIÓN & TEMPDB
     
 .DESCRIPTION
     Script de baja frecuencia (cada 30 minutos) que recolecta:
-    - ConfiguraciÃ³n de TempDB (archivos, tamaÃ±os, growth)
-    - ContenciÃ³n en TempDB (PAGELATCH waits)
+    - Configuración de TempDB (archivos, tamaños, growth)
+    - Contención en TempDB (PAGELATCH waits)
     - Latencia de TempDB (read/write separadas)
     - Espacio libre y version store
-    - Max Server Memory configurado vs Ã³ptimo
+    - Max Server Memory configurado vs óptimo
     
     Guarda en: InstanceHealth_ConfiguracionTempdb
     
     TempDB Health Score Compuesto (0-100 puntos):
-    - 40% ContenciÃ³n (PAGELATCH waits)
+    - 40% Contención (PAGELATCH waits)
     - 30% Latencia de disco (write latency)
-    - 20% ConfiguraciÃ³n (archivos, same size, growth)
+    - 20% Configuración (archivos, same size, growth)
     - 10% Recursos (espacio libre, version store)
     
     Peso en HealthScore v3: 8%
-    FÃ³rmula consolidador: 60% tempdb health + 40% memoria configurada
+    Fórmula consolidador: 60% tempdb health + 40% memoria configurada
     
 .NOTES
-    VersiÃ³n: 3.0.1 (Score Compuesto)
+    Versión: 3.0.1 (Score Compuesto)
     Frecuencia: Cada 30 minutos
     Timeout: 15 segundos
     
@@ -35,7 +35,7 @@
 param()
 
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
@@ -43,9 +43,9 @@ if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-Import-Module dbatools -Force
+Import-Module dbatools -Force -ErrorAction Stop
 
-#region ===== CONFIGURACIÃ“N =====
+#region ===== CONFIGURACIÓN =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -62,35 +62,35 @@ $OnlyAWS = $false
 function Calculate-TempDBHealthScore {
     <#
     .SYNOPSIS
-        Calcula un score compuesto de TempDB considerando TODAS las mÃ©tricas
+        Calcula un score compuesto de TempDB considerando TODAS las métricas
     .DESCRIPTION
-        FÃ³rmula del TempDB Health Score (0-100 puntos):
+        Fórmula del TempDB Health Score (0-100 puntos):
         
-        1. CONTENCIÃ“N (40%) - PAGELATCH waits
+        1. CONTENCIÓN (40%) - PAGELATCH waits
            - 0 waits = 100 pts
            - <100 waits = 90 pts
            - <1,000 waits = 70 pts
            - <10,000 waits = 40 pts
-           - â‰¥10,000 waits = 0 pts
+           - ≥10,000 waits = 0 pts
         
         2. LATENCIA DE DISCO (30%) - Write latency promedio
-           - â‰¤5ms = 100 pts
-           - â‰¤10ms = 90 pts
-           - â‰¤20ms = 70 pts
-           - â‰¤50ms = 40 pts
+           - ≤5ms = 100 pts
+           - ≤10ms = 90 pts
+           - ≤20ms = 70 pts
+           - ≤50ms = 40 pts
            - >50ms = 0 pts
         
-        3. CONFIGURACIÃ“N (20%) - Files, same size, same growth
-           - Archivos Ã³ptimos (1 por CPU, mÃ¡x 8)
+        3. CONFIGURACIÓN (20%) - Files, same size, same growth
+           - Archivos óptimos (1 por CPU, máx 8)
            - Same size
            - Same growth
-           - Growth config OK (â‰¥64MB, no % growth)
+           - Growth config OK (≥64MB, no % growth)
         
         4. RECURSOS (10%) - Espacio libre, version store
-           - Free space â‰¥20% = 100 pts
+           - Free space ≥20% = 100 pts
            - Free space 10-19% = 60 pts
            - Free space <10% = 0 pts
-           - Version store penalizaciÃ³n
+           - Version store penalización
     #>
     param(
         [int]$PageLatchWaits,
@@ -104,7 +104,7 @@ function Calculate-TempDBHealthScore {
         [int]$VersionStoreMB
     )
     
-    # 1. CONTENCIÃ“N (40 pts)
+    # 1. CONTENCIÓN (40 pts)
     $contentionScore = 0
     if ($PageLatchWaits -eq 0) {
         $contentionScore = 100
@@ -141,14 +141,14 @@ function Calculate-TempDBHealthScore {
         $diskScore = 40   # Lento
     }
     else {
-        $diskScore = 0    # CrÃ­tico
+        $diskScore = 0    # Crítico
     }
     $diskContribution = $diskScore * 0.30
     
-    # 3. CONFIGURACIÃ“N (20 pts)
+    # 3. CONFIGURACIÓN (20 pts)
     $configScore = 100
     
-    # NÃºmero Ã³ptimo de archivos (mÃ­nimo 4, mÃ¡ximo 8)
+    # Número óptimo de archivos (mínimo 4, máximo 8)
     # Best practice moderna: MIN(MAX(CPUs, 4), 8)
     if ($CPUCount -le 0) { 
         $optimalFiles = 4  # Default si no hay CPUCount
@@ -165,11 +165,11 @@ function Calculate-TempDBHealthScore {
         $configScore -= 20
     }
     elseif ($FileCount -ge 2) {
-        # SubÃ³ptimo
+        # Subóptimo
         $configScore -= 40
     }
     elseif ($FileCount -eq 1) {
-        # CrÃ­tico - un solo archivo
+        # Crítico - un solo archivo
         $configScore -= 60
     }
     else {
@@ -187,7 +187,7 @@ function Calculate-TempDBHealthScore {
         $configScore -= 10
     }
     
-    # Growth config OK (â‰¥64MB, no % growth)
+    # Growth config OK (≥64MB, no % growth)
     if (-not $GrowthConfigOK) {
         $configScore -= 10
     }
@@ -204,7 +204,7 @@ function Calculate-TempDBHealthScore {
         $resourceScore -= 20
     }
     elseif ($FreeSpacePct -ge 20) {
-        # Ã“ptimo
+        # Óptimo
         $resourceScore -= 0
     }
     elseif ($FreeSpacePct -ge 10) {
@@ -212,11 +212,11 @@ function Calculate-TempDBHealthScore {
         $resourceScore -= 40
     }
     else {
-        # CrÃ­tico
+        # Crítico
         $resourceScore -= 100
     }
     
-    # Version store (penalizaciÃ³n si es muy grande)
+    # Version store (penalización si es muy grande)
     if ($VersionStoreMB -gt 5120) {
         # >5 GB = problema serio
         $resourceScore -= 50
@@ -245,7 +245,7 @@ function Get-ConfigTempdbMetrics {
         [int]$TimeoutSec = 15
     )
     
-    # Inicializar variables de versiÃ³n con valores por defecto seguros
+    # Inicializar variables de versión con valores por defecto seguros
     $isSql2005 = $false
     $majorVersion = 10  # Asumir SQL 2008+ por defecto
     
@@ -266,13 +266,13 @@ function Get-ConfigTempdbMetrics {
         TempDBContentionScore = 100
         TempDBVersionStoreMB = 0
         
-        # TempDB - ConfiguraciÃ³n
+        # TempDB - Configuración
         TempDBAvgFileSizeMB = 0
         TempDBMinFileSizeMB = 0
         TempDBMaxFileSizeMB = 0
         TempDBGrowthConfigOK = $true
         
-        # ConfiguraciÃ³n del Servidor
+        # Configuración del Servidor
         MaxServerMemoryMB = 0
         TotalPhysicalMemoryMB = 0
         MaxMemoryPctOfPhysical = 0
@@ -282,19 +282,19 @@ function Get-ConfigTempdbMetrics {
     }
     
     try {
-        # Detectar versiÃ³n de SQL Server para compatibilidad (una sola vez)
+        # Detectar versión de SQL Server para compatibilidad (una sola vez)
         try {
             $versionQuery = "SELECT SERVERPROPERTY('ProductVersion') AS Version, @@VERSION AS VersionString"
-            $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate
+            $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
             $version = $versionResult.Version
             $majorVersion = [int]($version.Split('.')[0])
             $isSql2005 = ($majorVersion -lt 10)  # SQL 2005 = version 9.x, SQL 2008 = version 10.x
         } catch {
-            # Si falla la detecciÃ³n, usar valores por defecto (SQL 2008+)
-            Write-Verbose "No se pudo detectar versiÃ³n de SQL Server en ${InstanceName}, asumiendo SQL 2008+"
+            # Si falla la detección, usar valores por defecto (SQL 2008+)
+            Write-Verbose "No se pudo detectar versión de SQL Server en ${InstanceName}, asumiendo SQL 2008+"
         }
         
-        # Query 1: TempDB Files (extendido con mÃ¡s mÃ©tricas)
+        # Query 1: TempDB Files (extendido con más métricas)
         $queryTempDBFiles = @"
 SELECT 
     COUNT(*) AS FileCount,
@@ -313,7 +313,7 @@ WHERE database_id = DB_ID('tempdb')
 "@
         
         try {
-            $tempdbFiles = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryTempDBFiles -QueryTimeout $TimeoutSec -TrustServerCertificate
+            $tempdbFiles = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryTempDBFiles -QueryTimeout $TimeoutSec -EnableException
             if ($tempdbFiles) {
                 $result.TempDBFileCount = [int]$tempdbFiles.FileCount
                 $result.TempDBTotalSizeMB = [int]$tempdbFiles.TotalSizeMB
@@ -338,16 +338,16 @@ WHERE database_id = DB_ID('tempdb')
                 Write-Verbose "${InstanceName}: TempDB Files = $($result.TempDBFileCount), Total Size = $($result.TempDBTotalSizeMB) MB"
             }
             else {
-                Write-Warning "âš ï¸  ${InstanceName}: Query de archivos TempDB no retornÃ³ datos"
+                Write-Warning "⚠️  ${InstanceName}: Query de archivos TempDB no retornó datos"
                 $result.Details += "TempDBFilesQueryEmpty"
             }
         }
         catch {
-            Write-Warning "âš ï¸  ${InstanceName}: Error obteniendo archivos de TempDB: $($_.Exception.Message)"
+            Write-Warning "⚠️  ${InstanceName}: Error obteniendo archivos de TempDB: $($_.Exception.Message)"
             $result.Details += "TempDBFilesQueryFailed"
         }
         
-        # Query 2: TempDB Latency y Mount Point (para diagnÃ³stico de disco)
+        # Query 2: TempDB Latency y Mount Point (para diagnóstico de disco)
         # Intentar primero con sys.dm_os_volume_stats, si falla usar fallback
         $latencySuccess = $false
         
@@ -367,7 +367,7 @@ FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
 INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
 WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
 "@
-                $latency = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -TrustServerCertificate
+                $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
                 $latencySuccess = $true
             } catch {
                 # Si falla (permisos, DMV no disponible, etc.), usar fallback
@@ -375,7 +375,7 @@ WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
             }
         }
         
-        # FALLBACK: Si es SQL 2005 o si fallÃ³ el query anterior
+        # FALLBACK: Si es SQL 2005 o si falló el query anterior
         if (-not $latencySuccess) {
             try {
                 $queryLatency = @"
@@ -390,7 +390,7 @@ FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
 INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
 WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
 "@
-                $latency = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -TrustServerCertificate
+                $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
                 $latencySuccess = $true
             } catch {
                 Write-Warning "No se pudo obtener latencia de TempDB en ${InstanceName}: $($_.Exception.Message)"
@@ -400,11 +400,11 @@ WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
         if ($latencySuccess -and $latency) {
             $result.TempDBAvgReadLatencyMs = if ($latency.AvgReadLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgReadLatencyMs, 2) } else { 0 }
             $result.TempDBAvgWriteLatencyMs = if ($latency.AvgWriteLatencyMs -ne [DBNull]::Value) { [Math]::Round([decimal]$latency.AvgWriteLatencyMs, 2) } else { 0 }
-            # Limitar MountPoint a mÃ¡ximo 10 caracteres para evitar truncamiento SQL
+            # Limitar MountPoint a máximo 10 caracteres para evitar truncamiento SQL
             $mountPoint = if ($latency.MountPoint -ne [DBNull]::Value) { $latency.MountPoint.ToString().Trim() } else { "" }
             $result.TempDBMountPoint = if ($mountPoint.Length -gt 10) { $mountPoint.Substring(0, 10) } else { $mountPoint }
             
-            # DiagnÃ³stico de disco
+            # Diagnóstico de disco
             if ($result.TempDBAvgWriteLatencyMs -gt 50) {
                 $result.Details += "SlowDisk(>50ms)"
             }
@@ -423,7 +423,7 @@ WHERE wait_type LIKE 'PAGELATCH%'
   AND wait_type NOT LIKE 'PAGELATCH_SH%';
 "@
         
-        $pageLatch = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryPageLatch -QueryTimeout $TimeoutSec -TrustServerCertificate
+        $pageLatch = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryPageLatch -QueryTimeout $TimeoutSec -EnableException
         if ($pageLatch -and $pageLatch.PageLatchWaitMs -ne [DBNull]::Value) {
             $result.TempDBPageLatchWaits = [int]$pageLatch.PageLatchWaitMs
         }
@@ -448,13 +448,13 @@ WHERE database_id = DB_ID('tempdb');
 "@
             
             try {
-                $spaceUsage = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $querySpaceUsage -QueryTimeout $TimeoutSec -TrustServerCertificate
+                $spaceUsage = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySpaceUsage -QueryTimeout $TimeoutSec -EnableException
                 if ($spaceUsage) {
                     # Verificar si la DMV tiene datos reales (RecordCount > 0 y valores no nulos)
                     $hasRealData = ($spaceUsage.RecordCount -gt 0) -and ($spaceUsage.TotalSizeMB -gt 0)
                     
                     if ($hasRealData) {
-                        # DMV con datos vÃ¡lidos - usar esos valores
+                        # DMV con datos válidos - usar esos valores
                         $result.TempDBUsedSpaceMB = [int]$spaceUsage.UsedSpaceMB
                         $result.TempDBFreeSpacePct = [decimal]$spaceUsage.FreeSpacePct
                         $result.TempDBVersionStoreMB = [int]$spaceUsage.VersionStoreMB
@@ -462,18 +462,18 @@ WHERE database_id = DB_ID('tempdb');
                         Write-Verbose "${InstanceName}: TempDB UsedSpace = $($result.TempDBUsedSpaceMB) MB (from DMV)"
                     }
                     else {
-                        # DMV vacÃ­a o sin actividad - calcular FreeSpace estimado desde sys.master_files
+                        # DMV vacía o sin actividad - calcular FreeSpace estimado desde sys.master_files
                         if ($result.TempDBTotalSizeMB -gt 0) {
-                            # Asumir que estÃ¡ mayormente libre si no hay actividad
+                            # Asumir que está mayormente libre si no hay actividad
                             $result.TempDBUsedSpaceMB = 0
-                            $result.TempDBFreeSpacePct = 95.0  # EstimaciÃ³n conservadora
+                            $result.TempDBFreeSpacePct = 95.0  # Estimación conservadora
                             $result.TempDBVersionStoreMB = 0
                             
                             Write-Verbose "${InstanceName}: TempDB sin actividad en DMV - usando valores por defecto (FreeSpace estimado: 95%)"
                             $result.Details += "TempDB-NoActivity"
                         }
                         else {
-                            Write-Warning "âš ï¸  ${InstanceName}: sys.dm_db_file_space_usage vacÃ­a Y TotalSizeMB=0"
+                            Write-Warning "⚠️  ${InstanceName}: sys.dm_db_file_space_usage vacía Y TotalSizeMB=0"
                             $result.Details += "TempDB-NoData"
                         }
                     }
@@ -489,12 +489,12 @@ WHERE database_id = DB_ID('tempdb');
                     }
                 }
                 else {
-                    Write-Warning "âš ï¸  ${InstanceName}: sys.dm_db_file_space_usage no retornÃ³ filas"
+                    Write-Warning "⚠️  ${InstanceName}: sys.dm_db_file_space_usage no retornó filas"
                     $result.Details += "NoSpaceData"
                 }
             }
             catch {
-                Write-Warning "âš ï¸  ${InstanceName}: Error obteniendo espacio de TempDB: $($_.Exception.Message)"
+                Write-Warning "⚠️  ${InstanceName}: Error obteniendo espacio de TempDB: $($_.Exception.Message)"
                 $result.Details += "SpaceQueryFailed"
             }
         }
@@ -512,12 +512,12 @@ WHERE name = 'max server memory (MB)';
 "@
         
         try {
-            $maxMem = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryMaxMem -QueryTimeout $TimeoutSec -TrustServerCertificate
+            $maxMem = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryMaxMem -QueryTimeout $TimeoutSec -EnableException
             if ($maxMem -and $maxMem.MaxServerMemoryMB -ne [DBNull]::Value) {
                 $maxMemValue = [int]$maxMem.MaxServerMemoryMB
                 
                 # Detectar valor por defecto "unlimited" (2147483647 = 2^31-1)
-                # Este es el mÃ¡ximo de INT32 y significa que no estÃ¡ configurado
+                # Este es el máximo de INT32 y significa que no está configurado
                 if ($maxMemValue -eq 2147483647) {
                     $result.MaxServerMemoryMB = 0  # Marcar como no configurado
                     $result.Details += "MaxMem=UNLIMITED(NotSet)"
@@ -529,19 +529,19 @@ WHERE name = 'max server memory (MB)';
                 }
             }
             else {
-                Write-Warning "âš ï¸  ${InstanceName}: Query de Max Memory no retornÃ³ datos"
+                Write-Warning "⚠️  ${InstanceName}: Query de Max Memory no retornó datos"
                 $result.Details += "MaxMemQueryEmpty"
             }
         }
         catch {
-            Write-Warning "âš ï¸  ${InstanceName}: Error obteniendo Max Server Memory: $($_.Exception.Message)"
+            Write-Warning "⚠️  ${InstanceName}: Error obteniendo Max Server Memory: $($_.Exception.Message)"
             $result.Details += "MaxMemQueryFailed"
         }
         
         # Query 5: System Info (compatible con SQL 2008+)
-        # Construir query segÃºn versiÃ³n para evitar problemas de expansiÃ³n de variables
+        # Construir query según versión para evitar problemas de expansión de variables
         if ($majorVersion -ge 11) {
-            # SQL Server 2012+ (versiÃ³n 11+): usa physical_memory_kb
+            # SQL Server 2012+ (versión 11+): usa physical_memory_kb
             $querySysInfo = @"
 SELECT 
     physical_memory_kb / 1024 AS TotalPhysicalMemoryMB,
@@ -550,7 +550,7 @@ FROM sys.dm_os_sys_info;
 "@
         }
         else {
-            # SQL Server 2008/2008 R2 (versiÃ³n 10): usa physical_memory_in_bytes
+            # SQL Server 2008/2008 R2 (versión 10): usa physical_memory_in_bytes
             $querySysInfo = @"
 SELECT 
     physical_memory_in_bytes / 1024 / 1024 AS TotalPhysicalMemoryMB,
@@ -559,7 +559,7 @@ FROM sys.dm_os_sys_info;
 "@
         }
         
-        $sysInfo = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $querySysInfo -QueryTimeout $TimeoutSec -TrustServerCertificate
+        $sysInfo = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySysInfo -QueryTimeout $TimeoutSec -EnableException
         if ($sysInfo) {
             if ($sysInfo.TotalPhysicalMemoryMB -ne [DBNull]::Value) {
                 $rawValue = [long]$sysInfo.TotalPhysicalMemoryMB
@@ -569,17 +569,17 @@ FROM sys.dm_os_sys_info;
                     $result.TotalPhysicalMemoryMB = [int]$rawValue
                 }
                 else {
-                    Write-Warning "Valor de memoria fÃ­sica sospechoso en ${InstanceName}: $rawValue MB"
+                    Write-Warning "Valor de memoria física sospechoso en ${InstanceName}: $rawValue MB"
                     # Intentar obtener de otra fuente
                     $altQuery = "SELECT total_physical_memory_kb / 1024 AS TotalPhysicalMemoryMB FROM sys.dm_os_sys_memory"
                     try {
-                        $altMem = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $altQuery -QueryTimeout $TimeoutSec -TrustServerCertificate
+                        $altMem = Invoke-DbaQuery -SqlInstance $InstanceName -Query $altQuery -QueryTimeout $TimeoutSec -EnableException
                         if ($altMem -and $altMem.TotalPhysicalMemoryMB -gt 0) {
                             $result.TotalPhysicalMemoryMB = [int]$altMem.TotalPhysicalMemoryMB
                         }
                     }
                     catch {
-                        Write-Warning "âš ï¸  ${InstanceName}: sys.dm_os_sys_memory no disponible (SQL 2008 o anterior)"
+                        Write-Warning "⚠️  ${InstanceName}: sys.dm_os_sys_memory no disponible (SQL 2008 o anterior)"
                     }
                 }
             }
@@ -590,13 +590,13 @@ FROM sys.dm_os_sys_info;
             Write-Verbose "${InstanceName}: Physical Memory = $($result.TotalPhysicalMemoryMB) MB, CPU Count = $($result.CPUCount)"
         }
         else {
-            Write-Warning "âš ï¸  ${InstanceName}: Query de System Info no retornÃ³ datos"
+            Write-Warning "⚠️  ${InstanceName}: Query de System Info no retornó datos"
             $result.Details += "SysInfoQueryEmpty"
         }
         
-        # Calcular si Max Memory estÃ¡ dentro del rango Ã³ptimo (con validaciones)
+        # Calcular si Max Memory está dentro del rango óptimo (con validaciones)
         if ($result.MaxServerMemoryMB -eq 0) {
-            # Max Memory no estÃ¡ configurado (valor por defecto unlimited)
+            # Max Memory no está configurado (valor por defecto unlimited)
             $result.MaxMemoryPctOfPhysical = 0
             $result.MaxMemoryWithinOptimal = $false
         }
@@ -608,40 +608,40 @@ FROM sys.dm_os_sys_info;
                 # Truncar a 999.99 para evitar overflow en SQL (DECIMAL(5,2))
                 if ($calculatedPct -gt 999.99) {
                     $result.MaxMemoryPctOfPhysical = 999.99
-                    Write-Warning "âš ï¸  Max Memory configurado EXCESIVAMENTE alto en ${InstanceName}: $([Math]::Round($calculatedPct, 2))% (MaxMem=$($result.MaxServerMemoryMB)MB > Total=$($result.TotalPhysicalMemoryMB)MB) - Posible error de configuraciÃ³n"
+                    Write-Warning "⚠️  Max Memory configurado EXCESIVAMENTE alto en ${InstanceName}: $([Math]::Round($calculatedPct, 2))% (MaxMem=$($result.MaxServerMemoryMB)MB > Total=$($result.TotalPhysicalMemoryMB)MB) - Posible error de configuración"
                 }
                 else {
                     $result.MaxMemoryPctOfPhysical = [Math]::Round($calculatedPct, 2)
                     
-                    # Advertir si estÃ¡ configurado por encima del 100% (no recomendado)
+                    # Advertir si está configurado por encima del 100% (no recomendado)
                     if ($calculatedPct -gt 100) {
-                        Write-Warning "âš ï¸  Max Memory configurado por ENCIMA de RAM fÃ­sica en ${InstanceName}: $([Math]::Round($calculatedPct, 2))% (MaxMem=$($result.MaxServerMemoryMB)MB, Total=$($result.TotalPhysicalMemoryMB)MB)"
+                        Write-Warning "⚠️  Max Memory configurado por ENCIMA de RAM física en ${InstanceName}: $([Math]::Round($calculatedPct, 2))% (MaxMem=$($result.MaxServerMemoryMB)MB, Total=$($result.TotalPhysicalMemoryMB)MB)"
                     }
                 }
                 
-                # Considerar Ã³ptimo si estÃ¡ entre 70% y 95%
+                # Considerar óptimo si está entre 70% y 95%
                 if ($result.MaxMemoryPctOfPhysical -ge 70 -and $result.MaxMemoryPctOfPhysical -le 95) {
                     $result.MaxMemoryWithinOptimal = $true
                 }
             }
             else {
-                # Porcentaje negativo (no deberÃ­a pasar)
-                Write-Warning "âŒ Porcentaje de memoria negativo en ${InstanceName}: $calculatedPct% - Datos incorrectos"
+                # Porcentaje negativo (no debería pasar)
+                Write-Warning "❌ Porcentaje de memoria negativo en ${InstanceName}: $calculatedPct% - Datos incorrectos"
                 $result.MaxMemoryPctOfPhysical = 0
             }
         }
         else {
             if ($result.TotalPhysicalMemoryMB -le 512) {
-                Write-Warning "Memoria fÃ­sica muy baja o invÃ¡lida en ${InstanceName}: $($result.TotalPhysicalMemoryMB)MB"
+                Write-Warning "Memoria física muy baja o inválida en ${InstanceName}: $($result.TotalPhysicalMemoryMB)MB"
             }
         }
         
     } catch {
-        Write-Warning "âŒ Error GENERAL obteniendo config/tempdb metrics en ${InstanceName}: $($_.Exception.Message)"
+        Write-Warning "❌ Error GENERAL obteniendo config/tempdb metrics en ${InstanceName}: $($_.Exception.Message)"
         $result.Details += "GeneralError"
     }
     
-    # Calcular TempDB Health Score Compuesto (considerando TODAS las mÃ©tricas)
+    # Calcular TempDB Health Score Compuesto (considerando TODAS las métricas)
     $result.TempDBContentionScore = Calculate-TempDBHealthScore `
         -PageLatchWaits $result.TempDBPageLatchWaits `
         -AvgWriteLatencyMs $result.TempDBAvgWriteLatencyMs `
@@ -663,7 +663,7 @@ function Test-SqlConnection {
     )
     
     try {
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         return $connection.IsPingable
     } catch {
         return $false
@@ -687,7 +687,7 @@ function Write-ToSqlServer {
             # Validar y truncar MaxMemoryPctOfPhysical para que no exceda DECIMAL(5,2)
             $maxMemPct = $row.MaxMemoryPctOfPhysical
             if ($maxMemPct -gt 999.99) {
-                Write-Warning "MaxMemoryPctOfPhysical truncado para $($row.InstanceName): $maxMemPct â†’ 999.99"
+                Write-Warning "MaxMemoryPctOfPhysical truncado para $($row.InstanceName): $maxMemPct → 999.99"
                 $maxMemPct = 999.99
             }
             if ($maxMemPct -lt -999.99) {
@@ -720,7 +720,7 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     TempDBPageLatchWaits,
     TempDBContentionScore,
     TempDBVersionStoreMB,
-    -- TempDB - ConfiguraciÃ³n
+    -- TempDB - Configuración
     TempDBAvgFileSizeMB,
     TempDBMinFileSizeMB,
     TempDBMaxFileSizeMB,
@@ -752,7 +752,7 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
     $($row.TempDBPageLatchWaits),
     $($row.TempDBContentionScore),
     $($row.TempDBVersionStoreMB),
-    -- TempDB - ConfiguraciÃ³n
+    -- TempDB - Configuración
     $($row.TempDBAvgFileSizeMB),
     $($row.TempDBMinFileSizeMB),
     $($row.TempDBMaxFileSizeMB),
@@ -767,15 +767,14 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
 );
 "@
             
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
-               
+                -EnableException
         }
         
-        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -787,14 +786,14 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
 #region ===== MAIN =====
 
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
-Write-Host "â•‘  Health Score v3.0 - CONFIGURACIÃ“N & TEMPDB          â•‘" -ForegroundColor Cyan
-Write-Host "â•‘  Frecuencia: 30 minutos                               â•‘" -ForegroundColor Cyan
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  Health Score v3.0 - CONFIGURACIÓN & TEMPDB          ║" -ForegroundColor Cyan
+Write-Host "║  Frecuencia: 30 minutos                               ║" -ForegroundColor Cyan
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -822,7 +821,7 @@ try {
 
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "2ï¸âƒ£  Recolectando mÃ©tricas de configuraciÃ³n y TempDB..." -ForegroundColor Yellow
+Write-Host "2️⃣  Recolectando métricas de configuración y TempDB..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
@@ -831,7 +830,7 @@ foreach ($instance in $instances) {
     $counter++
     $instanceName = $instance.NombreInstancia
     
-    Write-Progress -Activity "Recolectando mÃ©tricas" `
+    Write-Progress -Activity "Recolectando métricas" `
         -Status "$counter de $($instances.Count): $instanceName" `
         -PercentComplete (($counter / $instances.Count) * 100)
     
@@ -840,29 +839,29 @@ foreach ($instance in $instances) {
     $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
     
     if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-        Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
+        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
         continue
     }
     
     $configMetrics = Get-ConfigTempdbMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
-    $status = "âœ…"
+    $status = "✅"
     $warnings = @()
     
-    # Validar si hay datos vÃ¡lidos
+    # Validar si hay datos válidos
     if ($configMetrics.MaxMemoryPctOfPhysical -eq 0 -and $configMetrics.TempDBFileCount -eq 0) {
-        $status = "âŒ NO DATA"
-        Write-Host "   $status $instanceName - No se pudieron obtener mÃ©tricas" -ForegroundColor Red
+        $status = "❌ NO DATA"
+        Write-Host "   $status $instanceName - No se pudieron obtener métricas" -ForegroundColor Red
     }
     else {
-        # Verificar si Max Memory estÃ¡ sin configurar (UNLIMITED)
+        # Verificar si Max Memory está sin configurar (UNLIMITED)
         $isUnlimited = ($configMetrics.MaxServerMemoryMB -eq 0 -and $configMetrics.Details -like "*UNLIMITED*")
         
-        # Verificar problemas crÃ­ticos
+        # Verificar problemas críticos
         if ($configMetrics.TempDBContentionScore -lt 40) {
-            $status = "ðŸš¨ CRÃTICO!"
+            $status = "🚨 CRÍTICO!"
             if ($configMetrics.TempDBPageLatchWaits -gt 10000) {
-                $warnings += "PAGELATCH_CRÃTICO"
+                $warnings += "PAGELATCH_CRÍTICO"
             }
             if ($configMetrics.TempDBAvgWriteLatencyMs -gt 50) {
                 $warnings += "Disco_Lento(>50ms)"
@@ -872,14 +871,14 @@ foreach ($instance in $instances) {
             $warnings += "TempDB_Score=$($configMetrics.TempDBContentionScore)"
         }
         
-        # Verificar configuraciÃ³n
+        # Verificar configuración
         if (-not $configMetrics.TempDBAllSameSize -and $configMetrics.TempDBFileCount -gt 1) {
             $warnings += "Size mismatch"
         }
         
-        # Problema crÃ­tico: Max Memory no configurado
+        # Problema crítico: Max Memory no configurado
         if ($isUnlimited) {
-            $warnings += "MaxMem=UNLIMITEDâš ï¸"
+            $warnings += "MaxMem=UNLIMITED⚠️"
         }
         elseif (-not $configMetrics.MaxMemoryWithinOptimal -and $configMetrics.MaxMemoryPctOfPhysical -gt 0) {
             $warnings += "MaxMem=$([int]$configMetrics.MaxMemoryPctOfPhysical)%"
@@ -890,11 +889,11 @@ foreach ($instance in $instances) {
             $warnings += "1 file only!"
         }
         
-        if ($warnings.Count -gt 0 -and $status -eq "âœ…") {
-            $status = "âš ï¸ " + ($warnings -join ", ")
+        if ($warnings.Count -gt 0 -and $status -eq "✅") {
+            $status = "⚠️ " + ($warnings -join ", ")
         }
         
-        # Formato mejorado con mÃ©tricas adicionales
+        # Formato mejorado con métricas adicionales
         if ($isUnlimited) {
             $memDisplay = "UNLIMITED"
             $color = "Yellow"
@@ -908,22 +907,22 @@ foreach ($instance in $instances) {
             $color = "DarkGray"
         }
         
-        # InformaciÃ³n de latencia si estÃ¡ disponible
+        # Información de latencia si está disponible
         $latencyInfo = ""
         if ($configMetrics.TempDBAvgWriteLatencyMs -gt 50) {
-            $latencyInfo = " [Disk:$([Math]::Round($configMetrics.TempDBAvgWriteLatencyMs, 0))msðŸŒ]"
+            $latencyInfo = " [Disk:$([Math]::Round($configMetrics.TempDBAvgWriteLatencyMs, 0))ms🐌]"
         }
         elseif ($configMetrics.TempDBAvgWriteLatencyMs -gt 20) {
             $latencyInfo = " [Disk:$([Math]::Round($configMetrics.TempDBAvgWriteLatencyMs, 0))ms]"
         }
         
-        # InformaciÃ³n de espacio si estÃ¡ disponible
+        # Información de espacio si está disponible
         $spaceInfo = ""
         if ($configMetrics.Details -contains "TempDB-NoActivity") {
             $spaceInfo = " [NoActivity~95%]"
         }
         elseif ($configMetrics.TempDBFreeSpacePct -gt 0 -and $configMetrics.TempDBFreeSpacePct -lt 10) {
-            $spaceInfo = " [Free:$([Math]::Round($configMetrics.TempDBFreeSpacePct, 0))%âš ï¸]"
+            $spaceInfo = " [Free:$([Math]::Round($configMetrics.TempDBFreeSpacePct, 0))%⚠️]"
         }
         elseif ($configMetrics.TempDBFreeSpacePct -gt 0) {
             $spaceInfo = " [Free:$([Math]::Round($configMetrics.TempDBFreeSpacePct, 0))%]"
@@ -952,7 +951,7 @@ foreach ($instance in $instances) {
         TempDBPageLatchWaits = $configMetrics.TempDBPageLatchWaits
         TempDBContentionScore = $configMetrics.TempDBContentionScore
         TempDBVersionStoreMB = $configMetrics.TempDBVersionStoreMB
-        # TempDB - ConfiguraciÃ³n
+        # TempDB - Configuración
         TempDBAvgFileSizeMB = $configMetrics.TempDBAvgFileSizeMB
         TempDBMinFileSizeMB = $configMetrics.TempDBMinFileSizeMB
         TempDBMaxFileSizeMB = $configMetrics.TempDBMaxFileSizeMB
@@ -967,87 +966,86 @@ foreach ($instance in $instances) {
     }
 }
 
-Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
+Write-Progress -Activity "Recolectando métricas" -Completed
 
 # 3. Guardar en SQL
 Write-Host ""
-Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
-Write-Host "â•‘  RESUMEN - CONFIGURACIÃ“N & TEMPDB                     â•‘" -ForegroundColor Green
-Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Green
-Write-Host "â•‘  ðŸ“Š GENERAL                                           â•‘" -ForegroundColor Cyan
-Write-Host "â•‘  Total instancias:     $($results.Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  RESUMEN - CONFIGURACIÓN & TEMPDB                     ║" -ForegroundColor Green
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "║  📊 GENERAL                                           ║" -ForegroundColor Cyan
+Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
 
 $avgFiles = ($results | Measure-Object -Property TempDBFileCount -Average).Average
-Write-Host "â•‘  TempDB files avg:     $([int]$avgFiles)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  TempDB files avg:     $([int]$avgFiles)".PadRight(53) "║" -ForegroundColor White
 
 $sameSize = ($results | Where-Object {$_.TempDBAllSameSize}).Count
-Write-Host "â•‘  Con same size:        $sameSize".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  Con same size:        $sameSize".PadRight(53) "║" -ForegroundColor White
 
 $goodGrowth = ($results | Where-Object {$_.TempDBGrowthConfigOK}).Count
-Write-Host "â•‘  Growth bien config:   $goodGrowth".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  Growth bien config:   $goodGrowth".PadRight(53) "║" -ForegroundColor White
 
-Write-Host "â•‘                                                       â•‘" -ForegroundColor White
-Write-Host "â•‘  ðŸ¥ TEMPDB HEALTH SCORE (Score Compuesto)            â•‘" -ForegroundColor Cyan
+Write-Host "║                                                       ║" -ForegroundColor White
+Write-Host "║  🏥 TEMPDB HEALTH SCORE (Score Compuesto)            ║" -ForegroundColor Cyan
 
 $withProblems = ($results | Where-Object {$_.TempDBContentionScore -lt 70}).Count
 $pctProblems = if ($results.Count -gt 0) { [Math]::Round(($withProblems * 100.0) / $results.Count, 1) } else { 0 }
-Write-Host "â•‘  Score <70 (problemas): $withProblems ($pctProblems%)".PadRight(53) "â•‘" -ForegroundColor $(if ($withProblems -gt 50) {"Red"} elseif ($withProblems -gt 20) {"Yellow"} else {"White"})
+Write-Host "║  Score <70 (problemas): $withProblems ($pctProblems%)".PadRight(53) "║" -ForegroundColor $(if ($withProblems -gt 50) {"Red"} elseif ($withProblems -gt 20) {"Yellow"} else {"White"})
 
 $criticalHealth = ($results | Where-Object {$_.TempDBContentionScore -lt 40}).Count
-Write-Host "â•‘  Score <40 (crÃ­tico):   $criticalHealth".PadRight(53) "â•‘" -ForegroundColor $(if ($criticalHealth -gt 0) {"Red"} else {"White"})
+Write-Host "║  Score <40 (crítico):   $criticalHealth".PadRight(53) "║" -ForegroundColor $(if ($criticalHealth -gt 0) {"Red"} else {"White"})
 
 $avgScore = if ($results.Count -gt 0) { [Math]::Round(($results | Measure-Object -Property TempDBContentionScore -Average).Average, 1) } else { 0 }
-Write-Host "â•‘  Score promedio:        $avgScore/100".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  Score promedio:        $avgScore/100".PadRight(53) "║" -ForegroundColor White
 
-Write-Host "â•‘                                                       â•‘" -ForegroundColor White
-Write-Host "â•‘  ðŸ’¾ DISCO                                             â•‘" -ForegroundColor Cyan
+Write-Host "║                                                       ║" -ForegroundColor White
+Write-Host "║  💾 DISCO                                             ║" -ForegroundColor Cyan
 
 $slowDisk = ($results | Where-Object {$_.TempDBAvgWriteLatencyMs -gt 20}).Count
 if ($slowDisk -gt 0) {
-    Write-Host "â•‘  âš ï¸  Disco lento (>20ms): $slowDisk".PadRight(53) "â•‘" -ForegroundColor Yellow
+    Write-Host "║  ⚠️  Disco lento (>20ms): $slowDisk".PadRight(53) "║" -ForegroundColor Yellow
 }
 
 $verySlowDisk = ($results | Where-Object {$_.TempDBAvgWriteLatencyMs -gt 50}).Count
 if ($verySlowDisk -gt 0) {
-    Write-Host "â•‘  ðŸš¨ Disco MUY lento:    $verySlowDisk".PadRight(53) "â•‘" -ForegroundColor Red
+    Write-Host "║  🚨 Disco MUY lento:    $verySlowDisk".PadRight(53) "║" -ForegroundColor Red
 }
 
 $avgWriteLatency = ($results | Where-Object {$_.TempDBAvgWriteLatencyMs -gt 0} | Measure-Object -Property TempDBAvgWriteLatencyMs -Average).Average
 if ($avgWriteLatency -gt 0) {
-    Write-Host "â•‘  Latencia write avg:   $([Math]::Round($avgWriteLatency, 1))ms".PadRight(53) "â•‘" -ForegroundColor White
+    Write-Host "║  Latencia write avg:   $([Math]::Round($avgWriteLatency, 1))ms".PadRight(53) "║" -ForegroundColor White
 }
 
-Write-Host "â•‘                                                       â•‘" -ForegroundColor White
-Write-Host "â•‘  ðŸ§  MEMORIA                                           â•‘" -ForegroundColor Cyan
+Write-Host "║                                                       ║" -ForegroundColor White
+Write-Host "║  🧠 MEMORIA                                           ║" -ForegroundColor Cyan
 
 $optimalMem = ($results | Where-Object {$_.MaxMemoryWithinOptimal}).Count
-Write-Host "â•‘  Max mem Ã³ptimo:       $optimalMem".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  Max mem óptimo:       $optimalMem".PadRight(53) "║" -ForegroundColor White
 
 $unlimitedMem = ($results | Where-Object {$_.MaxServerMemoryMB -eq 0}).Count
 if ($unlimitedMem -gt 0) {
-    Write-Host "â•‘  âš ï¸  Max mem UNLIMITED:  $unlimitedMem".PadRight(53) "â•‘" -ForegroundColor Yellow
+    Write-Host "║  ⚠️  Max mem UNLIMITED:  $unlimitedMem".PadRight(53) "║" -ForegroundColor Yellow
 }
 
 $lowSpace = ($results | Where-Object {$_.TempDBFreeSpacePct -gt 0 -and $_.TempDBFreeSpacePct -lt 20}).Count
 if ($lowSpace -gt 0) {
-    Write-Host "â•‘  âš ï¸  Espacio bajo (<20%): $lowSpace".PadRight(53) "â•‘" -ForegroundColor Yellow
+    Write-Host "║  ⚠️  Espacio bajo (<20%): $lowSpace".PadRight(53) "║" -ForegroundColor Yellow
 }
 
 $bigVersionStore = ($results | Where-Object {$_.TempDBVersionStoreMB -gt 1024}).Count
 if ($bigVersionStore -gt 0) {
-    Write-Host "â•‘  âš ï¸  Version store >1GB:  $bigVersionStore".PadRight(53) "â•‘" -ForegroundColor Yellow
+    Write-Host "║  ⚠️  Version store >1GB:  $bigVersionStore".PadRight(53) "║" -ForegroundColor Yellow
 }
 
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
-Write-Host "âœ… Script completado!" -ForegroundColor Green
+Write-Host "✅ Script completado!" -ForegroundColor Green
 
 #endregion
-
 

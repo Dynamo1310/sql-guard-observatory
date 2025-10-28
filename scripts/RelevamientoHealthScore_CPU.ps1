@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Health Score v3.0 - Recolección de métricas de CPU
     
@@ -27,41 +27,19 @@
 [CmdletBinding()]
 param()
 
-# Limpiar módulos SQL existentes para evitar conflictos de assemblies
-$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
-foreach ($mod in $sqlModules) {
-    if (Get-Module -Name $mod) {
-        Remove-Module $mod -Force -ErrorAction SilentlyContinue
-    }
-}
-
 # Verificar que dbatools está disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Intentar importar dbatools
-try {
-    Import-Module dbatools -Force -ErrorAction Stop
-    Write-Verbose "✅ dbatools cargado correctamente"
-} catch {
-    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
-        Write-Warning "⚠️  Conflicto de assembly detectado. Para evitar este problema:"
-        Write-Warning "   Opción 1: Ejecuta el script usando: .\Run-CPU-Clean.ps1"
-        Write-Warning "   Opción 2: Cierra esta sesión y ejecuta: powershell -NoProfile -File .\RelevamientoHealthScore_CPU.ps1"
-        Write-Warning ""
-        Write-Warning "⚠️  Intentando continuar con dbatools ya cargado..."
-        
-        # Si dbatools ya está parcialmente cargado, intentar usarlo de todos modos
-        if (-not (Get-Module -Name dbatools)) {
-            Write-Error "❌ No se pudo cargar dbatools. Usa una de las opciones anteriores."
-            exit 1
-        }
-    } else {
-        throw
-    }
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
+
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
@@ -173,8 +151,8 @@ WHERE scheduler_id < 255;
         $datasets = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -EnableException `
-            -As DataSet
+            -As DataSet `
+            -EnableException
         
         if ($datasets -and $datasets.Tables.Count -gt 0) {
             # Procesar múltiples resultsets correctamente
