@@ -106,12 +106,13 @@ try {
         -ErrorAction SilentlyContinue
     
     Write-Verbose "[SignalR] Notificación enviada: $NotificationType - $CollectorName"
-    exit 0
+    # NO usar exit aquí, dejar que el script termine naturalmente
     
 } catch {
     # Fallar silenciosamente para no interrumpir el collector
     Write-Verbose "[SignalR] No se pudo enviar notificación (backend offline o timeout): $_"
-    # Retornar éxito de todas formas para no marcar el collector como fallido
-    exit 0
+    # NO propagar el error
 }
 
+# Asegurar código de salida 0 (éxito)
+$global:LASTEXITCODE = 0

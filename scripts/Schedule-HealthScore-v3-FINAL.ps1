@@ -273,18 +273,14 @@ foreach ($task in $tasks) {
         # Esto permite al frontend mostrar actualizaciones en tiempo real
         # Nota: Siempre notificamos al terminar, independiente de si hubo errores
         $scriptBlock = @"
+& '$scriptPath'
+Start-Sleep -Milliseconds 500
 try {
-    & '$scriptPath'
+    & '$signalRModulePath' -NotificationType 'HealthScore' -CollectorName '$($task.Name)' -ApiBaseUrl '$ApiBaseUrl' -ErrorAction SilentlyContinue
 } catch {
-    Write-Warning "Error ejecutando collector: `$_"
-} finally {
-    # Siempre notificar al terminar (éxito o fallo)
-    try {
-        & '$signalRModulePath' -NotificationType 'HealthScore' -CollectorName '$($task.Name)' -ApiBaseUrl '$ApiBaseUrl'
-    } catch {
-        # Ignorar errores de notificación
-    }
+    # Ignorar errores de notificación silenciosamente
 }
+exit 0
 "@
         
         $action = New-ScheduledTaskAction `
