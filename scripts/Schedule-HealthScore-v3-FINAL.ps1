@@ -214,57 +214,15 @@ Write-Host "  🔵 Periódico (4 horas): 5 collectors" -ForegroundColor Blue
 Write-Host "  🔄 Consolidador (10 min): 1 script" -ForegroundColor Cyan
 Write-Host ""
 
-# Crear módulo de notificación SignalR si no existe
+# Verificar que existe el módulo de notificación SignalR
 $signalRModulePath = Join-Path $ScriptsPath "Send-SignalRNotification.ps1"
 if (-not (Test-Path $signalRModulePath)) {
-    Write-Host "[INFO] Creando módulo de notificación SignalR..." -ForegroundColor Yellow
-    
-    $signalRModuleContent = @'
-<#
-.SYNOPSIS
-    Envía notificación al backend para actualización en tiempo real vía SignalR
-
-.PARAMETER CollectorName
-    Nombre del collector que terminó de ejecutarse
-
-.PARAMETER ApiBaseUrl
-    URL base del backend API
-    
-.PARAMETER InstanceCount
-    Número de instancias procesadas (opcional)
-#>
-param(
-    [Parameter(Mandatory=$true)]
-    [string]$CollectorName,
-    
-    [Parameter(Mandatory=$false)]
-    [string]$ApiBaseUrl = "http://localhost:5000",
-    
-    [Parameter(Mandatory=$false)]
-    [int]$InstanceCount = 0
-)
-
-try {
-    $notificationUrl = "$ApiBaseUrl/api/healthscore/notify"
-    
-    $body = @{
-        collectorName = $CollectorName
-        timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-        instanceCount = $InstanceCount
-    } | ConvertTo-Json
-    
-    # Timeout corto (2 segundos) para no bloquear el collector
-    $response = Invoke-RestMethod -Uri $notificationUrl -Method Post -Body $body -ContentType "application/json" -TimeoutSec 2 -ErrorAction SilentlyContinue
-    
-    Write-Verbose "[SignalR] Notificación enviada: $CollectorName"
-} catch {
-    # Fallar silenciosamente para no interrumpir el collector
-    Write-Verbose "[SignalR] No se pudo enviar notificación (backend offline o timeout): $_"
-}
-'@
-    
-    Set-Content -Path $signalRModulePath -Value $signalRModuleContent -Encoding UTF8
-    Write-Host "  ✓ Módulo creado: $signalRModulePath" -ForegroundColor Green
+    Write-Warning "  ⚠ Archivo Send-SignalRNotification.ps1 no encontrado en $ScriptsPath"
+    Write-Warning "  Las notificaciones SignalR no funcionarán."
+    Write-Host "  Copia el archivo Send-SignalRNotification.ps1 al directorio de scripts y ejecuta nuevamente." -ForegroundColor Yellow
+    # Continuar sin salir - los collectors seguirán funcionando aunque sin notificaciones
+} else {
+    Write-Host "[INFO] Módulo de notificación SignalR encontrado: $signalRModulePath" -ForegroundColor Green
 }
 
 $successCount = 0
@@ -314,7 +272,14 @@ foreach ($task in $tasks) {
         # TODOS los collectors (incluido Consolidate) notifican cuando terminan
         # Esto permite al frontend mostrar actualizaciones en tiempo real
         $scriptBlock = @"
-& '$scriptPath'; if (`$?) { & '$signalRModulePath' -NotificationType 'HealthScore' -CollectorName '$($task.Name)' -ApiBaseUrl '$ApiBaseUrl' -Verbose }
+try {
+    & '$scriptPath'
+    if (`$LASTEXITCODE -eq 0 -or `$? -eq `$true) {
+        & '$signalRModulePath' -NotificationType 'HealthScore' -CollectorName '$($task.Name)' -ApiBaseUrl '$ApiBaseUrl'
+    }
+} catch {
+    Write-Error "Error ejecutando collector: `$_"
+}
 "@
         
         $action = New-ScheduledTaskAction `
