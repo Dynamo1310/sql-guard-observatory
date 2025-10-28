@@ -76,12 +76,14 @@ if ($existingTasks) {
     Write-Host "  INFO - No hay tareas previas" -ForegroundColor Gray
 }
 
-# Recrear tareas
+# Recrear tareas con UsrNova
 $scheduleScript = Join-Path $ScriptsPath "Schedule-HealthScore-v3-FINAL.ps1"
 if (Test-Path $scheduleScript) {
     try {
-        & $scheduleScript -ApiBaseUrl $ApiBaseUrl -ScriptsPath $ScriptsPath
-        Write-Host "  OK - Tareas recreadas" -ForegroundColor Green
+        Write-Host "  Ingrese password para GSCORP\UsrNova:" -ForegroundColor Yellow
+        $password = Read-Host -AsSecureString
+        & $scheduleScript -ApiBaseUrl $ApiBaseUrl -ScriptsPath $ScriptsPath -TaskPassword $password
+        Write-Host "  OK - Tareas recreadas con usuario GSCORP\UsrNova" -ForegroundColor Green
     } catch {
         Write-Host "  ERROR - $($_.Exception.Message)" -ForegroundColor Red
     }

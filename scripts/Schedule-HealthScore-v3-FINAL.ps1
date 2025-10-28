@@ -46,10 +46,17 @@
 param(
     [string]$ScriptsPath = "C:\Apps\SQLGuardObservatory\Scripts",
     [string]$TaskPrefix = "HealthScore_v3.2",
-    [string]$ApiBaseUrl = "http://localhost:5000"
+    [string]$ApiBaseUrl = "http://localhost:5000",
+    [string]$TaskUser = "GSCORP\UsrNova",
+    [SecureString]$TaskPassword
 )
 
 $ErrorActionPreference = "Stop"
+
+# Solicitar contraseña si no se proporcionó
+if (-not $TaskPassword) {
+    $TaskPassword = Read-Host "Ingrese password para $TaskUser" -AsSecureString
+}
 
 Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Cyan
@@ -310,16 +317,25 @@ exit 0
             $settings.Priority = 6
         }
         
-        # Crear la tarea
+        # Crear la tarea con usuario específico
+        # Convertir SecureString a texto plano para Register-ScheduledTask
+        $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($TaskPassword)
+        $PlainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        
         Register-ScheduledTask `
             -TaskName $taskName `
             -Description $task.Description `
             -Action $action `
             -Trigger $trigger `
             -Settings $settings `
-            -User "SYSTEM" `
+            -User $TaskUser `
+            -Password $PlainPassword `
             -RunLevel Highest `
             | Out-Null
+        
+        # Limpiar contraseña de memoria
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+        Remove-Variable PlainPassword
         
         Write-Host "    ✓ Tarea creada exitosamente (próxima: $($startTime.ToString('HH:mm')))" -ForegroundColor Green
         $successCount++
