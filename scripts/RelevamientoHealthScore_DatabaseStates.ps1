@@ -89,7 +89,7 @@ WHERE last_update_date > DATEADD(DAY, -30, GETDATE());
 "@
     
     try {
-        $datasets = Invoke-DbaQuery -SqlInstance $Instance -Query $query -QueryTimeout $TimeoutSec -EnableException -As DataSet
+        $datasets = Invoke-Sqlcmd -ServerInstance $Instance -Query $query -QueryTimeout $TimeoutSec -TrustServerCertificate -ErrorAction Stop
         
         $dbStates = $datasets.Tables[0]
         $suspectPages = $datasets.Tables[1]

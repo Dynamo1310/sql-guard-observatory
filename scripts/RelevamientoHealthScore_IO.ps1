@@ -112,10 +112,11 @@ ORDER BY
     CASE WHEN vfs.num_of_writes > 0 THEN (vfs.io_stall_write_ms / vfs.num_of_writes) ELSE 0 END DESC;
 "@
         
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TrustServerCertificate `
+            -ErrorAction Stop
         
         if ($data) {
             # Calcular mÃ©tricas agregadas

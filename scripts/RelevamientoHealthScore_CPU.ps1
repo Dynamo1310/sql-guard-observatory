@@ -75,7 +75,7 @@ function Get-CPUMetrics {
     try {
         # Detectar versión de SQL Server
         $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(50)) AS Version;"
-        $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate -ErrorAction Stop
+        $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate
         $version = [int]($versionResult.Version.Split('.')[0])
         
         # Para SQL 2005/2008 (versiones 9.x y 10.x), usar query simplificada
@@ -151,8 +151,7 @@ WHERE scheduler_id < 255;
         $datasets = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -As DataSet `
-            -EnableException
+            -TrustServerCertificate
         
         if ($datasets -and $datasets.Tables.Count -gt 0) {
             # Procesar múltiples resultsets correctamente
@@ -337,8 +336,7 @@ INSERT INTO dbo.InstanceHealth_CPU (
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
-                -ErrorAction Stop
+                -TrustServerCertificate
         }
         
         Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

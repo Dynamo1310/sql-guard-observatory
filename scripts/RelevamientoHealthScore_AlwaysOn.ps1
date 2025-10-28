@@ -84,10 +84,11 @@ function Get-AlwaysOnStatus {
         # PASO 1: Verificar si AlwaysOn estÃ¡ habilitado a nivel de instancia
         $checkHadrQuery = "SELECT SERVERPROPERTY('IsHadrEnabled') AS IsHadrEnabled;"
         
-        $hadrCheck = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $hadrCheck = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $checkHadrQuery `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TrustServerCertificate `
+            -ErrorAction Stop
         
         $isHadrEnabled = $hadrCheck.IsHadrEnabled
         
@@ -129,10 +130,11 @@ WHERE ars.is_local = 1
   AND drs.database_id IS NOT NULL;
 "@
             
-            $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+            $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
                 -Query $agQuery `
                 -QueryTimeout $TimeoutSec `
-                -EnableException
+                -TrustServerCertificate `
+                -ErrorAction Stop
             
             if ($data -and $data.Count -gt 0) {
                 # Hay datos de AGs - bases de datos participando en este nodo

@@ -77,7 +77,7 @@ function Get-MemoryMetrics {
     try {
         # Detectar versiÃ³n de SQL Server para compatibilidad
         $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(50)) AS Version;"
-        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
+        $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate -ErrorAction Stop
         $version = $versionResult.Version
         $majorVersion = [int]($version.Split('.')[0])
         
@@ -133,10 +133,11 @@ FROM sys.configurations WITH (NOLOCK)
 WHERE name = 'max server memory (MB)';
 "@
         
-        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -EnableException `
+            -TrustServerCertificate `
+            -ErrorAction Stop `
             -As DataSet  # â† Forzar a devolver como DataSet para mÃºltiples resultsets
         
         if ($data -and $data.Tables.Count -gt 0) {

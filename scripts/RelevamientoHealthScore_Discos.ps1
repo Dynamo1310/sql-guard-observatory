@@ -577,10 +577,11 @@ function Invoke-SqlQueryWithRetry {
         $attempt++
         
         try {
-            $result = Invoke-DbaQuery -SqlInstance $InstanceName `
+            $result = Invoke-Sqlcmd -ServerInstance $InstanceName `
                 -Query $Query `
                 -QueryTimeout $TimeoutSec `
-                -EnableException
+                -TrustServerCertificate `
+                -ErrorAction Stop
             
             return $result
         }
@@ -781,7 +782,7 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
             while ($attempt -lt $MaxRetries) {
                 $attempt++
                 try {
-                    return Invoke-DbaQuery -SqlInstance $InstanceName -Query $Query -QueryTimeout $TimeoutSec -EnableException
+                    return Invoke-Sqlcmd -ServerInstance $InstanceName -Query $Query -QueryTimeout $TimeoutSec -TrustServerCertificate -ErrorAction Stop
                 } catch {
                     $lastError = $_
                     if ($_.Exception.Message -match "Timeout|Connection|Network|Transport") {
