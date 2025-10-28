@@ -90,7 +90,7 @@ if (Test-Path $scheduleScript) {
 }
 
 Write-Host ""
-Write-Host "[PASO 3/3] Probando tarea CPU..." -ForegroundColor Yellow
+Write-Host "[PASO 3/4] Probando tarea CPU..." -ForegroundColor Yellow
 
 Start-ScheduledTask -TaskName "HealthScore_v3.2_CPU"
 Write-Host "  Esperando 30 segundos..." -ForegroundColor Gray
@@ -101,6 +101,23 @@ $taskInfo = Get-ScheduledTask -TaskName "HealthScore_v3.2_CPU" | Get-ScheduledTa
 Write-Host ""
 Write-Host "  Ultima ejecucion: $($taskInfo.LastRunTime)" -ForegroundColor Gray
 Write-Host "  Codigo: $($taskInfo.LastTaskResult) $(if ($taskInfo.LastTaskResult -eq 0) { '(EXITO)' } else { '(ERROR)' })" -ForegroundColor $(if ($taskInfo.LastTaskResult -eq 0) { "Green" } else { "Red" })
+
+Write-Host ""
+Write-Host "[PASO 4/4] Verificando datos en la base..." -ForegroundColor Yellow
+
+try {
+    $query = "SELECT TOP 5 InstanceName, TipoMetrica, FechaRelevamiento FROM RelevamientoHealthScore WHERE TipoMetrica = 'CPU' ORDER BY FechaRelevamiento DESC"
+    $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -ErrorAction Stop
+    
+    if ($result) {
+        Write-Host "  OK - Encontrados registros de CPU en SQLNova:" -ForegroundColor Green
+        $result | Format-Table -AutoSize | Out-String | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
+    } else {
+        Write-Host "  ADVERTENCIA - No hay registros de CPU en SQLNova" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "  ERROR - No se pudo consultar la base: $($_.Exception.Message)" -ForegroundColor Red
+}
 
 Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Cyan
