@@ -106,14 +106,14 @@ Write-Host ""
 Write-Host "[PASO 4/4] Verificando datos en la base..." -ForegroundColor Yellow
 
 try {
-    $query = "SELECT TOP 5 InstanceName, TipoMetrica, FechaRelevamiento FROM RelevamientoHealthScore WHERE TipoMetrica = 'CPU' ORDER BY FechaRelevamiento DESC"
+    $query = "SELECT TOP 5 InstanceName, FechaRelevamiento FROM InstanceHealth_CPU ORDER BY FechaRelevamiento DESC"
     $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -TrustServerCertificate -ErrorAction Stop
     
     if ($result) {
-        Write-Host "  OK - Encontrados registros de CPU en SQLNova:" -ForegroundColor Green
+        Write-Host "  OK - Encontrados registros de CPU en InstanceHealth_CPU:" -ForegroundColor Green
         $result | Format-Table -AutoSize | Out-String | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
     } else {
-        Write-Host "  ADVERTENCIA - No hay registros de CPU en SQLNova" -ForegroundColor Yellow
+        Write-Host "  ADVERTENCIA - No hay registros de CPU en InstanceHealth_CPU" -ForegroundColor Yellow
     }
 } catch {
     Write-Host "  ERROR - No se pudo consultar la base: $($_.Exception.Message)" -ForegroundColor Red

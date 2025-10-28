@@ -19,10 +19,12 @@ Write-Host ""
 # Contar registros ANTES
 Write-Host "[ANTES] Contando registros en la base de datos..." -ForegroundColor Yellow
 $countBefore = 0
+$tableName = "InstanceHealth_$CollectorName"
 try {
-    $query = "SELECT COUNT(*) as Count FROM RelevamientoHealthScore WHERE FechaRelevamiento >= DATEADD(MINUTE, -10, GETDATE())"
+    $query = "SELECT COUNT(*) as Count FROM $tableName WHERE FechaRelevamiento >= DATEADD(MINUTE, -10, GETDATE())"
     $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -TrustServerCertificate -ErrorAction Stop
     $countBefore = $result.Count
+    Write-Host "  Tabla: $tableName" -ForegroundColor Gray
     Write-Host "  Registros de los ultimos 10 minutos: $countBefore" -ForegroundColor Gray
     Write-Host "  (Instancia: SSPR17MON-01, Base: SQLNova)" -ForegroundColor DarkGray
 } catch {
