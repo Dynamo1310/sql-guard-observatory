@@ -318,24 +318,37 @@ exit 0
         }
         
         # Crear la tarea con usuario específico
-        # Convertir SecureString a texto plano para Register-ScheduledTask
-        $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($TaskPassword)
-        $PlainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-        
-        Register-ScheduledTask `
-            -TaskName $taskName `
-            -Description $task.Description `
-            -Action $action `
-            -Trigger $trigger `
-            -Settings $settings `
-            -User $TaskUser `
-            -Password $PlainPassword `
-            -RunLevel Highest `
-            | Out-Null
-        
-        # Limpiar contraseña de memoria
-        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
-        Remove-Variable PlainPassword
+        if ($TaskUser -eq "SYSTEM") {
+            # SYSTEM no requiere contraseña
+            Register-ScheduledTask `
+                -TaskName $taskName `
+                -Description $task.Description `
+                -Action $action `
+                -Trigger $trigger `
+                -Settings $settings `
+                -User "SYSTEM" `
+                -RunLevel Highest `
+                | Out-Null
+        } else {
+            # Usuario normal requiere contraseña
+            $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($TaskPassword)
+            $PlainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+            
+            Register-ScheduledTask `
+                -TaskName $taskName `
+                -Description $task.Description `
+                -Action $action `
+                -Trigger $trigger `
+                -Settings $settings `
+                -User $TaskUser `
+                -Password $PlainPassword `
+                -RunLevel Highest `
+                | Out-Null
+            
+            # Limpiar contraseña de memoria
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+            Remove-Variable PlainPassword
+        }
         
         Write-Host "    ✓ Tarea creada exitosamente (próxima: $($startTime.ToString('HH:mm')))" -ForegroundColor Green
         $successCount++
