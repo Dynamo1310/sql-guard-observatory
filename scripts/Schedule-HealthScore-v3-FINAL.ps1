@@ -47,14 +47,14 @@ param(
     [string]$ScriptsPath = "C:\Apps\SQLGuardObservatory\Scripts",
     [string]$TaskPrefix = "HealthScore_v3.2",
     [string]$ApiBaseUrl = "http://localhost:5000",
-    [string]$TaskUser = "GSCORP\UsrNova",
+    [string]$TaskUser = "GSCORP\TB03260ADM",
     [SecureString]$TaskPassword
 )
 
 $ErrorActionPreference = "Stop"
 
-# Solicitar contraseña si no se proporcionó
-if (-not $TaskPassword) {
+# Solicitar contraseña si no se proporcionó (excepto para SYSTEM)
+if (-not $TaskPassword -and $TaskUser -ne "SYSTEM") {
     $TaskPassword = Read-Host "Ingrese password para $TaskUser" -AsSecureString
 }
 
@@ -74,6 +74,7 @@ if (-not (Test-Path $ScriptsPath)) {
 Write-Host "[INFO] Configuración:" -ForegroundColor Yellow
 Write-Host "  Scripts Path: $ScriptsPath" -ForegroundColor Gray
 Write-Host "  API Base URL: $ApiBaseUrl" -ForegroundColor Gray
+Write-Host "  Usuario de tareas: $TaskUser" -ForegroundColor Gray
 Write-Host "  Throttle: 16 threads (optimizado para 10 cores)" -ForegroundColor Gray
 Write-Host ""
 
