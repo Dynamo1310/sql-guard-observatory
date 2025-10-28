@@ -271,14 +271,19 @@ foreach ($task in $tasks) {
         # Acción: Ejecutar PowerShell con el script Y notificar al backend
         # TODOS los collectors (incluido Consolidate) notifican cuando terminan
         # Esto permite al frontend mostrar actualizaciones en tiempo real
+        # Nota: Siempre notificamos al terminar, independiente de si hubo errores
         $scriptBlock = @"
 try {
     & '$scriptPath'
-    if (`$LASTEXITCODE -eq 0 -or `$? -eq `$true) {
-        & '$signalRModulePath' -NotificationType 'HealthScore' -CollectorName '$($task.Name)' -ApiBaseUrl '$ApiBaseUrl'
-    }
 } catch {
-    Write-Error "Error ejecutando collector: `$_"
+    Write-Warning "Error ejecutando collector: `$_"
+} finally {
+    # Siempre notificar al terminar (éxito o fallo)
+    try {
+        & '$signalRModulePath' -NotificationType 'HealthScore' -CollectorName '$($task.Name)' -ApiBaseUrl '$ApiBaseUrl'
+    } catch {
+        # Ignorar errores de notificación
+    }
 }
 "@
         
