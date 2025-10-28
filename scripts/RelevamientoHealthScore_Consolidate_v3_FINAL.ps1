@@ -1,52 +1,52 @@
-<#
+﻿<#
 .SYNOPSIS
-    Health Score v3.0 FINAL - CONSOLIDADOR y Cálculo Final
+    Health Score v3.0 FINAL - CONSOLIDADOR y CÃ¡lculo Final
     
 .DESCRIPTION
     Script que:
     1. Lee datos de las 12 tablas especializadas
     2. Calcula HealthScore final (100 puntos)
-    3. Aplica pesos según categoría
-    4. Aplica penalizaciones SELECTIVAS (solo a categorías relacionadas)
+    3. Aplica pesos segÃºn categorÃ­a
+    4. Aplica penalizaciones SELECTIVAS (solo a categorÃ­as relacionadas)
     5. Guarda en InstanceHealth_Score
     
     PENALIZACIONES BALANCEADAS (NO caps globales):
-    - Autogrowth crítico → Penaliza Discos, I/O, AlwaysOn
-    - TempDB crítico → Penaliza I/O, CPU, Memoria
-    - Backups crítico → Penaliza AlwaysOn, LogChain
-    - Errores severos → Penaliza CPU, Memoria, I/O (moderado)
-    - Discos críticos → Penaliza Autogrowth, I/O
+    - Autogrowth crÃ­tico â†’ Penaliza Discos, I/O, AlwaysOn
+    - TempDB crÃ­tico â†’ Penaliza I/O, CPU, Memoria
+    - Backups crÃ­tico â†’ Penaliza AlwaysOn, LogChain
+    - Errores severos â†’ Penaliza CPU, Memoria, I/O (moderado)
+    - Discos crÃ­ticos â†’ Penaliza Autogrowth, I/O
     
-    CATEGORÍAS Y PESOS (100 puntos) - 12 CATEGORÍAS:
+    CATEGORÃAS Y PESOS (100 puntos) - 12 CATEGORÃAS:
     
     TAB 1: AVAILABILITY & DR (40%)
-    1. 🗄️  Backups (RPO/RTO)           18%
-    2. ♻️  AlwaysOn (AG)               14%
-    3. 🔗 Log Chain Integrity          5%
-    4. 🗄️  Database States             3%
+    1. ðŸ—„ï¸  Backups (RPO/RTO)           18%
+    2. â™»ï¸  AlwaysOn (AG)               14%
+    3. ðŸ”— Log Chain Integrity          5%
+    4. ðŸ—„ï¸  Database States             3%
     
     TAB 2: PERFORMANCE (35%)
-    5. ⚙️  CPU                          10%
-    6. 🧠 Memoria (PLE + Grants)       8%
-    7. 💽 IO (Latencia / IOPS)         10%
-    8. 🧱 Espacio en discos            7%
+    5. âš™ï¸  CPU                          10%
+    6. ðŸ§  Memoria (PLE + Grants)       8%
+    7. ðŸ’½ IO (Latencia / IOPS)         10%
+    8. ðŸ§± Espacio en discos            7%
     
     TAB 3: MAINTENANCE & CONFIG (25%)
-    9. 🚨 Errores sev≥20               7%
-    10. 🧹 Mantenimientos              5%
-    11. 🧩 Config & TempDB (compuesto) 8%
-    12. 📈 Autogrowth & Capacity       5%
+    9. ðŸš¨ Errores sevâ‰¥20               7%
+    10. ðŸ§¹ Mantenimientos              5%
+    11. ðŸ§© Config & TempDB (compuesto) 8%
+    12. ðŸ“ˆ Autogrowth & Capacity       5%
     
-    SEMÁFORO:
-    🟢 Healthy (90-100): Optimal performance
-    🟡 Warning (75-89): Requires attention
-    🟠 Risk (60-74): Action required
-    🔴 Critical (<60): Immediate action
+    SEMÃFORO:
+    ðŸŸ¢ Healthy (90-100): Optimal performance
+    ðŸŸ¡ Warning (75-89): Requires attention
+    ðŸŸ  Risk (60-74): Action required
+    ðŸ”´ Critical (<60): Immediate action
     
 .NOTES
-    Versión: 3.0 FINAL (12 categorías balanceadas)
+    VersiÃ³n: 3.0 FINAL (12 categorÃ­as balanceadas)
     Frecuencia: Cada 2-5 minutos
-    Ejecutar DESPUÉS de los scripts de recolección
+    Ejecutar DESPUÃ‰S de los scripts de recolecciÃ³n
     
 .REQUIRES
     - dbatools (Install-Module -Name dbatools -Force)
@@ -57,7 +57,7 @@
 param()
 
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
@@ -67,13 +67,13 @@ if (Get-Module -Name SqlServer) {
 
 Import-Module dbatools -Force -ErrorAction Stop
 
-#region ===== CONFIGURACIÓN =====
+#region ===== CONFIGURACIÃ“N =====
 
 $SqlServer = "SSPR17MON-01"
 $SqlDatabase = "SQLNova"
 $TimeoutSec = 30
 
-# Pesos de las categorías (total = 100%)
+# Pesos de las categorÃ­as (total = 100%)
 $PESOS = @{
     Backups = 18
     AlwaysOn = 14
@@ -96,7 +96,7 @@ $PESOS = @{
 function Get-SafeNumeric {
     <#
     .SYNOPSIS
-        Convierte un valor potencialmente NULL/DBNull/vacío a un número válido
+        Convierte un valor potencialmente NULL/DBNull/vacÃ­o a un nÃºmero vÃ¡lido
     #>
     param(
         [Parameter(Mandatory)]
@@ -119,7 +119,7 @@ function Get-SafeNumeric {
 function Get-SafeInt {
     <#
     .SYNOPSIS
-        Convierte un valor potencialmente NULL/DBNull/vacío a un entero válido
+        Convierte un valor potencialmente NULL/DBNull/vacÃ­o a un entero vÃ¡lido
     #>
     param(
         [Parameter(Mandatory)]
@@ -210,12 +210,12 @@ function Calculate-LogChainScore {
     $score = 100
     $cap = 100
     
-    # DB crítica con log chain roto >24h => 0 pts y cap 0
+    # DB crÃ­tica con log chain roto >24h => 0 pts y cap 0
     if ($Data.MaxHoursSinceLogBackup -gt 24 -and $Data.BrokenChainCount -gt 0) {
         $score = 0
         $cap = 0
     }
-    # 1 DB crítica con log chain roto
+    # 1 DB crÃ­tica con log chain roto
     elseif ($Data.BrokenChainCount -eq 1) {
         $score = 50
     }
@@ -223,7 +223,7 @@ function Calculate-LogChainScore {
     elseif ($Data.BrokenChainCount -gt 2) {
         $score = 20
     }
-    # 1 DB no crítica con log chain roto
+    # 1 DB no crÃ­tica con log chain roto
     elseif ($Data.FullDBsWithoutLogBackup -eq 1) {
         $score = 80
     }
@@ -242,7 +242,7 @@ function Calculate-DatabaseStatesScore {
     
     $totalProblematic = $Data.OfflineCount + $Data.SuspectCount + $Data.EmergencyCount
     
-    # Alguna DB crítica OFFLINE/SUSPECT/EMERGENCY => 0
+    # Alguna DB crÃ­tica OFFLINE/SUSPECT/EMERGENCY => 0
     if ($Data.SuspectCount -gt 0 -or $Data.EmergencyCount -gt 0) {
         $score = 0
         $cap = 0
@@ -264,7 +264,7 @@ function Calculate-DatabaseStatesScore {
     elseif ($Data.SingleUserCount -gt 0 -or $Data.RestoringCount -gt 0) {
         $score = 60
     }
-    # >1 DB en estado problemático
+    # >1 DB en estado problemÃ¡tico
     elseif ($totalProblematic -gt 1) {
         $score = 20
     }
@@ -285,7 +285,7 @@ function Calculate-CPUScore {
     $p95CPU = Get-SafeNumeric -Value $Data.P95CPUPercent -Default 0
     $runnableTasks = Get-SafeInt -Value $Data.RunnableTasks -Default 0
     
-    # p95 ≤80% = 100, 81–90 = 70, >90 = 40
+    # p95 â‰¤80% = 100, 81â€“90 = 70, >90 = 40
     if ($p95CPU -le 80) {
         $score = 100
     }
@@ -345,9 +345,9 @@ function Calculate-MemoriaScore {
     $score = 0
     $cap = 100
     
-    # 0.6×PLE + 0.25×MemoryGrants + 0.15×UsoMemoria
+    # 0.6Ã—PLE + 0.25Ã—MemoryGrants + 0.15Ã—UsoMemoria
     
-    # PLE objetivo = 300 s × GB buffer pool
+    # PLE objetivo = 300 s Ã— GB buffer pool
     $pleScore = 0
     if ($Data.PLETarget -gt 0) {
         $pleRatio = $Data.PageLifeExpectancy / $Data.PLETarget
@@ -374,13 +374,13 @@ function Calculate-MemoriaScore {
     $usoScore = 100
     if ($Data.MaxServerMemoryMB -gt 0) {
         $usoRatio = $Data.TotalServerMemoryMB / $Data.MaxServerMemoryMB
-        if ($usoRatio -ge 0.95) { $usoScore = 100 }  # Casi al máximo configurado (óptimo)
+        if ($usoRatio -ge 0.95) { $usoScore = 100 }  # Casi al mÃ¡ximo configurado (Ã³ptimo)
         elseif ($usoRatio -ge 0.80) { $usoScore = 90 }
         elseif ($usoRatio -ge 0.60) { $usoScore = 70 }
-        else { $usoScore = 50 }  # Muy por debajo del máximo (posible problema)
+        else { $usoScore = 50 }  # Muy por debajo del mÃ¡ximo (posible problema)
     }
     
-    # Fórmula ponderada
+    # FÃ³rmula ponderada
     $score = ($pleScore * 0.6) + ($grantsScore * 0.25) + ($usoScore * 0.15)
     
     # NUEVO: Waits de memoria (RESOURCE_SEMAPHORE) y Stolen Memory
@@ -408,7 +408,7 @@ function Calculate-MemoriaScore {
         $stolenPct = ($stolenMemMB / $totalMemMB) * 100
         
         if ($stolenPct -gt 50) {
-            $score = [Math]::Min($score, 50)  # Stolen memory crítico
+            $score = [Math]::Min($score, 50)  # Stolen memory crÃ­tico
             $cap = [Math]::Min($cap, 70)
         }
         elseif ($stolenPct -gt 30) {
@@ -416,7 +416,7 @@ function Calculate-MemoriaScore {
         }
     }
     
-    # PLE <0.15×objetivo o Grants>10 => cap 60
+    # PLE <0.15Ã—objetivo o Grants>10 => cap 60
     if ($Data.PLETarget -gt 0 -and $Data.PageLifeExpectancy -lt ($Data.PLETarget * 0.15)) {
         $cap = [Math]::Min($cap, 60)
     }
@@ -439,7 +439,7 @@ function Calculate-IOScore {
     # Calcular latencia promedio ponderada (data + log)
     $avgLatency = ($Data.DataFileAvgReadMs + $Data.DataFileAvgWriteMs + $Data.LogFileAvgWriteMs) / 3
     
-    # Latencia ≤5ms=100; 6–10=80; 11–20=60; >20=40
+    # Latencia â‰¤5ms=100; 6â€“10=80; 11â€“20=60; >20=40
     if ($avgLatency -le 5) {
         $score = 100
     }
@@ -524,7 +524,7 @@ function Calculate-DiscosScore {
                        ($logDiskFreePct * $logWeight) + 
                        ($worstFreePct * $otherWeight)
     
-    # ≥20% = 100, 15–19% = 80, 10–14% = 60, 5–9% = 40, <5% = 0
+    # â‰¥20% = 100, 15â€“19% = 80, 10â€“14% = 60, 5â€“9% = 40, <5% = 0
     if ($weightedFreePct -ge 20) {
         $score = 100
     }
@@ -549,7 +549,7 @@ function Calculate-DiscosScore {
     return @{ Score = $score; Cap = $cap }
 }
 
-# 9. ERRORES CRÍTICOS & BLOCKING (7%)
+# 9. ERRORES CRÃTICOS & BLOCKING (7%)
 function Calculate-ErroresCriticosScore {
     param(
         [object]$Data
@@ -558,13 +558,13 @@ function Calculate-ErroresCriticosScore {
     $score = 100
     $cap = 100
     
-    # 0 errores = 100, −10 por cada evento (máx −40)
+    # 0 errores = 100, âˆ’10 por cada evento (mÃ¡x âˆ’40)
     if ($Data.Severity20PlusCount -eq 0) {
         $score = 100
     }
     else {
         $score = 100 - ($Data.Severity20PlusCount * 10)
-        if ($score -lt 60) { $score = 60 }  # Máximo −40
+        if ($score -lt 60) { $score = 60 }  # MÃ¡ximo âˆ’40
     }
     
     # Si hay evento reciente => cap 70
@@ -579,7 +579,7 @@ function Calculate-ErroresCriticosScore {
     if ($blockedCount -gt 0) {
         # Blocking severo (>10 sesiones o >30s)
         if ($blockedCount -gt 10 -or $maxBlockTime -gt 30) {
-            $score = [Math]::Min($score, 40)  # Blocking crítico
+            $score = [Math]::Min($score, 40)  # Blocking crÃ­tico
             $cap = [Math]::Min($cap, 60)
         }
         # Blocking moderado (5-10 sesiones o 10-30s)
@@ -605,7 +605,7 @@ function Calculate-MantenimientosScore {
     $score = 100
     $cap = 100
     
-    # 100 si CHECKDB ≤7 días
+    # 100 si CHECKDB â‰¤7 dÃ­as
     if ($Data.LastCheckdb -eq $null -or [string]::IsNullOrWhiteSpace($Data.LastCheckdb)) {
         $score = 0
     }
@@ -630,7 +630,7 @@ function Calculate-MantenimientosScore {
                 $score = 50
             }
             else {
-                $score = 0  # >30 días => 0 pts
+                $score = 0  # >30 dÃ­as => 0 pts
             }
         }
         catch {
@@ -642,14 +642,14 @@ function Calculate-MantenimientosScore {
     return @{ Score = $score; Cap = $cap }
 }
 
-# DIAGNÓSTICO INTELIGENTE DE I/O PARA TEMPDB
+# DIAGNÃ“STICO INTELIGENTE DE I/O PARA TEMPDB
 function Get-IODiagnosisForTempDB {
     <#
     .SYNOPSIS
-        Genera diagnóstico inteligente de I/O para TempDB basado en tipo de disco, latencia, y carga
+        Genera diagnÃ³stico inteligente de I/O para TempDB basado en tipo de disco, latencia, y carga
     .DESCRIPTION
         Analiza el tipo de disco (HDD/SSD/NVMe), latencias, carga del sistema, y competencia
-        para determinar la causa raíz de problemas de I/O en TempDB
+        para determinar la causa raÃ­z de problemas de I/O en TempDB
     #>
     param(
         [decimal]$WriteLatencyMs,
@@ -666,7 +666,7 @@ function Get-IODiagnosisForTempDB {
         Problem = $null
         Severity = "OK"
         Suggestion = $null
-        Icon = "✅"
+        Icon = "âœ…"
         MediaType = "Unknown"
         HealthStatus = "Unknown"
         DatabaseCount = 0
@@ -689,7 +689,7 @@ function Get-IODiagnosisForTempDB {
                 $diagnosis.HealthStatus = if ($tempdbVolume.HealthStatus) { $tempdbVolume.HealthStatus } else { "Unknown" }
                 $diagnosis.DatabaseCount = if ($tempdbVolume.DatabaseCount) { [int]$tempdbVolume.DatabaseCount } else { 0 }
                 
-                # Detectar si TempDB está en disco dedicado (solo 1 DB en el disco)
+                # Detectar si TempDB estÃ¡ en disco dedicado (solo 1 DB en el disco)
                 $diagnosis.IsDedicated = ($diagnosis.DatabaseCount -eq 1)
             }
         } catch {
@@ -701,25 +701,25 @@ function Get-IODiagnosisForTempDB {
     if ($diagnosis.HealthStatus -in @("Warning", "Unhealthy", "Degraded")) {
         $diagnosis.Problem = "Hardware degradado o fallando"
         $diagnosis.Severity = "CRITICAL"
-        $diagnosis.Suggestion = "El disco físico reporta problemas de hardware. Revisar SMART, RAID, o reemplazar disco urgentemente"
-        $diagnosis.Icon = "🚨"
+        $diagnosis.Suggestion = "El disco fÃ­sico reporta problemas de hardware. Revisar SMART, RAID, o reemplazar disco urgentemente"
+        $diagnosis.Icon = "ðŸš¨"
         return $diagnosis
     }
     
     # --- CASO 2: HDD con latencia alta ---
     if ($diagnosis.MediaType -eq "HDD") {
         if ($WriteLatencyMs -gt 50) {
-            $diagnosis.Problem = "Disco HDD mecánico (lento por naturaleza)"
+            $diagnosis.Problem = "Disco HDD mecÃ¡nico (lento por naturaleza)"
             $diagnosis.Severity = "HIGH"
             $diagnosis.Suggestion = "TempDB en disco HDD ($([int]$WriteLatencyMs)ms escritura). Migrar a SSD/NVMe urgentemente"
-            $diagnosis.Icon = "🐌"
+            $diagnosis.Icon = "ðŸŒ"
             return $diagnosis
         }
         elseif ($WriteLatencyMs -gt 20) {
             $diagnosis.Problem = "Disco HDD (considerar actualizar)"
             $diagnosis.Severity = "MEDIUM"
             $diagnosis.Suggestion = "TempDB en HDD. Migrar a SSD para mejor rendimiento (latencia: $([int]$WriteLatencyMs)ms)"
-            $diagnosis.Icon = "⚠️"
+            $diagnosis.Icon = "âš ï¸"
             return $diagnosis
         }
     }
@@ -727,38 +727,38 @@ function Get-IODiagnosisForTempDB {
     # --- CASO 3: SSD con latencia alta (problema real) ---
     if ($diagnosis.MediaType -in @("SSD", "Unspecified") -and $WriteLatencyMs -gt 10) {
         
-        # CRÍTICO: SSD con >100ms
+        # CRÃTICO: SSD con >100ms
         if ($WriteLatencyMs -gt 100) {
-            # Diagnosticar causa específica
+            # Diagnosticar causa especÃ­fica
             
             # CASO: Disco compartido con muchas DBs
             if (-not $diagnosis.IsDedicated -and $diagnosis.DatabaseCount -gt 5) {
                 $diagnosis.Problem = "TempDB en disco COMPARTIDO con $($diagnosis.DatabaseCount) DBs"
                 $diagnosis.Severity = "CRITICAL"
-                $diagnosis.Suggestion = "🚨 TempDB compartiendo disco SSD con $($diagnosis.DatabaseCount) bases de datos ($([int]$WriteLatencyMs)ms). Mover TempDB a disco DEDICADO urgentemente"
-                $diagnosis.Icon = "🚨"
+                $diagnosis.Suggestion = "ðŸš¨ TempDB compartiendo disco SSD con $($diagnosis.DatabaseCount) bases de datos ($([int]$WriteLatencyMs)ms). Mover TempDB a disco DEDICADO urgentemente"
+                $diagnosis.Icon = "ðŸš¨"
             }
-            # CASO: Presión de memoria (incluso en disco dedicado)
+            # CASO: PresiÃ³n de memoria (incluso en disco dedicado)
             elseif ($LazyWritesPerSec -gt 100) {
                 $dedicatedText = if ($diagnosis.IsDedicated) { "en disco DEDICADO" } else { "en disco compartido" }
-                $diagnosis.Problem = "Presión de memoria generando lazy writes ($LazyWritesPerSec/s)"
+                $diagnosis.Problem = "PresiÃ³n de memoria generando lazy writes ($LazyWritesPerSec/s)"
                 $diagnosis.Severity = "CRITICAL"
-                $diagnosis.Suggestion = "🚨 TempDB $dedicatedText con alta escritura por presión de memoria ($([int]$WriteLatencyMs)ms, $LazyWritesPerSec lazy writes/s). Revisar PLE y considerar más RAM"
-                $diagnosis.Icon = "🚨"
+                $diagnosis.Suggestion = "ðŸš¨ TempDB $dedicatedText con alta escritura por presiÃ³n de memoria ($([int]$WriteLatencyMs)ms, $LazyWritesPerSec lazy writes/s). Revisar PLE y considerar mÃ¡s RAM"
+                $diagnosis.Icon = "ðŸš¨"
             }
             # CASO: Disco dedicado con problemas
             elseif ($diagnosis.IsDedicated) {
                 $diagnosis.Problem = "TempDB en disco DEDICADO pero con latencia muy alta"
                 $diagnosis.Severity = "CRITICAL"
-                $diagnosis.Suggestion = "🚨 TempDB en disco DEDICADO SSD pero con $([int]$WriteLatencyMs)ms. Revisar: RAID cache, BBU, storage backend, firmware, o problemas de hardware"
-                $diagnosis.Icon = "🚨"
+                $diagnosis.Suggestion = "ðŸš¨ TempDB en disco DEDICADO SSD pero con $([int]$WriteLatencyMs)ms. Revisar: RAID cache, BBU, storage backend, firmware, o problemas de hardware"
+                $diagnosis.Icon = "ðŸš¨"
             }
             # CASO: Problema general
     else {
                 $diagnosis.Problem = "Posible problema de hardware, RAID, o storage backend"
                 $diagnosis.Severity = "CRITICAL"
-                $diagnosis.Suggestion = "🚨 SSD con latencia anormal ($([int]$WriteLatencyMs)ms). Si es HDD, migrar a SSD/NVMe. Si ya es SSD, revisar sobrecarga o problemas de hardware"
-                $diagnosis.Icon = "🚨"
+                $diagnosis.Suggestion = "ðŸš¨ SSD con latencia anormal ($([int]$WriteLatencyMs)ms). Si es HDD, migrar a SSD/NVMe. Si ya es SSD, revisar sobrecarga o problemas de hardware"
+                $diagnosis.Icon = "ðŸš¨"
             }
             return $diagnosis
         }
@@ -769,30 +769,30 @@ function Get-IODiagnosisForTempDB {
             if (-not $diagnosis.IsDedicated -and $diagnosis.DatabaseCount -gt 2) {
                 $diagnosis.Problem = "TempDB en disco COMPARTIDO con $($diagnosis.DatabaseCount) DBs"
                 $diagnosis.Severity = "MEDIUM"
-                $diagnosis.Suggestion = "⚠️ TempDB compartiendo disco ($([int]$WriteLatencyMs)ms) con $($diagnosis.DatabaseCount) bases de datos. Considerar mover a disco DEDICADO"
-                $diagnosis.Icon = "⚠️"
+                $diagnosis.Suggestion = "âš ï¸ TempDB compartiendo disco ($([int]$WriteLatencyMs)ms) con $($diagnosis.DatabaseCount) bases de datos. Considerar mover a disco DEDICADO"
+                $diagnosis.Icon = "âš ï¸"
             }
-            # CASO: Presión de memoria
+            # CASO: PresiÃ³n de memoria
             elseif ($LazyWritesPerSec -gt 50) {
                 $dedicatedText = if ($diagnosis.IsDedicated) { "DEDICADO" } else { "compartido" }
-                $diagnosis.Problem = "Presión de memoria incrementando I/O ($LazyWritesPerSec lazy writes/s)"
+                $diagnosis.Problem = "PresiÃ³n de memoria incrementando I/O ($LazyWritesPerSec lazy writes/s)"
                 $diagnosis.Severity = "MEDIUM"
-                $diagnosis.Suggestion = "⚠️ TempDB en disco $dedicatedText con escritura incrementada por presión de memoria ($([int]$WriteLatencyMs)ms). Revisar PLE y considerar más RAM"
-                $diagnosis.Icon = "⚠️"
+                $diagnosis.Suggestion = "âš ï¸ TempDB en disco $dedicatedText con escritura incrementada por presiÃ³n de memoria ($([int]$WriteLatencyMs)ms). Revisar PLE y considerar mÃ¡s RAM"
+                $diagnosis.Icon = "âš ï¸"
             }
-            # CASO: Disco dedicado con performance subóptima
+            # CASO: Disco dedicado con performance subÃ³ptima
             elseif ($diagnosis.IsDedicated) {
                 $diagnosis.Problem = "Disco DEDICADO con rendimiento por debajo del esperado"
                 $diagnosis.Severity = "MEDIUM"
-                $diagnosis.Suggestion = "⚠️ TempDB en disco DEDICADO pero con $([int]$WriteLatencyMs)ms. Revisar: carga de disco, IOPS provisionados, o tipo de storage (si es HDD migrar a SSD)"
-                $diagnosis.Icon = "⚠️"
+                $diagnosis.Suggestion = "âš ï¸ TempDB en disco DEDICADO pero con $([int]$WriteLatencyMs)ms. Revisar: carga de disco, IOPS provisionados, o tipo de storage (si es HDD migrar a SSD)"
+                $diagnosis.Icon = "âš ï¸"
             }
             # CASO: General
             else {
-                $diagnosis.Problem = "Storage más lento de lo esperado"
+                $diagnosis.Problem = "Storage mÃ¡s lento de lo esperado"
                 $diagnosis.Severity = "MEDIUM"
-                $diagnosis.Suggestion = "⚠️ SSD más lento de lo esperado ($([int]$WriteLatencyMs)ms). Revisar: carga de disco. Si es HDD, migrar a SSD. Si es SSD, revisar IOPS y competencia por storage"
-                $diagnosis.Icon = "⚠️"
+                $diagnosis.Suggestion = "âš ï¸ SSD mÃ¡s lento de lo esperado ($([int]$WriteLatencyMs)ms). Revisar: carga de disco. Si es HDD, migrar a SSD. Si es SSD, revisar IOPS y competencia por storage"
+                $diagnosis.Icon = "âš ï¸"
             }
             return $diagnosis
         }
@@ -802,7 +802,7 @@ function Get-IODiagnosisForTempDB {
             $diagnosis.Problem = "Rendimiento por debajo del ideal"
             $diagnosis.Severity = "LOW"
             $diagnosis.Suggestion = "SSD con rendimiento aceptable pero mejorable ($([int]$WriteLatencyMs)ms). Monitorear tendencia"
-            $diagnosis.Icon = "📊"
+            $diagnosis.Icon = "ðŸ“Š"
             return $diagnosis
         }
     }
@@ -814,7 +814,7 @@ function Get-IODiagnosisForTempDB {
             $diagnosis.Problem = "Latencia muy alta (tipo de disco desconocido)"
             $diagnosis.Severity = "CRITICAL"
             $diagnosis.Suggestion = "TempDB muy lento ($([int]$WriteLatencyMs)ms). Si es HDD, migrar a SSD/NVMe urgentemente. Si ya es SSD, revisar sobrecarga o problemas de hardware"
-            $diagnosis.Icon = "🚨"
+            $diagnosis.Icon = "ðŸš¨"
             return $diagnosis
         }
         elseif ($WriteLatencyMs -gt 50) {
@@ -822,7 +822,7 @@ function Get-IODiagnosisForTempDB {
             $diagnosis.Problem = "Latencia alta (posible HDD o SSD sobrecargado)"
             $diagnosis.Severity = "MEDIUM"
             $diagnosis.Suggestion = "TempDB lento ($([int]$WriteLatencyMs)ms). Verificar tipo de disco. Si es HDD, migrar a SSD. Si es SSD, revisar IOPS y competencia por storage"
-            $diagnosis.Icon = "⚠️"
+            $diagnosis.Icon = "âš ï¸"
             return $diagnosis
         }
         elseif ($WriteLatencyMs -lt 10) {
@@ -830,7 +830,7 @@ function Get-IODiagnosisForTempDB {
             $diagnosis.Problem = $null
             $diagnosis.Severity = "OK"
             $diagnosis.Suggestion = $null
-            $diagnosis.Icon = "✅"
+            $diagnosis.Icon = "âœ…"
             return $diagnosis
         }
     }
@@ -839,23 +839,23 @@ function Get-IODiagnosisForTempDB {
     $diagnosis.Problem = $null
     $diagnosis.Severity = "OK"
     $diagnosis.Suggestion = $null
-    $diagnosis.Icon = "✅"
+    $diagnosis.Icon = "âœ…"
     return $diagnosis
 }
 
-# 11. CONFIGURACIÓN & TEMPDB (8%)
+# 11. CONFIGURACIÃ“N & TEMPDB (8%)
 function Calculate-ConfiguracionTempdbScore {
     <#
     .SYNOPSIS
-        Calcula el score de Configuración & TempDB combinando el TempDB Health Score
-        compuesto (ya calculado por el collector) con la configuración de Max Memory.
+        Calcula el score de ConfiguraciÃ³n & TempDB combinando el TempDB Health Score
+        compuesto (ya calculado por el collector) con la configuraciÃ³n de Max Memory.
     .DESCRIPTION
-        Fórmula: 60% TempDB Health Score + 40% Max Memory Config
+        FÃ³rmula: 60% TempDB Health Score + 40% Max Memory Config
         
         El TempDB Health Score compuesto (calculado por el collector) ya considera:
-        - 40% Contención (PAGELATCH waits)
+        - 40% ContenciÃ³n (PAGELATCH waits)
         - 30% Latencia de disco (write latency)
-        - 20% Configuración (files, same size, growth)
+        - 20% ConfiguraciÃ³n (files, same size, growth)
         - 10% Recursos (free space, version store)
     #>
     param(
@@ -866,17 +866,17 @@ function Calculate-ConfiguracionTempdbScore {
     $cap = 100
     
     # 60% TempDB Health Score Compuesto (ya calculado por el collector)
-    # Este score ya considera contención, latencia, config y recursos
+    # Este score ya considera contenciÃ³n, latencia, config y recursos
     $tempdbHealthScore = if ($Data.TempDBContentionScore -ne $null) {
         [int]$Data.TempDBContentionScore
     } else {
         50  # Default si no hay datos
     }
     
-    # 40% Configuración de Max Memory
+    # 40% ConfiguraciÃ³n de Max Memory
     $memoryScore = 100
     if (-not $Data.MaxMemoryWithinOptimal) {
-        $memoryScore = 60  # No está dentro del rango óptimo (70-95%)
+        $memoryScore = 60  # No estÃ¡ dentro del rango Ã³ptimo (70-95%)
     }
     
     # Score final ponderado
@@ -898,7 +898,7 @@ function Calculate-AutogrowthScore {
     $score = 100
     $cap = 100
     
-    # Convertir valores nulos o vacíos a 0 para comparaciones seguras usando funciones helper
+    # Convertir valores nulos o vacÃ­os a 0 para comparaciones seguras usando funciones helper
     $autogrowthEvents = Get-SafeInt -Value $Data.AutogrowthEventsLast24h -Default 0
     $worstPercentOfMax = Get-SafeNumeric -Value $Data.WorstPercentOfMax -Default 0
     $filesNearLimit = Get-SafeInt -Value $Data.FilesNearLimit -Default 0
@@ -943,7 +943,7 @@ function Calculate-AutogrowthScore {
     return @{ Score = $score; Cap = $cap }
 }
 
-# Función para aplicar caps
+# FunciÃ³n para aplicar caps
 function Apply-Cap {
     param(
         [int]$Score,
@@ -956,7 +956,7 @@ function Apply-Cap {
     return $Score
 }
 
-# Función para determinar estado según rango
+# FunciÃ³n para determinar estado segÃºn rango
 function Get-HealthStatus {
     param([decimal]$Score)
     
@@ -966,7 +966,7 @@ function Get-HealthStatus {
     return "Critical"
 }
 
-# Función para mostrar estado (solo para consola)
+# FunciÃ³n para mostrar estado (solo para consola)
 function Get-HealthStatusDisplay {
     param([string]$Status)
     
@@ -1111,7 +1111,7 @@ SELECT
     -- Maintenance
     mnt.LastCheckdb,
     mnt.CheckdbOk,
-    -- Config/TempDB (con nuevas métricas extendidas)
+    -- Config/TempDB (con nuevas mÃ©tricas extendidas)
     cfg.TempDBFileCount,
     cfg.TempDBAllSameSize,
     cfg.TempDBAllSameGrowth,
@@ -1229,11 +1229,11 @@ INSERT INTO dbo.InstanceHealth_Score (
     MantenimientosScore,
     ConfiguracionTempdbScore,
     AutogrowthScore,
-    -- Diagnóstico Inteligente de I/O
+    -- DiagnÃ³stico Inteligente de I/O
     TempDBIODiagnosis,
     TempDBIOSuggestion,
     TempDBIOSeverity,
-    -- Contribuciones Ponderadas (0-peso máximo)
+    -- Contribuciones Ponderadas (0-peso mÃ¡ximo)
     BackupsContribution,
     AlwaysOnContribution,
     LogChainContribution,
@@ -1268,11 +1268,11 @@ INSERT INTO dbo.InstanceHealth_Score (
     $($ScoreData.MantenimientosScore),
     $($ScoreData.ConfiguracionTempdbScore),
     $($ScoreData.AutogrowthScore),
-    -- Diagnóstico Inteligente de I/O
+    -- DiagnÃ³stico Inteligente de I/O
     $(if ([string]::IsNullOrEmpty($ScoreData.TempDBIODiagnosis)) { 'NULL' } else { "'$($ScoreData.TempDBIODiagnosis -replace "'", "''")'" }),
     $(if ([string]::IsNullOrEmpty($ScoreData.TempDBIOSuggestion)) { 'NULL' } else { "'$($ScoreData.TempDBIOSuggestion -replace "'", "''")'" }),
     $(if ([string]::IsNullOrEmpty($ScoreData.TempDBIOSeverity)) { 'NULL' } else { "'$($ScoreData.TempDBIOSeverity)'" }),
-    -- Contribuciones Ponderadas (ya redondeadas a entero en el cálculo)
+    -- Contribuciones Ponderadas (ya redondeadas a entero en el cÃ¡lculo)
     $($ScoreData.BackupsContribution),
     $($ScoreData.AlwaysOnContribution),
     $($ScoreData.LogChainContribution),
@@ -1344,11 +1344,11 @@ foreach ($instanceName in $instances) {
     $data = Get-LatestInstanceData -InstanceName $instanceName
     
     if (-not $data) {
-        Write-Host "   ⚠️  $instanceName - Sin datos suficientes" -ForegroundColor Yellow
+        Write-Host "   âš ï¸  $instanceName - Sin datos suficientes" -ForegroundColor Yellow
         continue
     }
     
-    # Calcular scores por categoría
+    # Calcular scores por categorÃ­a
     $backupsResult = Calculate-BackupsScore -Data $data
     $alwaysOnResult = Calculate-AlwaysOnScore -Data $data
     $logChainResult = Calculate-LogChainScore -Data $data
@@ -1362,7 +1362,7 @@ foreach ($instanceName in $instances) {
     $configTempdbResult = Calculate-ConfiguracionTempdbScore -Data $data
     $autogrowthResult = Calculate-AutogrowthScore -Data $data
     
-    # Generar diagnóstico inteligente de I/O para TempDB
+    # Generar diagnÃ³stico inteligente de I/O para TempDB
     $ioDiagnosis = Get-IODiagnosisForTempDB `
         -WriteLatencyMs (Get-SafeNumeric -Value $data.TempDBAvgWriteLatencyMs -Default 0) `
         -ReadLatencyMs (Get-SafeNumeric -Value $data.TempDBAvgReadLatencyMs -Default 0) `
@@ -1389,7 +1389,7 @@ foreach ($instanceName in $instances) {
     
     # ===== PENALIZACIONES SELECTIVAS (BALANCEADAS) =====
     # En lugar de aplicar un cap global que penaliza TODO,
-    # aplicamos penalizaciones solo a categorías relacionadas con el problema
+    # aplicamos penalizaciones solo a categorÃ­as relacionadas con el problema
     
     # Calcular contribuciones base (sin penalizaciones cruzadas)
     $backupsContribution = [int][Math]::Round($backupsScore * $PESOS.Backups / 100)
@@ -1405,44 +1405,44 @@ foreach ($instanceName in $instances) {
     $configTempdbContribution = [int][Math]::Round($configTempdbScore * $PESOS.ConfiguracionTempdb / 100)
     $autogrowthContribution = [int][Math]::Round($autogrowthScore * $PESOS.Autogrowth / 100)
     
-    # PENALIZACIÓN SELECTIVA 1: Autogrowth crítico (archivo al límite)
+    # PENALIZACIÃ“N SELECTIVA 1: Autogrowth crÃ­tico (archivo al lÃ­mite)
     if ($autogrowthScore -eq 0) {
-        # Solo penalizar categorías RELACIONADAS con capacidad/disco
+        # Solo penalizar categorÃ­as RELACIONADAS con capacidad/disco
         $discosContribution = [int][Math]::Round($discosContribution * 0.5)      # -50% (capacidad relacionada)
         $ioContribution = [int][Math]::Round($ioContribution * 0.7)              # -30% (I/O relacionado)
         $alwaysOnContribution = [int][Math]::Round($alwaysOnContribution * 0.8)  # -20% (puede afectar sync)
         # Backups, CPU, Memory, Errores, etc. NO se penalizan (no relacionados)
     }
     
-    # PENALIZACIÓN SELECTIVA 2: TempDB crítico (contención/disco lento)
+    # PENALIZACIÃ“N SELECTIVA 2: TempDB crÃ­tico (contenciÃ³n/disco lento)
     if ($configTempdbScore -lt 40) {
-        # Solo penalizar categorías RELACIONADAS con performance
+        # Solo penalizar categorÃ­as RELACIONADAS con performance
         $ioContribution = [int][Math]::Round($ioContribution * 0.5)        # -50% (disco lento causa TempDB lento)
-        $cpuContribution = [int][Math]::Round($cpuContribution * 0.7)      # -30% (contención aumenta CPU)
-        $memoriaContribution = [int][Math]::Round($memoriaContribution * 0.8) # -20% (contención puede ser por memoria)
+        $cpuContribution = [int][Math]::Round($cpuContribution * 0.7)      # -30% (contenciÃ³n aumenta CPU)
+        $memoriaContribution = [int][Math]::Round($memoriaContribution * 0.8) # -20% (contenciÃ³n puede ser por memoria)
         # Backups, Discos, AlwaysOn, etc. NO se penalizan (no relacionados)
     }
     
-    # PENALIZACIÓN SELECTIVA 3: Backups críticos
+    # PENALIZACIÃ“N SELECTIVA 3: Backups crÃ­ticos
     if ($backupsScore -eq 0) {
-        # Solo penalizar categorías RELACIONADAS con DR
+        # Solo penalizar categorÃ­as RELACIONADAS con DR
         $alwaysOnContribution = [int][Math]::Round($alwaysOnContribution * 0.8)  # -20% (DR complementario)
         $logChainContribution = [int][Math]::Round($logChainContribution * 0.7)  # -30% (log backups relacionados)
         # CPU, Memory, I/O, etc. NO se penalizan (no relacionados)
     }
     
-    # PENALIZACIÓN SELECTIVA 4: Errores críticos severos
+    # PENALIZACIÃ“N SELECTIVA 4: Errores crÃ­ticos severos
     if ($erroresScore -lt 30) {
-        # Penalización moderada global (errores indican inestabilidad general)
+        # PenalizaciÃ³n moderada global (errores indican inestabilidad general)
         $cpuContribution = [int][Math]::Round($cpuContribution * 0.8)            # -20%
         $memoriaContribution = [int][Math]::Round($memoriaContribution * 0.8)    # -20%
         $ioContribution = [int][Math]::Round($ioContribution * 0.8)              # -20%
         # Backups NO se penaliza (errores no afectan backups)
     }
     
-    # PENALIZACIÓN SELECTIVA 5: Discos críticos (< 10% libre)
+    # PENALIZACIÃ“N SELECTIVA 5: Discos crÃ­ticos (< 10% libre)
     if ($discosScore -lt 30) {
-        # Solo penalizar categorías RELACIONADAS con capacidad
+        # Solo penalizar categorÃ­as RELACIONADAS con capacidad
         $autogrowthContribution = [int][Math]::Round($autogrowthContribution * 0.5) # -50% (directamente relacionado)
         $ioContribution = [int][Math]::Round($ioContribution * 0.7)                 # -30% (disco lleno afecta I/O)
         # CPU, Memory, Backups NO se penalizan
@@ -1464,9 +1464,9 @@ foreach ($instanceName in $instances) {
             $autogrowthContribution
         )
         
-    # NO aplicar cap global - cada categoría mantiene su contribución real con penalizaciones selectivas
-    # Esto permite que una instancia con 10/12 categorías perfectas tenga un score razonable
-    # en lugar de ser arrastrada a 50% por 2 problemas específicos
+    # NO aplicar cap global - cada categorÃ­a mantiene su contribuciÃ³n real con penalizaciones selectivas
+    # Esto permite que una instancia con 10/12 categorÃ­as perfectas tenga un score razonable
+    # en lugar de ser arrastrada a 50% por 2 problemas especÃ­ficos
     
     # Score final = suma de contribuciones (ya incluyen penalizaciones selectivas)
         $totalScore = $totalScoreBeforeCap
@@ -1497,7 +1497,7 @@ foreach ($instanceName in $instances) {
         ConfiguracionTempdbScore = $configTempdbScore
         AutogrowthScore = $autogrowthScore
         
-        # Diagnóstico inteligente de I/O para TempDB
+        # DiagnÃ³stico inteligente de I/O para TempDB
         TempDBIODiagnosis = $ioDiagnosis.Problem
         TempDBIOSuggestion = $ioDiagnosis.Suggestion
         TempDBIOSeverity = $ioDiagnosis.Severity
@@ -1584,4 +1584,5 @@ Write-Host ""
 Write-Host "[OK] Consolidacion completada!" -ForegroundColor Green
 
 #endregion
+
 

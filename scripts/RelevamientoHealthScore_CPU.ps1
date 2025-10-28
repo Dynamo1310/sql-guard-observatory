@@ -337,6 +337,7 @@ INSERT INTO dbo.InstanceHealth_CPU (
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
+                -TrustServerCertificate `
                 -EnableException
         }
         

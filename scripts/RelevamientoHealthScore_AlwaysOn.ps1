@@ -1,24 +1,24 @@
-<#
+﻿<#
 .SYNOPSIS
-    Health Score v3.0 - Recolección de métricas de ALWAYSON (AG)
+    Health Score v3.0 - RecolecciÃ³n de mÃ©tricas de ALWAYSON (AG)
     
 .DESCRIPTION
     Script de frecuencia media (cada 2-5 minutos) que recolecta:
-    - Estado de sincronización de bases en AG
+    - Estado de sincronizaciÃ³n de bases en AG
     - Send queue y redo queue
-    - Estado de salud de las réplicas
+    - Estado de salud de las rÃ©plicas
     
     Guarda en: InstanceHealth_AlwaysOn
     
     Peso en scoring: 14%
     Criterios: 
-    - Réplicas SYNCHRONOUS_COMMIT: 100 si están SYNCHRONIZED
-    - Réplicas ASYNCHRONOUS_COMMIT: 100 si están SYNCHRONIZED o SYNCHRONIZING (no se penalizan)
+    - RÃ©plicas SYNCHRONOUS_COMMIT: 100 si estÃ¡n SYNCHRONIZED
+    - RÃ©plicas ASYNCHRONOUS_COMMIT: 100 si estÃ¡n SYNCHRONIZED o SYNCHRONIZING (no se penalizan)
     - Penaliza send_queue y redo_queue altos
     Cap: DB SUSPENDED o no sincronizada (sync mode) >2 min => cap 60
     
 .NOTES
-    Versión: 3.0
+    VersiÃ³n: 3.0
     Frecuencia: Cada 2-5 minutos
     Timeout: 15 segundos
     
@@ -30,13 +30,13 @@
 [CmdletBinding()]
 param()
 
-# Verificar que dbatools está disponible
+# Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Descargar SqlServer si está cargado (conflicto con dbatools)
+# Descargar SqlServer si estÃ¡ cargado (conflicto con dbatools)
 if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
@@ -44,7 +44,7 @@ if (Get-Module -Name SqlServer) {
 # Importar dbatools con force para evitar conflictos
 Import-Module dbatools -Force -ErrorAction Stop
 
-#region ===== CONFIGURACIÓN =====
+#region ===== CONFIGURACIÃ“N =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -53,7 +53,7 @@ $TimeoutSec = 15
 $TestMode = $false    # $true = solo 5 instancias para testing
 $IncludeAWS = $false  # Cambiar a $true para incluir AWS
 $OnlyAWS = $false     # Cambiar a $true para SOLO AWS
-$VerboseOutput = $false  # $true = mostrar detalles de cada nodo para diagnóstico
+$VerboseOutput = $false  # $true = mostrar detalles de cada nodo para diagnÃ³stico
 # NOTA: Instancias con DMZ en el nombre siempre se excluyen
 
 #endregion
@@ -81,7 +81,7 @@ function Get-AlwaysOnStatus {
     }
     
     try {
-        # PASO 1: Verificar si AlwaysOn está habilitado a nivel de instancia
+        # PASO 1: Verificar si AlwaysOn estÃ¡ habilitado a nivel de instancia
         $checkHadrQuery = "SELECT SERVERPROPERTY('IsHadrEnabled') AS IsHadrEnabled;"
         
         $hadrCheck = Invoke-DbaQuery -SqlInstance $InstanceName `
@@ -92,14 +92,14 @@ function Get-AlwaysOnStatus {
         $isHadrEnabled = $hadrCheck.IsHadrEnabled
         
         if ($isHadrEnabled -eq $null -or $isHadrEnabled -eq [DBNull]::Value -or $isHadrEnabled -eq 0) {
-            # AlwaysOn NO está habilitado a nivel de instancia
+            # AlwaysOn NO estÃ¡ habilitado a nivel de instancia
             $result.Enabled = $false
             $result.WorstState = "N/A"
             return $result
         }
         
-        # PASO 2: AlwaysOn SÍ está habilitado, obtener estado de los AGs
-        $result.Enabled = $true  # ✅ Marcar como habilitado
+        # PASO 2: AlwaysOn SÃ estÃ¡ habilitado, obtener estado de los AGs
+        $result.Enabled = $true  # âœ… Marcar como habilitado
         
         try {
             # Query mejorada que funciona tanto en primarios como secundarios
@@ -138,7 +138,7 @@ WHERE ars.is_local = 1
                 # Hay datos de AGs - bases de datos participando en este nodo
                 $result.DatabaseCount = $data.Count
                 
-                # Contar bases "saludables" según su modo de disponibilidad:
+                # Contar bases "saludables" segÃºn su modo de disponibilidad:
                 # - SYNCHRONOUS_COMMIT: debe estar SYNCHRONIZED
                 # - ASYNCHRONOUS_COMMIT: puede estar SYNCHRONIZING (es normal y esperado)
                 $healthyDBs = $data | Where-Object { 
@@ -159,7 +159,7 @@ WHERE ars.is_local = 1
                     $result.AvgRedoQueueKB = [int](($activeDBs | Measure-Object -Property RedoQueueKB -Average).Average)
                     $result.MaxRedoQueueKB = [int](($activeDBs | Measure-Object -Property RedoQueueKB -Maximum).Maximum)
                     
-                    # Lag máximo (solo para nodos sincronos)
+                    # Lag mÃ¡ximo (solo para nodos sincronos)
                     $syncNodes = $activeDBs | Where-Object { $_.SecondsBehind -ne [DBNull]::Value }
                     if ($syncNodes) {
                         $result.MaxSecondsBehind = [int](($syncNodes | Measure-Object -Property SecondsBehind -Maximum).Maximum)
@@ -192,7 +192,7 @@ WHERE ars.is_local = 1
                     $result.WorstState = "HEALTHY"
                 }
                 
-                # Detalles (incluir rol y modo para diagnóstico)
+                # Detalles (incluir rol y modo para diagnÃ³stico)
                 # Forzar array con @() para evitar que PowerShell lo convierta en string cuando hay 1 solo elemento
                 $result.Details = @($data | ForEach-Object {
                     $agName = if ($_.PSObject.Properties['AGName']) { $_.AGName } else { "NULL" }
@@ -207,13 +207,13 @@ WHERE ars.is_local = 1
                 })
             }
             else {
-                # AlwaysOn está habilitado pero no hay AGs configurados (o no es parte de ningún AG)
+                # AlwaysOn estÃ¡ habilitado pero no hay AGs configurados (o no es parte de ningÃºn AG)
                 $result.WorstState = "OK"
                 $result.Details = @("AlwaysOn habilitado pero sin AGs configurados")
             }
         }
         catch {
-            # Error al consultar AGs, pero AlwaysOn está habilitado
+            # Error al consultar AGs, pero AlwaysOn estÃ¡ habilitado
             # Establecer estado por defecto
             $result.WorstState = "OK"
             $result.Details = @("AlwaysOn habilitado - no se pudo consultar estado de AGs")
@@ -221,7 +221,7 @@ WHERE ars.is_local = 1
         }
         
     } catch {
-        # Error al verificar si AlwaysOn está habilitado
+        # Error al verificar si AlwaysOn estÃ¡ habilitado
         # Mantener valores por defecto (Enabled = false, WorstState = "N/A")
     }
     
@@ -235,7 +235,7 @@ function Test-SqlConnection {
     )
     
     try {
-        # Usar dbatools para test de conexión
+        # Usar dbatools para test de conexiÃ³n
         $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         return $connection.IsPingable
     } catch {
@@ -301,7 +301,7 @@ INSERT INTO dbo.InstanceHealth_AlwaysOn (
                 -EnableException
         }
         
-        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -313,14 +313,14 @@ INSERT INTO dbo.InstanceHealth_AlwaysOn (
 #region ===== MAIN =====
 
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Health Score v3.0 - ALWAYSON (AG) METRICS           ║" -ForegroundColor Cyan
-Write-Host "║  Frecuencia: 2-5 minutos                              ║" -ForegroundColor Cyan
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
+Write-Host "â•‘  Health Score v3.0 - ALWAYSON (AG) METRICS           â•‘" -ForegroundColor Cyan
+Write-Host "â•‘  Frecuencia: 2-5 minutos                              â•‘" -ForegroundColor Cyan
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener instancias desde API
-Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -340,7 +340,7 @@ try {
     # Excluir instancias con DMZ en el nombre
     $instances = $instances | Where-Object { $_.NombreInstancia -notlike "*DMZ*" }
     
-    # Filtrar solo instancias con AlwaysOn habilitado (según API)
+    # Filtrar solo instancias con AlwaysOn habilitado (segÃºn API)
     $instancesWithAG = $instances | Where-Object { $_.AlwaysOn -eq "Enabled" }
     
     Write-Host "   Con AlwaysOn habilitado: $($instancesWithAG.Count)" -ForegroundColor Gray
@@ -349,7 +349,7 @@ try {
         $instancesWithAG = $instancesWithAG | Select-Object -First 5
     }
     
-    Write-Host "   Después de filtros: $($instancesWithAG.Count)" -ForegroundColor Green
+    Write-Host "   DespuÃ©s de filtros: $($instancesWithAG.Count)" -ForegroundColor Green
     
 } catch {
     Write-Error "Error obteniendo instancias: $($_.Exception.Message)"
@@ -358,24 +358,24 @@ try {
 
 if ($instancesWithAG.Count -eq 0) {
     Write-Host ""
-    Write-Host "ℹ️  No hay instancias con AlwaysOn habilitado para procesar." -ForegroundColor Yellow
-    Write-Host "✅ Script completado!" -ForegroundColor Green
+    Write-Host "â„¹ï¸  No hay instancias con AlwaysOn habilitado para procesar." -ForegroundColor Yellow
+    Write-Host "âœ… Script completado!" -ForegroundColor Green
     exit 0
 }
 
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "2️⃣  Recolectando métricas de AlwaysOn..." -ForegroundColor Yellow
+Write-Host "2ï¸âƒ£  Recolectando mÃ©tricas de AlwaysOn..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
 
 foreach ($instance in $instancesWithAG) {
     $counter++
-    # La propiedad correcta es NombreInstancia (con mayúscula inicial)
+    # La propiedad correcta es NombreInstancia (con mayÃºscula inicial)
     $instanceName = $instance.NombreInstancia
     
-    Write-Progress -Activity "Recolectando métricas" `
+    Write-Progress -Activity "Recolectando mÃ©tricas" `
         -Status "$counter de $($instancesWithAG.Count): $instanceName" `
         -PercentComplete (($counter / $instancesWithAG.Count) * 100)
     
@@ -386,11 +386,11 @@ foreach ($instance in $instancesWithAG) {
     
     # Verificar conectividad primero
     if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+        Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
         continue
     }
     
-    # Recolectar métricas de AlwaysOn
+    # Recolectar mÃ©tricas de AlwaysOn
     $alwaysOn = Get-AlwaysOnStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
     # Determinar el rol de este nodo (PRIMARY o SECONDARY)
@@ -431,18 +431,18 @@ foreach ($instance in $instancesWithAG) {
         }
     }
     
-    $status = "✅"
+    $status = "âœ…"
     if ($alwaysOn.WorstState -eq "SUSPENDED") { 
-        $status = "🚨 SUSPENDED!" 
+        $status = "ðŸš¨ SUSPENDED!" 
     }
     elseif ($alwaysOn.WorstState -eq "NOT_HEALTHY") { 
-        $status = "🚨 NOT HEALTHY!" 
+        $status = "ðŸš¨ NOT HEALTHY!" 
     }
     elseif ($alwaysOn.WorstState -eq "NOT_SYNCHRONIZED") { 
-        $status = "⚠️ NOT SYNC!" 
+        $status = "âš ï¸ NOT SYNC!" 
     }
     elseif ($alwaysOn.WorstState -eq "PARTIALLY_HEALTHY") { 
-        $status = "⚠️ PARTIAL!" 
+        $status = "âš ï¸ PARTIAL!" 
     }
     
     $color = "Gray"
@@ -452,9 +452,9 @@ foreach ($instance in $instancesWithAG) {
     
     Write-Host "   $status $instanceName [$role/$availabilityMode] - State:$($alwaysOn.WorstState) DBs:$($alwaysOn.DatabaseCount) Healthy:$($alwaysOn.SynchronizedCount) SendQ:$($alwaysOn.MaxSendQueueKB)KB" -ForegroundColor $color
     
-    # Mostrar detalles si está en modo verbose
+    # Mostrar detalles si estÃ¡ en modo verbose
     if ($VerboseOutput -and $alwaysOn.Details -and $alwaysOn.Details.Count -gt 0) {
-        Write-Host "      → Details: $($alwaysOn.Details -join ' | ')" -ForegroundColor DarkGray
+        Write-Host "      â†’ Details: $($alwaysOn.Details -join ' | ')" -ForegroundColor DarkGray
     }
     
     $results += [PSCustomObject]@{
@@ -476,29 +476,29 @@ foreach ($instance in $instancesWithAG) {
     }
 }
 
-Write-Progress -Activity "Recolectando métricas" -Completed
+Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
 
 # 3. Guardar en SQL
 Write-Host ""
-Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  RESUMEN - ALWAYSON                                   ║" -ForegroundColor Green
-Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Healthy:              $(($results | Where-Object {$_.AlwaysOnWorstState -eq 'HEALTHY'}).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Partially Healthy:    $(($results | Where-Object {$_.AlwaysOnWorstState -eq 'PARTIALLY_HEALTHY'}).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Not Healthy:          $(($results | Where-Object {$_.AlwaysOnWorstState -eq 'NOT_HEALTHY'}).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Suspended:            $(($results | Where-Object {$_.AlwaysOnWorstState -eq 'SUSPENDED'}).Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
+Write-Host "â•‘  RESUMEN - ALWAYSON                                   â•‘" -ForegroundColor Green
+Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Green
+Write-Host "â•‘  Total instancias:     $($results.Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Healthy:              $(($results | Where-Object {$_.AlwaysOnWorstState -eq 'HEALTHY'}).Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Partially Healthy:    $(($results | Where-Object {$_.AlwaysOnWorstState -eq 'PARTIALLY_HEALTHY'}).Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Not Healthy:          $(($results | Where-Object {$_.AlwaysOnWorstState -eq 'NOT_HEALTHY'}).Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Suspended:            $(($results | Where-Object {$_.AlwaysOnWorstState -eq 'SUSPENDED'}).Count)".PadRight(53) "â•‘" -ForegroundColor White
 
 $totalDBs = ($results | Measure-Object -Property DatabaseCount -Sum).Sum
 $totalHealthy = ($results | Measure-Object -Property SynchronizedCount -Sum).Sum
-Write-Host "║  Total bases:          $totalDBs".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Saludables:           $totalHealthy".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  Total bases:          $totalDBs".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Saludables:           $totalHealthy".PadRight(53) "â•‘" -ForegroundColor White
 
 # Contar roles y modos (basado en detalles)
 $primaryCount = 0
@@ -531,18 +531,19 @@ foreach ($result in $results) {
     }
 }
 
-Write-Host "║".PadRight(56) "║" -ForegroundColor White
-Write-Host "║  Nodos PRIMARY:        $primaryCount".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Nodos SECONDARY:      $secondaryCount".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Réplicas SYNC:        $syncCount".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Réplicas ASYNC:       $asyncCount".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘".PadRight(56) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Nodos PRIMARY:        $primaryCount".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Nodos SECONDARY:      $secondaryCount".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  RÃ©plicas SYNC:        $syncCount".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  RÃ©plicas ASYNC:       $asyncCount".PadRight(53) "â•‘" -ForegroundColor White
 if ($noAGCount -gt 0) {
-    Write-Host "║  Sin AG configurado:   $noAGCount".PadRight(53) "║" -ForegroundColor Yellow
+    Write-Host "â•‘  Sin AG configurado:   $noAGCount".PadRight(53) "â•‘" -ForegroundColor Yellow
 }
 
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
 Write-Host ""
-Write-Host "✅ Script completado!" -ForegroundColor Green
+Write-Host "âœ… Script completado!" -ForegroundColor Green
 
 #endregion
+
 

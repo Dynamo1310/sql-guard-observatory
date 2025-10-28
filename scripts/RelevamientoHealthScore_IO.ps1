@@ -1,6 +1,6 @@
-<#
+﻿<#
 .SYNOPSIS
-    Health Score v3.0 - Recolección de métricas de IO (Latencia / IOPS)
+    Health Score v3.0 - RecolecciÃ³n de mÃ©tricas de IO (Latencia / IOPS)
     
 .DESCRIPTION
     Script de frecuencia media (cada 5 minutos) que recolecta:
@@ -11,11 +11,11 @@
     Guarda en: InstanceHealth_IO
     
     Peso en scoring: 10%
-    Criterios: Latencia data/log ≤5ms=100; 6–10=80; 11–20=60; >20=40
+    Criterios: Latencia data/log â‰¤5ms=100; 6â€“10=80; 11â€“20=60; >20=40
     Cap: Log p95 >20ms => cap 70
     
 .NOTES
-    Versión: 3.0
+    VersiÃ³n: 3.0
     Frecuencia: Cada 5 minutos
     Timeout: 15 segundos
     
@@ -27,9 +27,9 @@
 [CmdletBinding()]
 param()
 
-# Verificar que dbatools está disponible
+# Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
@@ -39,7 +39,7 @@ if (Get-Module -Name SqlServer) {
 
 Import-Module dbatools -Force -ErrorAction Stop
 
-#region ===== CONFIGURACIÓN =====
+#region ===== CONFIGURACIÃ“N =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -80,7 +80,7 @@ DECLARE @UptimeSeconds BIGINT;
 SELECT @UptimeSeconds = DATEDIFF(SECOND, sqlserver_start_time, GETDATE())
 FROM sys.dm_os_sys_info;
 
--- Evitar división por cero si el servidor acaba de reiniciar
+-- Evitar divisiÃ³n por cero si el servidor acaba de reiniciar
 IF @UptimeSeconds < 60 SET @UptimeSeconds = 60;
 
 -- Latencias por archivo (data vs log) + IOPS calculados
@@ -118,7 +118,7 @@ ORDER BY
             -EnableException
         
         if ($data) {
-            # Calcular métricas agregadas
+            # Calcular mÃ©tricas agregadas
             $allReads = $data | Where-Object { $_.NumReads -gt 0 }
             $allWrites = $data | Where-Object { $_.NumWrites -gt 0 }
             
@@ -139,7 +139,7 @@ ORDER BY
             # IOPS totales = suma de lectura + escritura
             $result.TotalIOPS = $result.ReadIOPS + $result.WriteIOPS
             
-            # Métricas específicas por tipo de archivo
+            # MÃ©tricas especÃ­ficas por tipo de archivo
             $dataFiles = $data | Where-Object { $_.FileType -eq 'ROWS' }
             $logFiles = $data | Where-Object { $_.FileType -eq 'LOG' }
             
@@ -248,7 +248,7 @@ INSERT INTO dbo.InstanceHealth_IO (
                 -EnableException
         }
         
-        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -260,14 +260,14 @@ INSERT INTO dbo.InstanceHealth_IO (
 #region ===== MAIN =====
 
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Health Score v3.0 - IO METRICS (Latencia / IOPS)    ║" -ForegroundColor Cyan
-Write-Host "║  Frecuencia: 5 minutos                                ║" -ForegroundColor Cyan
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
+Write-Host "â•‘  Health Score v3.0 - IO METRICS (Latencia / IOPS)    â•‘" -ForegroundColor Cyan
+Write-Host "â•‘  Frecuencia: 5 minutos                                â•‘" -ForegroundColor Cyan
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -295,7 +295,7 @@ try {
 
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "2️⃣  Recolectando métricas de IO..." -ForegroundColor Yellow
+Write-Host "2ï¸âƒ£  Recolectando mÃ©tricas de IO..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
@@ -304,7 +304,7 @@ foreach ($instance in $instances) {
     $counter++
     $instanceName = $instance.NombreInstancia
     
-    Write-Progress -Activity "Recolectando métricas" `
+    Write-Progress -Activity "Recolectando mÃ©tricas" `
         -Status "$counter de $($instances.Count): $instanceName" `
         -PercentComplete (($counter / $instances.Count) * 100)
     
@@ -313,21 +313,21 @@ foreach ($instance in $instances) {
     $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
     
     if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+        Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
         continue
     }
     
     $ioMetrics = Get-IOMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
-    $status = "✅"
+    $status = "âœ…"
     if ($ioMetrics.LogFileAvgWriteMs -gt 20) {
-        $status = "🚨 LOG SLOW!"
+        $status = "ðŸš¨ LOG SLOW!"
     }
     elseif ($ioMetrics.MaxReadLatencyMs -gt 50 -or $ioMetrics.MaxWriteLatencyMs -gt 50) {
-        $status = "⚠️ IO SLOW!"
+        $status = "âš ï¸ IO SLOW!"
     }
     elseif ($ioMetrics.AvgReadLatencyMs -gt 10 -or $ioMetrics.AvgWriteLatencyMs -gt 10) {
-        $status = "⚠️ IO WARN"
+        $status = "âš ï¸ IO WARN"
     }
     
     Write-Host "   $status $instanceName - Read:$([int]$ioMetrics.AvgReadLatencyMs)ms Write:$([int]$ioMetrics.AvgWriteLatencyMs)ms Log:$([int]$ioMetrics.LogFileAvgWriteMs)ms | IOPS: $([int]$ioMetrics.TotalIOPS) (R:$([int]$ioMetrics.ReadIOPS) W:$([int]$ioMetrics.WriteIOPS))" -ForegroundColor Gray
@@ -351,44 +351,45 @@ foreach ($instance in $instances) {
     }
 }
 
-Write-Progress -Activity "Recolectando métricas" -Completed
+Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
 
 # 3. Guardar en SQL
 Write-Host ""
-Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  RESUMEN - IO                                         ║" -ForegroundColor Green
-Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
+Write-Host "â•‘  RESUMEN - IO                                         â•‘" -ForegroundColor Green
+Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Green
+Write-Host "â•‘  Total instancias:     $($results.Count)".PadRight(53) "â•‘" -ForegroundColor White
 
 $avgReadLatency = ($results | Measure-Object -Property AvgReadLatencyMs -Average).Average
 $avgWriteLatency = ($results | Measure-Object -Property AvgWriteLatencyMs -Average).Average
 $avgLogLatency = ($results | Where-Object {$_.LogFileAvgWriteMs -gt 0} | Measure-Object -Property LogFileAvgWriteMs -Average).Average
 
-Write-Host "║  Read latency avg:     $([int]$avgReadLatency)ms".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Write latency avg:    $([int]$avgWriteLatency)ms".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Log latency avg:      $([int]$avgLogLatency)ms".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  Read latency avg:     $([int]$avgReadLatency)ms".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Write latency avg:    $([int]$avgWriteLatency)ms".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Log latency avg:      $([int]$avgLogLatency)ms".PadRight(53) "â•‘" -ForegroundColor White
 
 $slowIO = ($results | Where-Object {$_.MaxReadLatencyMs -gt 20 -or $_.MaxWriteLatencyMs -gt 20}).Count
-Write-Host "║  IO lento (>20ms):     $slowIO".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  IO lento (>20ms):     $slowIO".PadRight(53) "â•‘" -ForegroundColor White
 
 $avgTotalIOPS = ($results | Measure-Object -Property TotalIOPS -Average).Average
 $avgReadIOPS = ($results | Measure-Object -Property ReadIOPS -Average).Average
 $avgWriteIOPS = ($results | Measure-Object -Property WriteIOPS -Average).Average
 
-Write-Host "║  ----------------------------------------------------- ║" -ForegroundColor Gray
-Write-Host "║  IOPS promedio total:  $([int]$avgTotalIOPS)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  IOPS promedio read:   $([int]$avgReadIOPS)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  IOPS promedio write:  $([int]$avgWriteIOPS)".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  ----------------------------------------------------- â•‘" -ForegroundColor Gray
+Write-Host "â•‘  IOPS promedio total:  $([int]$avgTotalIOPS)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  IOPS promedio read:   $([int]$avgReadIOPS)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  IOPS promedio write:  $([int]$avgWriteIOPS)".PadRight(53) "â•‘" -ForegroundColor White
 
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
 Write-Host ""
-Write-Host "✅ Script completado!" -ForegroundColor Green
+Write-Host "âœ… Script completado!" -ForegroundColor Green
 
 #endregion
+
 

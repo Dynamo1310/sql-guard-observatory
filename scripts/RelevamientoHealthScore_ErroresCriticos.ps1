@@ -1,20 +1,20 @@
-<#
+﻿<#
 .SYNOPSIS
-    Health Score v3.0 - Recolección de ERRORES CRÍTICOS (Severity ≥20)
+    Health Score v3.0 - RecolecciÃ³n de ERRORES CRÃTICOS (Severity â‰¥20)
     
 .DESCRIPTION
     Script de frecuencia media (cada 15 minutos) que recolecta:
-    - Errores de severity 20+ en las últimas 24 horas
-    - Penalización por errores recientes (decaen en 24h)
+    - Errores de severity 20+ en las Ãºltimas 24 horas
+    - PenalizaciÃ³n por errores recientes (decaen en 24h)
     
     Guarda en: InstanceHealth_ErroresCriticos
     
     Peso en scoring: 7%
-    Criterios: 0 errores = 100 pts, -10 por cada evento (máx -40)
+    Criterios: 0 errores = 100 pts, -10 por cada evento (mÃ¡x -40)
     Cap: Si hay evento reciente => cap 70
     
 .NOTES
-    Versión: 3.0
+    VersiÃ³n: 3.0
     Frecuencia: Cada 15 minutos
     Timeout: 30 segundos (90 segundos en retry para instancias lentas)
     
@@ -26,13 +26,13 @@
 [CmdletBinding()]
 param()
 
-# Verificar que dbatools está disponible
+# Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Descargar SqlServer si está cargado (conflicto con dbatools)
+# Descargar SqlServer si estÃ¡ cargado (conflicto con dbatools)
 if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
@@ -40,7 +40,7 @@ if (Get-Module -Name SqlServer) {
 # Importar dbatools con force para evitar conflictos
 Import-Module dbatools -Force -ErrorAction Stop
 
-#region ===== CONFIGURACIÓN =====
+#region ===== CONFIGURACIÃ“N =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -82,7 +82,7 @@ CREATE TABLE #ErrorLog (
 INSERT INTO #ErrorLog
 EXEC sp_readerrorlog 0;
 
--- Filtrar solo errores críticos (Severity 20+) en una sola pasada
+-- Filtrar solo errores crÃ­ticos (Severity 20+) en una sola pasada
 SELECT 
     LogDate,
     [Text]
@@ -92,15 +92,15 @@ WHERE ([Text] LIKE '%Severity: 2[0-9]%' OR [Text] LIKE '%Severity: 20%' OR [Text
        OR [Text] LIKE '%Severity: 22%' OR [Text] LIKE '%Severity: 23%' OR [Text] LIKE '%Severity: 24%' OR [Text] LIKE '%Severity: 25%')
   AND LogDate >= DATEADD(HOUR, -24, GETDATE());
 
--- Contar errores en últimas 24 horas
+-- Contar errores en Ãºltimas 24 horas
 SELECT COUNT(*) AS Severity20Count FROM #CriticalErrors;
 
--- Contar errores en última hora
+-- Contar errores en Ãºltima hora
 SELECT COUNT(*) AS Severity20Count1h 
 FROM #CriticalErrors
 WHERE LogDate >= DATEADD(HOUR, -1, GETDATE());
 
--- Error más reciente
+-- Error mÃ¡s reciente
 SELECT TOP 1 LogDate, [Text]
 FROM #CriticalErrors
 ORDER BY LogDate DESC;
@@ -125,7 +125,7 @@ DROP TABLE #ErrorLog;
             
             try {
                 if ($attemptCount -eq 2) {
-                    Write-Host "      ⏱️  Reintentando $InstanceName con timeout extendido (${RetryTimeoutSec}s)..." -ForegroundColor DarkYellow
+                    Write-Host "      â±ï¸  Reintentando $InstanceName con timeout extendido (${RetryTimeoutSec}s)..." -ForegroundColor DarkYellow
                 }
                 
                 $data = Invoke-DbaQuery -SqlInstance $InstanceName `
@@ -138,11 +138,11 @@ DROP TABLE #ErrorLog;
             } catch {
                 $lastError = $_
                 if ($attemptCount -eq 1) {
-                    # Primer intento falló, reintentar silenciosamente
+                    # Primer intento fallÃ³, reintentar silenciosamente
                     Start-Sleep -Milliseconds 500
                 } else {
-                    # Segundo intento falló, capturar detalles
-                    Write-Verbose "Error en ErrorLog después de 2 intentos: $($_.Exception.Message)"
+                    # Segundo intento fallÃ³, capturar detalles
+                    Write-Verbose "Error en ErrorLog despuÃ©s de 2 intentos: $($_.Exception.Message)"
                     if ($_.Exception.InnerException) {
                         Write-Verbose "Inner: $($_.Exception.InnerException.Message)"
                     }
@@ -151,17 +151,17 @@ DROP TABLE #ErrorLog;
         }
         
         if ($data -eq $null -and $lastError) {
-            # Mejorar mensaje de error con más detalles
+            # Mejorar mensaje de error con mÃ¡s detalles
             $errorMsg = $lastError.Exception.Message
             if ($lastError.Exception.InnerException) {
                 $errorMsg += " | Inner: $($lastError.Exception.InnerException.Message)"
             }
-            Write-Warning "Error obteniendo errorlog en ${InstanceName} (después de 2 intentos con ${RetryTimeoutSec}s timeout): $errorMsg"
+            Write-Warning "Error obteniendo errorlog en ${InstanceName} (despuÃ©s de 2 intentos con ${RetryTimeoutSec}s timeout): $errorMsg"
             return $result
         }
         
         if ($data) {
-            # Procesar múltiples resultsets
+            # Procesar mÃºltiples resultsets
             $resultSets = @($data)
             
             # ResultSet 1: Count de 24 horas
@@ -180,7 +180,7 @@ DROP TABLE #ErrorLog;
                 }
             }
             
-            # ResultSet 3: Error más reciente
+            # ResultSet 3: Error mÃ¡s reciente
             if ($resultSets.Count -ge 3 -and $resultSets[2]) {
                 $mostRecent = $resultSets[2] | Select-Object -First 1
                 if ($mostRecent -and $mostRecent.LogDate -ne [DBNull]::Value) {
@@ -203,7 +203,7 @@ DROP TABLE #ErrorLog;
         # Error en el procesamiento de errorlog
         $errorDetails = $_.Exception.Message
         Write-Warning "Error procesando errorlog en ${InstanceName}: $errorDetails"
-        Write-Verbose "  Línea: $($_.InvocationInfo.ScriptLineNumber)"
+        Write-Verbose "  LÃ­nea: $($_.InvocationInfo.ScriptLineNumber)"
     }
     
     return $result
@@ -216,7 +216,7 @@ function Test-SqlConnection {
     )
     
     try {
-        # Usar dbatools para test de conexión (comando simple sin parámetros de certificado)
+        # Usar dbatools para test de conexiÃ³n (comando simple sin parÃ¡metros de certificado)
         $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         return $connection.IsPingable
     } catch {
@@ -278,7 +278,7 @@ INSERT INTO dbo.InstanceHealth_ErroresCriticos (
                 -EnableException
         }
         
-        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -290,14 +290,14 @@ INSERT INTO dbo.InstanceHealth_ErroresCriticos (
 #region ===== MAIN =====
 
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Health Score v3.0 - ERRORES CRÍTICOS (SEV ≥20)      ║" -ForegroundColor Cyan
-Write-Host "║  Frecuencia: 15 minutos                               ║" -ForegroundColor Cyan
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
+Write-Host "â•‘  Health Score v3.0 - ERRORES CRÃTICOS (SEV â‰¥20)      â•‘" -ForegroundColor Cyan
+Write-Host "â•‘  Frecuencia: 15 minutos                               â•‘" -ForegroundColor Cyan
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -327,17 +327,17 @@ try {
 
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "2️⃣  Recolectando errores críticos..." -ForegroundColor Yellow
+Write-Host "2ï¸âƒ£  Recolectando errores crÃ­ticos..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
 
 foreach ($instance in $instances) {
     $counter++
-    # La propiedad correcta es NombreInstancia (con mayúscula inicial)
+    # La propiedad correcta es NombreInstancia (con mayÃºscula inicial)
     $instanceName = $instance.NombreInstancia
     
-    Write-Progress -Activity "Recolectando métricas" `
+    Write-Progress -Activity "Recolectando mÃ©tricas" `
         -Status "$counter de $($instances.Count): $instanceName" `
         -PercentComplete (($counter / $instances.Count) * 100)
     
@@ -348,23 +348,23 @@ foreach ($instance in $instances) {
     
     # Verificar conectividad primero
     if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+        Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
         continue
     }
     
-    # Recolectar métricas
+    # Recolectar mÃ©tricas
     $errorlog = Get-ErrorlogStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry
     
     # Determinar estado
-    $status = "✅"
+    $status = "âœ…"
     if ($errorlog.Severity20PlusLast1h -gt 0) {
-        $status = "🚨 ERROR RECIENTE!"
+        $status = "ðŸš¨ ERROR RECIENTE!"
     }
     elseif ($errorlog.Severity20PlusCount -gt 5) {
-        $status = "⚠️ MÚLTIPLES ERRORES!"
+        $status = "âš ï¸ MÃšLTIPLES ERRORES!"
     }
     elseif ($errorlog.Severity20PlusCount -gt 0) {
-        $status = "⚠️ CON ERRORES"
+        $status = "âš ï¸ CON ERRORES"
     }
     
     $errorAge = if ($errorlog.MostRecentError) {
@@ -387,26 +387,27 @@ foreach ($instance in $instances) {
     }
 }
 
-Write-Progress -Activity "Recolectando métricas" -Completed
+Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
 
 # 3. Guardar en SQL
 Write-Host ""
-Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  RESUMEN - ERRORES CRÍTICOS                           ║" -ForegroundColor Green
-Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Total instancias:         $($results.Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Sin errores:              $(($results | Where-Object {$_.Severity20PlusCount -eq 0}).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Con errores (24h):        $(($results | Where-Object {$_.Severity20PlusCount -gt 0}).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Errores recientes (1h):   $(($results | Where-Object {$_.Severity20PlusLast1h -gt 0}).Count)".PadRight(53) "║" -ForegroundColor White
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
+Write-Host "â•‘  RESUMEN - ERRORES CRÃTICOS                           â•‘" -ForegroundColor Green
+Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Green
+Write-Host "â•‘  Total instancias:         $($results.Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Sin errores:              $(($results | Where-Object {$_.Severity20PlusCount -eq 0}).Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Con errores (24h):        $(($results | Where-Object {$_.Severity20PlusCount -gt 0}).Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Errores recientes (1h):   $(($results | Where-Object {$_.Severity20PlusLast1h -gt 0}).Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
 Write-Host ""
-Write-Host "✅ Script completado!" -ForegroundColor Green
+Write-Host "âœ… Script completado!" -ForegroundColor Green
 
 #endregion
+
 

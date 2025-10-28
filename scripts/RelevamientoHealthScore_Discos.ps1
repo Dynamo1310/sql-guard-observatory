@@ -1,43 +1,43 @@
-<#
+﻿<#
 .SYNOPSIS
-    Health Score v3.0 - Recolección de métricas de ESPACIO EN DISCOS Y DIAGNÓSTICO I/O
+    Health Score v3.0 - RecolecciÃ³n de mÃ©tricas de ESPACIO EN DISCOS Y DIAGNÃ“STICO I/O
     
 .DESCRIPTION
     Script de frecuencia media (cada 10 minutos) que recolecta:
     
     ESPACIO EN DISCOS:
     - Espacio libre por disco/volumen
-    - Clasificación por rol (Data, Log, Backup, TempDB)
+    - ClasificaciÃ³n por rol (Data, Log, Backup, TempDB)
     - Tendencia de crecimiento
     
-    DIAGNÓSTICO DE DISCOS (NUEVO v3.1):
-    - Tipo de disco físico (HDD/SSD/NVMe) via PowerShell remoting
+    DIAGNÃ“STICO DE DISCOS (NUEVO v3.1):
+    - Tipo de disco fÃ­sico (HDD/SSD/NVMe) via PowerShell remoting
     - Bus Type (SATA/SAS/NVMe/iSCSI)
     - Health Status (Healthy/Warning/Unhealthy)
     - Operational Status (Online/Offline/Degraded)
     
-    MÉTRICAS DE CARGA I/O:
+    MÃ‰TRICAS DE CARGA I/O:
     - Page Reads/Writes per sec
-    - Lazy Writes per sec (presión de memoria)
+    - Lazy Writes per sec (presiÃ³n de memoria)
     - Checkpoint Pages per sec
     - Batch Requests per sec
     
-    ANÁLISIS DE COMPETENCIA:
-    - Cuántas bases de datos por volumen
-    - Cuántos archivos por volumen
+    ANÃLISIS DE COMPETENCIA:
+    - CuÃ¡ntas bases de datos por volumen
+    - CuÃ¡ntos archivos por volumen
     - Lista de bases de datos en cada disco
     
     Guarda en: InstanceHealth_Discos
     
     Peso en scoring: 8%
-    Criterios: ≥20% libre = 100, 15–19% = 80, 10–14% = 60, 5–9% = 40, <5% = 0
+    Criterios: â‰¥20% libre = 100, 15â€“19% = 80, 10â€“14% = 60, 5â€“9% = 40, <5% = 0
     Cap: Data o Log <10% libre => cap 40
     
-    NOTA: El tipo de disco físico requiere PowerShell remoting habilitado.
-    Si falla, el sistema inferirá el tipo por latencia en el Consolidador.
+    NOTA: El tipo de disco fÃ­sico requiere PowerShell remoting habilitado.
+    Si falla, el sistema inferirÃ¡ el tipo por latencia en el Consolidador.
     
 .NOTES
-    Versión: 3.1 (Diagnóstico Inteligente de I/O)
+    VersiÃ³n: 3.1 (DiagnÃ³stico Inteligente de I/O)
     Frecuencia: Cada 10 minutos
     Timeout: 15 segundos
     
@@ -51,7 +51,7 @@
 param()
 
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
@@ -61,7 +61,7 @@ if (Get-Module -Name SqlServer) {
 
 Import-Module dbatools -Force -ErrorAction Stop
 
-#region ===== CONFIGURACIÓN =====
+#region ===== CONFIGURACIÃ“N =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -71,15 +71,15 @@ $TestMode = $false
 $IncludeAWS = $false
 $OnlyAWS = $false
 
-# Configuración de paralelismo
+# ConfiguraciÃ³n de paralelismo
 $EnableParallel = $true      # $true para procesamiento paralelo, $false para secuencial
-$ThrottleLimit = 10           # Número de instancias a procesar simultáneamente (5-15 recomendado)
+$ThrottleLimit = 10           # NÃºmero de instancias a procesar simultÃ¡neamente (5-15 recomendado)
 
 #endregion
 
 #region ===== FUNCIONES =====
 
-# Función para convertir valores que pueden ser DBNull a int de forma segura
+# FunciÃ³n para convertir valores que pueden ser DBNull a int de forma segura
 function ConvertTo-SafeInt {
     param($Value, $Default = 0)
     
@@ -95,7 +95,7 @@ function ConvertTo-SafeInt {
     }
 }
 
-# Función para convertir valores que pueden ser DBNull a decimal de forma segura
+# FunciÃ³n para convertir valores que pueden ser DBNull a decimal de forma segura
 function ConvertTo-SafeDecimal {
     param($Value, $Default = 0.0)
     
@@ -114,7 +114,7 @@ function ConvertTo-SafeDecimal {
 function Get-DiskMediaType {
     <#
     .SYNOPSIS
-        Obtiene el tipo de disco físico (HDD/SSD/NVMe) y su estado de salud
+        Obtiene el tipo de disco fÃ­sico (HDD/SSD/NVMe) y su estado de salud
     #>
     param(
         [string]$InstanceName,
@@ -122,22 +122,22 @@ function Get-DiskMediaType {
     )
     
     try {
-        # Obtener servidor físico (sin instancia nombrada)
+        # Obtener servidor fÃ­sico (sin instancia nombrada)
         $serverName = $InstanceName.Split('\')[0]
         
         # Limpiar mount point para obtener letra de unidad (E:\ -> E)
         $driveLetter = $MountPoint.TrimEnd('\').TrimEnd(':')
         
-        # Intentar obtener información del disco físico vía PowerShell remoting
+        # Intentar obtener informaciÃ³n del disco fÃ­sico vÃ­a PowerShell remoting
         $diskInfo = Invoke-Command -ComputerName $serverName -ScriptBlock {
             param($drive)
             
             try {
-                # Obtener partición por letra de unidad
+                # Obtener particiÃ³n por letra de unidad
                 $partition = Get-Partition | Where-Object { $_.DriveLetter -eq $drive } | Select-Object -First 1
                 
                 if ($partition) {
-                    # Obtener disco físico
+                    # Obtener disco fÃ­sico
                     $disk = Get-Disk -Number $partition.DiskNumber
                     
                     return @{
@@ -160,8 +160,8 @@ function Get-DiskMediaType {
         }
         
     } catch {
-        # Si falla PowerShell remoting, no es crítico
-        # El sistema inferirá tipo de disco por latencia después
+        # Si falla PowerShell remoting, no es crÃ­tico
+        # El sistema inferirÃ¡ tipo de disco por latencia despuÃ©s
     }
     
     # Fallback: valores desconocidos
@@ -187,11 +187,11 @@ function Get-DiskMetrics {
         Volumes = @()
         DataVolumes = @()
         LogVolumes = @()
-        ProblematicFilesQueryFailed = $false  # Indica si la query de archivos problemáticos falló
+        ProblematicFilesQueryFailed = $false  # Indica si la query de archivos problemÃ¡ticos fallÃ³
     }
     
     try {
-        # Detectar versión de SQL Server primero
+        # Detectar versiÃ³n de SQL Server primero
         $versionQuery = @"
 SELECT 
     CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version,
@@ -205,8 +205,8 @@ SELECT
         $majorVersion = [int]($sqlVersion -split '\.')[0]
         $minorVersion = [int]($sqlVersion -split '\.')[1]
         
-        # Verificar si sys.dm_os_volume_stats está disponible
-        # SQL 2008 RTM (10.0.x) puede no tenerlo, pero SQL 2008 R2 (10.50.x) sí
+        # Verificar si sys.dm_os_volume_stats estÃ¡ disponible
+        # SQL 2008 RTM (10.0.x) puede no tenerlo, pero SQL 2008 R2 (10.50.x) sÃ­
         $hasVolumeStats = $true
         if ($majorVersion -eq 10 -and $minorVersion -lt 50) {
             # SQL 2008 RTM/SP1/SP2/SP3 (10.0.x - 10.49.x) puede no tener sys.dm_os_volume_stats
@@ -220,11 +220,11 @@ SELECT
             }
         }
         
-        # Query 1: Espacio en discos con clasificación por rol + archivos problemáticos
+        # Query 1: Espacio en discos con clasificaciÃ³n por rol + archivos problemÃ¡ticos
         if ($majorVersion -lt 10 -or -not $hasVolumeStats) {
             # FALLBACK para SQL Server 2005 o SQL 2008 sin sys.dm_os_volume_stats
             if (-not $hasVolumeStats) {
-                Write-Verbose "      ℹ️  ${InstanceName}: sys.dm_os_volume_stats no disponible (SQL $sqlVersion $servicePack), usando xp_fixeddrives"
+                Write-Verbose "      â„¹ï¸  ${InstanceName}: sys.dm_os_volume_stats no disponible (SQL $sqlVersion $servicePack), usando xp_fixeddrives"
             }
             $querySpace = @"
 -- SQL 2005/2008 compatible (usando xp_fixeddrives)
@@ -252,7 +252,7 @@ DROP TABLE #DriveSpace
         } else {
             # SQL 2008+ (query normal con sys.dm_os_volume_stats)
             $querySpace = @"
--- Espacio en discos con clasificación por rol
+-- Espacio en discos con clasificaciÃ³n por rol
 SELECT DISTINCT
     vs.volume_mount_point AS MountPoint,
     vs.logical_volume_name AS VolumeName,
@@ -274,12 +274,12 @@ ORDER BY FreePct ASC;
 "@
         }
 
-        # Query 1b: Archivos con poco espacio interno Y crecimiento habilitado (CRÍTICO)
+        # Query 1b: Archivos con poco espacio interno Y crecimiento habilitado (CRÃTICO)
         # Solo alertar si el archivo puede crecer (growth != 0) y tiene poco espacio libre interno
         # Mejorada: ignora bases offline/restoring para evitar errores con FILEPROPERTY
         $queryProblematicFiles = @"
 -- Archivos con poco espacio interno Y crecimiento habilitado (compatible SQL 2008+)
--- Basado en la lógica del usuario: solo alertar si growth != 0 y espacio interno < 30MB
+-- Basado en la lÃ³gica del usuario: solo alertar si growth != 0 y espacio interno < 30MB
 -- Mejorada: ignora bases offline/restoring/recovering para evitar errores
 SELECT 
     DB_NAME(mf.database_id) AS DatabaseName,
@@ -301,11 +301,11 @@ WHERE d.name NOT IN ('master', 'model', 'msdb', 'tempdb')
 ORDER BY FreeSpaceInFileMB ASC;
 "@
 
-        # Query 2: Métricas de carga de I/O del sistema
+        # Query 2: MÃ©tricas de carga de I/O del sistema
         $queryIOLoad = @"
--- Métricas de carga de I/O
+-- MÃ©tricas de carga de I/O
 SELECT 
-    -- Page Life Expectancy como indicador de presión de memoria -> más I/O
+    -- Page Life Expectancy como indicador de presiÃ³n de memoria -> mÃ¡s I/O
     (SELECT cntr_value 
      FROM sys.dm_os_performance_counters 
      WHERE counter_name = 'Page life expectancy' 
@@ -341,10 +341,10 @@ SELECT
      AND object_name LIKE '%SQL Statistics%') AS BatchRequestsPerSec;
 "@
 
-        # Query 3: Análisis de competencia por disco (cuántas DBs/archivos por volumen)
+        # Query 3: AnÃ¡lisis de competencia por disco (cuÃ¡ntas DBs/archivos por volumen)
         # Usar FOR XML PATH para compatibilidad con SQL 2008+
         $queryCompetition = @"
--- Análisis de competencia por volumen (compatible SQL 2008+)
+-- AnÃ¡lisis de competencia por volumen (compatible SQL 2008+)
 SELECT 
     vs.volume_mount_point AS MountPoint,
     COUNT(DISTINCT mf.database_id) AS DatabaseCount,
@@ -363,13 +363,13 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 GROUP BY vs.volume_mount_point;
 "@
         
-        # Ejecutar queries con reintentos automáticos
+        # Ejecutar queries con reintentos automÃ¡ticos
         $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
             -Query $querySpace `
             -TimeoutSec $TimeoutSec `
             -MaxRetries 2
         
-        # Query de archivos problemáticos: solo para SQL 2008+ con sys.dm_os_volume_stats
+        # Query de archivos problemÃ¡ticos: solo para SQL 2008+ con sys.dm_os_volume_stats
         $dataProblematicFiles = $null
         $problematicFilesQueryFailed = $false
         if ($majorVersion -ge 10 -and $hasVolumeStats) {
@@ -380,14 +380,14 @@ GROUP BY vs.volume_mount_point;
                     -MaxRetries 2
             } catch {
                 $problematicFilesQueryFailed = $true
-                Write-Warning "      ⚠️  No se pudo obtener archivos problemáticos en ${InstanceName}: $($_.Exception.Message)"
+                Write-Warning "      âš ï¸  No se pudo obtener archivos problemÃ¡ticos en ${InstanceName}: $($_.Exception.Message)"
             }
         } else {
             # SQL 2005 o SQL 2008 sin sys.dm_os_volume_stats: No soportado
             if (-not $hasVolumeStats) {
-                Write-Verbose "      ℹ️  Archivos problemáticos no disponible en ${InstanceName} (SQL $sqlVersion - falta sys.dm_os_volume_stats)"
+                Write-Verbose "      â„¹ï¸  Archivos problemÃ¡ticos no disponible en ${InstanceName} (SQL $sqlVersion - falta sys.dm_os_volume_stats)"
             } else {
-                Write-Verbose "      ℹ️  Archivos problemáticos no disponible en SQL 2005 para ${InstanceName}"
+                Write-Verbose "      â„¹ï¸  Archivos problemÃ¡ticos no disponible en SQL 2005 para ${InstanceName}"
             }
         }
         
@@ -405,7 +405,7 @@ GROUP BY vs.volume_mount_point;
                 -MaxRetries 2
         }
         
-        # Almacenar métricas de I/O del sistema (globales)
+        # Almacenar mÃ©tricas de I/O del sistema (globales)
         if ($dataIOLoad) {
             $result.PageLifeExpectancy = ConvertTo-SafeInt $dataIOLoad.PageLifeExpectancy
             $result.PageReadsPerSec = ConvertTo-SafeInt $dataIOLoad.PageReadsPerSec
@@ -416,10 +416,10 @@ GROUP BY vs.volume_mount_point;
         }
         
         if ($dataSpace) {
-            # Obtener volúmenes únicos para procesamiento
+            # Obtener volÃºmenes Ãºnicos para procesamiento
             $uniqueVolumes = $dataSpace | Select-Object -Property MountPoint, VolumeName, TotalGB, FreeGB, FreePct -Unique
             
-            # Procesar cada volumen único
+            # Procesar cada volumen Ãºnico
             $result.Volumes = $uniqueVolumes | ForEach-Object {
                 $mountPoint = $_.MountPoint
                 
@@ -432,7 +432,7 @@ GROUP BY vs.volume_mount_point;
                 $isData = ($volumeRoles | Where-Object { $_.DiskRole -eq 'Data' }) -ne $null
                 $isLog = ($volumeRoles | Where-Object { $_.DiskRole -eq 'Log' }) -ne $null
                 
-                # Obtener archivos problemáticos en este volumen (poco espacio interno + growth habilitado)
+                # Obtener archivos problemÃ¡ticos en este volumen (poco espacio interno + growth habilitado)
                 $driveLetter = $mountPoint.TrimEnd('\').TrimEnd(':') + ':'
                 $problematicFilesInVolume = @()
                 if ($dataProblematicFiles) {
@@ -442,7 +442,7 @@ GROUP BY vs.volume_mount_point;
                 }
                 $problematicFileCount = if ($problematicFilesInVolume) { $problematicFilesInVolume.Count } else { 0 }
                 
-                # Obtener tipo de disco físico (puede ser lento, usar con precaución)
+                # Obtener tipo de disco fÃ­sico (puede ser lento, usar con precauciÃ³n)
                 $diskTypeInfo = Get-DiskMediaType -InstanceName $InstanceName -MountPoint $mountPoint
                 
                 # Crear objeto de volumen enriquecido
@@ -458,18 +458,18 @@ GROUP BY vs.volume_mount_point;
                     IsDataDisk = $isData
                     IsLogDisk = $isLog
                     
-                    # Información de disco físico
+                    # InformaciÃ³n de disco fÃ­sico
                     MediaType = $diskTypeInfo.MediaType
                     BusType = $diskTypeInfo.BusType
                     HealthStatus = $diskTypeInfo.HealthStatus
                     OperationalStatus = $diskTypeInfo.OperationalStatus
                     
-                    # Competencia (cuántas DBs/archivos)
+                    # Competencia (cuÃ¡ntas DBs/archivos)
                     DatabaseCount = if ($competition) { ConvertTo-SafeInt $competition.DatabaseCount } else { 0 }
                     FileCount = if ($competition) { ConvertTo-SafeInt $competition.FileCount } else { 0 }
                     DatabaseList = if ($competition) { $competition.DatabaseList } else { "" }
                     
-                    # Archivos problemáticos (poco espacio interno + growth habilitado)
+                    # Archivos problemÃ¡ticos (poco espacio interno + growth habilitado)
                     ProblematicFileCount = $problematicFileCount
                 }
             }
@@ -496,28 +496,28 @@ GROUP BY vs.volume_mount_point;
             }
         }
         
-        # Guardar si la query de archivos problemáticos falló
+        # Guardar si la query de archivos problemÃ¡ticos fallÃ³
         $result.ProblematicFilesQueryFailed = $problematicFilesQueryFailed
         
     } catch {
         $errorMsg = $_.Exception.Message
         
-        # Construir mensaje con información de versión si está disponible
+        # Construir mensaje con informaciÃ³n de versiÃ³n si estÃ¡ disponible
         $versionInfo = if ($sqlVersion) { 
             "SQL $sqlVersion $servicePack" 
         } else { 
-            "versión desconocida" 
+            "versiÃ³n desconocida" 
         }
         
         # Identificar tipo de error
         if ($errorMsg -match "Timeout") {
-            Write-Warning "⏱️  TIMEOUT obteniendo disk metrics en ${InstanceName} ($versionInfo) (después de reintentos)"
+            Write-Warning "â±ï¸  TIMEOUT obteniendo disk metrics en ${InstanceName} ($versionInfo) (despuÃ©s de reintentos)"
         }
         elseif ($errorMsg -match "Connection|Network|Transport") {
-            Write-Warning "🔌 ERROR DE CONEXIÓN obteniendo disk metrics en ${InstanceName} ($versionInfo): $errorMsg"
+            Write-Warning "ðŸ”Œ ERROR DE CONEXIÃ“N obteniendo disk metrics en ${InstanceName} ($versionInfo): $errorMsg"
         }
         elseif ($errorMsg -match "sys\.dm_os_volume_stats") {
-            Write-Warning "⚠️  ERROR obteniendo disk metrics en ${InstanceName} ($versionInfo): sys.dm_os_volume_stats no disponible. Usa SQL 2008 R2+ o verifica permisos VIEW SERVER STATE."
+            Write-Warning "âš ï¸  ERROR obteniendo disk metrics en ${InstanceName} ($versionInfo): sys.dm_os_volume_stats no disponible. Usa SQL 2008 R2+ o verifica permisos VIEW SERVER STATE."
         }
         else {
             Write-Warning "Error obteniendo disk metrics en ${InstanceName} ($versionInfo): $errorMsg"
@@ -530,7 +530,7 @@ GROUP BY vs.volume_mount_point;
 function Test-SqlConnection {
     <#
     .SYNOPSIS
-        Prueba conexión con reintentos
+        Prueba conexiÃ³n con reintentos
     #>
     param(
         [string]$InstanceName,
@@ -549,7 +549,7 @@ function Test-SqlConnection {
             }
         } catch {
             if ($attempt -lt $MaxRetries) {
-                Write-Verbose "Intento $attempt falló para $InstanceName, reintentando..."
+                Write-Verbose "Intento $attempt fallÃ³ para $InstanceName, reintentando..."
                 Start-Sleep -Seconds 2
             }
         }
@@ -561,7 +561,7 @@ function Test-SqlConnection {
 function Invoke-SqlQueryWithRetry {
     <#
     .SYNOPSIS
-        Ejecuta query SQL con reintentos automáticos en caso de timeout
+        Ejecuta query SQL con reintentos automÃ¡ticos en caso de timeout
     #>
     param(
         [string]$InstanceName,
@@ -601,7 +601,7 @@ function Invoke-SqlQueryWithRetry {
         }
     }
     
-    # Si llegamos aquí, todos los reintentos fallaron
+    # Si llegamos aquÃ­, todos los reintentos fallaron
     throw $lastError
 }
 
@@ -617,10 +617,10 @@ function Write-ToSqlServer {
     
     try {
         foreach ($row in $Data) {
-            # Convertir volumes a JSON (ahora incluye mucha más información)
+            # Convertir volumes a JSON (ahora incluye mucha mÃ¡s informaciÃ³n)
             $volumesJson = ($row.Volumes | ConvertTo-Json -Compress -Depth 3) -replace "'", "''"
             
-            # Valores para métricas de I/O (globales)
+            # Valores para mÃ©tricas de I/O (globales)
             $pageLifeExp = if ($row.PageLifeExpectancy) { $row.PageLifeExpectancy } else { 0 }
             $pageReadsPerSec = if ($row.PageReadsPerSec) { $row.PageReadsPerSec } else { 0 }
             $pageWritesPerSec = if ($row.PageWritesPerSec) { $row.PageWritesPerSec } else { 0 }
@@ -673,7 +673,7 @@ INSERT INTO dbo.InstanceHealth_Discos (
                 -EnableException
         }
         
-        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -685,14 +685,14 @@ INSERT INTO dbo.InstanceHealth_Discos (
 #region ===== MAIN =====
 
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Health Score v3.0 - ESPACIO EN DISCOS               ║" -ForegroundColor Cyan
-Write-Host "║  Frecuencia: 10 minutos                               ║" -ForegroundColor Cyan
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
+Write-Host "â•‘  Health Score v3.0 - ESPACIO EN DISCOS               â•‘" -ForegroundColor Cyan
+Write-Host "â•‘  Frecuencia: 10 minutos                               â•‘" -ForegroundColor Cyan
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -720,12 +720,12 @@ try {
 
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "2️⃣  Recolectando métricas de discos..." -ForegroundColor Yellow
+Write-Host "2ï¸âƒ£  Recolectando mÃ©tricas de discos..." -ForegroundColor Yellow
 if ($EnableParallel) {
-    Write-Host "   🚀 Modo PARALELO activado (ThrottleLimit: $ThrottleLimit)" -ForegroundColor Cyan
-    Write-Host "   ℹ️  Modo paralelo: Recolección simplificada de espacio en discos (sin análisis de archivos problemáticos)" -ForegroundColor DarkGray
+    Write-Host "   ðŸš€ Modo PARALELO activado (ThrottleLimit: $ThrottleLimit)" -ForegroundColor Cyan
+    Write-Host "   â„¹ï¸  Modo paralelo: RecolecciÃ³n simplificada de espacio en discos (sin anÃ¡lisis de archivos problemÃ¡ticos)" -ForegroundColor DarkGray
 } else {
-    Write-Host "   🐌 Modo SECUENCIAL activado - Recolección completa con todas las funciones" -ForegroundColor DarkGray
+    Write-Host "   ðŸŒ Modo SECUENCIAL activado - RecolecciÃ³n completa con todas las funciones" -ForegroundColor DarkGray
 }
 
 $results = @()
@@ -733,7 +733,7 @@ $results = @()
 if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
     #region ===== PROCESAMIENTO PARALELO (PowerShell 7+) =====
     
-    Write-Host "   ℹ️  Usando ForEach-Object -Parallel (PS 7+)" -ForegroundColor DarkGray
+    Write-Host "   â„¹ï¸  Usando ForEach-Object -Parallel (PS 7+)" -ForegroundColor DarkGray
     
     $results = $instances | ForEach-Object -ThrottleLimit $ThrottleLimit -Parallel {
         $instance = $_
@@ -742,7 +742,7 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
         $SqlServer = $using:SqlServer
         $SqlDatabase = $using:SqlDatabase
         
-        # Importar módulo en cada runspace paralelo
+        # Importar mÃ³dulo en cada runspace paralelo
         Import-Module dbatools -ErrorAction SilentlyContinue
         
         # Redefinir funciones helper dentro del runspace paralelo
@@ -792,7 +792,7 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
             throw $lastError
         }
         
-        # Función simplificada Get-DiskMetrics inline
+        # FunciÃ³n simplificada Get-DiskMetrics inline
         function Get-DiskMetrics {
             param([string]$InstanceName, [int]$TimeoutSec = 15)
             
@@ -813,7 +813,7 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
             }
             
             try {
-                # Detectar versión de SQL Server
+                # Detectar versiÃ³n de SQL Server
                 $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version"
                 $versionResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $versionQuery -TimeoutSec 5 -MaxRetries 1
                 $sqlVersion = $versionResult.Version
@@ -910,22 +910,22 @@ ORDER BY FreePct ASC;
         $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
         
         if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-            Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+            Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
             return $null
         }
         
         $diskMetrics = Get-DiskMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
         
-        # Lógica simplificada de alertas (modo paralelo rápido - sin análisis de archivos)
-        $status = "✅"
+        # LÃ³gica simplificada de alertas (modo paralelo rÃ¡pido - sin anÃ¡lisis de archivos)
+        $status = "âœ…"
         if ($diskMetrics.WorstFreePct -lt 5) {
-            $status = "🚨 CRÍTICO!"
+            $status = "ðŸš¨ CRÃTICO!"
         }
         elseif ($diskMetrics.WorstFreePct -lt 10) {
-            $status = "⚠️ BAJO!"
+            $status = "âš ï¸ BAJO!"
         }
         elseif ($diskMetrics.WorstFreePct -lt 20) {
-            $status = "⚠️ ADVERTENCIA"
+            $status = "âš ï¸ ADVERTENCIA"
         }
         
         Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%" -ForegroundColor Gray
@@ -950,7 +950,7 @@ ORDER BY FreePct ASC;
         }
     }
     
-    # Filtrar nulos (instancias sin conexión)
+    # Filtrar nulos (instancias sin conexiÃ³n)
     $results = $results | Where-Object { $_ -ne $null }
     
     #endregion
@@ -959,7 +959,7 @@ else {
     #region ===== PROCESAMIENTO SECUENCIAL (PowerShell 5.1 o $EnableParallel = $false) =====
     
     if ($EnableParallel -and $PSVersionTable.PSVersion.Major -lt 7) {
-        Write-Host "   ⚠️  Procesamiento paralelo requiere PowerShell 7+. Usando modo secuencial." -ForegroundColor Yellow
+        Write-Host "   âš ï¸  Procesamiento paralelo requiere PowerShell 7+. Usando modo secuencial." -ForegroundColor Yellow
     }
     
     $counter = 0
@@ -968,7 +968,7 @@ else {
         $counter++
         $instanceName = $instance.NombreInstancia
         
-        Write-Progress -Activity "Recolectando métricas" `
+        Write-Progress -Activity "Recolectando mÃ©tricas" `
             -Status "$counter de $($instances.Count): $instanceName" `
             -PercentComplete (($counter / $instances.Count) * 100)
         
@@ -977,13 +977,13 @@ else {
         $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
         
         if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-            Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+            Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
             continue
         }
         
         $diskMetrics = Get-DiskMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
         
-        # Contar archivos problemáticos
+        # Contar archivos problemÃ¡ticos
         $totalProblematicFiles = 0
         if ($diskMetrics.Volumes) {
             foreach ($vol in $diskMetrics.Volumes) {
@@ -993,29 +993,29 @@ else {
             }
         }
         
-        # Lógica de alertas
-        $status = "✅"
+        # LÃ³gica de alertas
+        $status = "âœ…"
         $statusMessage = ""
         
         if ($totalProblematicFiles -gt 0) {
             if ($diskMetrics.WorstFreePct -lt 10 -or $totalProblematicFiles -ge 5) {
-                $status = "🚨 CRÍTICO!"
+                $status = "ðŸš¨ CRÃTICO!"
                 $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
             }
             elseif ($diskMetrics.WorstFreePct -lt 20 -or $totalProblematicFiles -ge 2) {
-                $status = "⚠️ ADVERTENCIA"
+                $status = "âš ï¸ ADVERTENCIA"
                 $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
             }
         }
         else {
             if ($diskMetrics.WorstFreePct -lt 5) {
-                $status = "📊 Disco bajo (archivos OK)"
+                $status = "ðŸ“Š Disco bajo (archivos OK)"
             }
             elseif ($diskMetrics.WorstFreePct -lt 10) {
-                $status = "📊 Disco bajo (archivos OK)"
+                $status = "ðŸ“Š Disco bajo (archivos OK)"
             }
             elseif ($diskMetrics.WorstFreePct -lt 20) {
-                $status = "📊 Monitorear"
+                $status = "ðŸ“Š Monitorear"
             }
         }
         
@@ -1040,33 +1040,33 @@ else {
         }
     }
     
-    Write-Progress -Activity "Recolectando métricas" -Completed
+    Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
     
     #endregion
 }
 
 # 3. Guardar en SQL
 Write-Host ""
-Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  RESUMEN - DISCOS                                     ║" -ForegroundColor Green
-Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
+Write-Host "â•‘  RESUMEN - DISCOS                                     â•‘" -ForegroundColor Green
+Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Green
+Write-Host "â•‘  Total instancias:     $($results.Count)".PadRight(53) "â•‘" -ForegroundColor White
 
 $avgWorst = ($results | Measure-Object -Property WorstFreePct -Average).Average
 $avgData = ($results | Measure-Object -Property DataDiskAvgFreePct -Average).Average
 $avgLog = ($results | Measure-Object -Property LogDiskAvgFreePct -Average).Average
 
-Write-Host "║  Worst % promedio:     $([int]$avgWorst)%".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Data % promedio:      $([int]$avgData)%".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Log % promedio:       $([int]$avgLog)%".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  Worst % promedio:     $([int]$avgWorst)%".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Data % promedio:      $([int]$avgData)%".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "â•‘  Log % promedio:       $([int]$avgLog)%".PadRight(53) "â•‘" -ForegroundColor White
 
-# Contar instancias con archivos problemáticos (< 30MB libres internos + growth habilitado)
+# Contar instancias con archivos problemÃ¡ticos (< 30MB libres internos + growth habilitado)
 $instancesWithProblematicFiles = 0
 $totalProblematicFilesCount = 0
 foreach ($r in $results) {
@@ -1084,30 +1084,30 @@ foreach ($r in $results) {
     }
 }
 
-Write-Host "║" -NoNewline -ForegroundColor Green
+Write-Host "â•‘" -NoNewline -ForegroundColor Green
 Write-Host "" -ForegroundColor White
 $critical = ($results | Where-Object {$_.WorstFreePct -lt 10}).Count
-Write-Host "║  Discos críticos (<10%): $critical".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  Discos crÃ­ticos (<10%): $critical".PadRight(53) "â•‘" -ForegroundColor White
 
-Write-Host "║  Instancias con archivos problemáticos: $instancesWithProblematicFiles".PadRight(53) "║" -ForegroundColor $(if ($instancesWithProblematicFiles -gt 0) { "Yellow" } else { "White" })
-Write-Host "║  Total archivos con <30MB libres: $totalProblematicFilesCount".PadRight(53) "║" -ForegroundColor $(if ($totalProblematicFilesCount -gt 0) { "Yellow" } else { "White" })
-Write-Host "║  (Solo archivos con growth habilitado)".PadRight(53) "║" -ForegroundColor DarkGray
+Write-Host "â•‘  Instancias con archivos problemÃ¡ticos: $instancesWithProblematicFiles".PadRight(53) "â•‘" -ForegroundColor $(if ($instancesWithProblematicFiles -gt 0) { "Yellow" } else { "White" })
+Write-Host "â•‘  Total archivos con <30MB libres: $totalProblematicFilesCount".PadRight(53) "â•‘" -ForegroundColor $(if ($totalProblematicFilesCount -gt 0) { "Yellow" } else { "White" })
+Write-Host "â•‘  (Solo archivos con growth habilitado)".PadRight(53) "â•‘" -ForegroundColor DarkGray
 
-# Contar instancias donde falló la query de archivos problemáticos
+# Contar instancias donde fallÃ³ la query de archivos problemÃ¡ticos
 $instancesWithQueryFailed = ($results | Where-Object { $_.ProblematicFilesQueryFailed -eq $true }).Count
 if ($instancesWithQueryFailed -gt 0) {
-    Write-Host "║" -NoNewline -ForegroundColor Green
+    Write-Host "â•‘" -NoNewline -ForegroundColor Green
     Write-Host "" -ForegroundColor White
-    Write-Host "║  ⚠️  Instancias con error en query de archivos: $instancesWithQueryFailed".PadRight(53) "║" -ForegroundColor Yellow
-    Write-Host "║      (Datos de archivos problemáticos incompletos)".PadRight(53) "║" -ForegroundColor DarkGray
+    Write-Host "â•‘  âš ï¸  Instancias con error en query de archivos: $instancesWithQueryFailed".PadRight(53) "â•‘" -ForegroundColor Yellow
+    Write-Host "â•‘      (Datos de archivos problemÃ¡ticos incompletos)".PadRight(53) "â•‘" -ForegroundColor DarkGray
 }
 
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
 
-# Mostrar TOP instancias con archivos problemáticos si existen
+# Mostrar TOP instancias con archivos problemÃ¡ticos si existen
 if ($instancesWithProblematicFiles -gt 0) {
     Write-Host ""
-    Write-Host "🚨 TOP INSTANCIAS CON ARCHIVOS PROBLEMÁTICOS (<30MB libres + growth habilitado):" -ForegroundColor Red
+    Write-Host "ðŸš¨ TOP INSTANCIAS CON ARCHIVOS PROBLEMÃTICOS (<30MB libres + growth habilitado):" -ForegroundColor Red
     
     $topProblematic = @()
     foreach ($r in $results) {
@@ -1129,13 +1129,14 @@ if ($instancesWithProblematicFiles -gt 0) {
     }
     
     $topProblematic | Sort-Object -Property ProblematicFileCount -Descending | Select-Object -First 10 | ForEach-Object {
-        $emoji = if ($_.ProblematicFileCount -ge 5) { "🚨" } elseif ($_.ProblematicFileCount -ge 2) { "⚠️" } else { "📊" }
+        $emoji = if ($_.ProblematicFileCount -ge 5) { "ðŸš¨" } elseif ($_.ProblematicFileCount -ge 2) { "âš ï¸" } else { "ðŸ“Š" }
         Write-Host "   $emoji $($_.InstanceName.PadRight(30)) - $($_.ProblematicFileCount) archivos - Worst: $([int]$_.WorstFreePct)%" -ForegroundColor Yellow
     }
 }
 
 Write-Host ""
-Write-Host "✅ Script completado!" -ForegroundColor Green
+Write-Host "âœ… Script completado!" -ForegroundColor Green
 
 #endregion
+
 

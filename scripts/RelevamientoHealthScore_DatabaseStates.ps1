@@ -1,16 +1,16 @@
-<#
+﻿<#
 .SYNOPSIS
     Health Score v3.0 - Database States Monitor
-    Detecta databases en estados problemáticos
+    Detecta databases en estados problemÃ¡ticos
 
 .DESCRIPTION
-    Categoría: DATABASE STATES (Peso: 3%)
+    CategorÃ­a: DATABASE STATES (Peso: 3%)
     
-    Métricas clave:
-    - Databases Suspect/Emergency (CRÍTICOS)
+    MÃ©tricas clave:
+    - Databases Suspect/Emergency (CRÃTICOS)
     - Recovery Pending
     - Single User / Restoring
-    - Suspect Pages (corrupción)
+    - Suspect Pages (corrupciÃ³n)
     
     NOTA: Databases OFFLINE se excluyen (pueden estar offline por mantenimiento intencional)
     
@@ -18,10 +18,10 @@
     - 100 pts: Todas las DBs en estado OK, 0 suspect pages
     - 60 pts: 1 DB en single user o restoring
     - 40 pts: 1 DB en recovery pending o suspect pages detectadas
-    - 20 pts: >1 DB en estado problemático
-    - 0 pts: Alguna DB crítica SUSPECT/EMERGENCY
+    - 20 pts: >1 DB en estado problemÃ¡tico
+    - 0 pts: Alguna DB crÃ­tica SUSPECT/EMERGENCY
     
-    Cap: 0 si DB crítica SUSPECT/EMERGENCY, 50 si hay suspect pages
+    Cap: 0 si DB crÃ­tica SUSPECT/EMERGENCY, 50 si hay suspect pages
 
 .NOTES
     Author: SQL Guard Observatory
@@ -33,13 +33,13 @@
 [CmdletBinding()]
 param()
 
-# Verificar que dbatools está disponible
+# Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Descargar SqlServer si está cargado (conflicto con dbatools)
+# Descargar SqlServer si estÃ¡ cargado (conflicto con dbatools)
 if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
@@ -47,7 +47,7 @@ if (Get-Module -Name SqlServer) {
 # Importar dbatools con force para evitar conflictos
 Import-Module dbatools -Force -ErrorAction Stop
 
-#region ===== CONFIGURACIÓN =====
+#region ===== CONFIGURACIÃ“N =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -103,7 +103,7 @@ WHERE last_update_date > DATEADD(DAY, -30, GETDATE());
         $restoringCount = ($dbStates | Where-Object { $_.State -eq 'RESTORING' }).Count
         $suspectPageCount = if ($suspectPages.Count -gt 0) { $suspectPages[0].SuspectPageCount } else { 0 }
         
-        # Detalles de DBs problemáticas
+        # Detalles de DBs problemÃ¡ticas
         $problematicDBs = $dbStates | Where-Object { $_.IsProblematic -eq 1 } | Select-Object DatabaseName, State, UserAccess
         $details = $problematicDBs | ConvertTo-Json -Compress
         if ($null -eq $details -or $details -eq "") { $details = "[]" }
@@ -176,7 +176,7 @@ INSERT INTO dbo.InstanceHealth_DatabaseStates (
                 -EnableException
         }
         
-        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -194,7 +194,7 @@ Write-Host "=========================================================" -Foregrou
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -223,7 +223,7 @@ try {
 
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "2️⃣  Recolectando estados de databases..." -ForegroundColor Yellow
+Write-Host "2ï¸âƒ£  Recolectando estados de databases..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
@@ -232,7 +232,7 @@ foreach ($instance in $instances) {
     $counter++
     $instanceName = $instance.NombreInstancia
     
-    Write-Progress -Activity "Recolectando métricas" `
+    Write-Progress -Activity "Recolectando mÃ©tricas" `
         -Status "$counter de $($instances.Count): $instanceName" `
         -PercentComplete (($counter / $instances.Count) * 100)
     
@@ -244,31 +244,31 @@ foreach ($instance in $instances) {
     try {
         $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
         if (-not $connection.IsPingable) {
-            Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+            Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
             continue
         }
     } catch {
-        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+        Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
         continue
     }
     
-    # Obtener métricas
+    # Obtener mÃ©tricas
     $dbStatus = Get-DatabaseStatesStatus -Instance $instanceName
     
     if ($null -eq $dbStatus) {
-        Write-Host "   ⚠️  $instanceName - Sin datos (skipped)" -ForegroundColor Yellow
+        Write-Host "   âš ï¸  $instanceName - Sin datos (skipped)" -ForegroundColor Yellow
         continue
     }
     
     $totalProblematic = $dbStatus.SuspectCount + $dbStatus.EmergencyCount + $dbStatus.RecoveryPendingCount
     
-    $status = "✅"
+    $status = "âœ…"
     if ($dbStatus.SuspectCount -gt 0 -or $dbStatus.EmergencyCount -gt 0) {
-        $status = "🚨 CRITICAL STATE!"
+        $status = "ðŸš¨ CRITICAL STATE!"
     } elseif ($dbStatus.SuspectPageCount -gt 0) {
-        $status = "⚠️  SUSPECT PAGES"
+        $status = "âš ï¸  SUSPECT PAGES"
     } elseif ($totalProblematic -gt 0) {
-        $status = "⚠️  PROBLEMATIC"
+        $status = "âš ï¸  PROBLEMATIC"
     }
     
     Write-Host "   $status $instanceName - Suspect:$($dbStatus.SuspectCount) Emergency:$($dbStatus.EmergencyCount) RecovPending:$($dbStatus.RecoveryPendingCount) SuspectPages:$($dbStatus.SuspectPageCount)" -ForegroundColor Gray
@@ -290,38 +290,39 @@ foreach ($instance in $instances) {
     }
 }
 
-Write-Progress -Activity "Recolectando métricas" -Completed
+Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
 
 # 3. Guardar en SQL
 Write-Host ""
-Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  RESUMEN - DATABASE STATES                            ║" -ForegroundColor Green
-Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
+Write-Host "â•‘  RESUMEN - DATABASE STATES                            â•‘" -ForegroundColor Green
+Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Green
+Write-Host "â•‘  Total instancias:     $($results.Count)".PadRight(53) "â•‘" -ForegroundColor White
 
 $totalSuspect = ($results | Measure-Object -Property SuspectCount -Sum).Sum
-Write-Host "║  DBs Suspect:          $totalSuspect".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  DBs Suspect:          $totalSuspect".PadRight(53) "â•‘" -ForegroundColor White
 
 $totalEmergency = ($results | Measure-Object -Property EmergencyCount -Sum).Sum
-Write-Host "║  DBs Emergency:        $totalEmergency".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  DBs Emergency:        $totalEmergency".PadRight(53) "â•‘" -ForegroundColor White
 
 $totalRecovPending = ($results | Measure-Object -Property RecoveryPendingCount -Sum).Sum
-Write-Host "║  DBs Recovery Pending: $totalRecovPending".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  DBs Recovery Pending: $totalRecovPending".PadRight(53) "â•‘" -ForegroundColor White
 
 $totalSuspectPages = ($results | Measure-Object -Property SuspectPageCount -Sum).Sum
-Write-Host "║  Suspect Pages:        $totalSuspectPages".PadRight(53) "║" -ForegroundColor White
+Write-Host "â•‘  Suspect Pages:        $totalSuspectPages".PadRight(53) "â•‘" -ForegroundColor White
 
-Write-Host "║                                                       ║" -ForegroundColor White
-Write-Host "║  ℹ️  OFFLINE DBs se excluyen (mantenimiento OK)      ║" -ForegroundColor DarkGray
-Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "â•‘                                                       â•‘" -ForegroundColor White
+Write-Host "â•‘  â„¹ï¸  OFFLINE DBs se excluyen (mantenimiento OK)      â•‘" -ForegroundColor DarkGray
+Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
 Write-Host ""
-Write-Host "✅ Script completado!" -ForegroundColor Green
+Write-Host "âœ… Script completado!" -ForegroundColor Green
 
 #endregion
+
 
