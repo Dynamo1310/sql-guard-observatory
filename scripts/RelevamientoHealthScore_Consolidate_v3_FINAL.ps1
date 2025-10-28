@@ -1289,11 +1289,12 @@ INSERT INTO dbo.InstanceHealth_Score (
 );
 "@
         
-        Invoke-DbaQuery -SqlInstance $SqlServer `
+        Invoke-Sqlcmd -ServerInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TrustServerCertificate `
+            -ErrorAction Stop
         
         return $true
         

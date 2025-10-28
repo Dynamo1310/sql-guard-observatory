@@ -402,11 +402,12 @@ INSERT INTO dbo.InstanceHealth_Waits (
 );
 "@
             
-            Invoke-DbaQuery -SqlInstance $SqlServer `
+            Invoke-Sqlcmd -ServerInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -EnableException | Out-Null
+                -TrustServerCertificate `
+                -ErrorAction Stop | Out-Null
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

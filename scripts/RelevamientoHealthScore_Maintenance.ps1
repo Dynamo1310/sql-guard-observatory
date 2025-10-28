@@ -657,11 +657,12 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
 "@
             
             # Usar dbatools para insertar datos
-            Invoke-DbaQuery -SqlInstance $SqlServer `
+            Invoke-Sqlcmd -ServerInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -EnableException
+                -TrustServerCertificate `
+                -ErrorAction Stop
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

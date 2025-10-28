@@ -343,11 +343,12 @@ INSERT INTO dbo.InstanceHealth_LogChain (
 "@
         
             try {
-                Invoke-DbaQuery -SqlInstance $SqlServer `
-                    -Database $SqlDatabase `
-                    -Query $query `
-                    -QueryTimeout 30 `
-                    -EnableException
+            Invoke-Sqlcmd -ServerInstance $SqlServer `
+                -Database $SqlDatabase `
+                -Query $query `
+                -QueryTimeout 30 `
+                -TrustServerCertificate `
+                -ErrorAction Stop
             }
             catch {
                 Write-Warning "Error al insertar $($row.InstanceName):"

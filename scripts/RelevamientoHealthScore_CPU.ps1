@@ -75,7 +75,7 @@ function Get-CPUMetrics {
     try {
         # Detectar versión de SQL Server
         $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(50)) AS Version;"
-        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
+        $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate -ErrorAction Stop
         $version = [int]($versionResult.Version.Split('.')[0])
         
         # Para SQL 2005/2008 (versiones 9.x y 10.x), usar query simplificada
@@ -148,7 +148,7 @@ WHERE scheduler_id < 255;
 "@
         }
         
-        $datasets = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $datasets = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
             -As DataSet `
