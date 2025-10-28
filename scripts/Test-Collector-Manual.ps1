@@ -21,7 +21,7 @@ Write-Host "[ANTES] Contando registros en la base de datos..." -ForegroundColor 
 $countBefore = 0
 try {
     $query = "SELECT COUNT(*) as Count FROM RelevamientoHealthScore WHERE FechaRelevamiento >= DATEADD(MINUTE, -10, GETDATE())"
-    $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -ErrorAction Stop
+    $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -TrustServerCertificate -ErrorAction Stop
     $countBefore = $result.Count
     Write-Host "  Registros de los ultimos 10 minutos: $countBefore" -ForegroundColor Gray
     Write-Host "  (Instancia: SSPR17MON-01, Base: SQLNova)" -ForegroundColor DarkGray
@@ -65,7 +65,7 @@ Write-Host ""
 Write-Host "[DESPUES] Contando registros en la base de datos..." -ForegroundColor Yellow
 $countAfter = 0
 try {
-    $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -ErrorAction Stop
+    $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -TrustServerCertificate -ErrorAction Stop
     $countAfter = $result.Count
     Write-Host "  Registros de los ultimos 10 minutos: $countAfter" -ForegroundColor Gray
     Write-Host "  (Instancia: SSPR17MON-01, Base: SQLNova)" -ForegroundColor DarkGray

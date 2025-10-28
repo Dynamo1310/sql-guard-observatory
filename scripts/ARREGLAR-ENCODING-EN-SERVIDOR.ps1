@@ -107,7 +107,7 @@ Write-Host "[PASO 4/4] Verificando datos en la base..." -ForegroundColor Yellow
 
 try {
     $query = "SELECT TOP 5 InstanceName, TipoMetrica, FechaRelevamiento FROM RelevamientoHealthScore WHERE TipoMetrica = 'CPU' ORDER BY FechaRelevamiento DESC"
-    $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -ErrorAction Stop
+    $result = Invoke-Sqlcmd -ServerInstance "SSPR17MON-01" -Database "SQLNova" -Query $query -TrustServerCertificate -ErrorAction Stop
     
     if ($result) {
         Write-Host "  OK - Encontrados registros de CPU en SQLNova:" -ForegroundColor Green
