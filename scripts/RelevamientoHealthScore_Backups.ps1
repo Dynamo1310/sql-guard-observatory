@@ -1,6 +1,6 @@
-﻿<#
+<#
 .SYNOPSIS
-    Health Score v2.0 - RecolecciÃ³n de mÃ©tricas de BACKUPS
+    Health Score v2.0 - Recolección de métricas de BACKUPS
     
 .DESCRIPTION
     Script de frecuencia media (cada 15 minutos) que recolecta:
@@ -10,7 +10,7 @@
     Guarda en: InstanceHealth_Backups
     
 .NOTES
-    VersiÃ³n: 2.1 (dbatools con retry)
+    Versión: 2.1 (dbatools con retry)
     Frecuencia: Cada 15 minutos
     Timeout: 30 segundos (60 segundos en retry para instancias lentas)
     
@@ -22,43 +22,21 @@
 [CmdletBinding()]
 param()
 
-# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
-$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
-foreach ($mod in $sqlModules) {
-    if (Get-Module -Name $mod) {
-        Remove-Module $mod -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# Verificar que dbatools estÃ¡ disponible
+# Verificar que dbatools está disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Intentar importar dbatools
-try {
-    Import-Module dbatools -Force -ErrorAction Stop
-    Write-Verbose "âœ… dbatools cargado correctamente"
-} catch {
-    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
-        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
-        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
-        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
-        Write-Warning ""
-        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
-        
-        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
-        if (-not (Get-Module -Name dbatools)) {
-            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
-            exit 1
-        }
-    } else {
-        throw
-    }
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-#region ===== CONFIGURACIÃ“N =====
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
+
+#region ===== CONFIGURACIÓN =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -89,7 +67,7 @@ function Get-BackupStatus {
         Details = @()
     }
     
-    # Query optimizada con lÃ­mite de fechas para reducir escaneo en msdb
+    # Query optimizada con límite de fechas para reducir escaneo en msdb
     $cutoffDate = (Get-Date).AddDays(-7).ToString('yyyy-MM-dd')
     
     $query = @"
@@ -135,12 +113,12 @@ GROUP BY d.name, d.recovery_model_desc;
             $lastError = $_
             if ($attemptCount -eq 1) {
                 Write-Verbose "Timeout en $InstanceName (intento 1/${TimeoutSec}s), reintentando con timeout extendido..."
-                Start-Sleep -Milliseconds 500  # PequeÃ±a pausa antes del retry
+                Start-Sleep -Milliseconds 500  # Pequeña pausa antes del retry
             }
         }
     }
     
-    # Si despuÃ©s de 2 intentos no hay datos, reportar error
+    # Si después de 2 intentos no hay datos, reportar error
     if ($data -eq $null) {
         Write-Warning "Error obteniendo backups en ${InstanceName}: $($lastError.Exception.Message)"
         $result.FullBackupBreached = $true
@@ -162,10 +140,10 @@ GROUP BY d.name, d.recovery_model_desc;
         
         $result.FullBackupBreached = ($breachedDbs.Count -gt 0)
         
-        # Si hay DBs con breach, mostrar el PEOR backup (mÃ¡s antiguo)
-        # Si no hay breach, mostrar el MÃS RECIENTE
+        # Si hay DBs con breach, mostrar el PEOR backup (más antiguo)
+        # Si no hay breach, mostrar el MÁS RECIENTE
         if ($result.FullBackupBreached) {
-            # Buscar el backup FULL mÃ¡s antiguo de las DBs con problema
+            # Buscar el backup FULL más antiguo de las DBs con problema
             $worstFullBackup = $breachedDbs | 
                 Where-Object { $_.LastFullBackup -ne [DBNull]::Value } | 
                 Sort-Object LastFullBackup | 
@@ -173,7 +151,7 @@ GROUP BY d.name, d.recovery_model_desc;
             
             $result.LastFullBackup = if ($worstFullBackup) { [datetime]$worstFullBackup } else { $null }
         } else {
-            # No hay breach, mostrar el mÃ¡s reciente
+            # No hay breach, mostrar el más reciente
             $fullBackups = $data | 
                 Where-Object { $_.LastFullBackup -ne [DBNull]::Value } | 
                 Select-Object -ExpandProperty LastFullBackup
@@ -195,10 +173,10 @@ GROUP BY d.name, d.recovery_model_desc;
             
             $result.LogBackupBreached = ($breachedLogs.Count -gt 0)
             
-            # Si hay DBs con breach, mostrar el PEOR backup (mÃ¡s antiguo)
-            # Si no hay breach, mostrar el MÃS RECIENTE
+            # Si hay DBs con breach, mostrar el PEOR backup (más antiguo)
+            # Si no hay breach, mostrar el MÁS RECIENTE
             if ($result.LogBackupBreached) {
-                # Buscar el backup LOG mÃ¡s antiguo de las DBs con problema
+                # Buscar el backup LOG más antiguo de las DBs con problema
                 $worstLogBackup = $breachedLogs | 
                     Where-Object { $_.LastLogBackup -ne [DBNull]::Value } | 
                     Sort-Object LastLogBackup | 
@@ -206,7 +184,7 @@ GROUP BY d.name, d.recovery_model_desc;
                 
                 $result.LastLogBackup = if ($worstLogBackup) { [datetime]$worstLogBackup } else { $null }
             } else {
-                # No hay breach, mostrar el mÃ¡s reciente
+                # No hay breach, mostrar el más reciente
                 $logBackups = $fullRecoveryDbs | 
                     Where-Object { $_.LastLogBackup -ne [DBNull]::Value } | 
                     Select-Object -ExpandProperty LastLogBackup
@@ -237,7 +215,7 @@ function Test-SqlConnection {
     )
     
     try {
-        # Usar dbatools para test de conexiÃ³n (comando simple sin parÃ¡metros de certificado)
+        # Usar dbatools para test de conexión (comando simple sin parámetros de certificado)
         $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         return $connection.IsPingable
     } catch {
@@ -250,7 +228,7 @@ function Get-AlwaysOnGroups {
     .SYNOPSIS
         Identifica grupos de AlwaysOn consultando sys.availability_replicas.
     .DESCRIPTION
-        Pre-procesa las instancias para identificar quÃ© nodos pertenecen al mismo AG.
+        Pre-procesa las instancias para identificar qué nodos pertenecen al mismo AG.
         Solo procesa instancias donde la API indica AlwaysOn = "Enabled".
     #>
     param(
@@ -263,12 +241,12 @@ function Get-AlwaysOnGroups {
     $nodeToGroup = @{}  # Key = NodeName, Value = AGName
     
     Write-Host ""
-    Write-Host "ðŸ” [PRE-PROCESO] Identificando grupos de AlwaysOn..." -ForegroundColor Cyan
+    Write-Host "🔍 [PRE-PROCESO] Identificando grupos de AlwaysOn..." -ForegroundColor Cyan
     
     foreach ($instance in $Instances) {
         $instanceName = $instance.NombreInstancia
         
-        # Solo procesar si la API indica que AlwaysOn estÃ¡ habilitado
+        # Solo procesar si la API indica que AlwaysOn está habilitado
         if ($instance.AlwaysOn -ne "Enabled") {
             continue
         }
@@ -310,13 +288,13 @@ ORDER BY ag.name, ar.replica_server_name
     
     # Mostrar resumen
     if ($agGroups.Count -gt 0) {
-        Write-Host "  âœ… $($agGroups.Count) grupo(s) identificado(s):" -ForegroundColor Green
+        Write-Host "  ✅ $($agGroups.Count) grupo(s) identificado(s):" -ForegroundColor Green
         foreach ($agName in $agGroups.Keys) {
             $nodes = $agGroups[$agName].Nodes -join ", "
-            Write-Host "    â€¢ $agName : $nodes" -ForegroundColor Gray
+            Write-Host "    • $agName : $nodes" -ForegroundColor Gray
         }
     } else {
-        Write-Host "  â„¹ï¸  No se encontraron grupos AlwaysOn" -ForegroundColor Gray
+        Write-Host "  ℹ️  No se encontraron grupos AlwaysOn" -ForegroundColor Gray
     }
     
     return @{
@@ -330,7 +308,7 @@ function Sync-AlwaysOnBackups {
     .SYNOPSIS
         Sincroniza datos de backups entre nodos de AlwaysOn.
     .DESCRIPTION
-        Toma el MEJOR valor de cada grupo (backup mÃ¡s reciente) y lo aplica a TODOS los nodos.
+        Toma el MEJOR valor de cada grupo (backup más reciente) y lo aplica a TODOS los nodos.
     #>
     param(
         [Parameter(Mandatory)]
@@ -340,7 +318,7 @@ function Sync-AlwaysOnBackups {
     )
     
     Write-Host ""
-    Write-Host "ðŸ”„ [POST-PROCESO] Sincronizando backups entre nodos AlwaysOn..." -ForegroundColor Cyan
+    Write-Host "🔄 [POST-PROCESO] Sincronizando backups entre nodos AlwaysOn..." -ForegroundColor Cyan
     
     $agGroups = $AGInfo.Groups
     $syncedCount = 0
@@ -349,24 +327,24 @@ function Sync-AlwaysOnBackups {
         $agGroup = $agGroups[$agName]
         $nodeNames = $agGroup.Nodes
         
-        Write-Host "  ðŸ“¦ Procesando AG: $agName" -ForegroundColor Yellow
+        Write-Host "  📦 Procesando AG: $agName" -ForegroundColor Yellow
         Write-Host "    Nodos: $($nodeNames -join ', ')" -ForegroundColor Gray
         
         # Obtener resultados de todos los nodos del grupo
         $groupResults = $AllResults | Where-Object { $nodeNames -contains $_.InstanceName }
         
         if ($groupResults.Count -eq 0) {
-            Write-Host "    âš ï¸  Sin resultados para este grupo" -ForegroundColor Gray
+            Write-Host "    ⚠️  Sin resultados para este grupo" -ForegroundColor Gray
             continue
         }
         
-        # Encontrar el MEJOR LastFullBackup (mÃ¡s reciente)
+        # Encontrar el MEJOR LastFullBackup (más reciente)
         $bestFull = $groupResults | 
             Where-Object { $_.LastFullBackup -ne $null } | 
             Sort-Object LastFullBackup -Descending | 
             Select-Object -First 1
         
-        # Encontrar el MEJOR LastLogBackup (mÃ¡s reciente)
+        # Encontrar el MEJOR LastLogBackup (más reciente)
         $bestLog = $groupResults | 
             Where-Object { $_.LastLogBackup -ne $null } | 
             Sort-Object LastLogBackup -Descending | 
@@ -375,8 +353,8 @@ function Sync-AlwaysOnBackups {
         $bestFullDate = if ($bestFull) { $bestFull.LastFullBackup } else { $null }
         $bestLogDate = if ($bestLog) { $bestLog.LastLogBackup } else { $null }
         
-        Write-Host "    ðŸ”„ Mejor FULL: $bestFullDate" -ForegroundColor Gray
-        Write-Host "    ðŸ”„ Mejor LOG:  $bestLogDate" -ForegroundColor Gray
+        Write-Host "    🔄 Mejor FULL: $bestFullDate" -ForegroundColor Gray
+        Write-Host "    🔄 Mejor LOG:  $bestLogDate" -ForegroundColor Gray
         
         # Aplicar los MEJORES valores a TODOS los nodos del grupo
         foreach ($nodeResult in $groupResults) {
@@ -401,10 +379,10 @@ function Sync-AlwaysOnBackups {
             $syncedCount++
         }
         
-        Write-Host "    âœ… Sincronizados $($groupResults.Count) nodos" -ForegroundColor Green
+        Write-Host "    ✅ Sincronizados $($groupResults.Count) nodos" -ForegroundColor Green
     }
     
-    Write-Host "  âœ… Total: $syncedCount nodos sincronizados" -ForegroundColor Green
+    Write-Host "  ✅ Total: $syncedCount nodos sincronizados" -ForegroundColor Green
     
     return $AllResults
 }
@@ -456,11 +434,10 @@ INSERT INTO dbo.InstanceHealth_Backups (
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -EnableException `
-               
+                -EnableException
         }
         
-        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -472,14 +449,14 @@ INSERT INTO dbo.InstanceHealth_Backups (
 #region ===== MAIN =====
 
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
-Write-Host "â•‘  Health Score v2.0 - BACKUP METRICS                   â•‘" -ForegroundColor Cyan
-Write-Host "â•‘  Frecuencia: 15 minutos                               â•‘" -ForegroundColor Cyan
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  Health Score v2.0 - BACKUP METRICS                   ║" -ForegroundColor Cyan
+Write-Host "║  Frecuencia: 15 minutos                               ║" -ForegroundColor Cyan
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -512,17 +489,17 @@ $agInfo = Get-AlwaysOnGroups -Instances $instances -TimeoutSec $TimeoutSec
 
 # 3. Procesar cada instancia
 Write-Host ""
-Write-Host "2ï¸âƒ£  Recolectando mÃ©tricas de backups..." -ForegroundColor Yellow
+Write-Host "2️⃣  Recolectando métricas de backups..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
 
 foreach ($instance in $instances) {
     $counter++
-    # La propiedad correcta es NombreInstancia (con mayÃºscula inicial)
+    # La propiedad correcta es NombreInstancia (con mayúscula inicial)
     $instanceName = $instance.NombreInstancia
     
-    Write-Progress -Activity "Recolectando mÃ©tricas" `
+    Write-Progress -Activity "Recolectando métricas" `
         -Status "$counter de $($instances.Count): $instanceName" `
         -PercentComplete (($counter / $instances.Count) * 100)
     
@@ -533,22 +510,22 @@ foreach ($instance in $instances) {
     
     # Verificar conectividad primero
     if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-        Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
+        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
         continue
     }
     
-    # Recolectar mÃ©tricas
+    # Recolectar métricas
     $backups = Get-BackupStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry
     
-    $status = "âœ…"
+    $status = "✅"
     if ($backups.FullBackupBreached -and $backups.LogBackupBreached) { 
-        $status = "ðŸš¨ FULL+LOG!" 
+        $status = "🚨 FULL+LOG!" 
     }
     elseif ($backups.FullBackupBreached) { 
-        $status = "ðŸš¨ FULL BACKUP!" 
+        $status = "🚨 FULL BACKUP!" 
     }
     elseif ($backups.LogBackupBreached) { 
-        $status = "âš ï¸ LOG BACKUP!" 
+        $status = "⚠️ LOG BACKUP!" 
     }
     
     $fullAge = if ($backups.LastFullBackup) { 
@@ -574,29 +551,28 @@ foreach ($instance in $instances) {
     }
 }
 
-Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
+Write-Progress -Activity "Recolectando métricas" -Completed
 
 # 4. Post-procesamiento: Sincronizar backups de AlwaysOn
 $results = Sync-AlwaysOnBackups -AllResults $results -AGInfo $agInfo
 
 # 5. Guardar en SQL
 Write-Host ""
-Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
-Write-Host "â•‘  RESUMEN - BACKUPS                                    â•‘" -ForegroundColor Green
-Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Green
-Write-Host "â•‘  Total instancias:     $($results.Count)".PadRight(53) "â•‘" -ForegroundColor White
-Write-Host "â•‘  FULL Backup OK:       $(($results | Where-Object {-not $_.FullBackupBreached}).Count)".PadRight(53) "â•‘" -ForegroundColor White
-Write-Host "â•‘  FULL Backup vencido:  $(($results | Where-Object FullBackupBreached).Count)".PadRight(53) "â•‘" -ForegroundColor White
-Write-Host "â•‘  LOG Backup vencido:   $(($results | Where-Object LogBackupBreached).Count)".PadRight(53) "â•‘" -ForegroundColor White
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  RESUMEN - BACKUPS                                    ║" -ForegroundColor Green
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  FULL Backup OK:       $(($results | Where-Object {-not $_.FullBackupBreached}).Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  FULL Backup vencido:  $(($results | Where-Object FullBackupBreached).Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  LOG Backup vencido:   $(($results | Where-Object LogBackupBreached).Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
-Write-Host "âœ… Script completado!" -ForegroundColor Green
+Write-Host "✅ Script completado!" -ForegroundColor Green
 
 #endregion
-

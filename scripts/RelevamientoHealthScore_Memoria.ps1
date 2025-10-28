@@ -1,6 +1,6 @@
-﻿<#
+<#
 .SYNOPSIS
-    Health Score v3.0 - RecolecciÃ³n de mÃ©tricas de MEMORIA
+    Health Score v3.0 - Recolección de métricas de MEMORIA
     
 .DESCRIPTION
     Script de frecuencia media (cada 5 minutos) que recolecta:
@@ -12,12 +12,12 @@
     Guarda en: InstanceHealth_Memoria
     
     Peso en scoring: 7%
-    FÃ³rmula: 0.6Ã—PLE + 0.25Ã—MemoryGrants + 0.15Ã—UsoMemoria
-    PLE objetivo = 300 s Ã— GB buffer pool
-    Cap: PLE <0.15Ã—objetivo o Grants>10 => cap 60
+    Fórmula: 0.6×PLE + 0.25×MemoryGrants + 0.15×UsoMemoria
+    PLE objetivo = 300 s × GB buffer pool
+    Cap: PLE <0.15×objetivo o Grants>10 => cap 60
     
 .NOTES
-    VersiÃ³n: 3.0
+    Versión: 3.0
     Frecuencia: Cada 5 minutos
     Timeout: 15 segundos
     
@@ -29,43 +29,18 @@
 [CmdletBinding()]
 param()
 
-# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
-$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
-foreach ($mod in $sqlModules) {
-    if (Get-Module -Name $mod) {
-        Remove-Module $mod -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Intentar importar dbatools
-try {
-    Import-Module dbatools -Force -ErrorAction Stop
-    Write-Verbose "âœ… dbatools cargado correctamente"
-} catch {
-    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
-        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
-        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
-        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
-        Write-Warning ""
-        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
-        
-        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
-        if (-not (Get-Module -Name dbatools)) {
-            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
-            exit 1
-        }
-    } else {
-        throw
-    }
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-#region ===== CONFIGURACIÃ“N =====
+Import-Module dbatools -Force -ErrorAction Stop
+
+#region ===== CONFIGURACIÓN =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -100,7 +75,7 @@ function Get-MemoryMetrics {
     }
     
     try {
-        # Detectar versiÃ³n de SQL Server para compatibilidad
+        # Detectar versión de SQL Server para compatibilidad
         $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(50)) AS Version;"
         $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
         $version = $versionResult.Version
@@ -162,10 +137,10 @@ WHERE name = 'max server memory (MB)';
             -Query $query `
             -QueryTimeout $TimeoutSec `
             -EnableException `
-            -As DataSet  # â† Forzar a devolver como DataSet para mÃºltiples resultsets
+            -As DataSet  # ← Forzar a devolver como DataSet para múltiples resultsets
         
         if ($data -and $data.Tables.Count -gt 0) {
-            # Procesar mÃºltiples resultsets desde DataSet
+            # Procesar múltiples resultsets desde DataSet
             
             # ResultSet 1: Performance Counters
             if ($data.Tables.Count -ge 1) {
@@ -317,7 +292,7 @@ INSERT INTO dbo.InstanceHealth_Memoria (
                 -EnableException
         }
         
-        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -329,14 +304,14 @@ INSERT INTO dbo.InstanceHealth_Memoria (
 #region ===== MAIN =====
 
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
-Write-Host "â•‘  Health Score v3.0 - MEMORIA METRICS                 â•‘" -ForegroundColor Cyan
-Write-Host "â•‘  Frecuencia: 5 minutos                                â•‘" -ForegroundColor Cyan
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  Health Score v3.0 - MEMORIA METRICS                 ║" -ForegroundColor Cyan
+Write-Host "║  Frecuencia: 5 minutos                                ║" -ForegroundColor Cyan
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -364,7 +339,7 @@ try {
 
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "2ï¸âƒ£  Recolectando mÃ©tricas de memoria..." -ForegroundColor Yellow
+Write-Host "2️⃣  Recolectando métricas de memoria..." -ForegroundColor Yellow
 
 $results = @()
 $counter = 0
@@ -373,7 +348,7 @@ foreach ($instance in $instances) {
     $counter++
     $instanceName = $instance.NombreInstancia
     
-    Write-Progress -Activity "Recolectando mÃ©tricas" `
+    Write-Progress -Activity "Recolectando métricas" `
         -Status "$counter de $($instances.Count): $instanceName" `
         -PercentComplete (($counter / $instances.Count) * 100)
     
@@ -382,32 +357,32 @@ foreach ($instance in $instances) {
     $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
     
     if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-        Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
+        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
         continue
     }
     
     $memMetrics = Get-MemoryMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
     
-    # LÃ³gica de alertas mejorada
-    $status = "âœ…"
+    # Lógica de alertas mejorada
+    $status = "✅"
     $alerts = @()
     
-    # No alertar si PLE y Target son ambos 0 (indica error de recolecciÃ³n, no problema real)
+    # No alertar si PLE y Target son ambos 0 (indica error de recolección, no problema real)
     $hasValidPLE = $memMetrics.PageLifeExpectancy -gt 0 -or $memMetrics.PLETarget -gt 0
     
     if ($hasValidPLE) {
         if ($memMetrics.MemoryPressure) {
-            $status = "ðŸš¨ PRESSURE!"
+            $status = "🚨 PRESSURE!"
             $alerts += "Memory Pressure"
         }
         elseif ($memMetrics.PageLifeExpectancy -gt 0 -and $memMetrics.PageLifeExpectancy -lt 300) {
-            $status = "âš ï¸ LOW PLE!"
+            $status = "⚠️ LOW PLE!"
             $alerts += "PLE < 300s"
         }
     }
     
     if ($memMetrics.MemoryGrantsPending -gt 5) {
-        if ($status -eq "âœ…") { $status = "âš ï¸ GRANTS!" }
+        if ($status -eq "✅") { $status = "⚠️ GRANTS!" }
         $alerts += "Grants Pending: $($memMetrics.MemoryGrantsPending)"
     }
     
@@ -432,15 +407,15 @@ foreach ($instance in $instances) {
         } else { 0 }
         
         if ($stolenPct -gt 30) {
-            $stolenInfo = " Stolen:${stolenPct}%âš ï¸"
-            if ($status -eq "âœ…") { $status = "âš ï¸ Stolen!" }
+            $stolenInfo = " Stolen:${stolenPct}%⚠️"
+            if ($status -eq "✅") { $status = "⚠️ Stolen!" }
         }
         elseif ($stolenPct -gt 20) {
             $stolenInfo = " Stolen:${stolenPct}%"
         }
     }
     
-    Write-Host "   $status $instanceName - PLE:$($memMetrics.PageLifeExpectancy)s $pleDisplay Target:$($memMetrics.PLETarget)s Grants:$($memMetrics.MemoryGrantsPending)$stolenInfo" -ForegroundColor $(if ($status -like "*ðŸš¨*") { "Red" } elseif ($status -like "*âš ï¸*") { "Yellow" } else { "Gray" })
+    Write-Host "   $status $instanceName - PLE:$($memMetrics.PageLifeExpectancy)s $pleDisplay Target:$($memMetrics.PLETarget)s Grants:$($memMetrics.MemoryGrantsPending)$stolenInfo" -ForegroundColor $(if ($status -like "*🚨*") { "Red" } elseif ($status -like "*⚠️*") { "Yellow" } else { "Gray" })
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -461,38 +436,38 @@ foreach ($instance in $instances) {
     }
 }
 
-Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
+Write-Progress -Activity "Recolectando métricas" -Completed
 
 # 3. Guardar en SQL
 Write-Host ""
-Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
-Write-Host "â•‘  RESUMEN - MEMORIA                                    â•‘" -ForegroundColor Cyan
-Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Cyan
-Write-Host "â•‘  Total instancias:        $($results.Count.ToString().PadLeft(3))                       â•‘" -ForegroundColor Cyan
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  RESUMEN - MEMORIA                                    ║" -ForegroundColor Cyan
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Cyan
+Write-Host "║  Total instancias:        $($results.Count.ToString().PadLeft(3))                       ║" -ForegroundColor Cyan
 
 # Page Life Expectancy
 $avgPLE = ($results | Measure-Object -Property PageLifeExpectancy -Average).Average
 $lowPLE = ($results | Where-Object {$_.PageLifeExpectancy -gt 0 -and $_.PageLifeExpectancy -lt 300}).Count
 $criticalPLE = ($results | Where-Object {$_.PageLifeExpectancy -gt 0 -and $_.PageLifeExpectancy -lt 100}).Count
-Write-Host "â•‘  PLE promedio:            $([int]$avgPLE)s".PadRight(53) "â•‘" -ForegroundColor Cyan
-Write-Host "â•‘  PLE bajo (<300s):        $(${lowPLE}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($lowPLE -gt 0) { "Yellow" } else { "Cyan" })
-Write-Host "â•‘  PLE crÃ­tico (<100s):     $(${criticalPLE}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($criticalPLE -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  PLE promedio:            $([int]$avgPLE)s".PadRight(53) "║" -ForegroundColor Cyan
+Write-Host "║  PLE bajo (<300s):        $(${lowPLE}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($lowPLE -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  PLE crítico (<100s):     $(${criticalPLE}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($criticalPLE -gt 0) { "Red" } else { "Cyan" })
 
 # Memory Pressure
 $withPressure = ($results | Where-Object {$_.MemoryPressure}).Count
-Write-Host "â•‘  Con memory pressure:     $(${withPressure}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($withPressure -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  Con memory pressure:     $(${withPressure}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($withPressure -gt 0) { "Red" } else { "Cyan" })
 
 # Memory Grants
 $highGrants = ($results | Where-Object {$_.MemoryGrantsPending -gt 10}).Count
 $moderateGrants = ($results | Where-Object {$_.MemoryGrantsPending -gt 5 -and $_.MemoryGrantsPending -le 10}).Count
-Write-Host "â•‘  Grants Pending >10:      $(${highGrants}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($highGrants -gt 0) { "Red" } else { "Cyan" })
-Write-Host "â•‘  Grants Pending 5-10:     $(${moderateGrants}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($moderateGrants -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  Grants Pending >10:      $(${highGrants}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($highGrants -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  Grants Pending 5-10:     $(${moderateGrants}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($moderateGrants -gt 0) { "Yellow" } else { "Cyan" })
 
 # Stolen Memory
 $highStolen = ($results | Where-Object {
@@ -504,13 +479,13 @@ $moderateStolen = ($results | Where-Object {
     (($_.StolenServerMemoryMB * 100.0) / $_.TotalServerMemoryMB) -gt 20 -and
     (($_.StolenServerMemoryMB * 100.0) / $_.TotalServerMemoryMB) -le 30
 }).Count
-Write-Host "â•‘  Stolen Memory >30%:      $(${highStolen}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($highStolen -gt 0) { "Red" } else { "Cyan" })
-Write-Host "â•‘  Stolen Memory 20-30%:    $(${moderateStolen}.ToString().PadLeft(3))                       â•‘" -ForegroundColor $(if ($moderateStolen -gt 0) { "Yellow" } else { "Cyan" })
+Write-Host "║  Stolen Memory >30%:      $(${highStolen}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($highStolen -gt 0) { "Red" } else { "Cyan" })
+Write-Host "║  Stolen Memory 20-30%:    $(${moderateStolen}.ToString().PadLeft(3))                       ║" -ForegroundColor $(if ($moderateStolen -gt 0) { "Yellow" } else { "Cyan" })
 
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 
-# Top 5 instancias con PLE mÃ¡s bajo
-Write-Host "`nðŸ“Š TOP 5 INSTANCIAS CON PLE MÃS BAJO:" -ForegroundColor Yellow
+# Top 5 instancias con PLE más bajo
+Write-Host "`n📊 TOP 5 INSTANCIAS CON PLE MÁS BAJO:" -ForegroundColor Yellow
 $top5LowPLE = $results | Where-Object {$_.PageLifeExpectancy -gt 0} | Sort-Object -Property PageLifeExpectancy | Select-Object -First 5
 foreach ($inst in $top5LowPLE) {
     $pleRatio = if ($inst.PLETarget -gt 0) {
@@ -523,15 +498,15 @@ foreach ($inst in $top5LowPLE) {
 # Top 5 instancias con Grants Pending
 $top5Grants = $results | Where-Object {$_.MemoryGrantsPending -gt 0} | Sort-Object -Property MemoryGrantsPending -Descending | Select-Object -First 5
 if ($top5Grants.Count -gt 0) {
-    Write-Host "`nâš ï¸  TOP 5 INSTANCIAS CON MEMORY GRANTS PENDING:" -ForegroundColor Yellow
+    Write-Host "`n⚠️  TOP 5 INSTANCIAS CON MEMORY GRANTS PENDING:" -ForegroundColor Yellow
     foreach ($inst in $top5Grants) {
         Write-Host "   $($inst.InstanceName.PadRight(25)) - Grants Pending: $($inst.MemoryGrantsPending)" -ForegroundColor Yellow
     }
 } else {
-    Write-Host "`nâœ… No hay instancias con Memory Grants Pending (todas las queries tienen memoria suficiente)" -ForegroundColor Green
+    Write-Host "`n✅ No hay instancias con Memory Grants Pending (todas las queries tienen memoria suficiente)" -ForegroundColor Green
 }
 
-# Top 5 instancias con Stolen Memory mÃ¡s alto
+# Top 5 instancias con Stolen Memory más alto
 $top5Stolen = $results | Where-Object {$_.StolenServerMemoryMB -gt 0 -and $_.TotalServerMemoryMB -gt 0} | 
     Select-Object InstanceName, StolenServerMemoryMB, TotalServerMemoryMB, @{
         Name='StolenPct'
@@ -541,16 +516,15 @@ $top5Stolen = $results | Where-Object {$_.StolenServerMemoryMB -gt 0 -and $_.Tot
     Select-Object -First 5
 
 if ($top5Stolen.Count -gt 0) {
-    Write-Host "`nâš ï¸  TOP 5 INSTANCIAS CON STOLEN MEMORY MÃS ALTO:" -ForegroundColor Yellow
+    Write-Host "`n⚠️  TOP 5 INSTANCIAS CON STOLEN MEMORY MÁS ALTO:" -ForegroundColor Yellow
     foreach ($inst in $top5Stolen) {
         $color = if ($inst.StolenPct -gt 50) { "Red" } elseif ($inst.StolenPct -gt 30) { "Yellow" } else { "Gray" }
         Write-Host "   $($inst.InstanceName.PadRight(25)) - Stolen: $($inst.StolenServerMemoryMB)MB ($($inst.StolenPct)%)" -ForegroundColor $color
     }
-    Write-Host "`n   ðŸ’¡ Stolen Memory = memoria usada fuera del buffer pool (planes, CLR, XPs, etc.)" -ForegroundColor DarkGray
+    Write-Host "`n   💡 Stolen Memory = memoria usada fuera del buffer pool (planes, CLR, XPs, etc.)" -ForegroundColor DarkGray
 }
 
-Write-Host "`nâœ… Script completado!" -ForegroundColor Green
+Write-Host "`n✅ Script completado!" -ForegroundColor Green
 
 #endregion
-
 

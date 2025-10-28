@@ -1,26 +1,26 @@
-﻿<#
+<#
 .SYNOPSIS
     Health Score v3.0 - Autogrowth & Capacity Monitor
     Detecta problemas de crecimiento y capacidad
 
 .DESCRIPTION
-    CategorÃ­a: AUTOGROWTH & CAPACITY (Peso: 5%)
+    Categoría: AUTOGROWTH & CAPACITY (Peso: 5%)
     
-    MÃ©tricas clave:
-    - Eventos de autogrowth excesivos (Ãºltimas 24h)
-    - Archivos cerca del lÃ­mite de maxsize
+    Métricas clave:
+    - Eventos de autogrowth excesivos (últimas 24h)
+    - Archivos cerca del límite de maxsize
     - Autogrowth mal configurado (% en archivos grandes)
-    - ProyecciÃ³n de espacio libre
+    - Proyección de espacio libre
     
     Scoring (0-100):
-    - 100 pts: <10 autogrouths/dÃ­a, ningÃºn archivo cerca del lÃ­mite
-    - 80 pts: 10-50 autogrowths/dÃ­a, archivos con >20% espacio libre
-    - 60 pts: 50-100 autogrowths/dÃ­a o archivos con <20% espacio libre
-    - 40 pts: >100 autogrowths/dÃ­a o archivos con <10% espacio libre
-    - 20 pts: >500 autogrowths/dÃ­a o archivos >90% del maxsize
+    - 100 pts: <10 autogrouths/día, ningún archivo cerca del límite
+    - 80 pts: 10-50 autogrowths/día, archivos con >20% espacio libre
+    - 60 pts: 50-100 autogrowths/día o archivos con <20% espacio libre
+    - 40 pts: >100 autogrowths/día o archivos con <10% espacio libre
+    - 20 pts: >500 autogrowths/día o archivos >90% del maxsize
     - 0 pts: Archivos en maxsize o crecimiento bloqueado
     
-    Cap: 50 si algÃºn archivo >90% del maxsize
+    Cap: 50 si algún archivo >90% del maxsize
 
 .NOTES
     Author: SQL Guard Observatory
@@ -32,43 +32,21 @@
 [CmdletBinding()]
 param()
 
-# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
-$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
-foreach ($mod in $sqlModules) {
-    if (Get-Module -Name $mod) {
-        Remove-Module $mod -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# Verificar que dbatools estÃ¡ disponible
+# Verificar que dbatools está disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Intentar importar dbatools
-try {
-    Import-Module dbatools -Force -ErrorAction Stop
-    Write-Verbose "âœ… dbatools cargado correctamente"
-} catch {
-    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
-        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
-        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
-        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
-        Write-Warning ""
-        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
-        
-        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
-        if (-not (Get-Module -Name dbatools)) {
-            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
-            exit 1
-        }
-    } else {
-        throw
-    }
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-#region ===== CONFIGURACIÃ“N =====
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
+
+#region ===== CONFIGURACIÓN =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -89,10 +67,10 @@ function Get-AutogrowthStatus {
     param([string]$Instance)
     
     $query = @"
--- Autogrowth Events (Ãºltimas 24h) usando Default Trace (mÃ¡s confiable)
+-- Autogrowth Events (últimas 24h) usando Default Trace (más confiable)
 DECLARE @AutogrowthEvents INT = 0;
 
--- Intentar con Default Trace primero (mÃ¡s rÃ¡pido y confiable)
+-- Intentar con Default Trace primero (más rápido y confiable)
 BEGIN TRY
     DECLARE @tracefile VARCHAR(500);
     
@@ -110,7 +88,7 @@ BEGIN TRY
     END
     ELSE
     BEGIN
-        -- Si Default Trace estÃ¡ deshabilitado, marcar como sin datos
+        -- Si Default Trace está deshabilitado, marcar como sin datos
         SET @AutogrowthEvents = 0;
     END
 END TRY
@@ -172,7 +150,7 @@ ORDER BY PercentOfMax DESC;
         
         if ($null -eq $worstPercentOfMax) { $worstPercentOfMax = 0 }
         
-        # Detalles de archivos problemÃ¡ticos
+        # Detalles de archivos problemáticos
         $problematicFiles = $fileInfo | Where-Object { $_.HasIssue -eq 1 -or $_.PercentOfMax -gt 70 } | 
                             Select-Object DatabaseName, FileName, FileType, SizeMB, MaxSizeMB, PercentOfMax, GrowthSetting
         $details = $problematicFiles | ConvertTo-Json -Compress
@@ -234,11 +212,10 @@ INSERT INTO dbo.InstanceHealth_Autogrowth (
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -EnableException `
-               
+                -EnableException
         }
         
-        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -256,7 +233,7 @@ Write-Host "=========================================================" -Foregrou
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -284,12 +261,12 @@ try {
 
 # 2. Procesar cada instancia
 Write-Host ""
-Write-Host "2ï¸âƒ£  Recolectando mÃ©tricas de autogrowth..." -ForegroundColor Yellow
+Write-Host "2️⃣  Recolectando métricas de autogrowth..." -ForegroundColor Yellow
 
 $results = @()
 
 if ($UseParallel) {
-    Write-Host "   âš¡ Modo paralelo activado ($MaxParallelJobs jobs simultÃ¡neos)" -ForegroundColor Cyan
+    Write-Host "   ⚡ Modo paralelo activado ($MaxParallelJobs jobs simultáneos)" -ForegroundColor Cyan
     
     # ScriptBlock para ejecutar en paralelo
     $scriptBlock = {
@@ -302,7 +279,7 @@ if ($UseParallel) {
         $hostingSite = if ($Instance.PSObject.Properties.Name -contains "hostingSite") { $Instance.hostingSite } else { "N/A" }
         $sqlVersion = if ($Instance.PSObject.Properties.Name -contains "MajorVersion") { $Instance.MajorVersion } else { "N/A" }
         
-        # Test connection rÃ¡pido
+        # Test connection rápido
         try {
             $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
             if (-not $connection.IsPingable) {
@@ -312,7 +289,7 @@ if ($UseParallel) {
             return $null
         }
         
-        # Obtener mÃ©tricas
+        # Obtener métricas
         try {
             $datasets = Invoke-DbaQuery -SqlInstance $instanceName -Query $QueryTemplate -QueryTimeout $TimeoutSec -EnableException -As DataSet
             
@@ -354,12 +331,12 @@ if ($UseParallel) {
         }
     }
     
-    # Definir la query directamente aquÃ­ (copiada de la funciÃ³n)
+    # Definir la query directamente aquí (copiada de la función)
     $queryTemplate = @"
--- Autogrowth Events (Ãºltimas 24h) usando Default Trace (mÃ¡s confiable)
+-- Autogrowth Events (últimas 24h) usando Default Trace (más confiable)
 DECLARE @AutogrowthEvents INT = 0;
 
--- Intentar con Default Trace primero (mÃ¡s rÃ¡pido y confiable)
+-- Intentar con Default Trace primero (más rápido y confiable)
 BEGIN TRY
     DECLARE @tracefile VARCHAR(500);
     
@@ -377,7 +354,7 @@ BEGIN TRY
     END
     ELSE
     BEGIN
-        -- Si Default Trace estÃ¡ deshabilitado, marcar como sin datos
+        -- Si Default Trace está deshabilitado, marcar como sin datos
         SET @AutogrowthEvents = 0;
     END
 END TRY
@@ -388,7 +365,7 @@ END CATCH
 
 SELECT @AutogrowthEvents AS AutogrowthEventsLast24h;
 
--- File Size vs MaxSize (incluye mÃ©tricas de bad growth)
+-- File Size vs MaxSize (incluye métricas de bad growth)
 SELECT 
     DB_NAME(mf.database_id) AS DatabaseName,
     mf.name AS FileName,
@@ -431,16 +408,16 @@ ORDER BY PercentOfMax DESC;
         while ((Get-Job -State Running).Count -ge $MaxParallelJobs) {
             Start-Sleep -Milliseconds 100
             
-            # Procesar jobs completados que aÃºn no hemos procesado
+            # Procesar jobs completados que aún no hemos procesado
             $completedJobs = Get-Job -State Completed | Where-Object { $_.Id -notin $processedJobs }
             foreach ($job in $completedJobs) {
                 $result = Receive-Job -Job $job
                 if ($null -ne $result) {
                     $results += $result
                     
-                    $status = "âœ…"
-                    if ($result.FilesNearLimit -gt 0) { $status = "ðŸš¨" }
-                    elseif ($result.AutogrowthEventsLast24h -gt 100) { $status = "âš ï¸ " }
+                    $status = "✅"
+                    if ($result.FilesNearLimit -gt 0) { $status = "🚨" }
+                    elseif ($result.AutogrowthEventsLast24h -gt 100) { $status = "⚠️ " }
                     
                     Write-Host "   $status $($result.InstanceName) - Events:$($result.AutogrowthEventsLast24h) NearLimit:$($result.FilesNearLimit)" -ForegroundColor Gray
                 }
@@ -449,7 +426,7 @@ ORDER BY PercentOfMax DESC;
             }
         }
         
-        Write-Progress -Activity "Recolectando mÃ©tricas" `
+        Write-Progress -Activity "Recolectando métricas" `
             -Status "$counter de $($instances.Count) instancias procesadas" `
             -PercentComplete (($counter / $instances.Count) * 100)
         
@@ -459,7 +436,7 @@ ORDER BY PercentOfMax DESC;
     }
     
     # Esperar a que terminen todos los jobs restantes
-    Write-Host "   â³ Esperando jobs restantes..." -ForegroundColor Yellow
+    Write-Host "   ⏳ Esperando jobs restantes..." -ForegroundColor Yellow
     $remainingJobs = Get-Job | Where-Object { $_.Id -in $jobs.Id -and $_.Id -notin $processedJobs }
     if ($remainingJobs) {
         Wait-Job -Job $remainingJobs | Out-Null
@@ -473,9 +450,9 @@ ORDER BY PercentOfMax DESC;
                 if ($null -ne $result -and $results.InstanceName -notcontains $result.InstanceName) {
                     $results += $result
                     
-                    $status = "âœ…"
-                    if ($result.FilesNearLimit -gt 0) { $status = "ðŸš¨" }
-                    elseif ($result.AutogrowthEventsLast24h -gt 100) { $status = "âš ï¸ " }
+                    $status = "✅"
+                    if ($result.FilesNearLimit -gt 0) { $status = "🚨" }
+                    elseif ($result.AutogrowthEventsLast24h -gt 100) { $status = "⚠️ " }
                     
                     Write-Host "   $status $($result.InstanceName) - Events:$($result.AutogrowthEventsLast24h) NearLimit:$($result.FilesNearLimit)" -ForegroundColor Gray
                 }
@@ -496,7 +473,7 @@ ORDER BY PercentOfMax DESC;
         $counter++
         $instanceName = $instance.NombreInstancia
         
-        Write-Progress -Activity "Recolectando mÃ©tricas" `
+        Write-Progress -Activity "Recolectando métricas" `
             -Status "$counter de $($instances.Count): $instanceName" `
             -PercentComplete (($counter / $instances.Count) * 100)
         
@@ -507,28 +484,28 @@ ORDER BY PercentOfMax DESC;
         try {
             $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
             if (-not $connection.IsPingable) {
-                Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
+                Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
                 continue
             }
         } catch {
-            Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
+            Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
             continue
         }
         
         $autogrowthStatus = Get-AutogrowthStatus -Instance $instanceName
         
         if ($null -eq $autogrowthStatus) {
-            Write-Host "   âš ï¸  $instanceName - Sin datos (skipped)" -ForegroundColor Yellow
+            Write-Host "   ⚠️  $instanceName - Sin datos (skipped)" -ForegroundColor Yellow
             continue
         }
         
-        $status = "âœ…"
+        $status = "✅"
         if ($autogrowthStatus.FilesNearLimit -gt 0) {
-            $status = "ðŸš¨ FILES NEAR LIMIT!"
+            $status = "🚨 FILES NEAR LIMIT!"
         } elseif ($autogrowthStatus.AutogrowthEventsLast24h -gt 100) {
-            $status = "âš ï¸  HIGH AUTOGROWTH"
+            $status = "⚠️  HIGH AUTOGROWTH"
         } elseif ($autogrowthStatus.FilesWithBadGrowth -gt 0) {
-            $status = "âš ï¸  BAD GROWTH CONFIG"
+            $status = "⚠️  BAD GROWTH CONFIG"
         }
         
         Write-Host "   $status $instanceName - Events:$($autogrowthStatus.AutogrowthEventsLast24h) NearLimit:$($autogrowthStatus.FilesNearLimit) BadGrowth:$($autogrowthStatus.FilesWithBadGrowth)" -ForegroundColor Gray
@@ -547,78 +524,77 @@ ORDER BY PercentOfMax DESC;
     }
 }
 
-Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
+Write-Progress -Activity "Recolectando métricas" -Completed
 
 # 3. Guardar en SQL
 Write-Host ""
-Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
-Write-Host "â•‘  RESUMEN - AUTOGROWTH & CAPACITY                      â•‘" -ForegroundColor Green
-Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Green
-Write-Host "â•‘  Total instancias procesadas:  $($results.Count)".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  RESUMEN - AUTOGROWTH & CAPACITY                      ║" -ForegroundColor Green
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "║  Total instancias procesadas:  $($results.Count)".PadRight(53) "║" -ForegroundColor White
 
 $totalEvents = ($results | Measure-Object -Property AutogrowthEventsLast24h -Sum).Sum
-Write-Host "â•‘  Total autogrowth events (24h): $totalEvents".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  Total autogrowth events (24h): $totalEvents".PadRight(53) "║" -ForegroundColor White
 
 $nearLimit = ($results | Where-Object { $_.FilesNearLimit -gt 0 }).Count
-Write-Host "â•‘  Instancias con files near limit: $nearLimit".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  Instancias con files near limit: $nearLimit".PadRight(53) "║" -ForegroundColor White
 
 $badGrowth = ($results | Where-Object { $_.FilesWithBadGrowth -gt 0 }).Count
-Write-Host "â•‘  Instancias con bad growth config: $badGrowth".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  Instancias con bad growth config: $badGrowth".PadRight(53) "║" -ForegroundColor White
 
 $highAutogrowth = ($results | Where-Object { $_.AutogrowthEventsLast24h -gt 100 }).Count
-Write-Host "â•‘  Instancias con >100 events/dÃ­a: $highAutogrowth".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  Instancias con >100 events/día: $highAutogrowth".PadRight(53) "║" -ForegroundColor White
 
 $criticalFiles = ($results | Where-Object { $_.WorstPercentOfMax -gt 90 }).Count
-Write-Host "â•‘  Instancias con archivos >90% max: $criticalFiles".PadRight(53) "â•‘" -ForegroundColor White
+Write-Host "║  Instancias con archivos >90% max: $criticalFiles".PadRight(53) "║" -ForegroundColor White
 
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 
-# Mostrar top 10 instancias con mÃ¡s autogrowth
+# Mostrar top 10 instancias con más autogrowth
 if ($results.Count -gt 0 -and ($results | Where-Object { $_.AutogrowthEventsLast24h -gt 0 }).Count -gt 0) {
     Write-Host ""
-    Write-Host "ðŸ”¥ TOP 10 Instancias con mÃ¡s autogrowth events:" -ForegroundColor Yellow
+    Write-Host "🔥 TOP 10 Instancias con más autogrowth events:" -ForegroundColor Yellow
     $results | Where-Object { $_.AutogrowthEventsLast24h -gt 0 } | 
         Sort-Object -Property AutogrowthEventsLast24h -Descending | 
         Select-Object -First 10 | 
         ForEach-Object {
-            Write-Host "   â€¢ $($_.InstanceName): $($_.AutogrowthEventsLast24h) events" -ForegroundColor Gray
+            Write-Host "   • $($_.InstanceName): $($_.AutogrowthEventsLast24h) events" -ForegroundColor Gray
         }
 }
 
-# Mostrar instancias crÃ­ticas
+# Mostrar instancias críticas
 $critical = $results | Where-Object { $_.FilesNearLimit -gt 0 -or $_.WorstPercentOfMax -gt 90 }
 if ($critical.Count -gt 0) {
     Write-Host ""
-    Write-Host "ðŸš¨ INSTANCIAS CRÃTICAS (archivos cerca del lÃ­mite):" -ForegroundColor Red
+    Write-Host "🚨 INSTANCIAS CRÍTICAS (archivos cerca del límite):" -ForegroundColor Red
     $critical | ForEach-Object {
-        Write-Host "   â€¢ $($_.InstanceName): $($_.FilesNearLimit) archivos >80% maxsize (peor: $($_.WorstPercentOfMax)%)" -ForegroundColor Red
+        Write-Host "   • $($_.InstanceName): $($_.FilesNearLimit) archivos >80% maxsize (peor: $($_.WorstPercentOfMax)%)" -ForegroundColor Red
     }
 }
 
 Write-Host ""
-Write-Host "â„¹ï¸  NOTAS:" -ForegroundColor Cyan
-Write-Host "   â€¢ 0 eventos = Sin autogrowth en 24h (normal en instancias estables)" -ForegroundColor Gray
-Write-Host "   â€¢ 1-100 eventos = Crecimiento moderado y esperado" -ForegroundColor Gray
-Write-Host "   â€¢ >100 eventos = Posible problema de sizing inicial" -ForegroundColor Gray
-Write-Host "   â€¢ BadGrowth = % growth en archivos >1GB o archivos >90% maxsize" -ForegroundColor Gray
+Write-Host "ℹ️  NOTAS:" -ForegroundColor Cyan
+Write-Host "   • 0 eventos = Sin autogrowth en 24h (normal en instancias estables)" -ForegroundColor Gray
+Write-Host "   • 1-100 eventos = Crecimiento moderado y esperado" -ForegroundColor Gray
+Write-Host "   • >100 eventos = Posible problema de sizing inicial" -ForegroundColor Gray
+Write-Host "   • BadGrowth = % growth en archivos >1GB o archivos >90% maxsize" -ForegroundColor Gray
 
-# EstadÃ­sticas adicionales
+# Estadísticas adicionales
 $withData = ($results | Where-Object { $_.AutogrowthEventsLast24h -gt 0 }).Count
 $noData = ($results | Where-Object { $_.AutogrowthEventsLast24h -eq 0 }).Count
 Write-Host ""
-Write-Host "ðŸ“Š DistribuciÃ³n:" -ForegroundColor Cyan
-Write-Host "   â€¢ Instancias con autogrowth detectado: $withData ($([math]::Round(($withData/$results.Count)*100,1))%)" -ForegroundColor Gray
-Write-Host "   â€¢ Instancias sin autogrowth (0): $noData ($([math]::Round(($noData/$results.Count)*100,1))%)" -ForegroundColor Gray
+Write-Host "📊 Distribución:" -ForegroundColor Cyan
+Write-Host "   • Instancias con autogrowth detectado: $withData ($([math]::Round(($withData/$results.Count)*100,1))%)" -ForegroundColor Gray
+Write-Host "   • Instancias sin autogrowth (0): $noData ($([math]::Round(($noData/$results.Count)*100,1))%)" -ForegroundColor Gray
 
 Write-Host ""
-Write-Host "âœ… Script completado!" -ForegroundColor Green
+Write-Host "✅ Script completado!" -ForegroundColor Green
 
 #endregion
-
 

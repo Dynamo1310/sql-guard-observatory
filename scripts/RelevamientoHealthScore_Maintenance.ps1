@@ -1,21 +1,21 @@
-﻿<#
+<#
 .SYNOPSIS
-    Health Score v2.0 - RecolecciÃ³n de mÃ©tricas de MANTENIMIENTO
+    Health Score v2.0 - Recolección de métricas de MANTENIMIENTO
     
 .DESCRIPTION
     Script de baja frecuencia (cada 1 hora) que recolecta:
     - CHECKDB status (basado en estado del job)
     - IndexOptimize status (basado en estado del job)
     
-    Incluye sincronizaciÃ³n AlwaysOn:
-    - Identifica grupos AG automÃ¡ticamente
+    Incluye sincronización AlwaysOn:
+    - Identifica grupos AG automáticamente
     - Sincroniza CHECKDB/IndexOptimize entre nodos del mismo AG
     - Aplica el MEJOR valor a todos los nodos
     
     Guarda en: InstanceHealth_Maintenance
     
 .NOTES
-    VersiÃ³n: 2.1 (dbatools con retry) + AlwaysOn Sync
+    Versión: 2.1 (dbatools con retry) + AlwaysOn Sync
     Frecuencia: Cada 1 hora
     Timeout: 30 segundos (60 segundos en retry para instancias lentas)
     
@@ -27,43 +27,21 @@
 [CmdletBinding()]
 param()
 
-# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
-$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
-foreach ($mod in $sqlModules) {
-    if (Get-Module -Name $mod) {
-        Remove-Module $mod -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# Verificar que dbatools estÃ¡ disponible
+# Verificar que dbatools está disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
-    Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
+    Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Intentar importar dbatools
-try {
-    Import-Module dbatools -Force -ErrorAction Stop
-    Write-Verbose "âœ… dbatools cargado correctamente"
-} catch {
-    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
-        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
-        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
-        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
-        Write-Warning ""
-        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
-        
-        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
-        if (-not (Get-Module -Name dbatools)) {
-            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
-            exit 1
-        }
-    } else {
-        throw
-    }
+# Descargar SqlServer si está cargado (conflicto con dbatools)
+if (Get-Module -Name SqlServer) {
+    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-#region ===== CONFIGURACIÃ“N =====
+# Importar dbatools con force para evitar conflictos
+Import-Module dbatools -Force -ErrorAction Stop
+
+#region ===== CONFIGURACIÓN =====
 
 $ApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/"
 $SqlServer = "SSPR17MON-01"
@@ -97,8 +75,8 @@ function Get-MaintenanceJobs {
     
     try {
         $query = @"
--- TODOS los IntegrityCheck con su Ãºltima ejecuciÃ³n (excluir STOP)
--- Usa TIEMPO DE FINALIZACIÃ“N (run_date + run_time + run_duration) para ordenar
+-- TODOS los IntegrityCheck con su última ejecución (excluir STOP)
+-- Usa TIEMPO DE FINALIZACIÓN (run_date + run_time + run_duration) para ordenar
 WITH LastJobRuns AS (
     SELECT 
         j.job_id,
@@ -111,8 +89,8 @@ WITH LastJobRuns AS (
         js.last_run_time AS ServerRunTime,
         js.last_run_duration AS ServerRunDuration,
         js.last_run_outcome AS ServerRunOutcome,
-        -- Calcular tiempo de finalizaciÃ³n: run_date + run_time + run_duration
-        -- run_duration estÃ¡ en formato HHMMSS (int): 20107 = 2m 7s
+        -- Calcular tiempo de finalización: run_date + run_time + run_duration
+        -- run_duration está en formato HHMMSS (int): 20107 = 2m 7s
         DATEADD(SECOND, 
             (jh.run_duration / 10000) * 3600 +  -- Horas
             ((jh.run_duration / 100) % 100) * 60 + -- Minutos
@@ -145,7 +123,7 @@ SELECT
 FROM LastJobRuns
 WHERE rn = 1 OR rn IS NULL;
 
--- TODOS los IndexOptimize con su Ãºltima ejecuciÃ³n (excluir STOP)
+-- TODOS los IndexOptimize con su última ejecución (excluir STOP)
 WITH LastJobRuns AS (
     SELECT 
         j.job_id,
@@ -158,7 +136,7 @@ WITH LastJobRuns AS (
         js.last_run_time AS ServerRunTime,
         js.last_run_duration AS ServerRunDuration,
         js.last_run_outcome AS ServerRunOutcome,
-        -- Calcular tiempo de finalizaciÃ³n
+        -- Calcular tiempo de finalización
         DATEADD(SECOND, 
             (jh.run_duration / 10000) * 3600 + ((jh.run_duration / 100) % 100) * 60 + (jh.run_duration % 100),
             CAST(CAST(jh.run_date AS VARCHAR) + ' ' + STUFF(STUFF(RIGHT('000000' + CAST(jh.run_time AS VARCHAR), 6), 5, 0, ':'), 3, 0, ':') AS DATETIME)
@@ -187,7 +165,7 @@ FROM LastJobRuns
 WHERE rn = 1 OR rn IS NULL;
 "@
         
-        # dbatools NO devuelve mÃºltiples resultsets correctamente, ejecutar queries por separado
+        # dbatools NO devuelve múltiples resultsets correctamente, ejecutar queries por separado
         # Ejecutar query CHECKDB con retry
         $checkdbQuery = ($query -split '; -- TODOS los IndexOptimize')[0]
         $checkdbJobs = $null
@@ -216,7 +194,7 @@ WHERE rn = 1 OR rn IS NULL;
                     Write-Verbose "Timeout en CHECKDB $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
                     Start-Sleep -Milliseconds 500
                 } else {
-                    # Segundo intento fallÃ³, capturar detalles
+                    # Segundo intento falló, capturar detalles
                     Write-Verbose "Error en CHECKDB: $($_.Exception.Message)"
                     if ($_.Exception.InnerException) {
                         Write-Verbose "Inner: $($_.Exception.InnerException.Message)"
@@ -226,13 +204,13 @@ WHERE rn = 1 OR rn IS NULL;
         }
         
         if ($checkdbJobs -eq $null) {
-            # Si la query falla (probablemente porque no hay jobs), asumir resultado vacÃ­o
-            Write-Verbose "Query CHECKDB fallÃ³, asumiendo 0 jobs: $($lastError.Exception.Message)"
-            $checkdbJobs = @()  # Array vacÃ­o en lugar de error
+            # Si la query falla (probablemente porque no hay jobs), asumir resultado vacío
+            Write-Verbose "Query CHECKDB falló, asumiendo 0 jobs: $($lastError.Exception.Message)"
+            $checkdbJobs = @()  # Array vacío en lugar de error
         }
         
         # Ejecutar query IndexOptimize con retry
-        $indexOptQuery = ($query -split '-- TODOS los IndexOptimize con su Ãºltima ejecuciÃ³n \(excluir STOP\)')[1]
+        $indexOptQuery = ($query -split '-- TODOS los IndexOptimize con su última ejecución \(excluir STOP\)')[1]
         $indexOptJobs = $null
         $attemptCount = 0
         $lastError = $null
@@ -259,7 +237,7 @@ WHERE rn = 1 OR rn IS NULL;
                     Write-Verbose "Timeout en IndexOptimize $InstanceName (intento 1/${TimeoutSec}s), reintentando..."
                     Start-Sleep -Milliseconds 500
                 } else {
-                    # Segundo intento fallÃ³, capturar detalles
+                    # Segundo intento falló, capturar detalles
                     Write-Verbose "Error en IndexOptimize: $($_.Exception.Message)"
                     if ($_.Exception.InnerException) {
                         Write-Verbose "Inner: $($_.Exception.InnerException.Message)"
@@ -269,9 +247,9 @@ WHERE rn = 1 OR rn IS NULL;
         }
         
         if ($indexOptJobs -eq $null) {
-            # Si la query falla (probablemente porque no hay jobs), asumir resultado vacÃ­o
-            Write-Verbose "Query IndexOptimize fallÃ³, asumiendo 0 jobs: $($lastError.Exception.Message)"
-            $indexOptJobs = @()  # Array vacÃ­o en lugar de error
+            # Si la query falla (probablemente porque no hay jobs), asumir resultado vacío
+            Write-Verbose "Query IndexOptimize falló, asumiendo 0 jobs: $($lastError.Exception.Message)"
+            $indexOptJobs = @()  # Array vacío en lugar de error
         }
         
         $cutoffDate = (Get-Date).AddDays(-7)
@@ -282,7 +260,7 @@ WHERE rn = 1 OR rn IS NULL;
         $mostRecentCheckdb = $null
         
         foreach ($job in $checkdbJobs) {
-            # Usar LastFinishTime si estÃ¡ disponible, sino calcular desde LastRunDate + LastRunTime
+            # Usar LastFinishTime si está disponible, sino calcular desde LastRunDate + LastRunTime
             $lastRun = $null
             if ($job.LastFinishTime -and $job.LastFinishTime -ne [DBNull]::Value) {
                 $lastRun = [datetime]$job.LastFinishTime
@@ -308,12 +286,12 @@ WHERE rn = 1 OR rn IS NULL;
                     Duration = $duration
                 }
                 
-                # Actualizar mÃ¡s reciente
+                # Actualizar más reciente
                 if (-not $mostRecentCheckdb -or $lastRun -gt $mostRecentCheckdb) {
                     $mostRecentCheckdb = $lastRun
                 }
                 
-                # Si alguno NO estÃ¡ OK, marcar como no OK
+                # Si alguno NO está OK, marcar como no OK
                 if (-not $isRecent) {
                     $allCheckdbOk = $false
                 }
@@ -342,7 +320,7 @@ WHERE rn = 1 OR rn IS NULL;
         $mostRecentIndexOpt = $null
         
         foreach ($job in $indexOptJobs) {
-            # Usar LastFinishTime si estÃ¡ disponible, sino calcular desde LastRunDate + LastRunTime
+            # Usar LastFinishTime si está disponible, sino calcular desde LastRunDate + LastRunTime
             $lastRun = $null
             if ($job.LastFinishTime -and $job.LastFinishTime -ne [DBNull]::Value) {
                 $lastRun = [datetime]$job.LastFinishTime
@@ -368,12 +346,12 @@ WHERE rn = 1 OR rn IS NULL;
                     Duration = $duration
                 }
                 
-                # Actualizar mÃ¡s reciente
+                # Actualizar más reciente
                 if (-not $mostRecentIndexOpt -or $lastRun -gt $mostRecentIndexOpt) {
                     $mostRecentIndexOpt = $lastRun
                 }
                 
-                # Si alguno NO estÃ¡ OK, marcar como no OK
+                # Si alguno NO está OK, marcar como no OK
                 if (-not $isRecent) {
                     $allIndexOptOk = $false
                 }
@@ -400,7 +378,7 @@ WHERE rn = 1 OR rn IS NULL;
         # Error en el procesamiento post-query (no en las queries mismas)
         $errorDetails = $_.Exception.Message
         Write-Warning "Error procesando maintenance jobs en ${InstanceName}: $errorDetails"
-        Write-Verbose "  LÃ­nea: $($_.InvocationInfo.ScriptLineNumber)"
+        Write-Verbose "  Línea: $($_.InvocationInfo.ScriptLineNumber)"
     }
     
     return $result
@@ -414,7 +392,7 @@ function Test-SqlConnection {
     )
     
     try {
-        # Usar dbatools para test de conexiÃ³n (comando simple sin parÃ¡metros de certificado)
+        # Usar dbatools para test de conexión (comando simple sin parámetros de certificado)
         $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         return $connection.IsPingable
     } catch {
@@ -427,7 +405,7 @@ function Get-AlwaysOnGroups {
     .SYNOPSIS
         Identifica grupos de AlwaysOn consultando sys.availability_replicas.
     .DESCRIPTION
-        Pre-procesa las instancias para identificar quÃ© nodos pertenecen al mismo AG.
+        Pre-procesa las instancias para identificar qué nodos pertenecen al mismo AG.
         Solo procesa instancias donde la API indica AlwaysOn = "Enabled".
     #>
     param(
@@ -440,12 +418,12 @@ function Get-AlwaysOnGroups {
     $nodeToGroup = @{}  # Key = NodeName, Value = AGName
     
     Write-Host ""
-    Write-Host "ðŸ” [PRE-PROCESO] Identificando grupos de AlwaysOn..." -ForegroundColor Cyan
+    Write-Host "🔍 [PRE-PROCESO] Identificando grupos de AlwaysOn..." -ForegroundColor Cyan
     
     foreach ($instance in $Instances) {
         $instanceName = $instance.NombreInstancia
         
-        # Solo procesar si la API indica que AlwaysOn estÃ¡ habilitado
+        # Solo procesar si la API indica que AlwaysOn está habilitado
         if ($instance.AlwaysOn -ne "Enabled") {
             continue
         }
@@ -487,13 +465,13 @@ ORDER BY ag.name, ar.replica_server_name
     
     # Mostrar resumen
     if ($agGroups.Count -gt 0) {
-        Write-Host "  âœ… $($agGroups.Count) grupo(s) identificado(s):" -ForegroundColor Green
+        Write-Host "  ✅ $($agGroups.Count) grupo(s) identificado(s):" -ForegroundColor Green
         foreach ($agName in $agGroups.Keys) {
             $nodes = $agGroups[$agName].Nodes -join ", "
-            Write-Host "    â€¢ $agName : $nodes" -ForegroundColor Gray
+            Write-Host "    • $agName : $nodes" -ForegroundColor Gray
         }
     } else {
-        Write-Host "  â„¹ï¸  No se encontraron grupos AlwaysOn" -ForegroundColor Gray
+        Write-Host "  ℹ️  No se encontraron grupos AlwaysOn" -ForegroundColor Gray
     }
     
     return @{
@@ -508,7 +486,7 @@ function Sync-AlwaysOnMaintenance {
         Sincroniza datos de mantenimiento entre nodos de AlwaysOn.
     .DESCRIPTION
         Recopila TODOS los jobs de TODOS los nodos del grupo.
-        Para cada TIPO de job (IntegrityCheck, IndexOptimize), toma el ÃšLTIMO run exitoso.
+        Para cada TIPO de job (IntegrityCheck, IndexOptimize), toma el ÚLTIMO run exitoso.
         Aplica ese valor a TODOS los nodos del grupo.
     #>
     param(
@@ -519,7 +497,7 @@ function Sync-AlwaysOnMaintenance {
     )
     
     Write-Host ""
-    Write-Host "ðŸ”„ [POST-PROCESO] Sincronizando mantenimiento entre nodos AlwaysOn..." -ForegroundColor Cyan
+    Write-Host "🔄 [POST-PROCESO] Sincronizando mantenimiento entre nodos AlwaysOn..." -ForegroundColor Cyan
     
     $agGroups = $AGInfo.Groups
     $syncedCount = 0
@@ -528,14 +506,14 @@ function Sync-AlwaysOnMaintenance {
         $agGroup = $agGroups[$agName]
         $nodeNames = $agGroup.Nodes
         
-        Write-Host "  ðŸ”§ Procesando AG: $agName" -ForegroundColor Yellow
+        Write-Host "  🔧 Procesando AG: $agName" -ForegroundColor Yellow
         Write-Host "    Nodos: $($nodeNames -join ', ')" -ForegroundColor Gray
         
         # Obtener resultados de todos los nodos del grupo
         $groupResults = $AllResults | Where-Object { $nodeNames -contains $_.InstanceName }
         
         if ($groupResults.Count -eq 0) {
-            Write-Host "    âš ï¸  Sin resultados para este grupo" -ForegroundColor Gray
+            Write-Host "    ⚠️  Sin resultados para este grupo" -ForegroundColor Gray
             continue
         }
         
@@ -548,7 +526,7 @@ function Sync-AlwaysOnMaintenance {
             $allIndexOptimizeJobs += $nodeResult.IndexOptimizeJobs
         }
         
-        # === ENCONTRAR EL MEJOR CHECKDB (LÃ“GICA ORIGINAL EXACTA) ===
+        # === ENCONTRAR EL MEJOR CHECKDB (LÓGICA ORIGINAL EXACTA) ===
         $allCheckdbOk = $true
         $bestCheckdb = $null
         $cutoffDate = (Get-Date).AddDays(-7)
@@ -558,23 +536,23 @@ function Sync-AlwaysOnMaintenance {
             $checkdbByName = $allCheckdbJobs | Group-Object -Property JobName
             
             foreach ($jobGroup in $checkdbByName) {
-                # Encontrar el mÃ¡s reciente de este tipo de job
-                # Ordenar por tiempo de finalizaciÃ³n DESC, luego por status (Succeeded > Failed > Canceled)
+                # Encontrar el más reciente de este tipo de job
+                # Ordenar por tiempo de finalización DESC, luego por status (Succeeded > Failed > Canceled)
                 $mostRecentJob = $jobGroup.Group | Sort-Object `
                     @{Expression={$_.LastRun}; Descending=$true}, `
                     @{Expression={
-                        if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - mÃ¡xima prioridad
+                        if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - máxima prioridad
                         elseif ($_.LastRunStatus -eq 0) { 1 }  # Failed - segunda prioridad
                         elseif ($_.LastRunStatus -eq 3) { 2 }  # Canceled - tercera prioridad
                         else { 3 }                              # Otros/SinDatos - menor prioridad
                     }; Descending=$false} | Select-Object -First 1
                 
-                # Si el mÃ¡s reciente de este tipo NO estÃ¡ OK, marcar grupo como no OK
+                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
                 if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
                     $allCheckdbOk = $false
                 }
                 
-                # Actualizar el mÃ¡s reciente global
+                # Actualizar el más reciente global
                 if ($mostRecentJob.LastRun -and (-not $bestCheckdb -or $mostRecentJob.LastRun -gt $bestCheckdb)) {
                     $bestCheckdb = $mostRecentJob.LastRun
                 }
@@ -583,7 +561,7 @@ function Sync-AlwaysOnMaintenance {
             $allCheckdbOk = $false
         }
         
-        # === ENCONTRAR EL MEJOR INDEX OPTIMIZE (LÃ“GICA ORIGINAL EXACTA) ===
+        # === ENCONTRAR EL MEJOR INDEX OPTIMIZE (LÓGICA ORIGINAL EXACTA) ===
         $allIndexOptimizeOk = $true
         $bestIndexOptimize = $null
         
@@ -592,23 +570,23 @@ function Sync-AlwaysOnMaintenance {
             $indexOptByName = $allIndexOptimizeJobs | Group-Object -Property JobName
             
             foreach ($jobGroup in $indexOptByName) {
-                # Encontrar el mÃ¡s reciente de este tipo de job
-                # Ordenar por tiempo de finalizaciÃ³n DESC, luego por status (Succeeded > Failed > Canceled)
+                # Encontrar el más reciente de este tipo de job
+                # Ordenar por tiempo de finalización DESC, luego por status (Succeeded > Failed > Canceled)
                 $mostRecentJob = $jobGroup.Group | Sort-Object `
                     @{Expression={$_.LastRun}; Descending=$true}, `
                     @{Expression={
-                        if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - mÃ¡xima prioridad
+                        if ($_.LastRunStatus -eq 1) { 0 }      # Succeeded - máxima prioridad
                         elseif ($_.LastRunStatus -eq 0) { 1 }  # Failed - segunda prioridad
                         elseif ($_.LastRunStatus -eq 3) { 2 }  # Canceled - tercera prioridad
                         else { 3 }                              # Otros/SinDatos - menor prioridad
                     }; Descending=$false} | Select-Object -First 1
                 
-                # Si el mÃ¡s reciente de este tipo NO estÃ¡ OK, marcar grupo como no OK
+                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
                 if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
                     $allIndexOptimizeOk = $false
                 }
                 
-                # Actualizar el mÃ¡s reciente global
+                # Actualizar el más reciente global
                 if ($mostRecentJob.LastRun -and (-not $bestIndexOptimize -or $mostRecentJob.LastRun -gt $bestIndexOptimize)) {
                     $bestIndexOptimize = $mostRecentJob.LastRun
                 }
@@ -617,8 +595,8 @@ function Sync-AlwaysOnMaintenance {
             $allIndexOptimizeOk = $false
         }
         
-        Write-Host "    ðŸ”„ Mejor CHECKDB: $bestCheckdb (OK: $allCheckdbOk)" -ForegroundColor Gray
-        Write-Host "    ðŸ”„ Mejor IndexOptimize: $bestIndexOptimize (OK: $allIndexOptimizeOk)" -ForegroundColor Gray
+        Write-Host "    🔄 Mejor CHECKDB: $bestCheckdb (OK: $allCheckdbOk)" -ForegroundColor Gray
+        Write-Host "    🔄 Mejor IndexOptimize: $bestIndexOptimize (OK: $allIndexOptimizeOk)" -ForegroundColor Gray
         
         # === APLICAR LOS MEJORES VALORES A TODOS LOS NODOS ===
         foreach ($nodeResult in $groupResults) {
@@ -630,10 +608,10 @@ function Sync-AlwaysOnMaintenance {
             $syncedCount++
         }
         
-        Write-Host "    âœ… Sincronizados $($groupResults.Count) nodos" -ForegroundColor Green
+        Write-Host "    ✅ Sincronizados $($groupResults.Count) nodos" -ForegroundColor Green
     }
     
-    Write-Host "  âœ… Total: $syncedCount nodos sincronizados" -ForegroundColor Green
+    Write-Host "  ✅ Total: $syncedCount nodos sincronizados" -ForegroundColor Green
     
     return $AllResults
 }
@@ -683,11 +661,10 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -EnableException `
-               
+                -EnableException
         }
         
-        Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
+        Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
         
     } catch {
         Write-Error "Error guardando en SQL: $($_.Exception.Message)"
@@ -699,14 +676,14 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
 #region ===== MAIN =====
 
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Cyan
-Write-Host "â•‘  Health Score v2.0 - MAINTENANCE METRICS              â•‘" -ForegroundColor Cyan
-Write-Host "â•‘  Frecuencia: 1 hora                                   â•‘" -ForegroundColor Cyan
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Cyan
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  Health Score v2.0 - MAINTENANCE METRICS              ║" -ForegroundColor Cyan
+Write-Host "║  Frecuencia: 1 hora                                   ║" -ForegroundColor Cyan
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Obtener instancias
-Write-Host "1ï¸âƒ£  Obteniendo instancias desde API..." -ForegroundColor Yellow
+Write-Host "1️⃣  Obteniendo instancias desde API..." -ForegroundColor Yellow
 
 try {
     $response = Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 30
@@ -739,7 +716,7 @@ $agInfo = Get-AlwaysOnGroups -Instances $instances -TimeoutSec $TimeoutSec
 
 # 3. Procesar cada instancia
 Write-Host ""
-Write-Host "2ï¸âƒ£  Recolectando mÃ©tricas de mantenimiento..." -ForegroundColor Yellow
+Write-Host "2️⃣  Recolectando métricas de mantenimiento..." -ForegroundColor Yellow
 Write-Host "   (Esto puede tardar varios minutos...)" -ForegroundColor Gray
 
 $results = @()
@@ -747,10 +724,10 @@ $counter = 0
 
 foreach ($instance in $instances) {
     $counter++
-    # La propiedad correcta es NombreInstancia (con mayÃºscula inicial)
+    # La propiedad correcta es NombreInstancia (con mayúscula inicial)
     $instanceName = $instance.NombreInstancia
     
-    Write-Progress -Activity "Recolectando mÃ©tricas" `
+    Write-Progress -Activity "Recolectando métricas" `
         -Status "$counter de $($instances.Count): $instanceName" `
         -PercentComplete (($counter / $instances.Count) * 100)
     
@@ -761,23 +738,23 @@ foreach ($instance in $instances) {
     
     # Verificar conectividad primero
     if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
-        Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
+        Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
         continue
     }
     
-    # Recolectar mÃ©tricas
+    # Recolectar métricas
     $maintenance = Get-MaintenanceJobs -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry
     
-    # Determinar estado (priorizar AMBOS fallidos como mÃ¡s crÃ­tico)
-    $status = "âœ…"
+    # Determinar estado (priorizar AMBOS fallidos como más crítico)
+    $status = "✅"
     if (-not $maintenance.CheckdbOk -and -not $maintenance.IndexOptimizeOk) { 
-        $status = "ðŸš¨ CRITICAL!" 
+        $status = "🚨 CRITICAL!" 
     }
     elseif (-not $maintenance.CheckdbOk) { 
-        $status = "âš ï¸ NO CHECKDB!" 
+        $status = "⚠️ NO CHECKDB!" 
     }
     elseif (-not $maintenance.IndexOptimizeOk) { 
-        $status = "âš ï¸ NO INDEX OPT!" 
+        $status = "⚠️ NO INDEX OPT!" 
     }
     
     $checkdbAge = if ($maintenance.LastCheckdb) { ((Get-Date) - $maintenance.LastCheckdb).Days } else { "N/A" }
@@ -794,33 +771,32 @@ foreach ($instance in $instances) {
         CheckdbOk = $maintenance.CheckdbOk
         LastIndexOptimize = $maintenance.LastIndexOptimize
         IndexOptimizeOk = $maintenance.IndexOptimizeOk
-        CheckdbJobs = $maintenance.CheckdbJobs  # Para sincronizaciÃ³n AlwaysOn
-        IndexOptimizeJobs = $maintenance.IndexOptimizeJobs  # Para sincronizaciÃ³n AlwaysOn
+        CheckdbJobs = $maintenance.CheckdbJobs  # Para sincronización AlwaysOn
+        IndexOptimizeJobs = $maintenance.IndexOptimizeJobs  # Para sincronización AlwaysOn
     }
 }
 
-Write-Progress -Activity "Recolectando mÃ©tricas" -Completed
+Write-Progress -Activity "Recolectando métricas" -Completed
 
 # 4. Post-procesamiento: Sincronizar mantenimiento de AlwaysOn
 $results = Sync-AlwaysOnMaintenance -AllResults $results -AGInfo $agInfo
 
 # 5. Guardar en SQL
 Write-Host ""
-Write-Host "3ï¸âƒ£  Guardando en SQL Server..." -ForegroundColor Yellow
+Write-Host "3️⃣  Guardando en SQL Server..." -ForegroundColor Yellow
 
 Write-ToSqlServer -Data $results
 
 # 4. Resumen
 Write-Host ""
-Write-Host "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" -ForegroundColor Green
-Write-Host "â•‘  RESUMEN - MAINTENANCE                                â•‘" -ForegroundColor Green
-Write-Host "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£" -ForegroundColor Green
-Write-Host "â•‘  Total instancias:         $($results.Count)".PadRight(53) "â•‘" -ForegroundColor White
-Write-Host "â•‘  CHECKDB OK:               $(($results | Where-Object CheckdbOk).Count)".PadRight(53) "â•‘" -ForegroundColor White
-Write-Host "â•‘  IndexOptimize OK:         $(($results | Where-Object IndexOptimizeOk).Count)".PadRight(53) "â•‘" -ForegroundColor White
-Write-Host "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" -ForegroundColor Green
+Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  RESUMEN - MAINTENANCE                                ║" -ForegroundColor Green
+Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "║  Total instancias:         $($results.Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  CHECKDB OK:               $(($results | Where-Object CheckdbOk).Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  IndexOptimize OK:         $(($results | Where-Object IndexOptimizeOk).Count)".PadRight(53) "║" -ForegroundColor White
+Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
-Write-Host "âœ… Script completado!" -ForegroundColor Green
+Write-Host "✅ Script completado!" -ForegroundColor Green
 
 #endregion
-
