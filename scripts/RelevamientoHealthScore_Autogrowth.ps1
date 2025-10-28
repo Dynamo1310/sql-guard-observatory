@@ -32,19 +32,41 @@
 [CmdletBinding()]
 param()
 
+# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
+$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
+foreach ($mod in $sqlModules) {
+    if (Get-Module -Name $mod) {
+        Remove-Module $mod -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Descargar SqlServer si estÃ¡ cargado (conflicto con dbatools)
-if (Get-Module -Name SqlServer) {
-    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+# Intentar importar dbatools
+try {
+    Import-Module dbatools -Force -ErrorAction Stop
+    Write-Verbose "âœ… dbatools cargado correctamente"
+} catch {
+    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
+        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
+        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
+        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
+        Write-Warning ""
+        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
+        
+        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
+        if (-not (Get-Module -Name dbatools)) {
+            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
+            exit 1
+        }
+    } else {
+        throw
+    }
 }
-
-# Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -131,7 +153,7 @@ ORDER BY PercentOfMax DESC;
 "@
     
     try {
-        $datasets = Invoke-Sqlcmd -ServerInstance $Instance -Query $query -QueryTimeout $TimeoutSec -TrustServerCertificate -As DataSet
+        $datasets = Invoke-DbaQuery -SqlInstance $Instance -Query $query -QueryTimeout $TimeoutSec -EnableException -As DataSet
         
         $autogrowthEvents = $datasets.Tables[0]
         $fileInfo = $datasets.Tables[1]
@@ -208,11 +230,11 @@ INSERT INTO dbo.InstanceHealth_Autogrowth (
 );
 "@
         
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
+                -EnableException `
                
         }
         
@@ -282,7 +304,7 @@ if ($UseParallel) {
         
         # Test connection rÃ¡pido
         try {
-            $connection = Test-DbaConnection -SqlInstance $instanceName -TrustServerCertificate
+            $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
             if (-not $connection.IsPingable) {
                 return $null
             }
@@ -292,7 +314,7 @@ if ($UseParallel) {
         
         # Obtener mÃ©tricas
         try {
-            $datasets = Invoke-Sqlcmd -ServerInstance $instanceName -Query $QueryTemplate -QueryTimeout $TimeoutSec -TrustServerCertificate -As DataSet
+            $datasets = Invoke-DbaQuery -SqlInstance $instanceName -Query $QueryTemplate -QueryTimeout $TimeoutSec -EnableException -As DataSet
             
             $autogrowthEvents = $datasets.Tables[0]
             $fileInfo = $datasets.Tables[1]
@@ -483,7 +505,7 @@ ORDER BY PercentOfMax DESC;
         $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
         
         try {
-            $connection = Test-DbaConnection -SqlInstance $instanceName -TrustServerCertificate
+            $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
             if (-not $connection.IsPingable) {
                 Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
                 continue

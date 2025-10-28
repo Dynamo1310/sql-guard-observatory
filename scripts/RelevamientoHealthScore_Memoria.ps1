@@ -29,16 +29,41 @@
 [CmdletBinding()]
 param()
 
+# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
+$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
+foreach ($mod in $sqlModules) {
+    if (Get-Module -Name $mod) {
+        Remove-Module $mod -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-if (Get-Module -Name SqlServer) {
-    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+# Intentar importar dbatools
+try {
+    Import-Module dbatools -Force -ErrorAction Stop
+    Write-Verbose "âœ… dbatools cargado correctamente"
+} catch {
+    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
+        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
+        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
+        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
+        Write-Warning ""
+        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
+        
+        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
+        if (-not (Get-Module -Name dbatools)) {
+            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
+            exit 1
+        }
+    } else {
+        throw
+    }
 }
-
-Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -77,7 +102,7 @@ function Get-MemoryMetrics {
     try {
         # Detectar versiÃ³n de SQL Server para compatibilidad
         $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(50)) AS Version;"
-        $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate
+        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
         $version = $versionResult.Version
         $majorVersion = [int]($version.Split('.')[0])
         
@@ -133,10 +158,10 @@ FROM sys.configurations WITH (NOLOCK)
 WHERE name = 'max server memory (MB)';
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $data = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
+            -EnableException `
             -As DataSet  # â† Forzar a devolver como DataSet para mÃºltiples resultsets
         
         if ($data -and $data.Tables.Count -gt 0) {
@@ -285,11 +310,11 @@ INSERT INTO dbo.InstanceHealth_Memoria (
 );
 "@
             
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate
+                -EnableException
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

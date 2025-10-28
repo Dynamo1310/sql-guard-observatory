@@ -56,16 +56,36 @@
 [CmdletBinding()]
 param()
 
+# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
+$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
+foreach ($mod in $sqlModules) {
+    if (Get-Module -Name $mod) {
+        Remove-Module $mod -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-if (Get-Module -Name SqlServer) {
-    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+# Intentar importar dbatools
+try {
+    Import-Module dbatools -Force -ErrorAction Stop
+    Write-Verbose "âœ… dbatools cargado correctamente"
+} catch {
+    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
+        Write-Warning "âš ï¸  Conflicto de assembly detectado. Ejecuta: .\Run-Consolidate-Clean.ps1"
+        Write-Warning "âš ï¸  Intentando continuar..."
+        if (-not (Get-Module -Name dbatools)) {
+            Write-Error "âŒ No se pudo cargar dbatools."
+            exit 1
+        }
+    } else {
+        throw
+    }
 }
-
-Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -1159,11 +1179,11 @@ LEFT JOIN LatestAutogrowth au ON 1=1
 LEFT JOIN LatestWaits w ON 1=1;
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $SqlServer `
+        $data = Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
         return $data
         
@@ -1187,11 +1207,11 @@ FROM (
 ORDER BY InstanceName;
 "@
         
-        $data = Invoke-Sqlcmd -ServerInstance $SqlServer `
+        $data = Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
         return $data | Select-Object -ExpandProperty InstanceName
         
@@ -1289,11 +1309,11 @@ INSERT INTO dbo.InstanceHealth_Score (
 );
 "@
         
-        Invoke-Sqlcmd -ServerInstance $SqlServer `
+        Invoke-DbaQuery -SqlInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
+            -EnableException `
            
         
         return $true

@@ -27,19 +27,41 @@
 [CmdletBinding()]
 param()
 
+# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
+$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
+foreach ($mod in $sqlModules) {
+    if (Get-Module -Name $mod) {
+        Remove-Module $mod -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Descargar SqlServer si estÃ¡ cargado (conflicto con dbatools)
-if (Get-Module -Name SqlServer) {
-    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+# Intentar importar dbatools
+try {
+    Import-Module dbatools -Force -ErrorAction Stop
+    Write-Verbose "âœ… dbatools cargado correctamente"
+} catch {
+    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
+        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
+        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
+        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
+        Write-Warning ""
+        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
+        
+        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
+        if (-not (Get-Module -Name dbatools)) {
+            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
+            exit 1
+        }
+    } else {
+        throw
+    }
 }
-
-# Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -181,10 +203,10 @@ WHERE rn = 1 OR rn IS NULL;
                     Write-Verbose "Reintentando CHECKDB en $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
                 }
                 
-                $checkdbJobs = Invoke-Sqlcmd -ServerInstance $InstanceName `
+                $checkdbJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
                     -Query $checkdbQuery `
                     -QueryTimeout $currentTimeout `
-                    -TrustServerCertificate
+                    -EnableException
                     
                 break
                 
@@ -224,10 +246,10 @@ WHERE rn = 1 OR rn IS NULL;
                     Write-Verbose "Reintentando IndexOptimize en $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
                 }
                 
-                $indexOptJobs = Invoke-Sqlcmd -ServerInstance $InstanceName `
+                $indexOptJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
                     -Query $indexOptQuery `
                     -QueryTimeout $currentTimeout `
-                    -TrustServerCertificate
+                    -EnableException
                     
                 break
                 
@@ -393,7 +415,7 @@ function Test-SqlConnection {
     
     try {
         # Usar dbatools para test de conexiÃ³n (comando simple sin parÃ¡metros de certificado)
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         return $connection.IsPingable
     } catch {
         return $false
@@ -438,10 +460,10 @@ INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 ORDER BY ag.name, ar.replica_server_name
 "@
             
-            $replicas = Invoke-Sqlcmd -ServerInstance $instanceName `
+            $replicas = Invoke-DbaQuery -SqlInstance $instanceName `
                 -Query $query `
                 -QueryTimeout $TimeoutSec `
-                -TrustServerCertificate
+                -EnableException
             
             foreach ($replica in $replicas) {
                 $agName = $replica.AGName
@@ -657,11 +679,11 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
 "@
             
             # Usar dbatools para insertar datos
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
+                -EnableException `
                
         }
         

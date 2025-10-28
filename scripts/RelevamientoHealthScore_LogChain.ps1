@@ -34,19 +34,41 @@
 [CmdletBinding()]
 param()
 
+# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
+$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
+foreach ($mod in $sqlModules) {
+    if (Get-Module -Name $mod) {
+        Remove-Module $mod -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Descargar SqlServer si estÃ¡ cargado (conflicto con dbatools)
-if (Get-Module -Name SqlServer) {
-    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+# Intentar importar dbatools
+try {
+    Import-Module dbatools -Force -ErrorAction Stop
+    Write-Verbose "âœ… dbatools cargado correctamente"
+} catch {
+    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
+        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
+        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
+        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
+        Write-Warning ""
+        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
+        
+        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
+        if (-not (Get-Module -Name dbatools)) {
+            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
+            exit 1
+        }
+    } else {
+        throw
+    }
 }
-
-# Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -122,7 +144,7 @@ ORDER BY LogChainAtRisk DESC, HoursSinceLastLog DESC;
                 Write-Verbose "  ðŸ” Retry con timeout extendido ($RetryTimeoutSec s)"
             }
             
-            $results = Invoke-Sqlcmd -ServerInstance $Instance -Query $query -QueryTimeout $currentTimeout -TrustServerCertificate
+            $results = Invoke-DbaQuery -SqlInstance $Instance -Query $query -QueryTimeout $currentTimeout -EnableException
             
         } catch {
             $lastError = $_
@@ -198,10 +220,10 @@ INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 ORDER BY ag.name, ar.replica_server_name
 "@
             
-            $replicas = Invoke-Sqlcmd -ServerInstance $instanceName `
+            $replicas = Invoke-DbaQuery -SqlInstance $instanceName `
                 -Query $query `
                 -QueryTimeout $TimeoutSec `
-                -TrustServerCertificate
+                -EnableException
             
             foreach ($replica in $replicas) {
                 $agName = $replica.AGName
@@ -343,11 +365,11 @@ INSERT INTO dbo.InstanceHealth_LogChain (
 "@
         
             try {
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
+                -EnableException `
                
             }
             catch {
@@ -427,7 +449,7 @@ foreach ($instance in $instances) {
     
     # Test connection
     try {
-        $connection = Test-DbaConnection -SqlInstance $instanceName -TrustServerCertificate
+        $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
         if (-not $connection.IsPingable) {
             Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
             continue

@@ -31,16 +31,41 @@
 [CmdletBinding()]
 param()
 
+# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
+$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
+foreach ($mod in $sqlModules) {
+    if (Get-Module -Name $mod) {
+        Remove-Module $mod -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-if (Get-Module -Name SqlServer) {
-    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+# Intentar importar dbatools
+try {
+    Import-Module dbatools -Force -ErrorAction Stop
+    Write-Verbose "âœ… dbatools cargado correctamente"
+} catch {
+    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
+        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
+        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
+        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
+        Write-Warning ""
+        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
+        
+        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
+        if (-not (Get-Module -Name dbatools)) {
+            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
+            exit 1
+        }
+    } else {
+        throw
+    }
 }
-
-Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -229,25 +254,25 @@ WHERE name = 'max degree of parallelism';
 "@
         
         # Ejecutar queries
-        $dataBlocking = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $dataBlocking = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $queryBlocking `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
-        $dataTopWaits = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $dataTopWaits = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $queryTopWaits `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
-        $dataAggregates = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $dataAggregates = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $queryWaitAggregates `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
-        $dataMaxDOP = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $dataMaxDOP = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $queryMaxDOP `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException
         
         # Procesar Blocking
         if ($dataBlocking) {
@@ -321,7 +346,7 @@ function Test-SqlConnection {
     )
     
     try {
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         return $connection.IsPingable
     } catch {
         return $false
@@ -402,11 +427,11 @@ INSERT INTO dbo.InstanceHealth_Waits (
 );
 "@
             
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
+                -EnableException `
                 | Out-Null
         }
         

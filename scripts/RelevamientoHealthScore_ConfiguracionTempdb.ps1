@@ -34,16 +34,41 @@
 [CmdletBinding()]
 param()
 
+# Limpiar mÃ³dulos SQL existentes para evitar conflictos de assemblies
+$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
+foreach ($mod in $sqlModules) {
+    if (Get-Module -Name $mod) {
+        Remove-Module $mod -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Verificar que dbatools estÃ¡ disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "âŒ dbatools no estÃ¡ instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-if (Get-Module -Name SqlServer) {
-    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
+# Intentar importar dbatools
+try {
+    Import-Module dbatools -Force -ErrorAction Stop
+    Write-Verbose "âœ… dbatools cargado correctamente"
+} catch {
+    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
+        Write-Warning "âš ï¸  Conflicto de assembly detectado. Para evitar este problema:"
+        Write-Warning "   OpciÃ³n 1: Ejecuta el script usando el wrapper Run-*-Clean.ps1 correspondiente"
+        Write-Warning "   OpciÃ³n 2: Cierra esta sesiÃ³n y ejecuta: powershell -NoProfile -File .\<NombreScript>.ps1"
+        Write-Warning ""
+        Write-Warning "âš ï¸  Intentando continuar con dbatools ya cargado..."
+        
+        # Si dbatools ya estÃ¡ parcialmente cargado, intentar usarlo de todos modos
+        if (-not (Get-Module -Name dbatools)) {
+            Write-Error "âŒ No se pudo cargar dbatools. Usa una de las opciones anteriores."
+            exit 1
+        }
+    } else {
+        throw
+    }
 }
-
-Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -285,7 +310,7 @@ function Get-ConfigTempdbMetrics {
         # Detectar versiÃ³n de SQL Server para compatibilidad (una sola vez)
         try {
             $versionQuery = "SELECT SERVERPROPERTY('ProductVersion') AS Version, @@VERSION AS VersionString"
-            $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate
+            $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
             $version = $versionResult.Version
             $majorVersion = [int]($version.Split('.')[0])
             $isSql2005 = ($majorVersion -lt 10)  # SQL 2005 = version 9.x, SQL 2008 = version 10.x
@@ -313,7 +338,7 @@ WHERE database_id = DB_ID('tempdb')
 "@
         
         try {
-            $tempdbFiles = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryTempDBFiles -QueryTimeout $TimeoutSec -TrustServerCertificate
+            $tempdbFiles = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryTempDBFiles -QueryTimeout $TimeoutSec -EnableException
             if ($tempdbFiles) {
                 $result.TempDBFileCount = [int]$tempdbFiles.FileCount
                 $result.TempDBTotalSizeMB = [int]$tempdbFiles.TotalSizeMB
@@ -367,7 +392,7 @@ FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
 INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
 WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
 "@
-                $latency = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -TrustServerCertificate
+                $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
                 $latencySuccess = $true
             } catch {
                 # Si falla (permisos, DMV no disponible, etc.), usar fallback
@@ -390,7 +415,7 @@ FROM sys.dm_io_virtual_file_stats(DB_ID('tempdb'), NULL) vfs
 INNER JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id
 WHERE mf.type = 0;  -- Solo archivos de datos (ROWS)
 "@
-                $latency = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -TrustServerCertificate
+                $latency = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryLatency -QueryTimeout $TimeoutSec -EnableException
                 $latencySuccess = $true
             } catch {
                 Write-Warning "No se pudo obtener latencia de TempDB en ${InstanceName}: $($_.Exception.Message)"
@@ -423,7 +448,7 @@ WHERE wait_type LIKE 'PAGELATCH%'
   AND wait_type NOT LIKE 'PAGELATCH_SH%';
 "@
         
-        $pageLatch = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryPageLatch -QueryTimeout $TimeoutSec -TrustServerCertificate
+        $pageLatch = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryPageLatch -QueryTimeout $TimeoutSec -EnableException
         if ($pageLatch -and $pageLatch.PageLatchWaitMs -ne [DBNull]::Value) {
             $result.TempDBPageLatchWaits = [int]$pageLatch.PageLatchWaitMs
         }
@@ -448,7 +473,7 @@ WHERE database_id = DB_ID('tempdb');
 "@
             
             try {
-                $spaceUsage = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $querySpaceUsage -QueryTimeout $TimeoutSec -TrustServerCertificate
+                $spaceUsage = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySpaceUsage -QueryTimeout $TimeoutSec -EnableException
                 if ($spaceUsage) {
                     # Verificar si la DMV tiene datos reales (RecordCount > 0 y valores no nulos)
                     $hasRealData = ($spaceUsage.RecordCount -gt 0) -and ($spaceUsage.TotalSizeMB -gt 0)
@@ -512,7 +537,7 @@ WHERE name = 'max server memory (MB)';
 "@
         
         try {
-            $maxMem = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $queryMaxMem -QueryTimeout $TimeoutSec -TrustServerCertificate
+            $maxMem = Invoke-DbaQuery -SqlInstance $InstanceName -Query $queryMaxMem -QueryTimeout $TimeoutSec -EnableException
             if ($maxMem -and $maxMem.MaxServerMemoryMB -ne [DBNull]::Value) {
                 $maxMemValue = [int]$maxMem.MaxServerMemoryMB
                 
@@ -559,7 +584,7 @@ FROM sys.dm_os_sys_info;
 "@
         }
         
-        $sysInfo = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $querySysInfo -QueryTimeout $TimeoutSec -TrustServerCertificate
+        $sysInfo = Invoke-DbaQuery -SqlInstance $InstanceName -Query $querySysInfo -QueryTimeout $TimeoutSec -EnableException
         if ($sysInfo) {
             if ($sysInfo.TotalPhysicalMemoryMB -ne [DBNull]::Value) {
                 $rawValue = [long]$sysInfo.TotalPhysicalMemoryMB
@@ -573,7 +598,7 @@ FROM sys.dm_os_sys_info;
                     # Intentar obtener de otra fuente
                     $altQuery = "SELECT total_physical_memory_kb / 1024 AS TotalPhysicalMemoryMB FROM sys.dm_os_sys_memory"
                     try {
-                        $altMem = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $altQuery -QueryTimeout $TimeoutSec -TrustServerCertificate
+                        $altMem = Invoke-DbaQuery -SqlInstance $InstanceName -Query $altQuery -QueryTimeout $TimeoutSec -EnableException
                         if ($altMem -and $altMem.TotalPhysicalMemoryMB -gt 0) {
                             $result.TotalPhysicalMemoryMB = [int]$altMem.TotalPhysicalMemoryMB
                         }
@@ -663,7 +688,7 @@ function Test-SqlConnection {
     )
     
     try {
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
         return $connection.IsPingable
     } catch {
         return $false
@@ -767,11 +792,11 @@ INSERT INTO dbo.InstanceHealth_ConfiguracionTempdb (
 );
 "@
             
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
+                -EnableException `
                
         }
         
