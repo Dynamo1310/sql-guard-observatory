@@ -53,9 +53,17 @@ Write-Host "[2/6] Verificando conectividad al backend API..." -ForegroundColor Y
 Write-Host "  URL: $ApiBaseUrl" -ForegroundColor Gray
 
 try {
-    $healthUrl = "$ApiBaseUrl/health"
-    $response = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-    Write-Host "    OK - Backend esta accesible (Status: $($response.StatusCode))" -ForegroundColor Green
+    # Probar endpoint de notificaciones directamente
+    $testUrl = "$ApiBaseUrl/api/notifications/healthscore"
+    $testBody = @{
+        collectorName = "DIAGNOSTICO_TEST"
+        timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+        instanceCount = 0
+    } | ConvertTo-Json
+    
+    $response = Invoke-RestMethod -Uri $testUrl -Method Post -Body $testBody -ContentType "application/json" -TimeoutSec 5 -ErrorAction Stop
+    Write-Host "    OK - Backend esta accesible y funcionando" -ForegroundColor Green
+    Write-Host "    Endpoint SignalR: $testUrl" -ForegroundColor Gray
 } catch {
     Write-Host "    ERROR - Backend NO accesible: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "    ADVERTENCIA - Las notificaciones SignalR fallaran" -ForegroundColor Yellow
