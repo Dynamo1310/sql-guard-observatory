@@ -27,16 +27,22 @@
 [CmdletBinding()]
 param()
 
+# Limpiar módulos SQL existentes para evitar conflictos de assemblies
+$sqlModules = @('SqlServer', 'SQLPS', 'dbatools', 'dbatools.library')
+foreach ($mod in $sqlModules) {
+    if (Get-Module -Name $mod) {
+        Remove-Module $mod -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Verificar que dbatools está disponible
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
     exit 1
 }
 
-# Descargar SqlServer si está cargado (conflicto con dbatools)
-if (Get-Module -Name SqlServer) {
-    Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
-}
+# Importar dbatools de forma limpia
+Import-Module dbatools -Force -ErrorAction Stop
 
 #region ===== CONFIGURACIÓN =====
 
@@ -72,7 +78,7 @@ function Get-CPUMetrics {
     try {
         # Detectar versión de SQL Server
         $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(50)) AS Version;"
-        $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate
+        $versionResult = Invoke-DbaQuery -SqlInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -EnableException
         $version = [int]($versionResult.Version.Split('.')[0])
         
         # Para SQL 2005/2008 (versiones 9.x y 10.x), usar query simplificada
@@ -145,10 +151,11 @@ WHERE scheduler_id < 255;
 "@
         }
         
-        $datasets = Invoke-Sqlcmd -ServerInstance $InstanceName `
+        $datasets = Invoke-DbaQuery -SqlInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate
+            -EnableException `
+            -As DataSet
         
         if ($datasets -and $datasets.Tables.Count -gt 0) {
             # Procesar múltiples resultsets correctamente
@@ -329,11 +336,11 @@ INSERT INTO dbo.InstanceHealth_CPU (
 );
 "@
             
-            Invoke-Sqlcmd -ServerInstance $SqlServer `
+            Invoke-DbaQuery -SqlInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate
+                -EnableException
         }
         
         Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
