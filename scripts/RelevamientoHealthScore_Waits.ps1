@@ -40,7 +40,7 @@ if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -229,25 +229,25 @@ WHERE name = 'max degree of parallelism';
 "@
         
         # Ejecutar queries
-        $dataBlocking = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $dataBlocking = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $queryBlocking `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TrustServerCertificate
         
-        $dataTopWaits = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $dataTopWaits = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $queryTopWaits `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TrustServerCertificate
         
-        $dataAggregates = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $dataAggregates = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $queryWaitAggregates `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TrustServerCertificate
         
-        $dataMaxDOP = Invoke-DbaQuery -SqlInstance $InstanceName `
+        $dataMaxDOP = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $queryMaxDOP `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TrustServerCertificate
         
         # Procesar Blocking
         if ($dataBlocking) {
@@ -321,7 +321,7 @@ function Test-SqlConnection {
     )
     
     try {
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate
         return $connection.IsPingable
     } catch {
         return $false
@@ -407,7 +407,7 @@ INSERT INTO dbo.InstanceHealth_Waits (
                 -Query $query `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -ErrorAction Stop | Out-Null
+                | Out-Null
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

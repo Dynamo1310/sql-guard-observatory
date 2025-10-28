@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Health Score v2.0 - Recolección de métricas de RECURSOS
     
@@ -35,7 +35,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÓN =====
 

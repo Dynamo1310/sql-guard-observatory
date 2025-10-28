@@ -37,7 +37,7 @@ if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -115,8 +115,7 @@ ORDER BY
         $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -TrustServerCertificate `
-            -ErrorAction Stop
+            -TrustServerCertificate
         
         if ($data) {
             # Calcular mÃ©tricas agregadas
@@ -246,8 +245,7 @@ INSERT INTO dbo.InstanceHealth_IO (
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
-                -ErrorAction Stop
+                -TrustServerCertificate
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

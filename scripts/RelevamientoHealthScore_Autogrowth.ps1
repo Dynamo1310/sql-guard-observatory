@@ -44,7 +44,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -131,7 +131,7 @@ ORDER BY PercentOfMax DESC;
 "@
     
     try {
-        $datasets = Invoke-DbaQuery -SqlInstance $Instance -Query $query -QueryTimeout $TimeoutSec -EnableException -As DataSet
+        $datasets = Invoke-Sqlcmd -ServerInstance $Instance -Query $query -QueryTimeout $TimeoutSec -TrustServerCertificate -As DataSet
         
         $autogrowthEvents = $datasets.Tables[0]
         $fileInfo = $datasets.Tables[1]
@@ -213,7 +213,7 @@ INSERT INTO dbo.InstanceHealth_Autogrowth (
                 -Query $query `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -ErrorAction Stop
+               
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
@@ -282,7 +282,7 @@ if ($UseParallel) {
         
         # Test connection rÃ¡pido
         try {
-            $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
+            $connection = Test-DbaConnection -SqlInstance $instanceName -TrustServerCertificate
             if (-not $connection.IsPingable) {
                 return $null
             }
@@ -292,7 +292,7 @@ if ($UseParallel) {
         
         # Obtener mÃ©tricas
         try {
-            $datasets = Invoke-DbaQuery -SqlInstance $instanceName -Query $QueryTemplate -QueryTimeout $TimeoutSec -EnableException -As DataSet
+            $datasets = Invoke-Sqlcmd -ServerInstance $instanceName -Query $QueryTemplate -QueryTimeout $TimeoutSec -TrustServerCertificate -As DataSet
             
             $autogrowthEvents = $datasets.Tables[0]
             $fileInfo = $datasets.Tables[1]
@@ -483,7 +483,7 @@ ORDER BY PercentOfMax DESC;
         $sqlVersion = if ($instance.PSObject.Properties.Name -contains "MajorVersion") { $instance.MajorVersion } else { "N/A" }
         
         try {
-            $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
+            $connection = Test-DbaConnection -SqlInstance $instanceName -TrustServerCertificate
             if (-not $connection.IsPingable) {
                 Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
                 continue

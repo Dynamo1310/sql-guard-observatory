@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Health Score v3.0 FINAL - CONSOLIDADOR y Cálculo Final
     
@@ -58,7 +58,7 @@ if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÓN =====
 

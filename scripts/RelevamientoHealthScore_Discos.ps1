@@ -59,7 +59,7 @@ if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -580,8 +580,7 @@ function Invoke-SqlQueryWithRetry {
             $result = Invoke-Sqlcmd -ServerInstance $InstanceName `
                 -Query $Query `
                 -QueryTimeout $TimeoutSec `
-                -TrustServerCertificate `
-                -ErrorAction Stop
+                -TrustServerCertificate
             
             return $result
         }
@@ -671,8 +670,7 @@ INSERT INTO dbo.InstanceHealth_Discos (
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
-                -ErrorAction Stop
+                -TrustServerCertificate
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
@@ -782,7 +780,7 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
             while ($attempt -lt $MaxRetries) {
                 $attempt++
                 try {
-                    return Invoke-Sqlcmd -ServerInstance $InstanceName -Query $Query -QueryTimeout $TimeoutSec -TrustServerCertificate -ErrorAction Stop
+                    return Invoke-Sqlcmd -ServerInstance $InstanceName -Query $Query -QueryTimeout $TimeoutSec -TrustServerCertificate
                 } catch {
                     $lastError = $_
                     if ($_.Exception.Message -match "Timeout|Connection|Network|Transport") {

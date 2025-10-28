@@ -39,7 +39,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -181,10 +181,10 @@ WHERE rn = 1 OR rn IS NULL;
                     Write-Verbose "Reintentando CHECKDB en $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
                 }
                 
-                $checkdbJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
+                $checkdbJobs = Invoke-Sqlcmd -ServerInstance $InstanceName `
                     -Query $checkdbQuery `
                     -QueryTimeout $currentTimeout `
-                    -EnableException
+                    -TrustServerCertificate
                     
                 break
                 
@@ -224,10 +224,10 @@ WHERE rn = 1 OR rn IS NULL;
                     Write-Verbose "Reintentando IndexOptimize en $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
                 }
                 
-                $indexOptJobs = Invoke-DbaQuery -SqlInstance $InstanceName `
+                $indexOptJobs = Invoke-Sqlcmd -ServerInstance $InstanceName `
                     -Query $indexOptQuery `
                     -QueryTimeout $currentTimeout `
-                    -EnableException
+                    -TrustServerCertificate
                     
                 break
                 
@@ -393,7 +393,7 @@ function Test-SqlConnection {
     
     try {
         # Usar dbatools para test de conexiÃ³n (comando simple sin parÃ¡metros de certificado)
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate
         return $connection.IsPingable
     } catch {
         return $false
@@ -438,10 +438,10 @@ INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 ORDER BY ag.name, ar.replica_server_name
 "@
             
-            $replicas = Invoke-DbaQuery -SqlInstance $instanceName `
+            $replicas = Invoke-Sqlcmd -ServerInstance $instanceName `
                 -Query $query `
                 -QueryTimeout $TimeoutSec `
-                -EnableException
+                -TrustServerCertificate
             
             foreach ($replica in $replicas) {
                 $agName = $replica.AGName
@@ -662,7 +662,7 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
                 -Query $query `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -ErrorAction Stop
+               
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

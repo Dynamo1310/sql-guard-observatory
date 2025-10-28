@@ -34,7 +34,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -102,10 +102,10 @@ GROUP BY d.name, d.recovery_model_desc;
             }
             
             # Usar dbatools para ejecutar queries
-            $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+            $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
                 -Query $query `
                 -QueryTimeout $currentTimeout `
-                -EnableException
+                -TrustServerCertificate
                 
             break  # Salir si fue exitoso
             
@@ -216,7 +216,7 @@ function Test-SqlConnection {
     
     try {
         # Usar dbatools para test de conexiÃ³n (comando simple sin parÃ¡metros de certificado)
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate
         return $connection.IsPingable
     } catch {
         return $false
@@ -261,10 +261,10 @@ INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 ORDER BY ag.name, ar.replica_server_name
 "@
             
-            $replicas = Invoke-DbaQuery -SqlInstance $instanceName `
+            $replicas = Invoke-Sqlcmd -ServerInstance $instanceName `
                 -Query $query `
                 -QueryTimeout $TimeoutSec `
-                -EnableException
+                -TrustServerCertificate
             
             foreach ($replica in $replicas) {
                 $agName = $replica.AGName
@@ -435,7 +435,7 @@ INSERT INTO dbo.InstanceHealth_Backups (
                 -Query $query `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -ErrorAction Stop
+               
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

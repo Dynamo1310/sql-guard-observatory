@@ -46,7 +46,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -122,7 +122,7 @@ ORDER BY LogChainAtRisk DESC, HoursSinceLastLog DESC;
                 Write-Verbose "  ðŸ” Retry con timeout extendido ($RetryTimeoutSec s)"
             }
             
-            $results = Invoke-DbaQuery -SqlInstance $Instance -Query $query -QueryTimeout $currentTimeout -EnableException
+            $results = Invoke-Sqlcmd -ServerInstance $Instance -Query $query -QueryTimeout $currentTimeout -TrustServerCertificate
             
         } catch {
             $lastError = $_
@@ -198,10 +198,10 @@ INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 ORDER BY ag.name, ar.replica_server_name
 "@
             
-            $replicas = Invoke-DbaQuery -SqlInstance $instanceName `
+            $replicas = Invoke-Sqlcmd -ServerInstance $instanceName `
                 -Query $query `
                 -QueryTimeout $TimeoutSec `
-                -EnableException
+                -TrustServerCertificate
             
             foreach ($replica in $replicas) {
                 $agName = $replica.AGName
@@ -348,7 +348,7 @@ INSERT INTO dbo.InstanceHealth_LogChain (
                 -Query $query `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -ErrorAction Stop
+               
             }
             catch {
                 Write-Warning "Error al insertar $($row.InstanceName):"
@@ -427,7 +427,7 @@ foreach ($instance in $instances) {
     
     # Test connection
     try {
-        $connection = Test-DbaConnection -SqlInstance $instanceName -EnableException
+        $connection = Test-DbaConnection -SqlInstance $instanceName -TrustServerCertificate
         if (-not $connection.IsPingable) {
             Write-Host "   âš ï¸  $instanceName - SIN CONEXIÃ“N (skipped)" -ForegroundColor Red
             continue

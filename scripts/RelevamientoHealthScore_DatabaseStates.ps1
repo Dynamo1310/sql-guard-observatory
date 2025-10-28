@@ -45,7 +45,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -89,7 +89,7 @@ WHERE last_update_date > DATEADD(DAY, -30, GETDATE());
 "@
     
     try {
-        $datasets = Invoke-Sqlcmd -ServerInstance $Instance -Query $query -QueryTimeout $TimeoutSec -TrustServerCertificate -ErrorAction Stop
+        $datasets = Invoke-Sqlcmd -ServerInstance $Instance -Query $query -QueryTimeout $TimeoutSec -TrustServerCertificate
         
         $dbStates = $datasets.Tables[0]
         $suspectPages = $datasets.Tables[1]
@@ -174,7 +174,7 @@ INSERT INTO dbo.InstanceHealth_DatabaseStates (
                 -Query $query `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -ErrorAction Stop
+               
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

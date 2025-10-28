@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Health Score v2.0 - CONSOLIDADOR y Cálculo Final
     
@@ -54,7 +54,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÓN =====
 

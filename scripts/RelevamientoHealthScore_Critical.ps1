@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Relevamiento de métricas CRÍTICAS de SQL Server (ejecutar cada 5 minutos).
 
@@ -58,7 +58,7 @@ function Test-SqlConnection {
             -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
             -TrustServerCertificate `
-            -ErrorAction Stop
+           
         
         $stopwatch.Stop()
         $result.Success = $true
@@ -104,7 +104,7 @@ ORDER BY FreePct ASC
             -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
             -TrustServerCertificate `
-            -ErrorAction Stop
+           
         
         foreach ($vol in $volumes) {
             $result.Volumes += @{
@@ -165,7 +165,7 @@ WHERE drs.is_local = 1
             -ConnectionTimeout $TimeoutSec `
             -QueryTimeout $TimeoutSec `
             -TrustServerCertificate `
-            -ErrorAction Stop
+           
         
         if ($agStates.Count -gt 0) {
             $result.Enabled = $true
@@ -330,7 +330,7 @@ VALUES
                 -ConnectionTimeout 30 `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -ErrorAction Stop
+               
             
         } catch {
             Write-Warning "Error escribiendo $($result.InstanceName): $_"
@@ -355,7 +355,7 @@ Write-Host ""
 Write-Host "[STEP 1/3] Obteniendo instancias desde API..." -ForegroundColor Cyan
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $instances = Invoke-RestMethod -Uri $ApiUrl -Method Get -TimeoutSec 30 -ErrorAction Stop
+    $instances = Invoke-RestMethod -Uri $ApiUrl -Method Get -TimeoutSec 30
     Write-Host "  [OK] $($instances.Count) instancia(s) obtenida(s)" -ForegroundColor Green
 } catch {
     Write-Host "  [ERROR] No se pudo obtener instancias: $_" -ForegroundColor Red

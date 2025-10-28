@@ -38,7 +38,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -128,10 +128,10 @@ DROP TABLE #ErrorLog;
                     Write-Host "      â±ï¸  Reintentando $InstanceName con timeout extendido (${RetryTimeoutSec}s)..." -ForegroundColor DarkYellow
                 }
                 
-                $data = Invoke-DbaQuery -SqlInstance $InstanceName `
+                $data = Invoke-Sqlcmd -ServerInstance $InstanceName `
                     -Query $query `
                     -QueryTimeout $currentTimeout `
-                    -EnableException
+                    -TrustServerCertificate
                     
                 break
                 
@@ -217,7 +217,7 @@ function Test-SqlConnection {
     
     try {
         # Usar dbatools para test de conexiÃ³n (comando simple sin parÃ¡metros de certificado)
-        $connection = Test-DbaConnection -SqlInstance $InstanceName -EnableException
+        $connection = Test-DbaConnection -SqlInstance $InstanceName -TrustServerCertificate
         return $connection.IsPingable
     } catch {
         return $false
@@ -276,7 +276,7 @@ INSERT INTO dbo.InstanceHealth_ErroresCriticos (
                 -Query $query `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -ErrorAction Stop
+               
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

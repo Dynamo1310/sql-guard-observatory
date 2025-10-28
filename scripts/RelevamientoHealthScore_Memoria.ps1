@@ -38,7 +38,7 @@ if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -77,7 +77,7 @@ function Get-MemoryMetrics {
     try {
         # Detectar versiÃ³n de SQL Server para compatibilidad
         $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(50)) AS Version;"
-        $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate -ErrorAction Stop
+        $versionResult = Invoke-Sqlcmd -ServerInstance $InstanceName -Query $versionQuery -QueryTimeout 5 -TrustServerCertificate
         $version = $versionResult.Version
         $majorVersion = [int]($version.Split('.')[0])
         
@@ -137,7 +137,6 @@ WHERE name = 'max server memory (MB)';
             -Query $query `
             -QueryTimeout $TimeoutSec `
             -TrustServerCertificate `
-            -ErrorAction Stop `
             -As DataSet  # â† Forzar a devolver como DataSet para mÃºltiples resultsets
         
         if ($data -and $data.Tables.Count -gt 0) {
@@ -290,8 +289,7 @@ INSERT INTO dbo.InstanceHealth_Memoria (
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
-                -TrustServerCertificate `
-                -ErrorAction Stop
+                -TrustServerCertificate
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green

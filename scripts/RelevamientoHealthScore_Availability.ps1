@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Health Score v2.0 - Recolección de métricas de DISPONIBILIDAD
     
@@ -36,7 +36,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÓN =====
 

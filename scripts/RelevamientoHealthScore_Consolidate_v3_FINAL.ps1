@@ -65,7 +65,7 @@ if (Get-Module -Name SqlServer) {
     Remove-Module SqlServer -Force -ErrorAction SilentlyContinue
 }
 
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -1159,11 +1159,11 @@ LEFT JOIN LatestAutogrowth au ON 1=1
 LEFT JOIN LatestWaits w ON 1=1;
 "@
         
-        $data = Invoke-DbaQuery -SqlInstance $SqlServer `
+        $data = Invoke-Sqlcmd -ServerInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TrustServerCertificate
         
         return $data
         
@@ -1187,11 +1187,11 @@ FROM (
 ORDER BY InstanceName;
 "@
         
-        $data = Invoke-DbaQuery -SqlInstance $SqlServer `
+        $data = Invoke-Sqlcmd -ServerInstance $SqlServer `
             -Database $SqlDatabase `
             -Query $query `
             -QueryTimeout $TimeoutSec `
-            -EnableException
+            -TrustServerCertificate
         
         return $data | Select-Object -ExpandProperty InstanceName
         
@@ -1294,7 +1294,7 @@ INSERT INTO dbo.InstanceHealth_Score (
             -Query $query `
             -QueryTimeout $TimeoutSec `
             -TrustServerCertificate `
-            -ErrorAction Stop
+           
         
         return $true
         

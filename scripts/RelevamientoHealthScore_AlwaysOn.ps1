@@ -42,7 +42,7 @@ if (Get-Module -Name SqlServer) {
 }
 
 # Importar dbatools con force para evitar conflictos
-Import-Module dbatools -Force -ErrorAction Stop
+Import-Module dbatools -Force
 
 #region ===== CONFIGURACIÃ“N =====
 
@@ -88,7 +88,7 @@ function Get-AlwaysOnStatus {
             -Query $checkHadrQuery `
             -QueryTimeout $TimeoutSec `
             -TrustServerCertificate `
-            -ErrorAction Stop
+           
         
         $isHadrEnabled = $hadrCheck.IsHadrEnabled
         
@@ -134,7 +134,7 @@ WHERE ars.is_local = 1
                 -Query $agQuery `
                 -QueryTimeout $TimeoutSec `
                 -TrustServerCertificate `
-                -ErrorAction Stop
+               
             
             if ($data -and $data.Count -gt 0) {
                 # Hay datos de AGs - bases de datos participando en este nodo
@@ -301,7 +301,7 @@ INSERT INTO dbo.InstanceHealth_AlwaysOn (
                 -Query $query `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -ErrorAction Stop
+               
         }
         
         Write-Host "âœ… Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
