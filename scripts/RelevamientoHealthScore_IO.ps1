@@ -75,7 +75,15 @@ function Get-IOMetrics {
     
     try {
         $query = @"
--- Latencias por archivo (data vs log)
+-- Obtener uptime del servidor en segundos
+DECLARE @UptimeSeconds BIGINT;
+SELECT @UptimeSeconds = DATEDIFF(SECOND, sqlserver_start_time, GETDATE())
+FROM sys.dm_os_sys_info;
+
+-- Evitar división por cero si el servidor acaba de reiniciar
+IF @UptimeSeconds < 60 SET @UptimeSeconds = 60;
+
+-- Latencias por archivo (data vs log) + IOPS calculados
 SELECT 
     DB_NAME(vfs.database_id) AS DatabaseName,
     mf.type_desc AS FileType,
@@ -89,7 +97,11 @@ SELECT
          ELSE (vfs.io_stall_write_ms / vfs.num_of_writes) 
     END AS AvgWriteLatencyMs,
     vfs.io_stall_read_ms AS TotalReadStallMs,
-    vfs.io_stall_write_ms AS TotalWriteStallMs
+    vfs.io_stall_write_ms AS TotalWriteStallMs,
+    -- IOPS = operaciones totales / uptime en segundos
+    CAST(CAST(vfs.num_of_reads AS BIGINT) * 1.0 / @UptimeSeconds AS DECIMAL(18,2)) AS ReadIOPS,
+    CAST(CAST(vfs.num_of_writes AS BIGINT) * 1.0 / @UptimeSeconds AS DECIMAL(18,2)) AS WriteIOPS,
+    @UptimeSeconds AS UptimeSeconds
 FROM sys.dm_io_virtual_file_stats(NULL, NULL) vfs
 INNER JOIN sys.master_files mf 
     ON vfs.database_id = mf.database_id 
@@ -113,20 +125,19 @@ ORDER BY
             if ($allReads) {
                 $result.AvgReadLatencyMs = [decimal](($allReads | Measure-Object -Property AvgReadLatencyMs -Average).Average)
                 $result.MaxReadLatencyMs = [decimal](($allReads | Measure-Object -Property AvgReadLatencyMs -Maximum).Maximum)
-                # NumReads es un contador acumulativo desde el reinicio, no IOPS reales
-                # Para evitar overflow de INT, lo establecemos en 0 (no se usa en scoring)
-                $result.ReadIOPS = 0
+                # Sumar todos los ReadIOPS de todos los archivos
+                $result.ReadIOPS = [decimal](($allReads | Measure-Object -Property ReadIOPS -Sum).Sum)
             }
             
             if ($allWrites) {
                 $result.AvgWriteLatencyMs = [decimal](($allWrites | Measure-Object -Property AvgWriteLatencyMs -Average).Average)
                 $result.MaxWriteLatencyMs = [decimal](($allWrites | Measure-Object -Property AvgWriteLatencyMs -Maximum).Maximum)
-                # NumWrites es un contador acumulativo desde el reinicio, no IOPS reales
-                # Para evitar overflow de INT, lo establecemos en 0 (no se usa en scoring)
-                $result.WriteIOPS = 0
+                # Sumar todos los WriteIOPS de todos los archivos
+                $result.WriteIOPS = [decimal](($allWrites | Measure-Object -Property WriteIOPS -Sum).Sum)
             }
             
-            $result.TotalIOPS = 0  # No almacenamos contadores acumulativos
+            # IOPS totales = suma de lectura + escritura
+            $result.TotalIOPS = $result.ReadIOPS + $result.WriteIOPS
             
             # Métricas específicas por tipo de archivo
             $dataFiles = $data | Where-Object { $_.FileType -eq 'ROWS' }
@@ -319,7 +330,7 @@ foreach ($instance in $instances) {
         $status = "⚠️ IO WARN"
     }
     
-    Write-Host "   $status $instanceName - Read:$([int]$ioMetrics.AvgReadLatencyMs)ms Write:$([int]$ioMetrics.AvgWriteLatencyMs)ms Log:$([int]$ioMetrics.LogFileAvgWriteMs)ms" -ForegroundColor Gray
+    Write-Host "   $status $instanceName - Read:$([int]$ioMetrics.AvgReadLatencyMs)ms Write:$([int]$ioMetrics.AvgWriteLatencyMs)ms Log:$([int]$ioMetrics.LogFileAvgWriteMs)ms | IOPS: $([int]$ioMetrics.TotalIOPS) (R:$([int]$ioMetrics.ReadIOPS) W:$([int]$ioMetrics.WriteIOPS))" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -365,6 +376,15 @@ Write-Host "║  Log latency avg:      $([int]$avgLogLatency)ms".PadRight(53) "�
 
 $slowIO = ($results | Where-Object {$_.MaxReadLatencyMs -gt 20 -or $_.MaxWriteLatencyMs -gt 20}).Count
 Write-Host "║  IO lento (>20ms):     $slowIO".PadRight(53) "║" -ForegroundColor White
+
+$avgTotalIOPS = ($results | Measure-Object -Property TotalIOPS -Average).Average
+$avgReadIOPS = ($results | Measure-Object -Property ReadIOPS -Average).Average
+$avgWriteIOPS = ($results | Measure-Object -Property WriteIOPS -Average).Average
+
+Write-Host "║  ----------------------------------------------------- ║" -ForegroundColor Gray
+Write-Host "║  IOPS promedio total:  $([int]$avgTotalIOPS)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  IOPS promedio read:   $([int]$avgReadIOPS)".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  IOPS promedio write:  $([int]$avgWriteIOPS)".PadRight(53) "║" -ForegroundColor White
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
