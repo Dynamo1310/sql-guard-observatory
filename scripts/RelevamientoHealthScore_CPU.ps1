@@ -333,12 +333,12 @@ INSERT INTO dbo.InstanceHealth_CPU (
 );
 "@
             
-            Invoke-DbaQuery -SqlInstance $SqlServer `
+            Invoke-Sqlcmd -ServerInstance $SqlServer `
                 -Database $SqlDatabase `
                 -Query $query `
                 -QueryTimeout 30 `
                 -TrustServerCertificate `
-                -EnableException
+                -ErrorAction Stop
         }
         
         Write-Host "✅ Guardados $($Data.Count) registros en SQL Server" -ForegroundColor Green
