@@ -41,8 +41,27 @@ if (-not (Get-Module -ListAvailable -Name dbatools)) {
     exit 1
 }
 
-# Importar dbatools de forma limpia
-Import-Module dbatools -Force -ErrorAction Stop
+# Intentar importar dbatools
+try {
+    Import-Module dbatools -Force -ErrorAction Stop
+    Write-Verbose "✅ dbatools cargado correctamente"
+} catch {
+    if ($_.Exception.Message -like "*Microsoft.Data.SqlClient*already loaded*") {
+        Write-Warning "⚠️  Conflicto de assembly detectado. Para evitar este problema:"
+        Write-Warning "   Opción 1: Ejecuta el script usando: .\Run-CPU-Clean.ps1"
+        Write-Warning "   Opción 2: Cierra esta sesión y ejecuta: powershell -NoProfile -File .\RelevamientoHealthScore_CPU.ps1"
+        Write-Warning ""
+        Write-Warning "⚠️  Intentando continuar con dbatools ya cargado..."
+        
+        # Si dbatools ya está parcialmente cargado, intentar usarlo de todos modos
+        if (-not (Get-Module -Name dbatools)) {
+            Write-Error "❌ No se pudo cargar dbatools. Usa una de las opciones anteriores."
+            exit 1
+        }
+    } else {
+        throw
+    }
+}
 
 #region ===== CONFIGURACIÓN =====
 
