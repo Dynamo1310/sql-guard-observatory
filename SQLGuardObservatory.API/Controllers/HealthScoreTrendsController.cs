@@ -439,7 +439,8 @@ namespace SQLGuardObservatory.API.Controllers
                         AvgReadLatencyMs,
                         AvgWriteLatencyMs,
                         LogFileAvgWriteMs,
-                        DataFileAvgReadMs
+                        DataFileAvgReadMs,
+                        IOByVolumeJson
                     FROM SQLNova.dbo.InstanceHealth_IO
                     WHERE InstanceName = @InstanceName
                       AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
@@ -460,7 +461,8 @@ namespace SQLGuardObservatory.API.Controllers
                         avgReadLatency = reader["AvgReadLatencyMs"] != DBNull.Value ? Convert.ToDecimal(reader["AvgReadLatencyMs"]) : 0m,
                         avgWriteLatency = reader["AvgWriteLatencyMs"] != DBNull.Value ? Convert.ToDecimal(reader["AvgWriteLatencyMs"]) : 0m,
                         logFileAvgWrite = reader["LogFileAvgWriteMs"] != DBNull.Value ? Convert.ToDecimal(reader["LogFileAvgWriteMs"]) : 0m,
-                        dataFileAvgRead = reader["DataFileAvgReadMs"] != DBNull.Value ? Convert.ToDecimal(reader["DataFileAvgReadMs"]) : 0m
+                        dataFileAvgRead = reader["DataFileAvgReadMs"] != DBNull.Value ? Convert.ToDecimal(reader["DataFileAvgReadMs"]) : 0m,
+                        ioByVolumeJson = reader["IOByVolumeJson"] != DBNull.Value ? reader["IOByVolumeJson"].ToString() : null
                     });
                 }
 

@@ -250,26 +250,33 @@ FROM #DriveSpace
 DROP TABLE #DriveSpace
 "@
         } else {
-            # SQL 2008+ (query normal con sys.dm_os_volume_stats)
+            # SQL 2008+ (query mejorada: obtiene volúmenes únicos + roles)
             $querySpace = @"
--- Espacio en discos con clasificación por rol
+-- Espacio en discos con clasificación por rol (deduplicado correctamente)
+;WITH VolumeInfo AS (
+    SELECT DISTINCT
+        vs.volume_mount_point AS MountPoint,
+        vs.logical_volume_name AS VolumeName,
+        vs.total_bytes,
+        vs.available_bytes,
+        -- Determinar rol del disco basado en tipo de archivo
+        CASE 
+            WHEN mf.type_desc = 'LOG' THEN 'Log'
+            WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
+            WHEN mf.type_desc = 'ROWS' THEN 'Data'
+            ELSE 'Other'
+        END AS DiskRole
+    FROM sys.master_files mf
+    CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+)
 SELECT DISTINCT
-    vs.volume_mount_point AS MountPoint,
-    vs.logical_volume_name AS VolumeName,
-    CAST(vs.total_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS TotalGB,
-    CAST(vs.available_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
-    CAST((vs.available_bytes * 100.0 / vs.total_bytes) AS DECIMAL(5,2)) AS FreePct,
-    -- Determinar rol del disco basado en tipo de archivo
-    CASE 
-        WHEN mf.type_desc = 'LOG' THEN 'Log'
-        WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
-        WHEN mf.type_desc = 'ROWS' THEN 'Data'
-        ELSE 'Other'
-    END AS DiskRole,
-    DB_NAME(mf.database_id) AS DatabaseName,
-    mf.type_desc AS FileType
-FROM sys.master_files mf
-CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+    MountPoint,
+    VolumeName,
+    CAST(total_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS TotalGB,
+    CAST(available_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
+    CAST((available_bytes * 100.0 / total_bytes) AS DECIMAL(5,2)) AS FreePct,
+    DiskRole
+FROM VolumeInfo
 ORDER BY FreePct ASC;
 "@
         }
@@ -416,8 +423,13 @@ GROUP BY vs.volume_mount_point;
         }
         
         if ($dataSpace) {
-            # Obtener volúmenes únicos para procesamiento
-            $uniqueVolumes = $dataSpace | Select-Object -Property MountPoint, VolumeName, TotalGB, FreeGB, FreePct -Unique
+            # Obtener volúmenes únicos para procesamiento usando Group-Object (más robusto)
+            $uniqueVolumes = $dataSpace | 
+                Group-Object -Property MountPoint | 
+                ForEach-Object {
+                    # Tomar el primer elemento de cada grupo (todos tienen los mismos valores de espacio)
+                    $_.Group[0]
+                }
             
             # Procesar cada volumen único
             $result.Volumes = $uniqueVolumes | ForEach-Object {
@@ -426,7 +438,7 @@ GROUP BY vs.volume_mount_point;
                 # Obtener info de competencia para este volumen
                 $competition = $dataCompetition | Where-Object { $_.MountPoint -eq $mountPoint } | Select-Object -First 1
                 
-                # Determinar roles del volumen
+                # Determinar roles del volumen (puede tener múltiples roles)
                 $volumeRoles = $dataSpace | Where-Object { $_.MountPoint -eq $mountPoint }
                 $isTempDB = ($volumeRoles | Where-Object { $_.DiskRole -eq 'TempDB' }) -ne $null
                 $isData = ($volumeRoles | Where-Object { $_.DiskRole -eq 'Data' }) -ne $null
@@ -474,23 +486,32 @@ GROUP BY vs.volume_mount_point;
                 }
             }
             
-            # Peor porcentaje libre
-            $result.WorstFreePct = ConvertTo-SafeDecimal (($dataSpace | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
+            # Peor porcentaje libre (del conjunto único de volúmenes ya procesado)
+            $result.WorstFreePct = ConvertTo-SafeDecimal (($uniqueVolumes | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
             
-            # Promedio por rol
-            $dataDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Data' } | Select-Object -Property MountPoint, FreePct -Unique
+            # Promedio por rol (usando los volúmenes únicos ya agrupados)
+            $dataDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Data' } | 
+                Group-Object -Property MountPoint | 
+                ForEach-Object { $_.Group[0] }
+            
             if ($dataDisks) {
                 $result.DataDiskAvgFreePct = ConvertTo-SafeDecimal (($dataDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                 $result.DataVolumes = $dataDisks | ForEach-Object { $_.MountPoint }
             }
             
-            $logDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Log' } | Select-Object -Property MountPoint, FreePct -Unique
+            $logDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Log' } | 
+                Group-Object -Property MountPoint | 
+                ForEach-Object { $_.Group[0] }
+            
             if ($logDisks) {
                 $result.LogDiskAvgFreePct = ConvertTo-SafeDecimal (($logDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                 $result.LogVolumes = $logDisks | ForEach-Object { $_.MountPoint }
             }
             
-            $tempdbDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'TempDB' } | Select-Object -Property MountPoint, FreePct -Unique
+            $tempdbDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'TempDB' } | 
+                Group-Object -Property MountPoint | 
+                ForEach-Object { $_.Group[0] }
+            
             if ($tempdbDisks) {
                 $result.TempDBDiskFreePct = ConvertTo-SafeDecimal (($tempdbDisks | Measure-Object -Property FreePct -Average).Average) 100.0
             }
@@ -846,22 +867,33 @@ FROM #DriveSpace
 DROP TABLE #DriveSpace
 "@
                 } else {
-                    # SQL 2008+ (query normal con sys.dm_os_volume_stats)
+                    # SQL 2008+ (query mejorada: obtiene volúmenes únicos + roles)
                     $querySpace = @"
+-- Espacio en discos con clasificación por rol (deduplicado correctamente)
+;WITH VolumeInfo AS (
+    SELECT DISTINCT
+        vs.volume_mount_point AS MountPoint,
+        vs.logical_volume_name AS VolumeName,
+        vs.total_bytes,
+        vs.available_bytes,
+        -- Determinar rol del disco basado en tipo de archivo
+        CASE 
+            WHEN mf.type_desc = 'LOG' THEN 'Log'
+            WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
+            WHEN mf.type_desc = 'ROWS' THEN 'Data'
+            ELSE 'Other'
+        END AS DiskRole
+    FROM sys.master_files mf
+    CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+)
 SELECT DISTINCT
-    vs.volume_mount_point AS MountPoint,
-    vs.logical_volume_name AS VolumeName,
-    CAST(vs.total_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS TotalGB,
-    CAST(vs.available_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
-    CAST((vs.available_bytes * 100.0 / vs.total_bytes) AS DECIMAL(5,2)) AS FreePct,
-    CASE 
-        WHEN mf.type_desc = 'LOG' THEN 'Log'
-        WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
-        WHEN mf.type_desc = 'ROWS' THEN 'Data'
-        ELSE 'Other'
-    END AS DiskRole
-FROM sys.master_files mf
-CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+    MountPoint,
+    VolumeName,
+    CAST(total_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS TotalGB,
+    CAST(available_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
+    CAST((available_bytes * 100.0 / total_bytes) AS DECIMAL(5,2)) AS FreePct,
+    DiskRole
+FROM VolumeInfo
 ORDER BY FreePct ASC;
 "@
                 }
@@ -869,7 +901,11 @@ ORDER BY FreePct ASC;
                 $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpace -TimeoutSec $TimeoutSec -MaxRetries 2
                 
                 if ($dataSpace) {
-                    $uniqueVolumes = $dataSpace | Select-Object -Property MountPoint, VolumeName, TotalGB, FreeGB, FreePct -Unique
+                    # Obtener volúmenes únicos usando Group-Object (más robusto)
+                    $uniqueVolumes = $dataSpace | 
+                        Group-Object -Property MountPoint | 
+                        ForEach-Object { $_.Group[0] }
+                    
                     $result.Volumes = $uniqueVolumes | ForEach-Object {
                         @{
                             MountPoint = $_.MountPoint
@@ -881,19 +917,30 @@ ORDER BY FreePct ASC;
                         }
                     }
                     
-                    $result.WorstFreePct = ConvertTo-SafeDecimal (($dataSpace | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
+                    # Peor porcentaje libre (del conjunto único de volúmenes ya procesado)
+                    $result.WorstFreePct = ConvertTo-SafeDecimal (($uniqueVolumes | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
                     
-                    $dataDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Data' } | Select-Object -Property MountPoint, FreePct -Unique
+                    # Promedio por rol (usando Group-Object para evitar duplicados)
+                    $dataDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Data' } | 
+                        Group-Object -Property MountPoint | 
+                        ForEach-Object { $_.Group[0] }
+                    
                     if ($dataDisks) {
                         $result.DataDiskAvgFreePct = ConvertTo-SafeDecimal (($dataDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                     }
                     
-                    $logDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Log' } | Select-Object -Property MountPoint, FreePct -Unique
+                    $logDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Log' } | 
+                        Group-Object -Property MountPoint | 
+                        ForEach-Object { $_.Group[0] }
+                    
                     if ($logDisks) {
                         $result.LogDiskAvgFreePct = ConvertTo-SafeDecimal (($logDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                     }
                     
-                    $tempdbDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'TempDB' } | Select-Object -Property MountPoint, FreePct -Unique
+                    $tempdbDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'TempDB' } | 
+                        Group-Object -Property MountPoint | 
+                        ForEach-Object { $_.Group[0] }
+                    
                     if ($tempdbDisks) {
                         $result.TempDBDiskFreePct = ConvertTo-SafeDecimal (($tempdbDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                     }

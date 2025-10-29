@@ -26,6 +26,7 @@ C:\Temp\Backend\Microsoft.Extensions.Configuration.Json.dll
 C:\Temp\Backend\Microsoft.Extensions.Configuration.UserSecrets.dll
 C:\Temp\Backend\Microsoft.Extensions.DependencyInjection.dll
 C:\Temp\Backend\Microsoft.Extensions.DependencyInjection.Abstractions.dll
+C:\Temp\Backend\Microsoft.Extensions.DependencyModel.dll
 C:\Temp\Backend\Microsoft.Extensions.Diagnostics.dll
 C:\Temp\Backend\Microsoft.Extensions.Diagnostics.Abstractions.dll
 C:\Temp\Backend\Microsoft.Extensions.Features.dll
@@ -54,6 +55,15 @@ C:\Temp\Backend\Microsoft.IdentityModel.Tokens.dll
 C:\Temp\Backend\Microsoft.OpenApi.dll
 C:\Temp\Backend\Microsoft.SqlServer.Server.dll
 C:\Temp\Backend\Newtonsoft.Json.dll
+C:\Temp\Backend\Serilog.dll
+C:\Temp\Backend\Serilog.AspNetCore.dll
+C:\Temp\Backend\Serilog.Extensions.Hosting.dll
+C:\Temp\Backend\Serilog.Extensions.Logging.dll
+C:\Temp\Backend\Serilog.Formatting.Compact.dll
+C:\Temp\Backend\Serilog.Settings.Configuration.dll
+C:\Temp\Backend\Serilog.Sinks.Console.dll
+C:\Temp\Backend\Serilog.Sinks.Debug.dll
+C:\Temp\Backend\Serilog.Sinks.File.dll
 C:\Temp\Backend\Swashbuckle.AspNetCore.Swagger.dll
 C:\Temp\Backend\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\Temp\Backend\Swashbuckle.AspNetCore.SwaggerUI.dll

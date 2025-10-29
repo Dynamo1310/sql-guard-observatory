@@ -7,12 +7,53 @@ using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Hubs;
 using SQLGuardObservatory.API.Models;
 using SQLGuardObservatory.API.Services;
+using Serilog;
+using Serilog.Events;
 using System.Text;
 
-var builder = WebApplication.CreateBuilder(args);
+// ========== CONFIGURACIÓN DE SERILOG ==========
+// Crear directorio de logs si no existe
+var logsPath = Path.Combine(Directory.GetCurrentDirectory(), "Logs");
+if (!Directory.Exists(logsPath))
+{
+    Directory.CreateDirectory(logsPath);
+}
 
-// Configurar para ejecutarse como servicio de Windows
-builder.Host.UseWindowsService();
+// Configurar Serilog con timestamps en hora local (UTC-3 para Argentina)
+// Serilog usa por defecto la hora local del sistema
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level:u3}] {SourceContext} - {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File(
+        Path.Combine(logsPath, "sqlguard-.log"),
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level:u3}] {SourceContext} - {Message:lj}{NewLine}{Exception}",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        fileSizeLimitBytes: 10 * 1024 * 1024, // 10 MB por archivo
+        rollOnFileSizeLimit: true,
+        shared: true) // Permite que múltiples procesos escriban al mismo archivo
+    .CreateLogger();
+
+try
+{
+    var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.Local);
+    Log.Information("==============================================");
+    Log.Information("Iniciando SQLGuard Observatory API");
+    Log.Information("Fecha y hora local: {Timestamp}", localTime.ToString("yyyy-MM-dd HH:mm:ss"));
+    Log.Information("Zona horaria: {TimeZone}", TimeZoneInfo.Local.DisplayName);
+    Log.Information("==============================================");
+
+    var builder = WebApplication.CreateBuilder(args);
+
+    // Usar Serilog como proveedor de logging
+    builder.Host.UseSerilog();
+
+    // Configurar para ejecutarse como servicio de Windows
+    builder.Host.UseWindowsService();
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -152,5 +193,20 @@ app.MapControllers();
 // Mapear Hub de SignalR para notificaciones en tiempo real
 app.MapHub<NotificationHub>("/hubs/notifications");
 
+Log.Information("SQLGuard Observatory API iniciada correctamente");
 app.Run();
+
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "La aplicación falló al iniciar");
+    throw;
+}
+finally
+{
+    Log.Information("==============================================");
+    Log.Information("Deteniendo SQLGuard Observatory API");
+    Log.Information("==============================================");
+    Log.CloseAndFlush();
+}
 
