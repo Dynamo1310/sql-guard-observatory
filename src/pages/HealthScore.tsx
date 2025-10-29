@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Activity, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronRight, HardDrive, Database, AlertCircle, Info, TrendingUp, Shield, Server, Wrench, Cpu, Zap, MemoryStick, Settings, Lightbulb, Clock, Flame, BarChart3, Edit3, Hourglass, Check, X, Lock, Heart, Circle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,23 +32,7 @@ export default function HealthScore() {
 
   const { sortedData, requestSort, getSortIndicator } = useTableSort(healthScores);
 
-  // ========== SIGNALR: Actualizaciones en tiempo real ==========
-  useHealthScoreNotifications(
-    (data) => {
-      console.log(`[HealthScore] Collector ${data.collectorName} completó: ${data.instanceCount} instancias`);
-      
-      // Si es el consolidador, refrescar toda la tabla (tiene el score final calculado)
-      if (data.collectorName === 'Consolidate') {
-        fetchHealthScores();
-      }
-    }
-  );
-
-  useEffect(() => {
-    fetchHealthScores();
-  }, []);
-
-  const fetchHealthScores = async () => {
+  const fetchHealthScores = useCallback(async () => {
     setLoading(true);
     try {
       const data = await healthScoreV3Api.getAllHealthScores();
@@ -63,7 +47,23 @@ export default function HealthScore() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  // ========== SIGNALR: Actualizaciones en tiempo real ==========
+  const handleHealthScoreUpdate = useCallback((data: any) => {
+    console.log(`[HealthScore] Collector ${data.collectorName} completó: ${data.instanceCount} instancias`);
+    
+    // Si es el consolidador, refrescar toda la tabla (tiene el score final calculado)
+    if (data.collectorName === 'Consolidate') {
+      fetchHealthScores();
+    }
+  }, [fetchHealthScores]);
+
+  useHealthScoreNotifications(handleHealthScoreUpdate);
+
+  useEffect(() => {
+    fetchHealthScores();
+  }, [fetchHealthScores]);
 
   // Opciones de filtros
   const ambientes = useMemo(() => {

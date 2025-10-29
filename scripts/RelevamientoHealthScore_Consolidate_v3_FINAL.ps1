@@ -54,7 +54,10 @@
 #>
 
 [CmdletBinding()]
-param()
+param(
+    [Parameter(Mandatory=$false)]
+    [string]$ApiBaseUrl = "http://localhost:5000"
+)
 
 if (-not (Get-Module -ListAvailable -Name dbatools)) {
     Write-Error "❌ dbatools no está instalado. Ejecuta: Install-Module -Name dbatools -Force"
@@ -1582,6 +1585,28 @@ Write-Host "  Autogrowth:           $([int]$avgAutogrowth)/100 (5pct)" -Foregrou
 Write-Host "=========================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "[OK] Consolidacion completada!" -ForegroundColor Green
+
+# Enviar notificación de SignalR para actualización en tiempo real
+try {
+    $totalInstances = $results.Count
+    $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $notificationScript = Join-Path $scriptPath "Send-SignalRNotification.ps1"
+    
+    if (Test-Path $notificationScript) {
+        & $notificationScript `
+            -NotificationType 'HealthScore' `
+            -CollectorName 'Consolidate' `
+            -InstanceCount $totalInstances `
+            -ApiBaseUrl $ApiBaseUrl `
+            -Verbose
+        
+        Write-Host "[SignalR] Notificación enviada al frontend ($totalInstances instancias)" -ForegroundColor Cyan
+    } else {
+        Write-Host "[SignalR] Script de notificación no encontrado: $notificationScript" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "[SignalR] Error al enviar notificación (no crítico): $_" -ForegroundColor Yellow
+}
 
 #endregion
 

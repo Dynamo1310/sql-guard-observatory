@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import * as signalR from '@microsoft/signalr';
 
 interface SignalRContextType {
@@ -170,17 +170,34 @@ export const useSignalREvent = <T = any>(
   callback: (data: T) => void,
   dependencies: React.DependencyList = []
 ) => {
-  const { subscribe, unsubscribe, isConnected } = useSignalR();
+  const { subscribe, unsubscribe, isConnected, connection } = useSignalR();
+  const callbackRef = useRef(callback);
+  
+  // Mantener el callback actualizado sin re-suscribir
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+
+  // Crear el handler una sola vez y mantenerlo estable
+  const handlerRef = useRef<(data: T) => void>();
+  if (!handlerRef.current) {
+    handlerRef.current = (data: T) => {
+      callbackRef.current(data);
+    };
+  }
 
   useEffect(() => {
-    if (isConnected) {
-      const handler = (data: T) => callback(data);
-      subscribe(event, handler);
+    if (isConnected && connection && handlerRef.current) {
+      subscribe(event, handlerRef.current);
+      console.log(`[SignalR] ✅ Suscrito a "${event}"`);
 
       return () => {
-        unsubscribe(event, handler);
+        if (handlerRef.current) {
+          unsubscribe(event, handlerRef.current);
+          console.log(`[SignalR] ❌ Desuscrito de "${event}"`);
+        }
       };
     }
-  }, [event, isConnected, subscribe, unsubscribe, ...dependencies]);
+  }, [event, isConnected, connection, subscribe, unsubscribe, ...dependencies]);
 };
 
