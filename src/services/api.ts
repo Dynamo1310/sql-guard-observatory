@@ -1104,10 +1104,13 @@ export const healthScoreV3Api = {
    * Obtiene el Health Score V3 de todas las instancias
    */
   async getAllHealthScores(): Promise<HealthScoreV3Dto[]> {
-    const response = await fetch(`${API_URL}/api/v3/healthscore`, {
+    // Agregar timestamp para evitar caché
+    const timestamp = new Date().getTime();
+    const response = await fetch(`${API_URL}/api/v3/healthscore?_=${timestamp}`, {
       headers: {
         ...getAuthHeader(),
       },
+      cache: 'no-cache', // Forzar no-cache
     });
     return handleResponse<HealthScoreV3Dto[]>(response);
   },

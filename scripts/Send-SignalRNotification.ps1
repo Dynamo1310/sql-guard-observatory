@@ -96,13 +96,13 @@ try {
     
     $bodyJson = $body | ConvertTo-Json -Depth 5
     
-    # Enviar notificación con timeout corto (2 segundos) para no bloquear el collector
+    # Enviar notificación con timeout de 10 segundos
     $response = Invoke-RestMethod `
         -Uri $notificationUrl `
         -Method Post `
         -Body $bodyJson `
         -ContentType "application/json" `
-        -TimeoutSec 2 `
+        -TimeoutSec 10 `
         -ErrorAction SilentlyContinue
     
     Write-Verbose "[SignalR] Notificación enviada: $NotificationType - $CollectorName"

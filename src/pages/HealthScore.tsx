@@ -24,6 +24,7 @@ export default function HealthScore() {
   const [instanceDetails, setInstanceDetails] = useState<Record<string, HealthScoreV3DetailDto>>({});
   const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({});
   const [showExplanation, setShowExplanation] = useState(false);
+  const [lastUpdateKey, setLastUpdateKey] = useState<number>(Date.now()); // Key para forzar re-render
   
   // Filtros
   const [filterStatus, setFilterStatus] = useState<string>('All');
@@ -33,10 +34,24 @@ export default function HealthScore() {
   const { sortedData, requestSort, getSortIndicator } = useTableSort(healthScores);
 
   const fetchHealthScores = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await healthScoreV3Api.getAllHealthScores();
+      
+      // Log detallado para debugging
+      if (data.length > 0) {
+        const firstInstance = data[0];
+        console.log('[HealthScore] Datos recibidos:', {
+          total: data.length,
+          primeraInstancia: firstInstance.instanceName,
+          ultimaActualizacion: firstInstance.generatedAtUtc,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       setHealthScores(data);
-      console.log('[HealthScore] Datos actualizados:', data.length, 'instancias');
+      setLastUpdateKey(Date.now()); // Forzar re-render con nuevo key
+      console.log('[HealthScore] Estado actualizado con', data.length, 'instancias');
     } catch (error) {
       console.error('Error al cargar health scores:', error);
       toast({
@@ -44,23 +59,41 @@ export default function HealthScore() {
         description: 'No se pudieron cargar los health scores',
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
     }
   }, [toast]);
 
   // ========== SIGNALR: Actualizaciones en tiempo real ==========
   const handleHealthScoreUpdate = useCallback(async (data: any) => {
-    console.log(`[HealthScore] Collector ${data.collectorName} completó: ${data.instanceCount} instancias`);
+    console.log(`[HealthScore] 🔔 Collector ${data.collectorName} completó: ${data.instanceCount} instancias`);
     
     // Si es el consolidador, refrescar toda la tabla (tiene el score final calculado)
     if (data.collectorName === 'Consolidate') {
-      console.log('[HealthScore] Esperando 2 segundos para que BD se actualice...');
-      // Pequeño delay para evitar race condition (dar tiempo a que BD termine de escribir)
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('[HealthScore] ⏳ Esperando 5 segundos para que BD termine commit...');
       
-      console.log('[HealthScore] Refrescando datos...');
+      // Toast para indicar que se está actualizando
+      toast({
+        title: '🔄 Actualizando datos...',
+        description: `Consolidador procesó ${data.instanceCount} instancias`,
+        duration: 5000,
+      });
+      
+      // Delay más largo para asegurar que BD termine (500ms script + commit de SQL)
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      console.log('[HealthScore] 🔍 Refrescando desde API...');
       await fetchHealthScores();
+      
+      console.log('[HealthScore] ✅ Actualización completada');
+      
+      toast({
+        title: '✅ Datos actualizados',
+        description: 'La tabla se ha actualizado automáticamente',
+        duration: 3000,
+      });
     }
-  }, [fetchHealthScores]);
+  }, [fetchHealthScores, toast]);
 
   useHealthScoreNotifications(handleHealthScoreUpdate);
 
@@ -554,7 +587,7 @@ export default function HealthScore() {
           <CardTitle>Instancias ({filteredScores.length})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <Table>
+          <Table key={lastUpdateKey}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8"></TableHead>
