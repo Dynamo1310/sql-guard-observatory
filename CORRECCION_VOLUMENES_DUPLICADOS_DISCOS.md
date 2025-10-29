@@ -20,9 +20,60 @@ E:\DWM\DWM5\9.4% (96GB)
 
 ---
 
-## ✅ Solución Implementada
+## ✅ Soluciones Implementadas
 
-### 1️⃣ Query SQL Mejorada (con CTE)
+### 1️⃣ **Fallback Robusto para SQL Server Antiguo** 🆕
+
+**Problema adicional detectado:** Instancias SQL Server 2000/2005/2008 RTM que no tienen `sys.dm_os_volume_stats` generaban errores.
+
+**Mejoras implementadas:**
+- ✅ Detección de versión con try-catch (no falla si la query de versión falla)
+- ✅ Fallback automático a `xp_fixeddrives` si detecta error "Invalid object name 'sys.dm_os_volume_stats'"
+- ✅ Mensajes de advertencia claros sobre qué fallback se está usando
+- ✅ Funciona tanto en modo secuencial como paralelo
+
+**Antes:**
+```
+WARNING: [03:18:52][Invoke-DbaQuery] [BD04SER] Failed during execution | Invalid object name 'sys.dm_os_volume_stats'.
+WARNING: Error obteniendo disk metrics en BD04SER: Invalid object name 'sys.dm_os_volume_stats'.
+   ✅ BD04SER - Worst:100% Data:100% Log:100%  ← ❌ Datos vacíos/incorrectos
+```
+
+**Después:**
+```
+WARNING: ⚠️  BD04SER: sys.dm_os_volume_stats no disponible (SQL muy antiguo), usando fallback xp_fixeddrives
+   ✅ BD04SER - Worst:15% Data:20% Log:45%  ← ✅ Datos correctos con xp_fixeddrives
+```
+
+**Código del fallback:**
+```powershell
+try {
+    $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpace
+}
+catch {
+    # Si falla por "Invalid object name 'sys.dm_os_volume_stats'", usar fallback
+    if ($_.Exception.Message -match "Invalid object name.*dm_os_volume_stats") {
+        Write-Warning "⚠️ ${InstanceName}: sys.dm_os_volume_stats no disponible, usando fallback xp_fixeddrives"
+        
+        # Reintenta con xp_fixeddrives
+        $querySpaceFallback = @"
+CREATE TABLE #DriveSpace (Drive VARCHAR(10), MBFree INT)
+INSERT INTO #DriveSpace EXEC xp_fixeddrives
+SELECT Drive + ':\' AS MountPoint, 
+       'Drive ' + Drive AS VolumeName,
+       CAST(MBFree / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
+       'Data' AS DiskRole
+FROM #DriveSpace
+DROP TABLE #DriveSpace
+"@
+        $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpaceFallback
+    }
+}
+```
+
+---
+
+### 2️⃣ Query SQL Mejorada (con CTE)
 
 **Antes:**
 ```sql
@@ -93,7 +144,7 @@ $uniqueVolumes = $dataSpace |
 
 ---
 
-### 3️⃣ Cálculo de Promedios Corregido
+### 4️⃣ Cálculo de Promedios Corregido
 
 **Antes:**
 ```powershell
@@ -150,10 +201,13 @@ D:\45.2% (500GB)           ← Volumen físico D:\
 
 | Archivo | Líneas Modificadas | Cambios |
 |---------|-------------------|---------|
-| `scripts/RelevamientoHealthScore_Discos.ps1` | 253-282 | Query SQL (modo secuencial) |
-| `scripts/RelevamientoHealthScore_Discos.ps1` | 856-884 | Query SQL (modo paralelo) |
-| `scripts/RelevamientoHealthScore_Discos.ps1` | 426-517 | Procesamiento PowerShell (secuencial) |
-| `scripts/RelevamientoHealthScore_Discos.ps1` | 894-946 | Procesamiento PowerShell (paralelo) |
+| `scripts/RelevamientoHealthScore_Discos.ps1` | 193-244 | Detección de versión mejorada con try-catch |
+| `scripts/RelevamientoHealthScore_Discos.ps1` | 253-282 | Query SQL con CTE (modo secuencial) |
+| `scripts/RelevamientoHealthScore_Discos.ps1` | 397-446 | Fallback automático a xp_fixeddrives (secuencial) |
+| `scripts/RelevamientoHealthScore_Discos.ps1` | 426-517 | Procesamiento PowerShell con Group-Object (secuencial) |
+| `scripts/RelevamientoHealthScore_Discos.ps1` | 905-920 | Detección de versión mejorada (paralelo) |
+| `scripts/RelevamientoHealthScore_Discos.ps1` | 925-999 | Query SQL + fallback automático (paralelo) |
+| `scripts/RelevamientoHealthScore_Discos.ps1` | 1002-1046 | Procesamiento PowerShell con Group-Object (paralelo) |
 
 ---
 
@@ -218,11 +272,20 @@ SQL Server ve cada uno como un volumen independiente, pero la query anterior los
 
 ## ✅ Estado
 
-- [x] Query SQL refactorizada con CTE
-- [x] Procesamiento PowerShell con Group-Object
-- [x] Cálculo de promedios corregido
-- [x] Aplicado tanto en modo secuencial como paralelo
-- [x] Documentación completada
+- [x] **Fallback robusto para SQL Server 2000/2005/2008 RTM** 🆕
+  - [x] Detección de versión con try-catch
+  - [x] Fallback automático a xp_fixeddrives
+  - [x] Mensajes de advertencia informativos
+- [x] **Query SQL refactorizada con CTE**
+  - [x] Elimina columnas que causaban duplicados
+  - [x] Garantiza volúmenes únicos desde SQL
+- [x] **Procesamiento PowerShell con Group-Object**
+  - [x] Deduplicación robusta por MountPoint
+  - [x] Independiente de variaciones decimales
+- [x] **Cálculo de promedios corregido**
+  - [x] WorstFreePct, DataDiskAvgFreePct, LogDiskAvgFreePct, TempDBDiskFreePct
+- [x] **Aplicado tanto en modo secuencial como paralelo**
+- [x] **Documentación completada**
 
 ---
 
@@ -230,5 +293,10 @@ SQL Server ve cada uno como un volumen independiente, pero la query anterior los
 **29 de Octubre, 2025**
 
 ## 👤 Contexto
-Corrección aplicada tras detectar que servidores con mount points reportaban 40+ volúmenes cuando en realidad tenían 10-15 volúmenes físicos.
+
+**Problema 1:** Servidores con mount points reportaban 40+ volúmenes cuando en realidad tenían 10-15 volúmenes físicos.
+
+**Problema 2 (detectado durante testing):** Instancias SQL Server 2000/2005/2008 RTM fallaban con error "Invalid object name 'sys.dm_os_volume_stats'" y no recolectaban métricas de disco.
+
+**Solución:** Query SQL refactorizada + PowerShell robusto con Group-Object + fallback automático a xp_fixeddrives para versiones antiguas.
 

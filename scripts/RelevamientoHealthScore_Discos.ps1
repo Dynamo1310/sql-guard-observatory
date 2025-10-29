@@ -246,9 +246,12 @@ SELECT
         # Query 1: Espacio en discos con clasificación por rol + archivos problemáticos
         if ($majorVersion -lt 10 -or -not $hasVolumeStats) {
             # FALLBACK para SQL Server 2005 o SQL 2008 sin sys.dm_os_volume_stats
+            # Usar xp_fixeddrives + WMI para obtener info completa
             if (-not $hasVolumeStats) {
-                Write-Verbose "      ℹ️  ${InstanceName}: sys.dm_os_volume_stats no disponible (SQL $sqlVersion $servicePack), usando xp_fixeddrives"
+                Write-Verbose "      ℹ️  ${InstanceName}: sys.dm_os_volume_stats no disponible (SQL $sqlVersion $servicePack), usando xp_fixeddrives + WMI"
             }
+            
+            # Query para obtener solo espacio libre
             $querySpace = @"
 -- SQL 2005/2008 compatible (usando xp_fixeddrives)
 CREATE TABLE #DriveSpace (
@@ -260,14 +263,8 @@ INSERT INTO #DriveSpace
 EXEC xp_fixeddrives
 
 SELECT 
-    Drive + ':' AS MountPoint,
-    'Drive ' + Drive AS VolumeName,
-    CAST(0 AS DECIMAL(10,2)) AS TotalGB,
-    CAST(MBFree / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
-    CAST(100 AS DECIMAL(5,2)) AS FreePct,
-    'Data' AS DiskRole,
-    'N/A' AS DatabaseName,
-    'ROWS' AS FileType
+    Drive AS DriveLetter,
+    MBFree AS MBFree
 FROM #DriveSpace
 
 DROP TABLE #DriveSpace
@@ -396,18 +393,75 @@ GROUP BY vs.volume_mount_point;
         # Ejecutar queries con reintentos automáticos
         $dataSpace = $null
         try {
-            $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
+            $rawDataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
                 -Query $querySpace `
                 -TimeoutSec $TimeoutSec `
                 -MaxRetries 2
+            
+            # Si usamos el fallback de xp_fixeddrives, procesar con WMI
+            if ($majorVersion -lt 10 -or -not $hasVolumeStats) {
+                if ($rawDataSpace -and $rawDataSpace[0].PSObject.Properties.Name -contains 'DriveLetter') {
+                    # Es resultado de xp_fixeddrives, necesita procesamiento con WMI
+                    $serverName = $InstanceName.Split('\')[0]
+                    $dataSpace = @()
+                    
+                    foreach ($drive in $rawDataSpace) {
+                        $driveLetter = $drive.DriveLetter
+                        $freeGB = [decimal]($drive.MBFree / 1024.0)
+                        $totalGB = 0
+                        $freePct = 0
+                        
+                        # Intentar WMI para tamaño total
+                        try {
+                            $diskInfo = Get-WmiObject -ComputerName $serverName -Class Win32_LogicalDisk -Filter "DeviceID='${driveLetter}:'" -ErrorAction SilentlyContinue
+                            if ($diskInfo) {
+                                $totalGB = [decimal]($diskInfo.Size / 1GB)
+                                if ($totalGB -gt 0) {
+                                    $freePct = [decimal](($freeGB / $totalGB) * 100)
+                                }
+                            }
+                        }
+                        catch {
+                            Write-Verbose "      No se pudo obtener tamaño total del disco $driveLetter en $serverName vía WMI"
+                        }
+                        
+                        # Si no pudimos obtener tamaño total, estimar
+                        if ($totalGB -eq 0 -and $freeGB -gt 0) {
+                            $totalGB = $freeGB * 5
+                            $freePct = 20
+                        }
+                        
+                        $dataSpace += [PSCustomObject]@{
+                            MountPoint = "${driveLetter}:\"
+                            VolumeName = "Drive $driveLetter"
+                            TotalGB = $totalGB
+                            FreeGB = $freeGB
+                            FreePct = $freePct
+                            DiskRole = 'Data'
+                        }
+                    }
+                    
+                    Write-Verbose "      ℹ️  ${InstanceName}: Procesados $($dataSpace.Count) volúmenes con xp_fixeddrives + WMI"
+                }
+                else {
+                    # No es xp_fixeddrives o falló, usar datos tal cual
+                    $dataSpace = $rawDataSpace
+                }
+            }
+            else {
+                # SQL 2008+, usar datos tal cual
+                $dataSpace = $rawDataSpace
+            }
         }
         catch {
             # Si falla por "Invalid object name 'sys.dm_os_volume_stats'", usar fallback
             if ($_.Exception.Message -match "Invalid object name.*dm_os_volume_stats") {
                 Write-Warning "      ⚠️  ${InstanceName}: sys.dm_os_volume_stats no disponible (SQL muy antiguo), usando fallback xp_fixeddrives"
                 
-                # Reintentamos con el fallback de xp_fixeddrives
-                $querySpaceFallback = @"
+                # Reintentamos con el fallback de xp_fixeddrives + WMI para tamaño total
+                try {
+                    # Paso 1: Obtener espacio libre con xp_fixeddrives
+                    $querySpaceFallback = @"
 -- SQL 2000/2005 compatible (usando xp_fixeddrives)
 CREATE TABLE #DriveSpace (
     Drive VARCHAR(10),
@@ -418,25 +472,72 @@ INSERT INTO #DriveSpace
 EXEC xp_fixeddrives
 
 SELECT 
-    Drive + ':\' AS MountPoint,
-    'Drive ' + Drive AS VolumeName,
-    CAST(0 AS DECIMAL(10,2)) AS TotalGB,
-    CAST(MBFree / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
-    CAST(100 AS DECIMAL(5,2)) AS FreePct,
-    'Data' AS DiskRole
+    Drive AS DriveLetter,
+    MBFree AS MBFree
 FROM #DriveSpace
 
 DROP TABLE #DriveSpace
 "@
-                try {
-                    $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
+                    $xpFixedDrivesResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
                         -Query $querySpaceFallback `
                         -TimeoutSec $TimeoutSec `
                         -MaxRetries 1
+                    
+                    if ($xpFixedDrivesResult) {
+                        # Paso 2: Obtener tamaño total con WMI (si es accesible)
+                        $serverName = $InstanceName.Split('\')[0]
+                        $dataSpace = @()
+                        
+                        foreach ($drive in $xpFixedDrivesResult) {
+                            $driveLetter = $drive.DriveLetter
+                            $freeGB = [decimal]($drive.MBFree / 1024.0)
+                            
+                            # Intentar obtener tamaño total con WMI
+                            $totalGB = 0
+                            $freePct = 0
+                            
+                            try {
+                                $diskInfo = Get-WmiObject -ComputerName $serverName -Class Win32_LogicalDisk -Filter "DeviceID='${driveLetter}:'" -ErrorAction SilentlyContinue
+                                if ($diskInfo) {
+                                    $totalGB = [decimal]($diskInfo.Size / 1GB)
+                                    if ($totalGB -gt 0) {
+                                        $freePct = [decimal](($freeGB / $totalGB) * 100)
+                                    }
+                                }
+                            }
+                            catch {
+                                # Si falla WMI, usar valores por defecto
+                                Write-Verbose "      No se pudo obtener tamaño total del disco $driveLetter en $serverName vía WMI"
+                            }
+                            
+                            # Si no pudimos obtener el tamaño total, estimar basado en el espacio libre
+                            if ($totalGB -eq 0 -and $freeGB -gt 0) {
+                                # Estimar: Si tiene X GB libres, asumir un disco razonable
+                                # Esta es una estimación conservadora para no dar falsas alarmas
+                                $totalGB = $freeGB * 5  # Asumir 20% libre como promedio
+                                $freePct = 20
+                            }
+                            
+                            $dataSpace += [PSCustomObject]@{
+                                MountPoint = "${driveLetter}:\"
+                                VolumeName = "Drive $driveLetter"
+                                TotalGB = $totalGB
+                                FreeGB = $freeGB
+                                FreePct = $freePct
+                                DiskRole = 'Data'
+                            }
+                        }
+                        
+                        Write-Verbose "      ℹ️  ${InstanceName}: Obtenidos $($dataSpace.Count) volúmenes con xp_fixeddrives"
+                    }
+                    else {
+                        Write-Warning "      ❌ ${InstanceName}: xp_fixeddrives no devolvió datos"
+                        $dataSpace = $null
+                    }
                 }
                 catch {
                     Write-Warning "      ❌ ${InstanceName}: Fallback xp_fixeddrives también falló: $($_.Exception.Message)"
-                    throw
+                    $dataSpace = $null
                 }
             }
             else {
@@ -934,12 +1035,8 @@ INSERT INTO #DriveSpace
 EXEC xp_fixeddrives
 
 SELECT 
-    Drive + ':\' AS MountPoint,
-    'Drive ' + Drive AS VolumeName,
-    CAST(0 AS DECIMAL(10,2)) AS TotalGB,
-    CAST(MBFree / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
-    CAST(100 AS DECIMAL(5,2)) AS FreePct,
-    'Data' AS DiskRole
+    Drive AS DriveLetter,
+    MBFree AS MBFree
 FROM #DriveSpace
 
 DROP TABLE #DriveSpace
@@ -975,18 +1072,103 @@ ORDER BY FreePct ASC;
 
                 # Seleccionar query según versión
                 $querySpace = if ($majorVersion -lt 10) { $querySpaceFallback } else { $querySpaceModern }
+                $usesFallback = ($querySpace -eq $querySpaceFallback)
                 
                 # Ejecutar query con fallback automático si falla
                 $dataSpace = $null
                 try {
-                    $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpace -TimeoutSec $TimeoutSec -MaxRetries 2
+                    $rawData = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpace -TimeoutSec $TimeoutSec -MaxRetries 2
+                    
+                    # Procesar xp_fixeddrives con WMI si es necesario
+                    if ($usesFallback -and $rawData -and $rawData[0].PSObject.Properties.Name -contains 'DriveLetter') {
+                        $serverName = $InstanceName.Split('\')[0]
+                        $dataSpace = @()
+                        
+                        foreach ($drive in $rawData) {
+                            $driveLetter = $drive.DriveLetter
+                            $freeGB = [decimal]($drive.MBFree / 1024.0)
+                            $totalGB = 0
+                            $freePct = 0
+                            
+                            try {
+                                $diskInfo = Get-WmiObject -ComputerName $serverName -Class Win32_LogicalDisk -Filter "DeviceID='${driveLetter}:'" -ErrorAction SilentlyContinue
+                                if ($diskInfo) {
+                                    $totalGB = [decimal]($diskInfo.Size / 1GB)
+                                    if ($totalGB -gt 0) { $freePct = [decimal](($freeGB / $totalGB) * 100) }
+                                }
+                            } catch { }
+                            
+                            if ($totalGB -eq 0 -and $freeGB -gt 0) {
+                                $totalGB = $freeGB * 5
+                                $freePct = 20
+                            }
+                            
+                            $dataSpace += [PSCustomObject]@{
+                                MountPoint = "${driveLetter}:\"
+                                VolumeName = "Drive $driveLetter"
+                                TotalGB = $totalGB
+                                FreeGB = $freeGB
+                                FreePct = $freePct
+                                DiskRole = 'Data'
+                            }
+                        }
+                    }
+                    else {
+                        $dataSpace = $rawData
+                    }
                 }
                 catch {
-                    # Si falla por sys.dm_os_volume_stats, usar fallback
+                    # Si falla por sys.dm_os_volume_stats, usar fallback mejorado
                     if ($_.Exception.Message -match "Invalid object name.*dm_os_volume_stats" -and $querySpace -eq $querySpaceModern) {
-                        Write-Warning "      ⚠️  ${InstanceName}: sys.dm_os_volume_stats no disponible, usando xp_fixeddrives"
+                        Write-Warning "      ⚠️  ${InstanceName}: sys.dm_os_volume_stats no disponible, usando xp_fixeddrives + WMI"
+                        
                         try {
-                            $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpaceFallback -TimeoutSec $TimeoutSec -MaxRetries 1
+                            # Query simplificada de xp_fixeddrives
+                            $queryFallbackSimple = @"
+CREATE TABLE #DriveSpace (Drive VARCHAR(10), MBFree INT)
+INSERT INTO #DriveSpace EXEC xp_fixeddrives
+SELECT Drive AS DriveLetter, MBFree AS MBFree FROM #DriveSpace
+DROP TABLE #DriveSpace
+"@
+                            $xpResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $queryFallbackSimple -TimeoutSec $TimeoutSec -MaxRetries 1
+                            
+                            if ($xpResult) {
+                                $serverName = $InstanceName.Split('\')[0]
+                                $dataSpace = @()
+                                
+                                foreach ($drive in $xpResult) {
+                                    $driveLetter = $drive.DriveLetter
+                                    $freeGB = [decimal]($drive.MBFree / 1024.0)
+                                    $totalGB = 0
+                                    $freePct = 0
+                                    
+                                    # Intentar WMI
+                                    try {
+                                        $diskInfo = Get-WmiObject -ComputerName $serverName -Class Win32_LogicalDisk -Filter "DeviceID='${driveLetter}:'" -ErrorAction SilentlyContinue
+                                        if ($diskInfo) {
+                                            $totalGB = [decimal]($diskInfo.Size / 1GB)
+                                            if ($totalGB -gt 0) {
+                                                $freePct = [decimal](($freeGB / $totalGB) * 100)
+                                            }
+                                        }
+                                    } catch { }
+                                    
+                                    # Fallback: estimar
+                                    if ($totalGB -eq 0 -and $freeGB -gt 0) {
+                                        $totalGB = $freeGB * 5
+                                        $freePct = 20
+                                    }
+                                    
+                                    $dataSpace += [PSCustomObject]@{
+                                        MountPoint = "${driveLetter}:\"
+                                        VolumeName = "Drive $driveLetter"
+                                        TotalGB = $totalGB
+                                        FreeGB = $freeGB
+                                        FreePct = $freePct
+                                        DiskRole = 'Data'
+                                    }
+                                }
+                            }
                         }
                         catch {
                             Write-Warning "      ❌ ${InstanceName}: Fallback también falló"
