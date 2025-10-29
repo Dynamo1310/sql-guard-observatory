@@ -31,13 +31,23 @@
     
 .PARAMETER ApiBaseUrl
     URL base del backend API para notificaciones SignalR (default: http://localhost:5000)
+
+.PARAMETER PowerShellPath
+    Ruta al ejecutable de PowerShell (default: PowerShell 7 - pwsh.exe)
+    Para PowerShell 5.1: "PowerShell.exe"
     
 .NOTES
     Ejecutar con permisos de Administrador
     Hardware recomendado: 10+ cores, 16GB+ RAM
+    Requiere PowerShell 7+ (pwsh.exe) por defecto para dbatools
     
 .EXAMPLE
+    # Usar PowerShell 7 (default)
     .\Schedule-HealthScore-v3-FINAL.ps1 -ApiBaseUrl "http://asprbm-nov-01:5000"
+
+.EXAMPLE
+    # Usar PowerShell 5.1 (Windows PowerShell)
+    .\Schedule-HealthScore-v3-FINAL.ps1 -ApiBaseUrl "http://asprbm-nov-01:5000" -PowerShellPath "PowerShell.exe"
 #>
 
 #Requires -RunAsAdministrator
@@ -48,7 +58,8 @@ param(
     [string]$TaskPrefix = "HealthScore_v3.2",
     [string]$ApiBaseUrl = "http://localhost:5000",
     [string]$TaskUser = "GSCORP\TB03260ADM",
-    [SecureString]$TaskPassword
+    [SecureString]$TaskPassword,
+    [string]$PowerShellPath = "C:\Program Files\PowerShell\7\pwsh.exe"
 )
 
 $ErrorActionPreference = "Stop"
@@ -75,7 +86,19 @@ Write-Host "[INFO] Configuración:" -ForegroundColor Yellow
 Write-Host "  Scripts Path: $ScriptsPath" -ForegroundColor Gray
 Write-Host "  API Base URL: $ApiBaseUrl" -ForegroundColor Gray
 Write-Host "  Usuario de tareas: $TaskUser" -ForegroundColor Gray
+Write-Host "  PowerShell: $PowerShellPath" -ForegroundColor Gray
 Write-Host "  Throttle: 16 threads (optimizado para 10 cores)" -ForegroundColor Gray
+Write-Host ""
+
+# Verificar que PowerShell existe
+if (-not (Test-Path $PowerShellPath)) {
+    Write-Warning "PowerShell no encontrado en: $PowerShellPath"
+    Write-Warning "Intentando con PowerShell 5.1 (Windows PowerShell)..."
+    $PowerShellPath = "PowerShell.exe"
+} else {
+    $pwshVersion = & $PowerShellPath -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+    Write-Host "  Versión detectada: PowerShell $pwshVersion" -ForegroundColor Green
+}
 Write-Host ""
 
 # Definición de tareas con frecuencias optimizadas
@@ -292,7 +315,7 @@ exit 0
 "@
         
         $action = New-ScheduledTaskAction `
-            -Execute "PowerShell.exe" `
+            -Execute $PowerShellPath `
             -Argument "-NoProfile -ExecutionPolicy Bypass -Command `"$scriptBlock`""
         
         # Trigger: Repetir cada X minutos
