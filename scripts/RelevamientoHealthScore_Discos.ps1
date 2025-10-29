@@ -270,33 +270,17 @@ FROM #DriveSpace
 DROP TABLE #DriveSpace
 "@
         } else {
-            # SQL 2008+ (query mejorada: obtiene volúmenes únicos + roles)
+            # SQL 2008+ (query simplificada: SOLO volúmenes únicos, sin roles para evitar duplicados)
             $querySpace = @"
--- Espacio en discos con clasificación por rol (deduplicado correctamente)
-;WITH VolumeInfo AS (
-    SELECT DISTINCT
-        vs.volume_mount_point AS MountPoint,
-        vs.logical_volume_name AS VolumeName,
-        vs.total_bytes,
-        vs.available_bytes,
-        -- Determinar rol del disco basado en tipo de archivo
-        CASE 
-            WHEN mf.type_desc = 'LOG' THEN 'Log'
-            WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
-            WHEN mf.type_desc = 'ROWS' THEN 'Data'
-            ELSE 'Other'
-        END AS DiskRole
-    FROM sys.master_files mf
-    CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
-)
+-- Espacio en discos (deduplicado por volumen físico)
 SELECT DISTINCT
-    MountPoint,
-    VolumeName,
-    CAST(total_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS TotalGB,
-    CAST(available_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
-    CAST((available_bytes * 100.0 / total_bytes) AS DECIMAL(5,2)) AS FreePct,
-    DiskRole
-FROM VolumeInfo
+    vs.volume_mount_point AS MountPoint,
+    vs.logical_volume_name AS VolumeName,
+    CAST(vs.total_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS TotalGB,
+    CAST(vs.available_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
+    CAST((vs.available_bytes * 100.0 / vs.total_bytes) AS DECIMAL(5,2)) AS FreePct
+FROM sys.master_files mf
+CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 ORDER BY FreePct ASC;
 "@
         }
@@ -402,12 +386,45 @@ GROUP BY vs.volume_mount_point;
             if ($majorVersion -lt 10 -or -not $hasVolumeStats) {
                 if ($rawDataSpace -and $rawDataSpace[0].PSObject.Properties.Name -contains 'DriveLetter') {
                     # Es resultado de xp_fixeddrives, necesita procesamiento con WMI
+                    
+                    # Detectar roles de discos vía sysaltfiles
+                    $diskRoles = @{}
+                    try {
+                        $queryDetectRoles = @"
+SELECT DISTINCT
+    SUBSTRING(filename, 1, 1) AS DriveLetter,
+    CASE 
+        WHEN filename LIKE '%.ldf' THEN 'Log'
+        WHEN DB_NAME(dbid) = 'tempdb' THEN 'TempDB'
+        ELSE 'Data'
+    END AS DiskRole
+FROM master..sysaltfiles
+WHERE SUBSTRING(filename, 1, 1) BETWEEN 'A' AND 'Z'
+"@
+                        $rolesResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $queryDetectRoles -TimeoutSec 5 -MaxRetries 1
+                        foreach ($role in $rolesResult) {
+                            $diskRoles[$role.DriveLetter] = $role.DiskRole
+                        }
+                        Write-Verbose "      ℹ️  ${InstanceName}: Detectados roles de $($diskRoles.Count) discos vía sysaltfiles"
+                    }
+                    catch {
+                        Write-Verbose "      ⚠️  ${InstanceName}: No se pudo detectar roles de discos, asumiendo todos como Data"
+                    }
+                    
                     $serverName = $InstanceName.Split('\')[0]
                     $dataSpace = @()
                     
                     foreach ($drive in $rawDataSpace) {
                         $driveLetter = $drive.DriveLetter
                         $freeGB = [decimal]($drive.MBFree / 1024.0)
+                        
+                        # Determinar rol del disco
+                        $diskRole = if ($diskRoles.ContainsKey($driveLetter)) { 
+                            $diskRoles[$driveLetter] 
+                        } else { 
+                            'Data' 
+                        }
+                        
                         $totalGB = 0
                         $freePct = 0
                         
@@ -437,7 +454,7 @@ GROUP BY vs.volume_mount_point;
                             TotalGB = $totalGB
                             FreeGB = $freeGB
                             FreePct = $freePct
-                            DiskRole = 'Data'
+                            DiskRole = $diskRole
                         }
                     }
                     
@@ -460,7 +477,36 @@ GROUP BY vs.volume_mount_point;
                 
                 # Reintentamos con el fallback de xp_fixeddrives + WMI para tamaño total
                 try {
-                    # Paso 1: Obtener espacio libre con xp_fixeddrives
+                    # Paso 1: Detectar qué discos tienen archivos de datos vs logs
+                    $queryDetectRoles = @"
+-- Detectar roles de discos según archivos (compatible SQL 2005+)
+SELECT DISTINCT
+    SUBSTRING(filename, 1, 1) AS DriveLetter,
+    CASE 
+        WHEN filename LIKE '%.ldf' THEN 'Log'
+        WHEN DB_NAME(dbid) = 'tempdb' THEN 'TempDB'
+        ELSE 'Data'
+    END AS DiskRole
+FROM master..sysaltfiles
+WHERE SUBSTRING(filename, 1, 1) BETWEEN 'A' AND 'Z'
+"@
+                    $diskRoles = @{}
+                    try {
+                        $rolesResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
+                            -Query $queryDetectRoles `
+                            -TimeoutSec 5 `
+                            -MaxRetries 1
+                        
+                        foreach ($role in $rolesResult) {
+                            $diskRoles[$role.DriveLetter] = $role.DiskRole
+                        }
+                        Write-Verbose "      ℹ️  ${InstanceName}: Detectados roles de $($diskRoles.Count) discos vía sysaltfiles"
+                    }
+                    catch {
+                        Write-Verbose "      ⚠️  ${InstanceName}: No se pudo detectar roles de discos, asumiendo todos como Data"
+                    }
+                    
+                    # Paso 2: Obtener espacio libre con xp_fixeddrives
                     $querySpaceFallback = @"
 -- SQL 2000/2005 compatible (usando xp_fixeddrives)
 CREATE TABLE #DriveSpace (
@@ -484,13 +530,20 @@ DROP TABLE #DriveSpace
                         -MaxRetries 1
                     
                     if ($xpFixedDrivesResult) {
-                        # Paso 2: Obtener tamaño total con WMI (si es accesible)
+                        # Paso 3: Obtener tamaño total con WMI (si es accesible)
                         $serverName = $InstanceName.Split('\')[0]
                         $dataSpace = @()
                         
                         foreach ($drive in $xpFixedDrivesResult) {
                             $driveLetter = $drive.DriveLetter
                             $freeGB = [decimal]($drive.MBFree / 1024.0)
+                            
+                            # Determinar rol del disco (desde detección vía sysaltfiles)
+                            $diskRole = if ($diskRoles.ContainsKey($driveLetter)) { 
+                                $diskRoles[$driveLetter] 
+                            } else { 
+                                'Data'  # Por defecto si no se pudo detectar
+                            }
                             
                             # Intentar obtener tamaño total con WMI
                             $totalGB = 0
@@ -524,7 +577,7 @@ DROP TABLE #DriveSpace
                                 TotalGB = $totalGB
                                 FreeGB = $freeGB
                                 FreePct = $freePct
-                                DiskRole = 'Data'
+                                DiskRole = $diskRole
                             }
                         }
                         
@@ -601,6 +654,38 @@ DROP TABLE #DriveSpace
                     $_.Group[0]
                 }
             
+            # Detectar roles de cada volumen consultando qué archivos tiene
+            $queryRoles = @"
+SELECT DISTINCT
+    vs.volume_mount_point AS MountPoint,
+    CASE 
+        WHEN mf.type_desc = 'LOG' THEN 'Log'
+        WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
+        WHEN mf.type_desc = 'ROWS' THEN 'Data'
+        ELSE 'Other'
+    END AS DiskRole
+FROM sys.master_files mf
+CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+"@
+            $volumeRoles = @{}
+            try {
+                $rolesData = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
+                    -Query $queryRoles `
+                    -TimeoutSec 5 `
+                    -MaxRetries 1
+                
+                foreach ($roleEntry in $rolesData) {
+                    $mp = $roleEntry.MountPoint
+                    if (-not $volumeRoles.ContainsKey($mp)) {
+                        $volumeRoles[$mp] = @()
+                    }
+                    $volumeRoles[$mp] += $roleEntry.DiskRole
+                }
+            }
+            catch {
+                Write-Verbose "      No se pudo detectar roles de volúmenes para ${InstanceName}"
+            }
+            
             # Procesar cada volumen único
             $result.Volumes = $uniqueVolumes | ForEach-Object {
                 $mountPoint = $_.MountPoint
@@ -609,10 +694,10 @@ DROP TABLE #DriveSpace
                 $competition = $dataCompetition | Where-Object { $_.MountPoint -eq $mountPoint } | Select-Object -First 1
                 
                 # Determinar roles del volumen (puede tener múltiples roles)
-                $volumeRoles = $dataSpace | Where-Object { $_.MountPoint -eq $mountPoint }
-                $isTempDB = ($volumeRoles | Where-Object { $_.DiskRole -eq 'TempDB' }) -ne $null
-                $isData = ($volumeRoles | Where-Object { $_.DiskRole -eq 'Data' }) -ne $null
-                $isLog = ($volumeRoles | Where-Object { $_.DiskRole -eq 'Log' }) -ne $null
+                $roles = if ($volumeRoles.ContainsKey($mountPoint)) { $volumeRoles[$mountPoint] } else { @() }
+                $isTempDB = ($roles -contains 'TempDB')
+                $isData = ($roles -contains 'Data')
+                $isLog = ($roles -contains 'Log')
                 
                 # Obtener archivos problemáticos en este volumen (poco espacio interno + growth habilitado)
                 $driveLetter = $mountPoint.TrimEnd('\').TrimEnd(':') + ':'
@@ -659,28 +744,34 @@ DROP TABLE #DriveSpace
             # Peor porcentaje libre (del conjunto único de volúmenes ya procesado)
             $result.WorstFreePct = ConvertTo-SafeDecimal (($uniqueVolumes | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
             
-            # Promedio por rol (usando los volúmenes únicos ya agrupados)
-            $dataDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Data' } | 
-                Group-Object -Property MountPoint | 
-                ForEach-Object { $_.Group[0] }
+            # Promedio por rol (usando los roles detectados)
+            $dataDisks = $uniqueVolumes | Where-Object { 
+                $mp = $_.MountPoint
+                $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                $roles -contains 'Data'
+            }
             
             if ($dataDisks) {
                 $result.DataDiskAvgFreePct = ConvertTo-SafeDecimal (($dataDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                 $result.DataVolumes = $dataDisks | ForEach-Object { $_.MountPoint }
             }
             
-            $logDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Log' } | 
-                Group-Object -Property MountPoint | 
-                ForEach-Object { $_.Group[0] }
+            $logDisks = $uniqueVolumes | Where-Object { 
+                $mp = $_.MountPoint
+                $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                $roles -contains 'Log'
+            }
             
             if ($logDisks) {
                 $result.LogDiskAvgFreePct = ConvertTo-SafeDecimal (($logDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                 $result.LogVolumes = $logDisks | ForEach-Object { $_.MountPoint }
             }
             
-            $tempdbDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'TempDB' } | 
-                Group-Object -Property MountPoint | 
-                ForEach-Object { $_.Group[0] }
+            $tempdbDisks = $uniqueVolumes | Where-Object { 
+                $mp = $_.MountPoint
+                $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                $roles -contains 'TempDB'
+            }
             
             if ($tempdbDisks) {
                 $result.TempDBDiskFreePct = ConvertTo-SafeDecimal (($tempdbDisks | Measure-Object -Property FreePct -Average).Average) 100.0
@@ -1043,30 +1134,15 @@ DROP TABLE #DriveSpace
 "@
 
                 $querySpaceModern = @"
--- Espacio en discos con clasificación por rol (deduplicado correctamente)
-;WITH VolumeInfo AS (
-    SELECT DISTINCT
-        vs.volume_mount_point AS MountPoint,
-        vs.logical_volume_name AS VolumeName,
-        vs.total_bytes,
-        vs.available_bytes,
-        CASE 
-            WHEN mf.type_desc = 'LOG' THEN 'Log'
-            WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
-            WHEN mf.type_desc = 'ROWS' THEN 'Data'
-            ELSE 'Other'
-        END AS DiskRole
-    FROM sys.master_files mf
-    CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
-)
+-- Espacio en discos (deduplicado por volumen físico)
 SELECT DISTINCT
-    MountPoint,
-    VolumeName,
-    CAST(total_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS TotalGB,
-    CAST(available_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
-    CAST((available_bytes * 100.0 / total_bytes) AS DECIMAL(5,2)) AS FreePct,
-    DiskRole
-FROM VolumeInfo
+    vs.volume_mount_point AS MountPoint,
+    vs.logical_volume_name AS VolumeName,
+    CAST(vs.total_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS TotalGB,
+    CAST(vs.available_bytes / 1024.0 / 1024.0 / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
+    CAST((vs.available_bytes * 100.0 / vs.total_bytes) AS DECIMAL(5,2)) AS FreePct
+FROM sys.master_files mf
+CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 ORDER BY FreePct ASC;
 "@
 
@@ -1081,12 +1157,40 @@ ORDER BY FreePct ASC;
                     
                     # Procesar xp_fixeddrives con WMI si es necesario
                     if ($usesFallback -and $rawData -and $rawData[0].PSObject.Properties.Name -contains 'DriveLetter') {
+                        # Detectar roles de discos vía sysaltfiles
+                        $diskRoles = @{}
+                        try {
+                            $queryDetectRoles = @"
+SELECT DISTINCT
+    SUBSTRING(filename, 1, 1) AS DriveLetter,
+    CASE 
+        WHEN filename LIKE '%.ldf' THEN 'Log'
+        WHEN DB_NAME(dbid) = 'tempdb' THEN 'TempDB'
+        ELSE 'Data'
+    END AS DiskRole
+FROM master..sysaltfiles
+WHERE SUBSTRING(filename, 1, 1) BETWEEN 'A' AND 'Z'
+"@
+                            $rolesResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $queryDetectRoles -TimeoutSec 5 -MaxRetries 1
+                            foreach ($role in $rolesResult) {
+                                $diskRoles[$role.DriveLetter] = $role.DiskRole
+                            }
+                        } catch { }
+                        
                         $serverName = $InstanceName.Split('\')[0]
                         $dataSpace = @()
                         
                         foreach ($drive in $rawData) {
                             $driveLetter = $drive.DriveLetter
                             $freeGB = [decimal]($drive.MBFree / 1024.0)
+                            
+                            # Determinar rol del disco
+                            $diskRole = if ($diskRoles.ContainsKey($driveLetter)) { 
+                                $diskRoles[$driveLetter] 
+                            } else { 
+                                'Data' 
+                            }
+                            
                             $totalGB = 0
                             $freePct = 0
                             
@@ -1109,7 +1213,7 @@ ORDER BY FreePct ASC;
                                 TotalGB = $totalGB
                                 FreeGB = $freeGB
                                 FreePct = $freePct
-                                DiskRole = 'Data'
+                                DiskRole = $diskRole
                             }
                         }
                     }
@@ -1123,6 +1227,26 @@ ORDER BY FreePct ASC;
                         Write-Warning "      ⚠️  ${InstanceName}: sys.dm_os_volume_stats no disponible, usando xp_fixeddrives + WMI"
                         
                         try {
+                            # Detectar roles de discos vía sysaltfiles
+                            $queryDetectRoles = @"
+SELECT DISTINCT
+    SUBSTRING(filename, 1, 1) AS DriveLetter,
+    CASE 
+        WHEN filename LIKE '%.ldf' THEN 'Log'
+        WHEN DB_NAME(dbid) = 'tempdb' THEN 'TempDB'
+        ELSE 'Data'
+    END AS DiskRole
+FROM master..sysaltfiles
+WHERE SUBSTRING(filename, 1, 1) BETWEEN 'A' AND 'Z'
+"@
+                            $diskRoles = @{}
+                            try {
+                                $rolesResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $queryDetectRoles -TimeoutSec 5 -MaxRetries 1
+                                foreach ($role in $rolesResult) {
+                                    $diskRoles[$role.DriveLetter] = $role.DiskRole
+                                }
+                            } catch { }
+                            
                             # Query simplificada de xp_fixeddrives
                             $queryFallbackSimple = @"
 CREATE TABLE #DriveSpace (Drive VARCHAR(10), MBFree INT)
@@ -1139,6 +1263,14 @@ DROP TABLE #DriveSpace
                                 foreach ($drive in $xpResult) {
                                     $driveLetter = $drive.DriveLetter
                                     $freeGB = [decimal]($drive.MBFree / 1024.0)
+                                    
+                                    # Determinar rol del disco
+                                    $diskRole = if ($diskRoles.ContainsKey($driveLetter)) { 
+                                        $diskRoles[$driveLetter] 
+                                    } else { 
+                                        'Data' 
+                                    }
+                                    
                                     $totalGB = 0
                                     $freePct = 0
                                     
@@ -1165,7 +1297,7 @@ DROP TABLE #DriveSpace
                                         TotalGB = $totalGB
                                         FreeGB = $freeGB
                                         FreePct = $freePct
-                                        DiskRole = 'Data'
+                                        DiskRole = $diskRole
                                     }
                                 }
                             }
@@ -1186,6 +1318,31 @@ DROP TABLE #DriveSpace
                         Group-Object -Property MountPoint | 
                         ForEach-Object { $_.Group[0] }
                     
+                    # Detectar roles de volúmenes (simplificado para modo paralelo)
+                    $queryRoles = @"
+SELECT DISTINCT
+    vs.volume_mount_point AS MountPoint,
+    CASE 
+        WHEN mf.type_desc = 'LOG' THEN 'Log'
+        WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
+        WHEN mf.type_desc = 'ROWS' THEN 'Data'
+        ELSE 'Other'
+    END AS DiskRole
+FROM sys.master_files mf
+CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+"@
+                    $volumeRoles = @{}
+                    try {
+                        $rolesData = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $queryRoles -TimeoutSec 5 -MaxRetries 1
+                        foreach ($roleEntry in $rolesData) {
+                            $mp = $roleEntry.MountPoint
+                            if (-not $volumeRoles.ContainsKey($mp)) {
+                                $volumeRoles[$mp] = @()
+                            }
+                            $volumeRoles[$mp] += $roleEntry.DiskRole
+                        }
+                    } catch { }
+                    
                     $result.Volumes = $uniqueVolumes | ForEach-Object {
                         @{
                             MountPoint = $_.MountPoint
@@ -1197,30 +1354,33 @@ DROP TABLE #DriveSpace
                         }
                     }
                     
-                    # Peor porcentaje libre (del conjunto único de volúmenes ya procesado)
+                    # Peor porcentaje libre
                     $result.WorstFreePct = ConvertTo-SafeDecimal (($uniqueVolumes | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
                     
-                    # Promedio por rol (usando Group-Object para evitar duplicados)
-                    $dataDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Data' } | 
-                        Group-Object -Property MountPoint | 
-                        ForEach-Object { $_.Group[0] }
-                    
+                    # Promedio por rol (usando roles detectados)
+                    $dataDisks = $uniqueVolumes | Where-Object { 
+                        $mp = $_.MountPoint
+                        $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                        $roles -contains 'Data'
+                    }
                     if ($dataDisks) {
                         $result.DataDiskAvgFreePct = ConvertTo-SafeDecimal (($dataDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                     }
                     
-                    $logDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'Log' } | 
-                        Group-Object -Property MountPoint | 
-                        ForEach-Object { $_.Group[0] }
-                    
+                    $logDisks = $uniqueVolumes | Where-Object { 
+                        $mp = $_.MountPoint
+                        $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                        $roles -contains 'Log'
+                    }
                     if ($logDisks) {
                         $result.LogDiskAvgFreePct = ConvertTo-SafeDecimal (($logDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                     }
                     
-                    $tempdbDisks = $dataSpace | Where-Object { $_.DiskRole -eq 'TempDB' } | 
-                        Group-Object -Property MountPoint | 
-                        ForEach-Object { $_.Group[0] }
-                    
+                    $tempdbDisks = $uniqueVolumes | Where-Object { 
+                        $mp = $_.MountPoint
+                        $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                        $roles -contains 'TempDB'
+                    }
                     if ($tempdbDisks) {
                         $result.TempDBDiskFreePct = ConvertTo-SafeDecimal (($tempdbDisks | Measure-Object -Property FreePct -Average).Average) 100.0
                     }
