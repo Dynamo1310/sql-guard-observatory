@@ -745,10 +745,17 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
             $result.WorstFreePct = ConvertTo-SafeDecimal (($uniqueVolumes | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
             
             # Promedio por rol (usando los roles detectados)
+            # Si no se detectaron roles, asumir que todos los discos tienen Data+Log
+            $hasRoles = $volumeRoles.Count -gt 0
+            
             $dataDisks = $uniqueVolumes | Where-Object { 
                 $mp = $_.MountPoint
-                $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
-                $roles -contains 'Data'
+                if ($hasRoles) {
+                    $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                    $roles -contains 'Data'
+                } else {
+                    $true  # Si no hay roles detectados, todos son Data
+                }
             }
             
             if ($dataDisks) {
@@ -758,8 +765,12 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
             
             $logDisks = $uniqueVolumes | Where-Object { 
                 $mp = $_.MountPoint
-                $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
-                $roles -contains 'Log'
+                if ($hasRoles) {
+                    $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                    $roles -contains 'Log'
+                } else {
+                    $true  # Si no hay roles detectados, todos son Log
+                }
             }
             
             if ($logDisks) {
@@ -769,8 +780,12 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
             
             $tempdbDisks = $uniqueVolumes | Where-Object { 
                 $mp = $_.MountPoint
-                $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
-                $roles -contains 'TempDB'
+                if ($hasRoles) {
+                    $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                    $roles -contains 'TempDB'
+                } else {
+                    $false  # Si no hay roles detectados, ninguno es TempDB por defecto
+                }
             }
             
             if ($tempdbDisks) {
@@ -1358,10 +1373,17 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                     $result.WorstFreePct = ConvertTo-SafeDecimal (($uniqueVolumes | Measure-Object -Property FreePct -Minimum).Minimum) 100.0
                     
                     # Promedio por rol (usando roles detectados)
+                    # Si no se detectaron roles, asumir que todos los discos tienen Data+Log
+                    $hasRoles = $volumeRoles.Count -gt 0
+                    
                     $dataDisks = $uniqueVolumes | Where-Object { 
                         $mp = $_.MountPoint
-                        $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
-                        $roles -contains 'Data'
+                        if ($hasRoles) {
+                            $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                            $roles -contains 'Data'
+                        } else {
+                            $true
+                        }
                     }
                     if ($dataDisks) {
                         $result.DataDiskAvgFreePct = ConvertTo-SafeDecimal (($dataDisks | Measure-Object -Property FreePct -Average).Average) 100.0
@@ -1369,8 +1391,12 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                     
                     $logDisks = $uniqueVolumes | Where-Object { 
                         $mp = $_.MountPoint
-                        $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
-                        $roles -contains 'Log'
+                        if ($hasRoles) {
+                            $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                            $roles -contains 'Log'
+                        } else {
+                            $true
+                        }
                     }
                     if ($logDisks) {
                         $result.LogDiskAvgFreePct = ConvertTo-SafeDecimal (($logDisks | Measure-Object -Property FreePct -Average).Average) 100.0
@@ -1378,8 +1404,12 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                     
                     $tempdbDisks = $uniqueVolumes | Where-Object { 
                         $mp = $_.MountPoint
-                        $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
-                        $roles -contains 'TempDB'
+                        if ($hasRoles) {
+                            $roles = if ($volumeRoles.ContainsKey($mp)) { $volumeRoles[$mp] } else { @() }
+                            $roles -contains 'TempDB'
+                        } else {
+                            $false
+                        }
                     }
                     if ($tempdbDisks) {
                         $result.TempDBDiskFreePct = ConvertTo-SafeDecimal (($tempdbDisks | Measure-Object -Property FreePct -Average).Average) 100.0
