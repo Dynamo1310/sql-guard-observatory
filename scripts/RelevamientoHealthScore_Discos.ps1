@@ -192,31 +192,54 @@ function Get-DiskMetrics {
     
     try {
         # Detectar versión de SQL Server primero
-        $versionQuery = @"
+        $sqlVersion = "Unknown"
+        $servicePack = "Unknown"
+        $edition = "Unknown"
+        $majorVersion = 0
+        $minorVersion = 0
+        
+        try {
+            $versionQuery = @"
 SELECT 
     CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version,
     CAST(SERVERPROPERTY('ProductLevel') AS VARCHAR(20)) AS ServicePack,
     CAST(SERVERPROPERTY('Edition') AS VARCHAR(100)) AS Edition
 "@
-        $versionResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $versionQuery -TimeoutSec 5 -MaxRetries 1
-        $sqlVersion = $versionResult.Version
-        $servicePack = $versionResult.ServicePack
-        $edition = $versionResult.Edition
-        $majorVersion = [int]($sqlVersion -split '\.')[0]
-        $minorVersion = [int]($sqlVersion -split '\.')[1]
+            $versionResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $versionQuery -TimeoutSec 5 -MaxRetries 1
+            $sqlVersion = $versionResult.Version
+            $servicePack = $versionResult.ServicePack
+            $edition = $versionResult.Edition
+            $majorVersion = [int]($sqlVersion -split '\.')[0]
+            $minorVersion = [int]($sqlVersion -split '\.')[1]
+        } catch {
+            Write-Verbose "      ℹ️  No se pudo detectar versión de ${InstanceName}, asumiendo versión antigua"
+            # Asumir versión muy antigua (SQL 2000/2005) sin sys.dm_os_volume_stats
+            $majorVersion = 8  # SQL 2000
+        }
         
         # Verificar si sys.dm_os_volume_stats está disponible
-        # SQL 2008 RTM (10.0.x) puede no tenerlo, pero SQL 2008 R2 (10.50.x) sí
+        # SQL 2005 (9.x) = No tiene sys.dm_os_volume_stats
+        # SQL 2008 RTM (10.0.x) = Puede no tenerlo
+        # SQL 2008 R2+ (10.50.x+) = Sí tiene sys.dm_os_volume_stats
         $hasVolumeStats = $true
-        if ($majorVersion -eq 10 -and $minorVersion -lt 50) {
-            # SQL 2008 RTM/SP1/SP2/SP3 (10.0.x - 10.49.x) puede no tener sys.dm_os_volume_stats
-            # Verificar si existe
+        
+        if ($majorVersion -lt 10) {
+            # SQL 2005 o anterior: definitivamente no tiene sys.dm_os_volume_stats
+            $hasVolumeStats = $false
+            Write-Verbose "      ℹ️  ${InstanceName}: SQL $majorVersion.x detectado, usando fallback xp_fixeddrives"
+        }
+        elseif ($majorVersion -eq 10 -and $minorVersion -lt 50) {
+            # SQL 2008 RTM/SP1/SP2/SP3 (10.0.x - 10.49.x): verificar si tiene sys.dm_os_volume_stats
             try {
                 $checkQuery = "SELECT 1 FROM sys.system_objects WHERE name = 'dm_os_volume_stats'"
                 $checkResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $checkQuery -TimeoutSec 5 -MaxRetries 1
                 $hasVolumeStats = ($checkResult -ne $null)
+                if (-not $hasVolumeStats) {
+                    Write-Verbose "      ℹ️  ${InstanceName}: SQL 2008 RTM sin sys.dm_os_volume_stats, usando fallback"
+                }
             } catch {
                 $hasVolumeStats = $false
+                Write-Verbose "      ℹ️  ${InstanceName}: Error verificando sys.dm_os_volume_stats, usando fallback"
             }
         }
         
@@ -371,10 +394,56 @@ GROUP BY vs.volume_mount_point;
 "@
         
         # Ejecutar queries con reintentos automáticos
-        $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
-            -Query $querySpace `
-            -TimeoutSec $TimeoutSec `
-            -MaxRetries 2
+        $dataSpace = $null
+        try {
+            $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
+                -Query $querySpace `
+                -TimeoutSec $TimeoutSec `
+                -MaxRetries 2
+        }
+        catch {
+            # Si falla por "Invalid object name 'sys.dm_os_volume_stats'", usar fallback
+            if ($_.Exception.Message -match "Invalid object name.*dm_os_volume_stats") {
+                Write-Warning "      ⚠️  ${InstanceName}: sys.dm_os_volume_stats no disponible (SQL muy antiguo), usando fallback xp_fixeddrives"
+                
+                # Reintentamos con el fallback de xp_fixeddrives
+                $querySpaceFallback = @"
+-- SQL 2000/2005 compatible (usando xp_fixeddrives)
+CREATE TABLE #DriveSpace (
+    Drive VARCHAR(10),
+    MBFree INT
+)
+
+INSERT INTO #DriveSpace
+EXEC xp_fixeddrives
+
+SELECT 
+    Drive + ':\' AS MountPoint,
+    'Drive ' + Drive AS VolumeName,
+    CAST(0 AS DECIMAL(10,2)) AS TotalGB,
+    CAST(MBFree / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
+    CAST(100 AS DECIMAL(5,2)) AS FreePct,
+    'Data' AS DiskRole
+FROM #DriveSpace
+
+DROP TABLE #DriveSpace
+"@
+                try {
+                    $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
+                        -Query $querySpaceFallback `
+                        -TimeoutSec $TimeoutSec `
+                        -MaxRetries 1
+                }
+                catch {
+                    Write-Warning "      ❌ ${InstanceName}: Fallback xp_fixeddrives también falló: $($_.Exception.Message)"
+                    throw
+                }
+            }
+            else {
+                # Otro tipo de error, propagar
+                throw
+            }
+        }
         
         # Query de archivos problemáticos: solo para SQL 2008+ con sys.dm_os_volume_stats
         $dataProblematicFiles = $null
@@ -835,18 +904,27 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
             
             try {
                 # Detectar versión de SQL Server
-                $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version"
-                $versionResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $versionQuery -TimeoutSec 5 -MaxRetries 1
-                $sqlVersion = $versionResult.Version
-                $majorVersion = [int]($sqlVersion -split '\.')[0]
+                $sqlVersion = "Unknown"
+                $majorVersion = 0
+                $minorVersion = 0
+                
+                try {
+                    $versionQuery = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)) AS Version"
+                    $versionResult = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $versionQuery -TimeoutSec 5 -MaxRetries 1
+                    $sqlVersion = $versionResult.Version
+                    $majorVersion = [int]($sqlVersion -split '\.')[0]
+                    $minorVersion = [int]($sqlVersion -split '\.')[1]
+                } catch {
+                    # Asumir versión antigua si falla detección
+                    $majorVersion = 8  # SQL 2000/2005
+                }
                 
                 # SQL 2005 = version 9.x (no tiene sys.dm_os_volume_stats)
-                # SQL 2008+ = version 10.x+ (tiene sys.dm_os_volume_stats)
+                # SQL 2008+ = version 10.x+ (puede tener sys.dm_os_volume_stats)
                 
-                if ($majorVersion -lt 10) {
-                    # FALLBACK para SQL Server 2005 (usar xp_fixeddrives)
-                    $querySpace = @"
--- SQL 2005 compatible (usando xp_fixeddrives)
+                # Determinar query según versión
+                $querySpaceFallback = @"
+-- SQL 2000/2005 compatible (usando xp_fixeddrives)
 CREATE TABLE #DriveSpace (
     Drive VARCHAR(10),
     MBFree INT
@@ -856,19 +934,18 @@ INSERT INTO #DriveSpace
 EXEC xp_fixeddrives
 
 SELECT 
-    Drive + ':' AS MountPoint,
+    Drive + ':\' AS MountPoint,
     'Drive ' + Drive AS VolumeName,
-    CAST(0 AS DECIMAL(10,2)) AS TotalGB,  -- xp_fixeddrives no da total
+    CAST(0 AS DECIMAL(10,2)) AS TotalGB,
     CAST(MBFree / 1024.0 AS DECIMAL(10,2)) AS FreeGB,
-    CAST(100 AS DECIMAL(5,2)) AS FreePct,  -- No podemos calcular % sin total
-    'Data' AS DiskRole  -- Asumimos Data por defecto
+    CAST(100 AS DECIMAL(5,2)) AS FreePct,
+    'Data' AS DiskRole
 FROM #DriveSpace
 
 DROP TABLE #DriveSpace
 "@
-                } else {
-                    # SQL 2008+ (query mejorada: obtiene volúmenes únicos + roles)
-                    $querySpace = @"
+
+                $querySpaceModern = @"
 -- Espacio en discos con clasificación por rol (deduplicado correctamente)
 ;WITH VolumeInfo AS (
     SELECT DISTINCT
@@ -876,7 +953,6 @@ DROP TABLE #DriveSpace
         vs.logical_volume_name AS VolumeName,
         vs.total_bytes,
         vs.available_bytes,
-        -- Determinar rol del disco basado en tipo de archivo
         CASE 
             WHEN mf.type_desc = 'LOG' THEN 'Log'
             WHEN DB_NAME(mf.database_id) = 'tempdb' THEN 'TempDB'
@@ -896,9 +972,31 @@ SELECT DISTINCT
 FROM VolumeInfo
 ORDER BY FreePct ASC;
 "@
-                }
+
+                # Seleccionar query según versión
+                $querySpace = if ($majorVersion -lt 10) { $querySpaceFallback } else { $querySpaceModern }
                 
-                $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpace -TimeoutSec $TimeoutSec -MaxRetries 2
+                # Ejecutar query con fallback automático si falla
+                $dataSpace = $null
+                try {
+                    $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpace -TimeoutSec $TimeoutSec -MaxRetries 2
+                }
+                catch {
+                    # Si falla por sys.dm_os_volume_stats, usar fallback
+                    if ($_.Exception.Message -match "Invalid object name.*dm_os_volume_stats" -and $querySpace -eq $querySpaceModern) {
+                        Write-Warning "      ⚠️  ${InstanceName}: sys.dm_os_volume_stats no disponible, usando xp_fixeddrives"
+                        try {
+                            $dataSpace = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $querySpaceFallback -TimeoutSec $TimeoutSec -MaxRetries 1
+                        }
+                        catch {
+                            Write-Warning "      ❌ ${InstanceName}: Fallback también falló"
+                            throw
+                        }
+                    }
+                    else {
+                        throw
+                    }
+                }
                 
                 if ($dataSpace) {
                     # Obtener volúmenes únicos usando Group-Object (más robusto)
