@@ -33,10 +33,10 @@ export default function HealthScore() {
   const { sortedData, requestSort, getSortIndicator } = useTableSort(healthScores);
 
   const fetchHealthScores = useCallback(async () => {
-    setLoading(true);
     try {
       const data = await healthScoreV3Api.getAllHealthScores();
       setHealthScores(data);
+      console.log('[HealthScore] Datos actualizados:', data.length, 'instancias');
     } catch (error) {
       console.error('Error al cargar health scores:', error);
       toast({
@@ -44,18 +44,21 @@ export default function HealthScore() {
         description: 'No se pudieron cargar los health scores',
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
     }
   }, [toast]);
 
   // ========== SIGNALR: Actualizaciones en tiempo real ==========
-  const handleHealthScoreUpdate = useCallback((data: any) => {
+  const handleHealthScoreUpdate = useCallback(async (data: any) => {
     console.log(`[HealthScore] Collector ${data.collectorName} completó: ${data.instanceCount} instancias`);
     
     // Si es el consolidador, refrescar toda la tabla (tiene el score final calculado)
     if (data.collectorName === 'Consolidate') {
-      fetchHealthScores();
+      console.log('[HealthScore] Esperando 2 segundos para que BD se actualice...');
+      // Pequeño delay para evitar race condition (dar tiempo a que BD termine de escribir)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      console.log('[HealthScore] Refrescando datos...');
+      await fetchHealthScores();
     }
   }, [fetchHealthScores]);
 

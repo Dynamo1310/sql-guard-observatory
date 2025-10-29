@@ -1586,6 +1586,9 @@ Write-Host "=========================================================" -Foregrou
 Write-Host ""
 Write-Host "[OK] Consolidacion completada!" -ForegroundColor Green
 
+# Dar tiempo a que SQL Server haga commit de las transacciones
+Start-Sleep -Milliseconds 500
+
 # Enviar notificación de SignalR para actualización en tiempo real
 try {
     $totalInstances = $results.Count
