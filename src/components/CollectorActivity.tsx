@@ -19,8 +19,9 @@ export default function CollectorActivity() {
   const [activities, setActivities] = useState<Map<string, CollectorActivity>>(new Map());
 
   // Escuchar notificaciones de collectors
+  // NOTA: SignalR convierte nombres a minúsculas automáticamente
   useSignalREvent<{ CollectorName: string; Timestamp: string; InstanceCount: number }>(
-    'HealthScoreUpdated',
+    'healthscoreupdated',
     (data) => {
       const newActivities = new Map(activities);
       newActivities.set(data.CollectorName, {

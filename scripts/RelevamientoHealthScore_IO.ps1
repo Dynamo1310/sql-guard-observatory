@@ -71,6 +71,7 @@ function Get-IOMetrics {
         ReadIOPS = 0
         WriteIOPS = 0
         Details = @()
+        IOByVolume = @()
     }
     
     try {
@@ -166,6 +167,66 @@ ORDER BY
             $result.Details = $data | Select-Object -First 5 | ForEach-Object {
                 "$($_.DatabaseName):$($_.FileType):Read=$([int]$_.AvgReadLatencyMs)ms:Write=$([int]$_.AvgWriteLatencyMs)ms"
             }
+            
+            # Agrupar métricas por volumen (disco físico)
+            $volumeMetrics = @{}
+            foreach ($file in $data) {
+                # Extraer letra de unidad del physical_name (ej: "C:\..." -> "C:")
+                if ($file.PhysicalName -match '^([A-Z]:)') {
+                    $volume = $matches[1]
+                    
+                    if (-not $volumeMetrics.ContainsKey($volume)) {
+                        $volumeMetrics[$volume] = @{
+                            MountPoint = $volume
+                            TotalReadLatency = 0
+                            TotalWriteLatency = 0
+                            ReadCount = 0
+                            WriteCount = 0
+                            TotalReadIOPS = 0
+                            TotalWriteIOPS = 0
+                            MaxReadLatency = 0
+                            MaxWriteLatency = 0
+                        }
+                    }
+                    
+                    # Acumular métricas
+                    $vol = $volumeMetrics[$volume]
+                    if ($file.NumReads -gt 0) {
+                        $vol.TotalReadLatency += $file.AvgReadLatencyMs
+                        $vol.ReadCount++
+                        $vol.TotalReadIOPS += $file.ReadIOPS
+                        if ($file.AvgReadLatencyMs -gt $vol.MaxReadLatency) {
+                            $vol.MaxReadLatency = $file.AvgReadLatencyMs
+                        }
+                    }
+                    if ($file.NumWrites -gt 0) {
+                        $vol.TotalWriteLatency += $file.AvgWriteLatencyMs
+                        $vol.WriteCount++
+                        $vol.TotalWriteIOPS += $file.WriteIOPS
+                        if ($file.AvgWriteLatencyMs -gt $vol.MaxWriteLatency) {
+                            $vol.MaxWriteLatency = $file.AvgWriteLatencyMs
+                        }
+                    }
+                }
+            }
+            
+            # Calcular promedios y crear lista de volúmenes
+            $result.IOByVolume = $volumeMetrics.Keys | Sort-Object | ForEach-Object {
+                $vol = $volumeMetrics[$_]
+                $avgRead = if ($vol.ReadCount -gt 0) { $vol.TotalReadLatency / $vol.ReadCount } else { 0 }
+                $avgWrite = if ($vol.WriteCount -gt 0) { $vol.TotalWriteLatency / $vol.WriteCount } else { 0 }
+                
+                [PSCustomObject]@{
+                    MountPoint = $vol.MountPoint
+                    AvgReadLatencyMs = [math]::Round($avgRead, 2)
+                    AvgWriteLatencyMs = [math]::Round($avgWrite, 2)
+                    MaxReadLatencyMs = [math]::Round($vol.MaxReadLatency, 2)
+                    MaxWriteLatencyMs = [math]::Round($vol.MaxWriteLatency, 2)
+                    ReadIOPS = [math]::Round($vol.TotalReadIOPS, 2)
+                    WriteIOPS = [math]::Round($vol.TotalWriteIOPS, 2)
+                    TotalIOPS = [math]::Round($vol.TotalReadIOPS + $vol.TotalWriteIOPS, 2)
+                }
+            }
         }
         
     } catch {
@@ -203,6 +264,13 @@ function Write-ToSqlServer {
         foreach ($row in $Data) {
             $details = ($row.Details -join "|") -replace "'", "''"
             
+            # Convertir IOByVolume a JSON
+            $ioByVolumeJson = if ($row.IOByVolume -and $row.IOByVolume.Count -gt 0) {
+                ($row.IOByVolume | ConvertTo-Json -Compress) -replace "'", "''"
+            } else {
+                $null
+            }
+            
             $query = @"
 INSERT INTO dbo.InstanceHealth_IO (
     InstanceName,
@@ -220,7 +288,8 @@ INSERT INTO dbo.InstanceHealth_IO (
     TotalIOPS,
     ReadIOPS,
     WriteIOPS,
-    IODetails
+    IODetails,
+    IOByVolumeJson
 ) VALUES (
     '$($row.InstanceName)',
     '$($row.Ambiente)',
@@ -237,7 +306,8 @@ INSERT INTO dbo.InstanceHealth_IO (
     $($row.TotalIOPS),
     $($row.ReadIOPS),
     $($row.WriteIOPS),
-    '$details'
+    '$details',
+    $(if ($ioByVolumeJson) { "'$ioByVolumeJson'" } else { "NULL" })
 );
 "@
             
@@ -348,6 +418,7 @@ foreach ($instance in $instances) {
         ReadIOPS = $ioMetrics.ReadIOPS
         WriteIOPS = $ioMetrics.WriteIOPS
         Details = $ioMetrics.Details
+        IOByVolume = $ioMetrics.IOByVolume
     }
 }
 

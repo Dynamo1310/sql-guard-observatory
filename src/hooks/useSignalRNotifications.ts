@@ -50,35 +50,21 @@ export const useHealthScoreNotifications = (
   onHealthScoreUpdated?: (data: HealthScoreUpdateNotification) => void,
   onInstanceUpdated?: (data: InstanceHealthUpdateNotification) => void
 ) => {
-  const { toast } = useToast();
-
   // Notificación de actualización general de HealthScore
+  // NOTA: SignalR convierte nombres a minúsculas automáticamente
   useSignalREvent<HealthScoreUpdateNotification>(
-    'HealthScoreUpdated',
+    'healthscoreupdated',
     useCallback((data: HealthScoreUpdateNotification) => {
-      console.log('[SignalR] HealthScore actualizado:', data);
-      
       if (onHealthScoreUpdated) {
         onHealthScoreUpdated(data);
       }
-
-      // Opcional: Mostrar toast para ciertos collectors críticos
-      if (['Consolidate', 'Backups', 'AlwaysOn'].includes(data.collectorName)) {
-        toast({
-          title: 'Datos actualizados',
-          description: `${data.collectorName}: ${data.instanceCount} instancias procesadas`,
-          duration: 2000,
-        });
-      }
-    }, [onHealthScoreUpdated, toast])
+    }, [onHealthScoreUpdated])
   );
 
   // Notificación de actualización de instancia específica
   useSignalREvent<InstanceHealthUpdateNotification>(
-    'InstanceHealthUpdated',
+    'instancehealthupdated',
     useCallback((data: InstanceHealthUpdateNotification) => {
-      console.log('[SignalR] Instancia actualizada:', data);
-      
       if (onInstanceUpdated) {
         onInstanceUpdated(data);
       }
@@ -96,9 +82,7 @@ export const useAlertNotifications = (
   const { toast } = useToast();
 
   // Notificación de alerta creada
-  useSignalREvent('AlertCreated', useCallback((alert: any) => {
-    console.log('[SignalR] Nueva alerta:', alert);
-    
+  useSignalREvent('alertcreated', useCallback((alert: any) => {
     toast({
       title: 'Nueva Alerta',
       description: `${alert.instanceName}: ${alert.message}`,
@@ -112,9 +96,7 @@ export const useAlertNotifications = (
   }, [onAlertCreated, toast]));
 
   // Notificación de alerta resuelta
-  useSignalREvent('AlertResolved', useCallback((alert: any) => {
-    console.log('[SignalR] Alerta resuelta:', alert);
-    
+  useSignalREvent('alertresolved', useCallback((alert: any) => {
     if (onAlertResolved) {
       onAlertResolved(alert);
     }
@@ -130,9 +112,7 @@ export const useMaintenanceNotifications = (
 ) => {
   const { toast } = useToast();
 
-  useSignalREvent('MaintenanceStarted', useCallback((data: any) => {
-    console.log('[SignalR] Mantenimiento iniciado:', data);
-    
+  useSignalREvent('maintenancestarted', useCallback((data: any) => {
     toast({
       title: 'Mantenimiento Iniciado',
       description: `${data.instanceName}: ${data.taskName}`,
@@ -144,9 +124,7 @@ export const useMaintenanceNotifications = (
     }
   }, [onMaintenanceStarted, toast]));
 
-  useSignalREvent('MaintenanceCompleted', useCallback((data: any) => {
-    console.log('[SignalR] Mantenimiento completado:', data);
-    
+  useSignalREvent('maintenancecompleted', useCallback((data: any) => {
     if (onMaintenanceCompleted) {
       onMaintenanceCompleted(data);
     }
@@ -161,9 +139,7 @@ export const useSystemNotifications = (
 ) => {
   const { toast } = useToast();
 
-  useSignalREvent('SystemNotification', useCallback((notification: any) => {
-    console.log('[SignalR] Notificación del sistema:', notification);
-    
+  useSignalREvent('systemnotification', useCallback((notification: any) => {
     toast({
       title: notification.title || 'Notificación del Sistema',
       description: notification.message,

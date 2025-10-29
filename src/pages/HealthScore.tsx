@@ -25,6 +25,7 @@ export default function HealthScore() {
   const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({});
   const [showExplanation, setShowExplanation] = useState(false);
   const [lastUpdateKey, setLastUpdateKey] = useState<number>(Date.now()); // Key para forzar re-render
+  const [isUpdating, setIsUpdating] = useState(false); // Flag para evitar doble actualización
   
   // Filtros
   const [filterStatus, setFilterStatus] = useState<string>('All');
@@ -33,25 +34,14 @@ export default function HealthScore() {
 
   const { sortedData, requestSort, getSortIndicator } = useTableSort(healthScores);
 
-  const fetchHealthScores = useCallback(async () => {
-    setLoading(true);
+  const fetchHealthScores = useCallback(async (showLoading: boolean = true) => {
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
       const data = await healthScoreV3Api.getAllHealthScores();
-      
-      // Log detallado para debugging
-      if (data.length > 0) {
-        const firstInstance = data[0];
-        console.log('[HealthScore] Datos recibidos:', {
-          total: data.length,
-          primeraInstancia: firstInstance.instanceName,
-          ultimaActualizacion: firstInstance.generatedAtUtc,
-          timestamp: new Date().toISOString()
-        });
-      }
-      
       setHealthScores(data);
       setLastUpdateKey(Date.now()); // Forzar re-render con nuevo key
-      console.log('[HealthScore] Estado actualizado con', data.length, 'instancias');
     } catch (error) {
       console.error('Error al cargar health scores:', error);
       toast({
@@ -60,40 +50,62 @@ export default function HealthScore() {
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
+    }
+  }, [toast]);
+
+  const loadInstanceDetails = useCallback(async (instanceName: string, showLoading: boolean = true) => {
+    if (showLoading) {
+      setLoadingDetails(prev => ({ ...prev, [instanceName]: true }));
+    }
+    try {
+      const details = await healthScoreV3Api.getHealthScoreDetails(instanceName);
+      setInstanceDetails(prev => ({ ...prev, [instanceName]: details }));
+    } catch (error) {
+      console.error('Error al cargar detalles:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los detalles de la instancia',
+        variant: 'destructive',
+      });
+    } finally {
+      if (showLoading) {
+        setLoadingDetails(prev => ({ ...prev, [instanceName]: false }));
+      }
     }
   }, [toast]);
 
   // ========== SIGNALR: Actualizaciones en tiempo real ==========
   const handleHealthScoreUpdate = useCallback(async (data: any) => {
-    console.log(`[HealthScore] 🔔 Collector ${data.collectorName} completó: ${data.instanceCount} instancias`);
-    
     // Si es el consolidador, refrescar toda la tabla (tiene el score final calculado)
-    if (data.collectorName === 'Consolidate') {
-      console.log('[HealthScore] ⏳ Esperando 5 segundos para que BD termine commit...');
-      
-      // Toast para indicar que se está actualizando
-      toast({
-        title: '🔄 Actualizando datos...',
-        description: `Consolidador procesó ${data.instanceCount} instancias`,
-        duration: 5000,
-      });
-      
-      // Delay más largo para asegurar que BD termine (500ms script + commit de SQL)
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      console.log('[HealthScore] 🔍 Refrescando desde API...');
-      await fetchHealthScores();
-      
-      console.log('[HealthScore] ✅ Actualización completada');
-      
-      toast({
-        title: '✅ Datos actualizados',
-        description: 'La tabla se ha actualizado automáticamente',
-        duration: 3000,
-      });
+    if (data.collectorName === 'Consolidate' && !isUpdating) {
+      setIsUpdating(true);
+      try {
+        // Delay para asegurar que BD termine commit (500ms script + 1500ms buffer)
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Actualización silenciosa sin mostrar loading
+        await fetchHealthScores(false);
+        
+        // Recargar detalles de instancias actualmente expandidas (silenciosamente)
+        const expandedArray = Array.from(expandedRows);
+        const updatedDetails: Record<string, HealthScoreV3DetailDto> = {};
+        
+        for (const instanceName of expandedArray) {
+          // Cargar detalles frescos
+          const details = await healthScoreV3Api.getHealthScoreDetails(instanceName);
+          updatedDetails[instanceName] = details;
+        }
+        
+        // Actualizar caché de una sola vez (evita flash/parpadeo)
+        // Solo mantiene instancias expandidas, el resto se limpia automáticamente
+        setInstanceDetails(updatedDetails);
+      } finally {
+        setIsUpdating(false);
+      }
     }
-  }, [fetchHealthScores, toast]);
+  }, [fetchHealthScores, expandedRows, isUpdating]);
 
   useHealthScoreNotifications(handleHealthScoreUpdate);
 
@@ -142,20 +154,7 @@ export default function HealthScore() {
       newExpanded.add(instanceName);
       // Cargar detalles si no los tenemos aún
       if (!instanceDetails[instanceName] && !loadingDetails[instanceName]) {
-        setLoadingDetails(prev => ({ ...prev, [instanceName]: true }));
-        try {
-          const details = await healthScoreV3Api.getHealthScoreDetails(instanceName);
-          setInstanceDetails(prev => ({ ...prev, [instanceName]: details }));
-        } catch (error) {
-          console.error('Error al cargar detalles:', error);
-          toast({
-            title: 'Error',
-            description: 'No se pudieron cargar los detalles de la instancia',
-            variant: 'destructive',
-          });
-        } finally {
-          setLoadingDetails(prev => ({ ...prev, [instanceName]: false }));
-        }
+        await loadInstanceDetails(instanceName);
       }
     }
     setExpandedRows(newExpanded);
@@ -696,7 +695,7 @@ export default function HealthScore() {
                     
                     {/* Fila Expandida con Detalles */}
                     {expandedRows.has(score.instanceName) && (
-                      <TableRow>
+                      <TableRow key={`expanded-${score.instanceName}-${lastUpdateKey}`}>
                         <TableCell colSpan={8} className="bg-accent/20 p-6">
                           {loadingDetails[score.instanceName] ? (
                             <div className="flex items-center justify-center py-8">

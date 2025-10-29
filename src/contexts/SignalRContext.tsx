@@ -55,19 +55,16 @@ export const SignalRProvider: React.FC<SignalRProviderProps> = ({
 
     // Eventos de conexión
     newConnection.onclose((error) => {
-      console.log('[SignalR] Conexión cerrada', error);
       setIsConnected(false);
       setConnectionState(signalR.HubConnectionState.Disconnected);
     });
 
     newConnection.onreconnecting((error) => {
-      console.log('[SignalR] Reconectando...', error);
       setIsConnected(false);
       setConnectionState(signalR.HubConnectionState.Reconnecting);
     });
 
     newConnection.onreconnected((connectionId) => {
-      console.log('[SignalR] Reconectado con ID:', connectionId);
       setIsConnected(true);
       setConnectionState(signalR.HubConnectionState.Connected);
     });
@@ -76,7 +73,6 @@ export const SignalRProvider: React.FC<SignalRProviderProps> = ({
     const startConnection = async () => {
       try {
         await newConnection.start();
-        console.log('[SignalR] Conectado exitosamente');
         setIsConnected(true);
         setConnectionState(signalR.HubConnectionState.Connected);
       } catch (error) {
@@ -104,7 +100,6 @@ export const SignalRProvider: React.FC<SignalRProviderProps> = ({
   const subscribe = useCallback((event: string, callback: (...args: any[]) => void) => {
     if (connection) {
       connection.on(event, callback);
-      console.log(`[SignalR] Suscrito a evento: ${event}`);
     }
   }, [connection]);
 
@@ -114,7 +109,6 @@ export const SignalRProvider: React.FC<SignalRProviderProps> = ({
   const unsubscribe = useCallback((event: string, callback: (...args: any[]) => void) => {
     if (connection) {
       connection.off(event, callback);
-      console.log(`[SignalR] Desuscrito de evento: ${event}`);
     }
   }, [connection]);
 
@@ -189,12 +183,10 @@ export const useSignalREvent = <T = any>(
   useEffect(() => {
     if (isConnected && connection && handlerRef.current) {
       subscribe(event, handlerRef.current);
-      console.log(`[SignalR] ✅ Suscrito a "${event}"`);
 
       return () => {
         if (handlerRef.current) {
           unsubscribe(event, handlerRef.current);
-          console.log(`[SignalR] ❌ Desuscrito de "${event}"`);
         }
       };
     }
