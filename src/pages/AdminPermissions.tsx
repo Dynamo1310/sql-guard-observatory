@@ -42,13 +42,19 @@ export default function AdminPermissions() {
     // SuperAdmin puede editar todo
     if (isSuperAdmin) return true;
     
-    // Admin no puede editar permisos de SuperAdmin
-    if (role === 'SuperAdmin') return false;
+    // Admin solo puede editar el rol Reader
+    if (role === 'Reader') return true;
     
-    // Admin no puede editar sus propios permisos
-    if (role === 'Admin') return false;
+    // Admin no puede editar SuperAdmin ni sus propios permisos (Admin)
+    return false;
+  };
+
+  const canViewRole = (role: string): boolean => {
+    // SuperAdmin puede ver todos los roles
+    if (isSuperAdmin) return true;
     
-    return true;
+    // Admin solo puede ver el rol Reader
+    return role === 'Reader';
   };
 
   const handleTogglePermission = (role: string, viewName: string, currentValue: boolean) => {
@@ -206,7 +212,7 @@ export default function AdminPermissions() {
       </div>
 
       {/* Tabla de Permisos por Rol */}
-      {permissions.map((rolePermission) => {
+      {permissions.filter(rp => canViewRole(rp.role)).map((rolePermission) => {
         const viewsList = availableData?.views || [];
         
         return (
@@ -221,7 +227,7 @@ export default function AdminPermissions() {
                   </CardTitle>
                   <CardDescription className="mt-2">
                     {rolePermission.role === 'SuperAdmin' && 'Acceso total al sistema y configuración de permisos'}
-                    {rolePermission.role === 'Admin' && 'Gestión de usuarios y todas las vistas de observabilidad'}
+                    {rolePermission.role === 'Admin' && 'Gestión de usuarios y configuración de permisos de Reader'}
                     {rolePermission.role === 'Reader' && 'Solo lectura de las vistas permitidas'}
                   </CardDescription>
                 </div>

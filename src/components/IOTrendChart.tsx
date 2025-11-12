@@ -27,9 +27,10 @@ interface IODataPoint {
 interface Props {
   instanceName: string;
   hours?: number;
+  refreshTrigger?: number;
 }
 
-export function IOTrendChart({ instanceName, hours = 24 }: Props) {
+export function IOTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: Props) {
   const [data, setData] = useState<IODataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,9 +39,17 @@ export function IOTrendChart({ instanceName, hours = 24 }: Props) {
 
   const API_BASE_URL = getApiUrl();
 
+  // Carga inicial
   useEffect(() => {
     fetchTrendData();
   }, [instanceName, hours]);
+  
+  // Actualización silenciosa cuando cambia refreshTrigger
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      fetchTrendDataSilently();
+    }
+  }, [refreshTrigger]);
   
   useEffect(() => {
     // Extraer volúmenes únicos de los datos
@@ -48,7 +57,9 @@ export function IOTrendChart({ instanceName, hours = 24 }: Props) {
     data.forEach(d => {
       if (d.ioByVolumeJson) {
         try {
-          const volumes: VolumeIO[] = JSON.parse(d.ioByVolumeJson);
+          const parsed = JSON.parse(d.ioByVolumeJson);
+          // Normalizar: si es objeto, convertir a array
+          const volumes: VolumeIO[] = Array.isArray(parsed) ? parsed : [parsed];
           volumes.forEach(v => volumesSet.add(v.MountPoint.toUpperCase()));
         } catch (e) {
           console.error('Error parsing ioByVolumeJson:', e);
@@ -85,6 +96,29 @@ export function IOTrendChart({ instanceName, hours = 24 }: Props) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Actualización silenciosa sin cambiar el estado de loading
+  const fetchTrendDataSilently = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/HealthScoreTrends/io/${instanceName}?hours=${hours}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        }
+      });
+      
+      if (!response.ok) return;
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setData(result.data);
+        setError(null);
+      }
+    } catch (err: any) {
+      console.debug('Error en actualización silenciosa:', err);
     }
   };
 
@@ -136,7 +170,9 @@ export function IOTrendChart({ instanceName, hours = 24 }: Props) {
     // Si hay un volumen específico seleccionado, usar sus métricas
     if (selectedVolume !== 'ALL' && d.ioByVolumeJson) {
       try {
-        const volumes: VolumeIO[] = JSON.parse(d.ioByVolumeJson);
+        const parsed = JSON.parse(d.ioByVolumeJson);
+        // Normalizar: si es objeto, convertir a array
+        const volumes: VolumeIO[] = Array.isArray(parsed) ? parsed : [parsed];
         const volumeData = volumes.find(v => v.MountPoint.toUpperCase() === selectedVolume);
         if (volumeData) {
           readValue = volumeData.AvgReadLatencyMs;
@@ -170,7 +206,9 @@ export function IOTrendChart({ instanceName, hours = 24 }: Props) {
   
   if (selectedVolume !== 'ALL' && latestData?.ioByVolumeJson) {
     try {
-      const volumes: VolumeIO[] = JSON.parse(latestData.ioByVolumeJson);
+      const parsed = JSON.parse(latestData.ioByVolumeJson);
+      // Normalizar: si es objeto, convertir a array
+      const volumes: VolumeIO[] = Array.isArray(parsed) ? parsed : [parsed];
       const volumeData = volumes.find(v => v.MountPoint.toUpperCase() === selectedVolume);
       if (volumeData) {
         latestRead = volumeData.AvgReadLatencyMs;

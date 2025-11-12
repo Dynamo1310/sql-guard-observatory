@@ -30,11 +30,10 @@ const mainItems = [
 
 const adminItems = [
   { title: 'Usuarios', url: '/admin/users', icon: Users, permission: 'AdminUsers' },
-];
-
-const superAdminItems = [
   { title: 'Permisos', url: '/admin/permissions', icon: Shield, permission: 'AdminPermissions' },
 ];
+
+const superAdminItems: typeof adminItems = [];
 
 export function AppSidebar() {
   const { state } = useSidebar();

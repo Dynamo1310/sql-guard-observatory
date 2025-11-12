@@ -20,18 +20,27 @@ interface TrendDataPoint {
 interface Props {
   instanceName: string;
   hours?: number;
+  refreshTrigger?: number;
 }
 
-export function HealthScoreTrendChart({ instanceName, hours = 24 }: Props) {
+export function HealthScoreTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: Props) {
   const [data, setData] = useState<TrendDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const API_BASE_URL = getApiUrl();
 
+  // Carga inicial
   useEffect(() => {
     fetchTrendData();
   }, [instanceName, hours]);
+
+  // Actualización silenciosa cuando cambia refreshTrigger
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      fetchTrendDataSilently();
+    }
+  }, [refreshTrigger]);
 
   const fetchTrendData = async () => {
     try {
@@ -60,6 +69,30 @@ export function HealthScoreTrendChart({ instanceName, hours = 24 }: Props) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Actualización silenciosa sin cambiar el estado de loading
+  const fetchTrendDataSilently = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/HealthScoreTrends/healthscore/${instanceName}?hours=${hours}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        }
+      });
+      
+      if (!response.ok) return;
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setData(result.data);
+        setError(null);
+      }
+    } catch (err: any) {
+      // Silenciar errores en actualizaciones automáticas
+      console.debug('Error en actualización silenciosa:', err);
     }
   };
 

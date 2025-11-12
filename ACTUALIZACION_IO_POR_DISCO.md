@@ -99,3 +99,4 @@ Una vez verificado que el collector funciona correctamente, necesitamos:
 - Las métricas se agrupan promediando todos los archivos en cada volumen
 
 
+

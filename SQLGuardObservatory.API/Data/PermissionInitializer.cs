@@ -51,8 +51,8 @@ public static class PermissionInitializer
                 });
             }
 
-            // Admin: Todo excepto AdminPermissions
-            foreach (var view in views.Where(v => v != "AdminPermissions"))
+            // Admin: Todo (incluyendo AdminUsers y AdminPermissions para configurar permisos de Reader)
+            foreach (var view in views)
             {
                 permissions.Add(new RolePermission
                 {

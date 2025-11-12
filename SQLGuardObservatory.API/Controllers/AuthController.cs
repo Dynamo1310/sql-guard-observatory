@@ -131,6 +131,8 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Crea un nuevo usuario (solo admin)
+    /// Admin solo puede asignar roles Reader y Admin
+    /// SuperAdmin puede asignar cualquier rol
     /// </summary>
     [HttpPost("users")]
     [Authorize(Policy = "AdminOnly")]
@@ -138,6 +140,12 @@ public class AuthController : ControllerBase
     {
         try
         {
+            // Si el usuario es Admin (no SuperAdmin) y está intentando crear un SuperAdmin, denegar
+            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && request.Role == "SuperAdmin")
+            {
+                return StatusCode(403, new { message = "Los usuarios Admin no pueden asignar el rol SuperAdmin" });
+            }
+            
             var user = await _authService.CreateUserAsync(request);
             
             if (user == null)
@@ -145,6 +153,8 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "No se pudo crear el usuario. Puede que ya exista." });
             }
 
+            _logger.LogInformation("Usuario {DomainUser} creado con rol {Role} por {CurrentUser}", 
+                request.DomainUser, request.Role, User.Identity?.Name);
             return CreatedAtAction(nameof(GetUser), new { userId = user.Id }, user);
         }
         catch (Exception ex)
@@ -156,6 +166,8 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Actualiza un usuario (solo admin)
+    /// Admin solo puede asignar roles Reader y Admin
+    /// SuperAdmin puede asignar cualquier rol
     /// </summary>
     [HttpPut("users/{userId}")]
     [Authorize(Policy = "AdminOnly")]
@@ -163,6 +175,19 @@ public class AuthController : ControllerBase
     {
         try
         {
+            // Si el usuario es Admin (no SuperAdmin) y está intentando asignar SuperAdmin, denegar
+            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && request.Role == "SuperAdmin")
+            {
+                return StatusCode(403, new { message = "Los usuarios Admin no pueden asignar el rol SuperAdmin" });
+            }
+            
+            // Obtener el usuario actual para verificar si está intentando cambiar el rol de un SuperAdmin
+            var existingUser = await _authService.GetUserByIdAsync(userId);
+            if (existingUser != null && !User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && existingUser.Role == "SuperAdmin")
+            {
+                return StatusCode(403, new { message = "Los usuarios Admin no pueden modificar usuarios SuperAdmin" });
+            }
+            
             var user = await _authService.UpdateUserAsync(userId, request);
             
             if (user == null)
@@ -170,6 +195,8 @@ public class AuthController : ControllerBase
                 return NotFound(new { message = "Usuario no encontrado" });
             }
 
+            _logger.LogInformation("Usuario {UserId} actualizado por {CurrentUser}. Nuevo rol: {Role}", 
+                userId, User.Identity?.Name, request.Role);
             return Ok(user);
         }
         catch (Exception ex)
@@ -271,6 +298,8 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Importa usuarios desde un grupo de Active Directory
+    /// Admin solo puede asignar roles Reader y Admin
+    /// SuperAdmin puede asignar cualquier rol
     /// </summary>
     [HttpPost("import-from-ad-group")]
     [Authorize(Policy = "AdminOnly")]
@@ -289,7 +318,13 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Debe seleccionar al menos un usuario para importar" });
             }
 
-            _logger.LogInformation($"Importando {request.SelectedUsernames.Count} usuarios del grupo {request.GroupName}");
+            // Si el usuario es Admin (no SuperAdmin) y está intentando importar con rol SuperAdmin, denegar
+            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && request.DefaultRole == "SuperAdmin")
+            {
+                return StatusCode(403, new { message = "Los usuarios Admin no pueden asignar el rol SuperAdmin" });
+            }
+
+            _logger.LogInformation($"Importando {request.SelectedUsernames.Count} usuarios del grupo {request.GroupName} con rol {request.DefaultRole}");
 
             // Obtener los miembros del grupo para validar
             var groupMembers = await _activeDirectoryService.GetGroupMembersAsync(request.GroupName);

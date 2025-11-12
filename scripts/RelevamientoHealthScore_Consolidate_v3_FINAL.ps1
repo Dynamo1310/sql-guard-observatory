@@ -504,8 +504,17 @@ function Calculate-IOScore {
     return @{ Score = $score; Cap = $cap }
 }
 
-# 8. DISCOS (7%)
+# 8. DISCOS (7%) - MEJORADO v3.2: Considera crecimiento y espacio interno de archivos
 function Calculate-DiscosScore {
+    <#
+    .SYNOPSIS
+        Calcula el score de discos considerando espacio libre EN DISCO y EN ARCHIVOS
+    .DESCRIPTION
+        Lógica inteligente:
+        - Si los archivos NO tienen crecimiento → no penalizar disco bajo
+        - Si los archivos TIENEN espacio interno → reducir penalización
+        - Solo penalizar fuerte cuando hay archivos con growth Y sin espacio interno
+    #>
     param(
         [object]$Data
     )
@@ -518,7 +527,47 @@ function Calculate-DiscosScore {
     $logDiskFreePct = Get-SafeNumeric -Value $Data.LogDiskAvgFreePct -Default 100
     $worstFreePct = Get-SafeNumeric -Value $Data.WorstFreePct -Default 100
     
-    # Promedio ponderado: priorizar Data y Log
+    # Parsear VolumesJson para analizar archivos
+    $hasGrowthRisk = $false
+    $totalProblematicFiles = 0
+    $hasFilesWithoutGrowth = $false
+    $hasGoodInternalSpace = $false
+    
+    if (![string]::IsNullOrWhiteSpace($Data.VolumesJson)) {
+        try {
+            $volumes = $Data.VolumesJson | ConvertFrom-Json
+            
+            foreach ($vol in $volumes) {
+                # Verificar si hay archivos problemáticos (growth + sin espacio interno)
+                $problematicFiles = Get-SafeInt -Value $vol.ProblematicFileCount -Default 0
+                $totalProblematicFiles += $problematicFiles
+                
+                # Verificar si todos los archivos NO tienen growth
+                $filesWithoutGrowth = Get-SafeInt -Value $vol.FilesWithoutGrowth -Default 0
+                $filesWithGrowth = Get-SafeInt -Value $vol.FilesWithGrowth -Default 0
+                $totalFiles = Get-SafeInt -Value $vol.TotalFiles -Default 0
+                
+                if ($totalFiles -gt 0 -and $filesWithoutGrowth -eq $totalFiles) {
+                    $hasFilesWithoutGrowth = $true
+                }
+                
+                # Verificar si los archivos con growth tienen buen espacio interno
+                $avgFreeSpacePct = Get-SafeNumeric -Value $vol.AvgFreeSpacePctInGrowableFiles -Default 0
+                if ($filesWithGrowth -gt 0 -and $avgFreeSpacePct -gt 20) {
+                    $hasGoodInternalSpace = $true
+                }
+            }
+            
+            # Determinar si hay riesgo real de crecimiento
+            $hasGrowthRisk = ($totalProblematicFiles -gt 0)
+            
+        } catch {
+            # Si falla el parseo, usar lógica tradicional
+            Write-Verbose "No se pudo parsear VolumesJson para análisis de archivos"
+        }
+    }
+    
+    # Promedio ponderado de espacio en disco: priorizar Data y Log
     $dataWeight = 0.5
     $logWeight = 0.3
     $otherWeight = 0.2
@@ -527,6 +576,7 @@ function Calculate-DiscosScore {
                        ($logDiskFreePct * $logWeight) + 
                        ($worstFreePct * $otherWeight)
     
+    # SCORING BASE (solo espacio en disco)
     # ≥20% = 100, 15–19% = 80, 10–14% = 60, 5–9% = 40, <5% = 0
     if ($weightedFreePct -ge 20) {
         $score = 100
@@ -544,9 +594,34 @@ function Calculate-DiscosScore {
         $score = 0
     }
     
-    # Data o Log <10% => cap 40
-    if ($dataDiskFreePct -lt 10 -or $logDiskFreePct -lt 10) {
-        $cap = 40
+    # AJUSTE INTELIGENTE: Reducir penalización si no hay riesgo real
+    if ($weightedFreePct -lt 20) {
+        # CASO 1: Todos los archivos NO tienen growth → No hay riesgo, mejorar score
+        if ($hasFilesWithoutGrowth) {
+            # Disco bajo pero sin riesgo de crecimiento → mejorar +20 pts
+            $score = [Math]::Min(100, $score + 20)
+            Write-Verbose "Disco con espacio bajo pero archivos SIN growth → Score mejorado: $score"
+        }
+        # CASO 2: Archivos con growth PERO tienen buen espacio interno → Riesgo bajo, mejorar score
+        elseif ($hasGoodInternalSpace -and -not $hasGrowthRisk) {
+            # Archivos tienen espacio interno suficiente → mejorar +10 pts
+            $score = [Math]::Min(100, $score + 10)
+            Write-Verbose "Disco con espacio bajo pero archivos con buen espacio interno → Score mejorado: $score"
+        }
+        # CASO 3: Archivos problemáticos (growth + sin espacio interno) → Riesgo ALTO, penalizar
+        elseif ($hasGrowthRisk) {
+            # Riesgo real de quedarse sin espacio → penalizar extra -10 pts
+            $score = [Math]::Max(0, $score - 10)
+            Write-Verbose "Disco con espacio bajo Y archivos problemáticos ($totalProblematicFiles) → Score penalizado: $score"
+        }
+    }
+    
+    # CAP: Solo aplicar cap estricto si hay riesgo real de crecimiento
+    if ($hasGrowthRisk -and ($dataDiskFreePct -lt 10 -or $logDiskFreePct -lt 10)) {
+        $cap = 40  # Cap estricto solo si hay riesgo real
+    }
+    elseif ($dataDiskFreePct -lt 10 -or $logDiskFreePct -lt 10) {
+        $cap = 60  # Cap más suave si no hay riesgo de crecimiento
     }
     
     return @{ Score = $score; Cap = $cap }

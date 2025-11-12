@@ -16,18 +16,28 @@ interface DiskDataPoint {
 interface Props {
   instanceName: string;
   hours?: number;
+  refreshTrigger?: number;
 }
 
-export function DiskTrendChart({ instanceName, hours = 24 }: Props) {
+export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: Props) {
   const [data, setData] = useState<DiskDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAllVolumes, setShowAllVolumes] = useState(false);
 
   const API_BASE_URL = getApiUrl();
 
+  // Carga inicial
   useEffect(() => {
     fetchTrendData();
   }, [instanceName, hours]);
+
+  // Actualización silenciosa cuando cambia refreshTrigger
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      fetchTrendDataSilently();
+    }
+  }, [refreshTrigger]);
 
   const fetchTrendData = async () => {
     try {
@@ -56,6 +66,29 @@ export function DiskTrendChart({ instanceName, hours = 24 }: Props) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Actualización silenciosa sin cambiar el estado de loading
+  const fetchTrendDataSilently = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/HealthScoreTrends/disk/${instanceName}?hours=${hours}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        }
+      });
+      
+      if (!response.ok) return;
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setData(result.data);
+        setError(null);
+      }
+    } catch (err: any) {
+      console.debug('Error en actualización silenciosa:', err);
     }
   };
 
@@ -243,39 +276,65 @@ export function DiskTrendChart({ instanceName, hours = 24 }: Props) {
         </ResponsiveContainer>
 
         {/* Estadísticas por volumen individual */}
-        {latestVolumes.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
-            {latestVolumes
-              .sort((a, b) => a.FreePct - b.FreePct) // Ordenar por espacio libre (menos a más)
-              .map((vol) => {
-                const isCritical = vol.FreePct < 10;
-                const isWarning = vol.FreePct >= 10 && vol.FreePct < 20;
-                const isOk = vol.FreePct >= 20;
-                
-                return (
-                  <div 
-                    key={vol.MountPoint} 
-                    className={`p-2 rounded border ${
-                      isCritical ? 'bg-red-50 border-red-200' :
-                      isWarning ? 'bg-yellow-50 border-yellow-200' :
-                      'bg-blue-50 border-blue-200'
-                    }`}
-                  >
-                    <div className="font-semibold text-gray-700">{vol.MountPoint}</div>
-                    <div className="text-gray-600 truncate" title={vol.VolumeName}>{vol.VolumeName}</div>
-                    <div className={`font-bold text-base ${
-                      isCritical ? 'text-red-700' :
-                      isWarning ? 'text-yellow-700' :
-                      'text-blue-700'
-                    }`}>
-                      {vol.FreePct.toFixed(1)}%
+        {latestVolumes.length > 0 && (() => {
+          const sortedVolumes = latestVolumes.sort((a, b) => a.FreePct - b.FreePct);
+          const criticalVolumes = sortedVolumes.filter(v => v.FreePct < 10);
+          const warningVolumes = sortedVolumes.filter(v => v.FreePct >= 10 && v.FreePct < 20);
+          const okVolumes = sortedVolumes.filter(v => v.FreePct >= 20);
+          
+          const volumesToShow = showAllVolumes 
+            ? sortedVolumes 
+            : [...criticalVolumes, ...warningVolumes, ...okVolumes.slice(0, 5)];
+          
+          const hiddenCount = sortedVolumes.length - volumesToShow.length;
+          
+          return (
+            <div className="space-y-2">
+              {/* Grid de volúmenes */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                {volumesToShow.map((vol) => {
+                  const isCritical = vol.FreePct < 10;
+                  const isWarning = vol.FreePct >= 10 && vol.FreePct < 20;
+                  
+                  return (
+                    <div 
+                      key={vol.MountPoint} 
+                      className={`p-2 rounded border ${
+                        isCritical ? 'bg-red-50 border-red-200' :
+                        isWarning ? 'bg-yellow-50 border-yellow-200' :
+                        'bg-gray-50 border-gray-200'
+                      }`}
+                    >
+                      <div className="font-semibold text-gray-700 truncate text-[10px]" title={vol.MountPoint}>{vol.MountPoint}</div>
+                      <div className={`font-bold text-sm ${
+                        isCritical ? 'text-red-700' :
+                        isWarning ? 'text-yellow-700' :
+                        'text-gray-600'
+                      }`}>
+                        {vol.FreePct.toFixed(1)}%
+                      </div>
+                      <div className="text-gray-500 text-[10px]">{vol.FreeGB.toFixed(0)}GB</div>
                     </div>
-                    <div className="text-gray-500">{vol.FreeGB.toFixed(0)} GB libre</div>
-                  </div>
-                );
-              })}
-          </div>
-        )}
+                  );
+                })}
+              </div>
+              
+              {/* Botón para mostrar/ocultar todos */}
+              {hiddenCount > 0 && (
+                <button
+                  onClick={() => setShowAllVolumes(!showAllVolumes)}
+                  className="w-full py-2 px-4 text-sm text-blue-600 hover:bg-blue-50 rounded border border-blue-200 transition-colors"
+                >
+                  {showAllVolumes ? (
+                    <>Ocultar {hiddenCount} volúmenes OK</>
+                  ) : (
+                    <>Mostrar {hiddenCount} volúmenes más ({okVolumes.length} OK en total)</>
+                  )}
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Alertas */}
         {latestFreePct < 20 && (

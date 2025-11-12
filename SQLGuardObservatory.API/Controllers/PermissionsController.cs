@@ -20,15 +20,24 @@ public class PermissionsController : ControllerBase
     }
 
     /// <summary>
-    /// Obtiene todos los permisos de todos los roles (Solo SuperAdmin)
+    /// Obtiene todos los permisos de todos los roles
+    /// SuperAdmin: ve todos los roles
+    /// Admin: solo ve el rol Reader
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> GetAllPermissions()
     {
         try
         {
             var permissions = await _permissionService.GetAllRolePermissionsAsync();
+            
+            // Si es Admin (no SuperAdmin), solo mostrar permisos de Reader
+            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin"))
+            {
+                permissions = permissions.Where(p => p.Role == "Reader").ToList();
+            }
+            
             return Ok(permissions);
         }
         catch (Exception ex)
@@ -39,14 +48,22 @@ public class PermissionsController : ControllerBase
     }
 
     /// <summary>
-    /// Obtiene los permisos de un rol específico (Solo SuperAdmin)
+    /// Obtiene los permisos de un rol específico
+    /// SuperAdmin: puede ver cualquier rol
+    /// Admin: solo puede ver el rol Reader
     /// </summary>
     [HttpGet("{role}")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> GetRolePermissions(string role)
     {
         try
         {
+            // Si es Admin (no SuperAdmin), solo puede ver permisos de Reader
+            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && role != "Reader")
+            {
+                return Forbid();
+            }
+            
             var permissions = await _permissionService.GetRolePermissionsAsync(role);
             if (permissions == null)
             {
@@ -62,19 +79,29 @@ public class PermissionsController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza los permisos de un rol (Solo SuperAdmin)
+    /// Actualiza los permisos de un rol
+    /// SuperAdmin: puede actualizar cualquier rol
+    /// Admin: solo puede actualizar el rol Reader
     /// </summary>
     [HttpPut("{role}")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> UpdateRolePermissions(string role, [FromBody] UpdateRolePermissionsRequest request)
     {
         try
         {
+            // Si es Admin (no SuperAdmin), solo puede actualizar permisos de Reader
+            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && role != "Reader")
+            {
+                return StatusCode(403, new { message = "Solo puedes editar permisos del rol Reader" });
+            }
+            
             var result = await _permissionService.UpdateRolePermissionsAsync(role, request.Permissions);
             if (!result)
             {
                 return BadRequest(new { message = "No se pudieron actualizar los permisos" });
             }
+            
+            _logger.LogInformation("Permisos del rol {Role} actualizados por {User}", role, User.Identity?.Name);
             return Ok(new { message = "Permisos actualizados exitosamente" });
         }
         catch (Exception ex)
@@ -85,15 +112,24 @@ public class PermissionsController : ControllerBase
     }
 
     /// <summary>
-    /// Obtiene las vistas disponibles y los roles (Solo SuperAdmin)
+    /// Obtiene las vistas disponibles y los roles
+    /// SuperAdmin: ve todos los roles
+    /// Admin: solo ve el rol Reader
     /// </summary>
     [HttpGet("available")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> GetAvailableViewsAndRoles()
     {
         try
         {
             var data = await _permissionService.GetAvailableViewsAndRolesAsync();
+            
+            // Si es Admin (no SuperAdmin), solo mostrar rol Reader
+            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin"))
+            {
+                data.Roles = data.Roles.Where(r => r == "Reader").ToList();
+            }
+            
             return Ok(data);
         }
         catch (Exception ex)

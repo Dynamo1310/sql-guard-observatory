@@ -8,11 +8,19 @@ import { DiskTrendChart } from '@/components/DiskTrendChart';
 import { CpuTrendChart } from '@/components/CpuTrendChart';
 import { MemoryTrendChart } from '@/components/MemoryTrendChart';
 import { IOTrendChart } from '@/components/IOTrendChart';
+import { useSignalREvent } from '@/contexts/SignalRContext';
 
 export default function InstanceTrends() {
   const { instanceName } = useParams<{ instanceName: string }>();
   const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState(24); // horas
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Escuchar actualizaciones de HealthScore y refrescar los gráficos silenciosamente
+  useSignalREvent('healthscoreupdated', () => {
+    // Incrementar el trigger para que todos los componentes se actualicen
+    setRefreshTrigger(prev => prev + 1);
+  });
 
   if (!instanceName) {
     return (
@@ -71,24 +79,24 @@ export default function InstanceTrends() {
         </div>
 
         {/* Gráfico de Health Score */}
-        <HealthScoreTrendChart instanceName={instanceName} hours={timeRange} />
+        <HealthScoreTrendChart instanceName={instanceName} hours={timeRange} refreshTrigger={refreshTrigger} />
 
         {/* Grid de gráficos - Recursos */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Gráfico de CPU */}
-          <CpuTrendChart instanceName={instanceName} hours={timeRange} />
+          <CpuTrendChart instanceName={instanceName} hours={timeRange} refreshTrigger={refreshTrigger} />
 
           {/* Gráfico de Memoria */}
-          <MemoryTrendChart instanceName={instanceName} hours={timeRange} />
+          <MemoryTrendChart instanceName={instanceName} hours={timeRange} refreshTrigger={refreshTrigger} />
         </div>
 
         {/* Grid de gráficos - Storage */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Gráfico de Disco */}
-          <DiskTrendChart instanceName={instanceName} hours={timeRange} />
+          <DiskTrendChart instanceName={instanceName} hours={timeRange} refreshTrigger={refreshTrigger} />
 
           {/* Gráfico de I/O */}
-          <IOTrendChart instanceName={instanceName} hours={timeRange} />
+          <IOTrendChart instanceName={instanceName} hours={timeRange} refreshTrigger={refreshTrigger} />
         </div>
       </div>
     </div>

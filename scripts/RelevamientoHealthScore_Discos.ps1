@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Health Score v3.0 - Recolección de métricas de ESPACIO EN DISCOS Y DIAGNÓSTICO I/O
+    Health Score v3.2 - Recolección de métricas de ESPACIO EN DISCOS Y DIAGNÓSTICO I/O
     
 .DESCRIPTION
     Script de frecuencia media (cada 10 minutos) que recolecta:
@@ -10,11 +10,20 @@
     - Clasificación por rol (Data, Log, Backup, TempDB)
     - Tendencia de crecimiento
     
-    DIAGNÓSTICO DE DISCOS (NUEVO v3.1):
+    DIAGNÓSTICO DE DISCOS:
     - Tipo de disco físico (HDD/SSD/NVMe) via PowerShell remoting
     - Bus Type (SATA/SAS/NVMe/iSCSI)
     - Health Status (Healthy/Warning/Unhealthy)
     - Operational Status (Online/Offline/Degraded)
+    
+    ANÁLISIS INTELIGENTE DE ARCHIVOS (NUEVO v3.2):
+    - Archivos con/sin crecimiento habilitado
+    - Espacio libre INTERNO en archivos
+    - Archivos problemáticos (growth + sin espacio interno)
+    - Porcentaje promedio de espacio libre en archivos con growth
+    - Permite diferenciar entre:
+      * Disco bajo SIN riesgo (archivos sin growth o con espacio interno)
+      * Disco bajo CON riesgo (archivos con growth y sin espacio interno)
     
     MÉTRICAS DE CARGA I/O:
     - Page Reads/Writes per sec
@@ -29,15 +38,17 @@
     
     Guarda en: InstanceHealth_Discos
     
-    Peso en scoring: 8%
-    Criterios: ≥20% libre = 100, 15–19% = 80, 10–14% = 60, 5–9% = 40, <5% = 0
-    Cap: Data o Log <10% libre => cap 40
+    Peso en scoring: 7%
+    Criterios inteligentes:
+    - Disco bajo SIN growth → No penalizar fuerte
+    - Disco bajo CON espacio interno → Penalización leve
+    - Disco bajo SIN espacio interno + growth → Penalización ALTA
     
     NOTA: El tipo de disco físico requiere PowerShell remoting habilitado.
     Si falla, el sistema inferirá el tipo por latencia en el Consolidador.
     
 .NOTES
-    Versión: 3.1 (Diagnóstico Inteligente de I/O)
+    Versión: 3.2 (Análisis Inteligente de Archivos)
     Frecuencia: Cada 10 minutos
     Timeout: 15 segundos
     
@@ -187,7 +198,7 @@ function Get-DiskMetrics {
         Volumes = @()
         DataVolumes = @()
         LogVolumes = @()
-        ProblematicFilesQueryFailed = $false  # Indica si la query de archivos problemáticos falló
+        FileAnalysisQueryFailed = $false  # Indica si la query de análisis de archivos falló
     }
     
     try {
@@ -285,31 +296,52 @@ ORDER BY FreePct ASC;
 "@
         }
 
-        # Query 1b: Archivos con poco espacio interno Y crecimiento habilitado (CRÍTICO)
-        # Solo alertar si el archivo puede crecer (growth != 0) y tiene poco espacio libre interno
-        # Mejorada: ignora bases offline/restoring para evitar errores con FILEPROPERTY
-        $queryProblematicFiles = @"
--- Archivos con poco espacio interno Y crecimiento habilitado (compatible SQL 2008+)
--- Basado en la lógica del usuario: solo alertar si growth != 0 y espacio interno < 30MB
--- Mejorada: ignora bases offline/restoring/recovering para evitar errores
+        # Query 1b: Análisis completo de archivos por disco (MEJORADO v3.2)
+        # Calcula métricas por volumen: archivos con/sin growth, espacio interno, etc.
+        $queryFileAnalysis = @"
+-- Análisis completo de archivos por volumen (compatible SQL 2008+)
+-- Para determinar riesgo real de crecimiento en cada disco
 SELECT 
-    DB_NAME(mf.database_id) AS DatabaseName,
-    mf.name AS FileName,
-    mf.type_desc AS FileType,
     SUBSTRING(mf.physical_name, 1, 3) AS DriveLetter,
-    CAST(mf.size * 8.0 / 1024 AS DECIMAL(10,2)) AS FileSizeMB,
-    CAST((mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 AS DECIMAL(10,2)) AS FreeSpaceInFileMB,
-    CAST(mf.growth * 8.0 / 1024 AS DECIMAL(10,2)) AS GrowthMB,
-    mf.is_percent_growth AS IsPercentGrowth,
-    mf.max_size AS MaxSize
+    
+    -- Contadores de archivos
+    COUNT(*) AS TotalFiles,
+    SUM(CASE WHEN mf.growth = 0 THEN 1 ELSE 0 END) AS FilesWithoutGrowth,
+    SUM(CASE WHEN mf.growth != 0 THEN 1 ELSE 0 END) AS FilesWithGrowth,
+    
+    -- Espacio interno total
+    CAST(SUM(mf.size * 8.0 / 1024) AS DECIMAL(10,2)) AS TotalFileSizeMB,
+    CAST(SUM((mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024) AS DECIMAL(10,2)) AS TotalFreeSpaceInFilesMB,
+    
+    -- Archivos problemáticos (growth habilitado + poco espacio interno)
+    SUM(CASE 
+        WHEN mf.growth != 0 
+         AND (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 < 30 
+        THEN 1 
+        ELSE 0 
+    END) AS ProblematicFiles,
+    
+    -- Espacio interno promedio en archivos con growth
+    CAST(AVG(CASE 
+        WHEN mf.growth != 0 
+        THEN (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 
+        ELSE NULL 
+    END) AS DECIMAL(10,2)) AS AvgFreeSpaceInGrowableFilesMB,
+    
+    -- Porcentaje de espacio libre interno promedio
+    CAST(AVG(CASE 
+        WHEN mf.size > 0 AND mf.growth != 0
+        THEN ((mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 100.0 / mf.size)
+        ELSE NULL
+    END) AS DECIMAL(5,2)) AS AvgFreeSpacePctInGrowableFiles
+
 FROM sys.master_files mf
 INNER JOIN sys.databases d ON mf.database_id = d.database_id
 WHERE d.name NOT IN ('master', 'model', 'msdb', 'tempdb')
   AND d.state = 0  -- ONLINE (evita errores con FILEPROPERTY en bases offline)
-  AND d.is_read_only = 0  -- No read-only (pueden dar problemas con FILEPROPERTY)
-  AND mf.growth != 0  -- Solo archivos con crecimiento habilitado
-  AND (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 < 30  -- Menos de 30MB libres internos
-ORDER BY FreeSpaceInFileMB ASC;
+  AND d.is_read_only = 0  -- No read-only
+GROUP BY SUBSTRING(mf.physical_name, 1, 3)
+ORDER BY ProblematicFiles DESC, TotalFreeSpaceInFilesMB ASC;
 "@
 
         # Query 2: Métricas de carga de I/O del sistema
@@ -599,25 +631,25 @@ DROP TABLE #DriveSpace
             }
         }
         
-        # Query de archivos problemáticos: solo para SQL 2008+ con sys.dm_os_volume_stats
-        $dataProblematicFiles = $null
-        $problematicFilesQueryFailed = $false
+        # Query de análisis de archivos: solo para SQL 2008+ con sys.dm_os_volume_stats
+        $dataFileAnalysis = $null
+        $fileAnalysisQueryFailed = $false
         if ($majorVersion -ge 10 -and $hasVolumeStats) {
             try {
-                $dataProblematicFiles = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
-                    -Query $queryProblematicFiles `
+                $dataFileAnalysis = Invoke-SqlQueryWithRetry -InstanceName $InstanceName `
+                    -Query $queryFileAnalysis `
                     -TimeoutSec $TimeoutSec `
                     -MaxRetries 2
             } catch {
-                $problematicFilesQueryFailed = $true
-                Write-Warning "      ⚠️  No se pudo obtener archivos problemáticos en ${InstanceName}: $($_.Exception.Message)"
+                $fileAnalysisQueryFailed = $true
+                Write-Warning "      ⚠️  No se pudo obtener análisis de archivos en ${InstanceName}: $($_.Exception.Message)"
             }
         } else {
             # SQL 2005 o SQL 2008 sin sys.dm_os_volume_stats: No soportado
             if (-not $hasVolumeStats) {
-                Write-Verbose "      ℹ️  Archivos problemáticos no disponible en ${InstanceName} (SQL $sqlVersion - falta sys.dm_os_volume_stats)"
+                Write-Verbose "      ℹ️  Análisis de archivos no disponible en ${InstanceName} (SQL $sqlVersion - falta sys.dm_os_volume_stats)"
             } else {
-                Write-Verbose "      ℹ️  Archivos problemáticos no disponible en SQL 2005 para ${InstanceName}"
+                Write-Verbose "      ℹ️  Análisis de archivos no disponible en SQL 2005 para ${InstanceName}"
             }
         }
         
@@ -699,15 +731,23 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                 $isData = ($roles -contains 'Data')
                 $isLog = ($roles -contains 'Log')
                 
-                # Obtener archivos problemáticos en este volumen (poco espacio interno + growth habilitado)
+                # Obtener análisis de archivos en este volumen
                 $driveLetter = $mountPoint.TrimEnd('\').TrimEnd(':') + ':'
-                $problematicFilesInVolume = @()
-                if ($dataProblematicFiles) {
-                    $problematicFilesInVolume = $dataProblematicFiles | Where-Object { 
+                $fileAnalysisForVolume = $null
+                if ($dataFileAnalysis) {
+                    $fileAnalysisForVolume = $dataFileAnalysis | Where-Object { 
                         $_.DriveLetter -eq $driveLetter 
-                    }
+                    } | Select-Object -First 1
                 }
-                $problematicFileCount = if ($problematicFilesInVolume) { $problematicFilesInVolume.Count } else { 0 }
+                
+                # Extraer métricas de archivos (si están disponibles)
+                $totalFiles = if ($fileAnalysisForVolume) { [int]$fileAnalysisForVolume.TotalFiles } else { 0 }
+                $filesWithoutGrowth = if ($fileAnalysisForVolume) { [int]$fileAnalysisForVolume.FilesWithoutGrowth } else { 0 }
+                $filesWithGrowth = if ($fileAnalysisForVolume) { [int]$fileAnalysisForVolume.FilesWithGrowth } else { 0 }
+                $totalFreeSpaceInFilesMB = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.TotalFreeSpaceInFilesMB } else { 0 }
+                $problematicFileCount = if ($fileAnalysisForVolume) { [int]$fileAnalysisForVolume.ProblematicFiles } else { 0 }
+                $avgFreeSpaceInGrowableFilesMB = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.AvgFreeSpaceInGrowableFilesMB } else { 0 }
+                $avgFreeSpacePctInGrowableFiles = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.AvgFreeSpacePctInGrowableFiles } else { 0 }
                 
                 # Obtener tipo de disco físico (puede ser lento, usar con precaución)
                 $diskTypeInfo = Get-DiskMediaType -InstanceName $InstanceName -MountPoint $mountPoint
@@ -736,8 +776,14 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                     FileCount = if ($competition) { ConvertTo-SafeInt $competition.FileCount } else { 0 }
                     DatabaseList = if ($competition) { $competition.DatabaseList } else { "" }
                     
-                    # Archivos problemáticos (poco espacio interno + growth habilitado)
+                    # NUEVO v3.2: Análisis de archivos (growth y espacio interno)
+                    TotalFiles = $totalFiles
+                    FilesWithoutGrowth = $filesWithoutGrowth
+                    FilesWithGrowth = $filesWithGrowth
+                    TotalFreeSpaceInFilesMB = $totalFreeSpaceInFilesMB
                     ProblematicFileCount = $problematicFileCount
+                    AvgFreeSpaceInGrowableFilesMB = $avgFreeSpaceInGrowableFilesMB
+                    AvgFreeSpacePctInGrowableFiles = $avgFreeSpacePctInGrowableFiles
                 }
             }
             
@@ -793,8 +839,8 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
             }
         }
         
-        # Guardar si la query de archivos problemáticos falló
-        $result.ProblematicFilesQueryFailed = $problematicFilesQueryFailed
+        # Guardar si la query de análisis de archivos falló
+        $result.FileAnalysisQueryFailed = $fileAnalysisQueryFailed
         
     } catch {
         $errorMsg = $_.Exception.Message
@@ -983,7 +1029,8 @@ INSERT INTO dbo.InstanceHealth_Discos (
 
 Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Health Score v3.0 - ESPACIO EN DISCOS               ║" -ForegroundColor Cyan
+Write-Host "║  Health Score v3.2 - ESPACIO EN DISCOS               ║" -ForegroundColor Cyan
+Write-Host "║  Análisis Inteligente de Archivos                     ║" -ForegroundColor Cyan
 Write-Host "║  Frecuencia: 10 minutos                               ║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
@@ -1610,13 +1657,13 @@ Write-Host "║  Instancias con archivos problemáticos: $instancesWithProblemat
 Write-Host "║  Total archivos con <30MB libres: $totalProblematicFilesCount".PadRight(53) "║" -ForegroundColor $(if ($totalProblematicFilesCount -gt 0) { "Yellow" } else { "White" })
 Write-Host "║  (Solo archivos con growth habilitado)".PadRight(53) "║" -ForegroundColor DarkGray
 
-# Contar instancias donde falló la query de archivos problemáticos
-$instancesWithQueryFailed = ($results | Where-Object { $_.ProblematicFilesQueryFailed -eq $true }).Count
+# Contar instancias donde falló la query de análisis de archivos
+$instancesWithQueryFailed = ($results | Where-Object { $_.FileAnalysisQueryFailed -eq $true }).Count
 if ($instancesWithQueryFailed -gt 0) {
     Write-Host "║" -NoNewline -ForegroundColor Green
     Write-Host "" -ForegroundColor White
     Write-Host "║  ⚠️  Instancias con error en query de archivos: $instancesWithQueryFailed".PadRight(53) "║" -ForegroundColor Yellow
-    Write-Host "║      (Datos de archivos problemáticos incompletos)".PadRight(53) "║" -ForegroundColor DarkGray
+    Write-Host "║      (Datos de análisis de archivos incompletos)".PadRight(53) "║" -ForegroundColor DarkGray
 }
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green

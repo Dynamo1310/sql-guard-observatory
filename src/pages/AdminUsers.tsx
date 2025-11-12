@@ -321,6 +321,24 @@ export default function AdminUsers() {
     });
   };
 
+  // Obtener opciones de roles disponibles según el usuario actual
+  const getAvailableRoles = () => {
+    if (isSuperAdmin) {
+      // SuperAdmin puede asignar cualquier rol
+      return [
+        { value: 'Reader', label: 'Reader (Solo lectura)' },
+        { value: 'Admin', label: 'Admin (Gestión de usuarios)' },
+        { value: 'SuperAdmin', label: 'SuperAdmin (Acceso total)' }
+      ];
+    } else {
+      // Admin solo puede asignar Reader y Admin
+      return [
+        { value: 'Reader', label: 'Reader (Solo lectura)' },
+        { value: 'Admin', label: 'Admin (Gestión de usuarios)' }
+      ];
+    }
+  };
+
   const activeUsers = users.filter(u => u.active).length;
   const superAdminUsers = users.filter(u => u.role === 'SuperAdmin').length;
   const adminUsers = users.filter(u => u.role === 'Admin').length;
@@ -522,11 +540,16 @@ export default function AdminUsers() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Reader">Reader (Solo lectura)</SelectItem>
-                  <SelectItem value="Admin">Admin (Gestión de usuarios)</SelectItem>
-                  <SelectItem value="SuperAdmin">SuperAdmin (Acceso total)</SelectItem>
+                  {getAvailableRoles().map(role => (
+                    <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              {!isSuperAdmin && (
+                <p className="text-xs text-muted-foreground">
+                  Solo puedes asignar roles Reader y Admin
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -575,14 +598,19 @@ export default function AdminUsers() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Reader">Reader (Solo lectura)</SelectItem>
-                  <SelectItem value="Admin">Admin (Gestión de usuarios)</SelectItem>
-                  <SelectItem value="SuperAdmin">SuperAdmin (Acceso total)</SelectItem>
+                  {getAvailableRoles().map(role => (
+                    <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {selectedUser && isEditingOwnProfile(selectedUser) && (
                 <p className="text-xs text-muted-foreground">
                   No puedes modificar tu propio rol por seguridad
+                </p>
+              )}
+              {!isSuperAdmin && selectedUser && !isEditingOwnProfile(selectedUser) && (
+                <p className="text-xs text-muted-foreground">
+                  Solo puedes asignar roles Reader y Admin
                 </p>
               )}
             </div>
@@ -736,13 +764,14 @@ export default function AdminUsers() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Reader">Reader (Solo lectura)</SelectItem>
-                      <SelectItem value="Admin">Admin (Gestión de usuarios)</SelectItem>
-                      <SelectItem value="SuperAdmin">SuperAdmin (Acceso total)</SelectItem>
+                      {getAvailableRoles().map(role => (
+                        <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     Todos los usuarios importados tendrán este rol. Podrás cambiarlo individualmente después.
+                    {!isSuperAdmin && ' (Solo puedes asignar Reader y Admin)'}
                   </p>
                 </div>
 
