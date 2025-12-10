@@ -305,7 +305,7 @@ ORDER BY FreePct ASC;
 -- Para determinar riesgo REAL de crecimiento en cada disco
 -- v3.3: Incluye FreeSpaceInGrowableFilesMB para cálculo de espacio libre REAL
 SELECT 
-    SUBSTRING(mf.physical_name, 1, 3) AS DriveLetter,
+    LEFT(mf.physical_name, 2) AS DriveLetter,  -- Solo E: (sin backslash) para match correcto
     
     -- Contadores de archivos
     COUNT(*) AS TotalFiles,
@@ -350,7 +350,7 @@ INNER JOIN sys.databases d ON mf.database_id = d.database_id
 WHERE d.name NOT IN ('master', 'model', 'msdb', 'tempdb')
   AND d.state = 0  -- ONLINE (evita errores con FILEPROPERTY en bases offline)
   AND d.is_read_only = 0  -- No read-only
-GROUP BY SUBSTRING(mf.physical_name, 1, 3)
+GROUP BY LEFT(mf.physical_name, 2)
 ORDER BY ProblematicFiles DESC, TotalFreeSpaceInFilesMB ASC;
 "@
 
@@ -742,7 +742,8 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                 $isLog = ($roles -contains 'Log')
                 
                 # Obtener análisis de archivos en este volumen
-                $driveLetter = $mountPoint.TrimEnd('\').TrimEnd(':') + ':'
+                # MountPoint viene como "E:\" - extraer solo "E:" para match con query
+                $driveLetter = $mountPoint.Substring(0, [Math]::Min(2, $mountPoint.Length))
                 $fileAnalysisForVolume = $null
                 if ($dataFileAnalysis) {
                     $fileAnalysisForVolume = $dataFileAnalysis | Where-Object { 
@@ -1444,14 +1445,14 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                     # NUEVO v3.3: Query de análisis de archivos para modo paralelo
                     $queryFileAnalysisParallel = @"
 SELECT 
-    SUBSTRING(mf.physical_name, 1, 3) AS DriveLetter,
+    LEFT(mf.physical_name, 2) AS DriveLetter,  -- Solo E: (sin backslash) para match correcto
     SUM(CASE WHEN mf.growth = 0 THEN 1 ELSE 0 END) AS FilesWithoutGrowth,
     SUM(CASE WHEN mf.growth != 0 THEN 1 ELSE 0 END) AS FilesWithGrowth,
     CAST(SUM(CASE WHEN mf.growth != 0 THEN (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 ELSE 0 END) AS DECIMAL(10,2)) AS FreeSpaceInGrowableFilesMB
 FROM sys.master_files mf
 INNER JOIN sys.databases d ON mf.database_id = d.database_id
 WHERE d.name NOT IN ('master', 'model', 'msdb', 'tempdb') AND d.state = 0 AND d.is_read_only = 0
-GROUP BY SUBSTRING(mf.physical_name, 1, 3)
+GROUP BY LEFT(mf.physical_name, 2)
 "@
                     $fileAnalysisData = $null
                     try {
@@ -1464,7 +1465,9 @@ GROUP BY SUBSTRING(mf.physical_name, 1, 3)
                         $freePct = ConvertTo-SafeDecimal $_.FreePct
                         
                         # Buscar análisis de archivos para este volumen
-                        $driveLetter = $_.MountPoint.TrimEnd('\').TrimEnd(':') + ':'
+                        # MountPoint viene como "E:\" - extraer solo "E:" para match con query
+                        $mp = $_.MountPoint
+                        $driveLetter = if ($mp.Length -ge 2) { $mp.Substring(0, 2) } else { $mp }
                         $fileAnalysis = $fileAnalysisData | Where-Object { $_.DriveLetter -eq $driveLetter } | Select-Object -First 1
                         
                         $filesWithGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithGrowth } else { 0 }
