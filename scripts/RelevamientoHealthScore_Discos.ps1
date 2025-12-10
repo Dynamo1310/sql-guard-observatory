@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Health Score v3.2 - Recolección de métricas de ESPACIO EN DISCOS Y DIAGNÓSTICO I/O
+    Health Score v3.3 - Recolección de métricas de ESPACIO EN DISCOS Y DIAGNÓSTICO I/O
     
 .DESCRIPTION
     Script de frecuencia media (cada 10 minutos) que recolecta:
@@ -16,14 +16,16 @@
     - Health Status (Healthy/Warning/Unhealthy)
     - Operational Status (Online/Offline/Degraded)
     
-    ANÁLISIS INTELIGENTE DE ARCHIVOS (NUEVO v3.2):
-    - Archivos con/sin crecimiento habilitado
-    - Espacio libre INTERNO en archivos
-    - Archivos problemáticos (growth + sin espacio interno)
-    - Porcentaje promedio de espacio libre en archivos con growth
-    - Permite diferenciar entre:
-      * Disco bajo SIN riesgo (archivos sin growth o con espacio interno)
-      * Disco bajo CON riesgo (archivos con growth y sin espacio interno)
+    ESPACIO LIBRE REAL (NUEVO v3.3):
+    - Calcula el espacio libre REAL considerando:
+      * Espacio libre en disco físico
+      * Espacio libre INTERNO en archivos con growth habilitado
+    - Solo alerta discos donde:
+      * Los archivos tienen growth habilitado (pueden crecer)
+      * El espacio libre REAL (disco + interno) es <= 10%
+    - NO alerta discos donde:
+      * Los archivos NO tienen growth (no van a crecer)
+      * Los archivos tienen espacio interno disponible
     
     MÉTRICAS DE CARGA I/O:
     - Page Reads/Writes per sec
@@ -39,16 +41,16 @@
     Guarda en: InstanceHealth_Discos
     
     Peso en scoring: 7%
-    Criterios inteligentes:
-    - Disco bajo SIN growth → No penalizar fuerte
-    - Disco bajo CON espacio interno → Penalización leve
-    - Disco bajo SIN espacio interno + growth → Penalización ALTA
+    Criterios de alerta v3.3:
+    - Solo se alerta si: FilesWithGrowth > 0 AND RealFreePct <= 10%
+    - RealFreePct = (FreeGB + FreeSpaceInGrowableFilesGB) / TotalGB * 100
+    - NO se alerta si archivos sin growth o tienen espacio interno
     
     NOTA: El tipo de disco físico requiere PowerShell remoting habilitado.
     Si falla, el sistema inferirá el tipo por latencia en el Consolidador.
     
 .NOTES
-    Versión: 3.2 (Análisis Inteligente de Archivos)
+    Versión: 3.3 (Espacio Libre REAL)
     Frecuencia: Cada 10 minutos
     Timeout: 15 segundos
     
@@ -296,11 +298,12 @@ ORDER BY FreePct ASC;
 "@
         }
 
-        # Query 1b: Análisis completo de archivos por disco (MEJORADO v3.2)
-        # Calcula métricas por volumen: archivos con/sin growth, espacio interno, etc.
+        # Query 1b: Análisis completo de archivos por disco (MEJORADO v3.3)
+        # Calcula métricas por volumen: archivos con/sin growth, espacio interno, ESPACIO LIBRE REAL
         $queryFileAnalysis = @"
 -- Análisis completo de archivos por volumen (compatible SQL 2008+)
--- Para determinar riesgo real de crecimiento en cada disco
+-- Para determinar riesgo REAL de crecimiento en cada disco
+-- v3.3: Incluye FreeSpaceInGrowableFilesMB para cálculo de espacio libre REAL
 SELECT 
     SUBSTRING(mf.physical_name, 1, 3) AS DriveLetter,
     
@@ -309,9 +312,16 @@ SELECT
     SUM(CASE WHEN mf.growth = 0 THEN 1 ELSE 0 END) AS FilesWithoutGrowth,
     SUM(CASE WHEN mf.growth != 0 THEN 1 ELSE 0 END) AS FilesWithGrowth,
     
-    -- Espacio interno total
+    -- Espacio interno total (todos los archivos)
     CAST(SUM(mf.size * 8.0 / 1024) AS DECIMAL(10,2)) AS TotalFileSizeMB,
     CAST(SUM((mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024) AS DECIMAL(10,2)) AS TotalFreeSpaceInFilesMB,
+    
+    -- NUEVO v3.3: Espacio libre interno SOLO en archivos CON growth habilitado (para cálculo de espacio REAL)
+    CAST(SUM(CASE 
+        WHEN mf.growth != 0 
+        THEN (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 
+        ELSE 0 
+    END) AS DECIMAL(10,2)) AS FreeSpaceInGrowableFilesMB,
     
     -- Archivos problemáticos (growth habilitado + poco espacio interno)
     SUM(CASE 
@@ -745,6 +755,7 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                 $filesWithoutGrowth = if ($fileAnalysisForVolume) { [int]$fileAnalysisForVolume.FilesWithoutGrowth } else { 0 }
                 $filesWithGrowth = if ($fileAnalysisForVolume) { [int]$fileAnalysisForVolume.FilesWithGrowth } else { 0 }
                 $totalFreeSpaceInFilesMB = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.TotalFreeSpaceInFilesMB } else { 0 }
+                $freeSpaceInGrowableFilesMB = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.FreeSpaceInGrowableFilesMB } else { 0 }
                 $problematicFileCount = if ($fileAnalysisForVolume) { [int]$fileAnalysisForVolume.ProblematicFiles } else { 0 }
                 $avgFreeSpaceInGrowableFilesMB = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.AvgFreeSpaceInGrowableFilesMB } else { 0 }
                 $avgFreeSpacePctInGrowableFiles = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.AvgFreeSpacePctInGrowableFiles } else { 0 }
@@ -752,13 +763,37 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                 # Obtener tipo de disco físico (puede ser lento, usar con precaución)
                 $diskTypeInfo = Get-DiskMediaType -InstanceName $InstanceName -MountPoint $mountPoint
                 
+                # Valores de espacio
+                $totalGB = ConvertTo-SafeDecimal $_.TotalGB
+                $freeGB = ConvertTo-SafeDecimal $_.FreeGB
+                $freePct = ConvertTo-SafeDecimal $_.FreePct
+                
+                # NUEVO v3.3: Cálculo de ESPACIO LIBRE REAL
+                # Espacio Libre Real = Espacio libre en disco + Espacio interno en archivos con growth
+                $freeSpaceInGrowableFilesGB = $freeSpaceInGrowableFilesMB / 1024.0
+                $realFreeGB = $freeGB + $freeSpaceInGrowableFilesGB
+                $realFreePct = if ($totalGB -gt 0) { ($realFreeGB / $totalGB) * 100.0 } else { 100.0 }
+                
+                # NUEVO v3.3: Determinar si el disco debe alertarse
+                # Solo alertar si:
+                # 1. Tiene archivos con growth habilitado (pueden crecer y consumir disco)
+                # 2. El espacio libre REAL (disco + interno en archivos) es <= 10%
+                $isAlerted = ($filesWithGrowth -gt 0) -and ($realFreePct -le 10)
+                
                 # Crear objeto de volumen enriquecido
                 @{
                     MountPoint = $mountPoint
                     VolumeName = $_.VolumeName
-                    TotalGB = ConvertTo-SafeDecimal $_.TotalGB
-                    FreeGB = ConvertTo-SafeDecimal $_.FreeGB
-                    FreePct = ConvertTo-SafeDecimal $_.FreePct
+                    TotalGB = $totalGB
+                    FreeGB = $freeGB
+                    FreePct = $freePct
+                    
+                    # NUEVO v3.3: Espacio Libre REAL
+                    FreeSpaceInGrowableFilesMB = $freeSpaceInGrowableFilesMB
+                    FreeSpaceInGrowableFilesGB = [math]::Round($freeSpaceInGrowableFilesGB, 2)
+                    RealFreeGB = [math]::Round($realFreeGB, 2)
+                    RealFreePct = [math]::Round($realFreePct, 2)
+                    IsAlerted = $isAlerted
                     
                     # Flags de rol
                     IsTempDBDisk = $isTempDB
@@ -776,7 +811,7 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                     FileCount = if ($competition) { ConvertTo-SafeInt $competition.FileCount } else { 0 }
                     DatabaseList = if ($competition) { $competition.DatabaseList } else { "" }
                     
-                    # NUEVO v3.2: Análisis de archivos (growth y espacio interno)
+                    # Análisis de archivos (growth y espacio interno)
                     TotalFiles = $totalFiles
                     FilesWithoutGrowth = $filesWithoutGrowth
                     FilesWithGrowth = $filesWithGrowth
@@ -1029,8 +1064,8 @@ INSERT INTO dbo.InstanceHealth_Discos (
 
 Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Health Score v3.2 - ESPACIO EN DISCOS               ║" -ForegroundColor Cyan
-Write-Host "║  Análisis Inteligente de Archivos                     ║" -ForegroundColor Cyan
+Write-Host "║  Health Score v3.3 - ESPACIO EN DISCOS               ║" -ForegroundColor Cyan
+Write-Host "║  Espacio Libre REAL (disco + interno archivos)        ║" -ForegroundColor Cyan
 Write-Host "║  Frecuencia: 10 minutos                               ║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
@@ -1067,9 +1102,10 @@ Write-Host ""
 Write-Host "2️⃣  Recolectando métricas de discos..." -ForegroundColor Yellow
 if ($EnableParallel) {
     Write-Host "   🚀 Modo PARALELO activado (ThrottleLimit: $ThrottleLimit)" -ForegroundColor Cyan
-    Write-Host "   ℹ️  Modo paralelo: Recolección simplificada de espacio en discos (sin análisis de archivos problemáticos)" -ForegroundColor DarkGray
+    Write-Host "   ℹ️  v3.3: Calcula espacio REAL (disco + interno) para alertas precisas" -ForegroundColor DarkGray
 } else {
-    Write-Host "   🐌 Modo SECUENCIAL activado - Recolección completa con todas las funciones" -ForegroundColor DarkGray
+    Write-Host "   🐌 Modo SECUENCIAL activado" -ForegroundColor DarkGray
+    Write-Host "   ℹ️  v3.3: Calcula espacio REAL (disco + interno) para alertas precisas" -ForegroundColor DarkGray
 }
 
 $results = @()
@@ -1405,14 +1441,54 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                         }
                     } catch { }
                     
+                    # NUEVO v3.3: Query de análisis de archivos para modo paralelo
+                    $queryFileAnalysisParallel = @"
+SELECT 
+    SUBSTRING(mf.physical_name, 1, 3) AS DriveLetter,
+    SUM(CASE WHEN mf.growth = 0 THEN 1 ELSE 0 END) AS FilesWithoutGrowth,
+    SUM(CASE WHEN mf.growth != 0 THEN 1 ELSE 0 END) AS FilesWithGrowth,
+    CAST(SUM(CASE WHEN mf.growth != 0 THEN (mf.size - FILEPROPERTY(mf.name, 'SpaceUsed')) * 8.0 / 1024 ELSE 0 END) AS DECIMAL(10,2)) AS FreeSpaceInGrowableFilesMB
+FROM sys.master_files mf
+INNER JOIN sys.databases d ON mf.database_id = d.database_id
+WHERE d.name NOT IN ('master', 'model', 'msdb', 'tempdb') AND d.state = 0 AND d.is_read_only = 0
+GROUP BY SUBSTRING(mf.physical_name, 1, 3)
+"@
+                    $fileAnalysisData = $null
+                    try {
+                        $fileAnalysisData = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $queryFileAnalysisParallel -TimeoutSec 5 -MaxRetries 1
+                    } catch { }
+                    
                     $result.Volumes = $uniqueVolumes | ForEach-Object {
+                        $totalGB = ConvertTo-SafeDecimal $_.TotalGB
+                        $freeGB = ConvertTo-SafeDecimal $_.FreeGB
+                        $freePct = ConvertTo-SafeDecimal $_.FreePct
+                        
+                        # Buscar análisis de archivos para este volumen
+                        $driveLetter = $_.MountPoint.TrimEnd('\').TrimEnd(':') + ':'
+                        $fileAnalysis = $fileAnalysisData | Where-Object { $_.DriveLetter -eq $driveLetter } | Select-Object -First 1
+                        
+                        $filesWithGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithGrowth } else { 0 }
+                        $freeSpaceInGrowableFilesMB = if ($fileAnalysis) { ConvertTo-SafeDecimal $fileAnalysis.FreeSpaceInGrowableFilesMB } else { 0 }
+                        
+                        # NUEVO v3.3: Cálculo de ESPACIO LIBRE REAL
+                        $freeSpaceInGrowableFilesGB = $freeSpaceInGrowableFilesMB / 1024.0
+                        $realFreeGB = $freeGB + $freeSpaceInGrowableFilesGB
+                        $realFreePct = if ($totalGB -gt 0) { ($realFreeGB / $totalGB) * 100.0 } else { 100.0 }
+                        
+                        # Solo alertar si tiene archivos con growth Y espacio real <= 10%
+                        $isAlerted = ($filesWithGrowth -gt 0) -and ($realFreePct -le 10)
+                        
                         @{
                             MountPoint = $_.MountPoint
                             VolumeName = $_.VolumeName
-                            TotalGB = ConvertTo-SafeDecimal $_.TotalGB
-                            FreeGB = ConvertTo-SafeDecimal $_.FreeGB
-                            FreePct = ConvertTo-SafeDecimal $_.FreePct
-                            ProblematicFileCount = 0  # Simplificado para velocidad
+                            TotalGB = $totalGB
+                            FreeGB = $freeGB
+                            FreePct = $freePct
+                            FilesWithGrowth = $filesWithGrowth
+                            FreeSpaceInGrowableFilesMB = $freeSpaceInGrowableFilesMB
+                            RealFreeGB = [math]::Round($realFreeGB, 2)
+                            RealFreePct = [math]::Round($realFreePct, 2)
+                            IsAlerted = $isAlerted
                         }
                     }
                     
@@ -1480,19 +1556,39 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
         
         $diskMetrics = Get-DiskMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
         
-        # Lógica simplificada de alertas (modo paralelo rápido - sin análisis de archivos)
-        $status = "✅"
-        if ($diskMetrics.WorstFreePct -lt 5) {
-            $status = "🚨 CRÍTICO!"
-        }
-        elseif ($diskMetrics.WorstFreePct -lt 10) {
-            $status = "⚠️ BAJO!"
-        }
-        elseif ($diskMetrics.WorstFreePct -lt 20) {
-            $status = "⚠️ ADVERTENCIA"
+        # NUEVO v3.3: Lógica de alertas basada en ESPACIO LIBRE REAL
+        $alertedVolumes = @()
+        $worstRealFreePct = 100.0
+        if ($diskMetrics.Volumes) {
+            foreach ($vol in $diskMetrics.Volumes) {
+                if ($vol.RealFreePct -lt $worstRealFreePct) {
+                    $worstRealFreePct = $vol.RealFreePct
+                }
+                if ($vol.IsAlerted) {
+                    $alertedVolumes += $vol
+                }
+            }
         }
         
-        Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%" -ForegroundColor Gray
+        $status = "✅"
+        $statusMessage = ""
+        if ($alertedVolumes.Count -gt 0) {
+            $worstAlertedPct = ($alertedVolumes | Measure-Object -Property RealFreePct -Minimum).Minimum
+            if ($worstAlertedPct -le 5) {
+                $status = "🚨 CRÍTICO!"
+            } else {
+                $status = "⚠️ ALERTA!"
+            }
+            $statusMessage = " ($($alertedVolumes.Count) disco(s) con ≤10% espacio REAL)"
+        }
+        elseif ($diskMetrics.WorstFreePct -lt 10) {
+            $status = "📊 Disco bajo (sin riesgo)"
+        }
+        elseif ($diskMetrics.WorstFreePct -lt 20) {
+            $status = "📊 Monitorear"
+        }
+        
+        Write-Host "   $status $instanceName - Disco:$([int]$diskMetrics.WorstFreePct)% Real:$([int]$worstRealFreePct)%$statusMessage" -ForegroundColor Gray
         
         # Devolver resultado
         [PSCustomObject]@{
@@ -1547,43 +1643,48 @@ else {
         
         $diskMetrics = Get-DiskMetrics -InstanceName $instanceName -TimeoutSec $TimeoutSec
         
-        # Contar archivos problemáticos
-        $totalProblematicFiles = 0
+        # NUEVO v3.3: Contar discos alertados (RealFreePct <= 10% Y tiene archivos con growth)
+        $alertedVolumes = @()
+        $worstRealFreePct = 100.0
         if ($diskMetrics.Volumes) {
             foreach ($vol in $diskMetrics.Volumes) {
-                if ($vol.ProblematicFileCount) {
-                    $totalProblematicFiles += $vol.ProblematicFileCount
+                # Actualizar peor porcentaje REAL
+                if ($vol.RealFreePct -lt $worstRealFreePct) {
+                    $worstRealFreePct = $vol.RealFreePct
+                }
+                # Contar volúmenes alertados
+                if ($vol.IsAlerted) {
+                    $alertedVolumes += $vol
                 }
             }
         }
         
-        # Lógica de alertas
+        # NUEVO v3.3: Lógica de alertas basada en ESPACIO LIBRE REAL
+        # Solo alertar si: archivos con growth + espacio real <= 10%
         $status = "✅"
         $statusMessage = ""
         
-        if ($totalProblematicFiles -gt 0) {
-            if ($diskMetrics.WorstFreePct -lt 10 -or $totalProblematicFiles -ge 5) {
+        if ($alertedVolumes.Count -gt 0) {
+            # Hay volúmenes con riesgo REAL (growth habilitado + poco espacio real)
+            $worstAlertedPct = ($alertedVolumes | Measure-Object -Property RealFreePct -Minimum).Minimum
+            if ($worstAlertedPct -le 5) {
                 $status = "🚨 CRÍTICO!"
-                $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
+                $statusMessage = " ($($alertedVolumes.Count) disco(s) con ≤10% espacio REAL)"
             }
-            elseif ($diskMetrics.WorstFreePct -lt 20 -or $totalProblematicFiles -ge 2) {
-                $status = "⚠️ ADVERTENCIA"
-                $statusMessage = " ($totalProblematicFiles archivos con <30MB libres)"
+            else {
+                $status = "⚠️ ALERTA!"
+                $statusMessage = " ($($alertedVolumes.Count) disco(s) con ≤10% espacio REAL)"
             }
         }
-        else {
-            if ($diskMetrics.WorstFreePct -lt 5) {
-                $status = "📊 Disco bajo (archivos OK)"
-            }
-            elseif ($diskMetrics.WorstFreePct -lt 10) {
-                $status = "📊 Disco bajo (archivos OK)"
-            }
-            elseif ($diskMetrics.WorstFreePct -lt 20) {
-                $status = "📊 Monitorear"
-            }
+        elseif ($diskMetrics.WorstFreePct -lt 10) {
+            # Disco bajo pero SIN riesgo real (no hay archivos con growth o tienen espacio interno)
+            $status = "📊 Disco bajo (sin riesgo)"
+        }
+        elseif ($diskMetrics.WorstFreePct -lt 20) {
+            $status = "📊 Monitorear"
         }
         
-        Write-Host "   $status $instanceName - Worst:$([int]$diskMetrics.WorstFreePct)% Data:$([int]$diskMetrics.DataDiskAvgFreePct)% Log:$([int]$diskMetrics.LogDiskAvgFreePct)%$statusMessage" -ForegroundColor Gray
+        Write-Host "   $status $instanceName - Disco:$([int]$diskMetrics.WorstFreePct)% Real:$([int]$worstRealFreePct)%$statusMessage" -ForegroundColor Gray
         
         $results += [PSCustomObject]@{
             InstanceName = $instanceName
@@ -1618,7 +1719,7 @@ Write-ToSqlServer -Data $results
 # 4. Resumen
 Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  RESUMEN - DISCOS                                     ║" -ForegroundColor Green
+Write-Host "║  RESUMEN - DISCOS v3.3 (Espacio Libre REAL)           ║" -ForegroundColor Green
 Write-Host "╠═══════════════════════════════════════════════════════╣" -ForegroundColor Green
 Write-Host "║  Total instancias:     $($results.Count)".PadRight(53) "║" -ForegroundColor White
 
@@ -1626,76 +1727,87 @@ $avgWorst = ($results | Measure-Object -Property WorstFreePct -Average).Average
 $avgData = ($results | Measure-Object -Property DataDiskAvgFreePct -Average).Average
 $avgLog = ($results | Measure-Object -Property LogDiskAvgFreePct -Average).Average
 
-Write-Host "║  Worst % promedio:     $([int]$avgWorst)%".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Data % promedio:      $([int]$avgData)%".PadRight(53) "║" -ForegroundColor White
-Write-Host "║  Log % promedio:       $([int]$avgLog)%".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Worst disco % promedio:     $([int]$avgWorst)%".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Data disco % promedio:      $([int]$avgData)%".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  Log disco % promedio:       $([int]$avgLog)%".PadRight(53) "║" -ForegroundColor White
 
-# Contar instancias con archivos problemáticos (< 30MB libres internos + growth habilitado)
-$instancesWithProblematicFiles = 0
-$totalProblematicFilesCount = 0
+# NUEVO v3.3: Contar instancias REALMENTE alertadas (espacio REAL <= 10%)
+$instancesWithRealAlerts = 0
+$totalAlertedVolumes = 0
+$alertedInstanceDetails = @()
+
 foreach ($r in $results) {
     if ($r.Volumes) {
-        $instanceFiles = 0
+        $alertedVols = @()
+        $worstRealPct = 100.0
         foreach ($vol in $r.Volumes) {
-            if ($vol.ProblematicFileCount) {
-                $instanceFiles += $vol.ProblematicFileCount
+            if ($vol.RealFreePct -lt $worstRealPct) {
+                $worstRealPct = $vol.RealFreePct
+            }
+            if ($vol.IsAlerted) {
+                $alertedVols += $vol
             }
         }
-        if ($instanceFiles -gt 0) {
-            $instancesWithProblematicFiles++
-            $totalProblematicFilesCount += $instanceFiles
+        if ($alertedVols.Count -gt 0) {
+            $instancesWithRealAlerts++
+            $totalAlertedVolumes += $alertedVols.Count
+            $alertedInstanceDetails += [PSCustomObject]@{
+                InstanceName = $r.InstanceName
+                AlertedVolumes = $alertedVols.Count
+                WorstRealFreePct = $worstRealPct
+                WorstDiskPct = $r.WorstFreePct
+            }
         }
     }
 }
 
 Write-Host "║" -NoNewline -ForegroundColor Green
 Write-Host "" -ForegroundColor White
-$critical = ($results | Where-Object {$_.WorstFreePct -lt 10}).Count
-Write-Host "║  Discos críticos (<10%): $critical".PadRight(53) "║" -ForegroundColor White
+Write-Host "║  ══════════ ALERTAS REALES (v3.3) ══════════".PadRight(53) "║" -ForegroundColor Cyan
 
-Write-Host "║  Instancias con archivos problemáticos: $instancesWithProblematicFiles".PadRight(53) "║" -ForegroundColor $(if ($instancesWithProblematicFiles -gt 0) { "Yellow" } else { "White" })
-Write-Host "║  Total archivos con <30MB libres: $totalProblematicFilesCount".PadRight(53) "║" -ForegroundColor $(if ($totalProblematicFilesCount -gt 0) { "Yellow" } else { "White" })
-Write-Host "║  (Solo archivos con growth habilitado)".PadRight(53) "║" -ForegroundColor DarkGray
+# Discos físicos bajo (sin considerar espacio interno)
+$disksBelowTenPct = ($results | Where-Object {$_.WorstFreePct -lt 10}).Count
+Write-Host "║  Discos físicos <10%:        $disksBelowTenPct".PadRight(53) "║" -ForegroundColor White
+
+# Discos REALMENTE alertados (espacio REAL <= 10%)
+$alertColor = if ($instancesWithRealAlerts -gt 0) { "Red" } else { "Green" }
+Write-Host "║  🚨 Instancias ALERTADAS:    $instancesWithRealAlerts".PadRight(53) "║" -ForegroundColor $alertColor
+Write-Host "║  🚨 Volúmenes alertados:     $totalAlertedVolumes".PadRight(53) "║" -ForegroundColor $alertColor
+Write-Host "║" -NoNewline -ForegroundColor Green
+Write-Host "" -ForegroundColor White
+Write-Host "║  Criterio: Growth + EspacioReal ≤10%".PadRight(53) "║" -ForegroundColor DarkGray
+Write-Host "║  EspacioReal = Disco + EspacioInternoEnArchivos".PadRight(53) "║" -ForegroundColor DarkGray
 
 # Contar instancias donde falló la query de análisis de archivos
 $instancesWithQueryFailed = ($results | Where-Object { $_.FileAnalysisQueryFailed -eq $true }).Count
 if ($instancesWithQueryFailed -gt 0) {
     Write-Host "║" -NoNewline -ForegroundColor Green
     Write-Host "" -ForegroundColor White
-    Write-Host "║  ⚠️  Instancias con error en query de archivos: $instancesWithQueryFailed".PadRight(53) "║" -ForegroundColor Yellow
-    Write-Host "║      (Datos de análisis de archivos incompletos)".PadRight(53) "║" -ForegroundColor DarkGray
+    Write-Host "║  ⚠️  Instancias con error en query: $instancesWithQueryFailed".PadRight(53) "║" -ForegroundColor Yellow
 }
 
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
 
-# Mostrar TOP instancias con archivos problemáticos si existen
-if ($instancesWithProblematicFiles -gt 0) {
+# NUEVO v3.3: Mostrar TOP instancias REALMENTE alertadas
+if ($instancesWithRealAlerts -gt 0) {
     Write-Host ""
-    Write-Host "🚨 TOP INSTANCIAS CON ARCHIVOS PROBLEMÁTICOS (<30MB libres + growth habilitado):" -ForegroundColor Red
+    Write-Host "🚨 INSTANCIAS CON ESPACIO REAL ≤10% (Growth habilitado + disco/interno bajo):" -ForegroundColor Red
     
-    $topProblematic = @()
-    foreach ($r in $results) {
-        if ($r.Volumes) {
-            $instanceFiles = 0
-            foreach ($vol in $r.Volumes) {
-                if ($vol.ProblematicFileCount) {
-                    $instanceFiles += $vol.ProblematicFileCount
-                }
-            }
-            if ($instanceFiles -gt 0) {
-                $topProblematic += [PSCustomObject]@{
-                    InstanceName = $r.InstanceName
-                    ProblematicFileCount = $instanceFiles
-                    WorstFreePct = $r.WorstFreePct
-                }
-            }
-        }
+    $alertedInstanceDetails | Sort-Object -Property WorstRealFreePct | Select-Object -First 10 | ForEach-Object {
+        $emoji = if ($_.WorstRealFreePct -le 5) { "🚨" } else { "⚠️" }
+        Write-Host "   $emoji $($_.InstanceName.PadRight(35)) Disco:$([int]$_.WorstDiskPct)% → Real:$([int]$_.WorstRealFreePct)% ($($_.AlertedVolumes) vol)" -ForegroundColor Yellow
     }
     
-    $topProblematic | Sort-Object -Property ProblematicFileCount -Descending | Select-Object -First 10 | ForEach-Object {
-        $emoji = if ($_.ProblematicFileCount -ge 5) { "🚨" } elseif ($_.ProblematicFileCount -ge 2) { "⚠️" } else { "📊" }
-        Write-Host "   $emoji $($_.InstanceName.PadRight(30)) - $($_.ProblematicFileCount) archivos - Worst: $([int]$_.WorstFreePct)%" -ForegroundColor Yellow
-    }
+    Write-Host ""
+    Write-Host "   💡 Estos discos tienen archivos con growth habilitado y poco espacio" -ForegroundColor DarkGray
+    Write-Host "      disponible tanto en disco como internamente en los archivos." -ForegroundColor DarkGray
+}
+
+# Mostrar instancias con disco bajo pero SIN alerta (para información)
+$diskLowNoAlert = ($results | Where-Object {$_.WorstFreePct -lt 10}).Count - $instancesWithRealAlerts
+if ($diskLowNoAlert -gt 0) {
+    Write-Host ""
+    Write-Host "📊 $diskLowNoAlert instancia(s) con disco <10% pero SIN alerta (archivos sin growth o con espacio interno)" -ForegroundColor DarkGray
 }
 
 Write-Host ""
