@@ -1492,21 +1492,51 @@ export default function HealthScore() {
                                 <CardContent className="space-y-1 text-xs pt-2 pb-2">
                                   {instanceDetails[score.instanceName].discosDetails ? (
                                     <>
-                                      {/* Resumen */}
-                                      <div className="flex items-center justify-between text-[11px]">
-                                        <span className="text-muted-foreground">Peor volumen</span>
-                                        <span className={cn(
-                                          'font-mono font-semibold',
-                                          instanceDetails[score.instanceName].discosDetails.worstFreePct < 10 && 'text-red-500',
-                                          instanceDetails[score.instanceName].discosDetails.worstFreePct >= 10 && instanceDetails[score.instanceName].discosDetails.worstFreePct < 20 && 'text-amber-500'
-                                        )}>
-                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct.toFixed(1)}% libre
-                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct < 10}
-                                          {instanceDetails[score.instanceName].discosDetails.worstFreePct >= 10 && instanceDetails[score.instanceName].discosDetails.worstFreePct < 20}
-                                        </span>
-                                      </div>
+                                      {/* Resumen v3.3 - Espacio en disco y REAL */}
+                                      {(() => {
+                                        const diskPct = instanceDetails[score.instanceName].discosDetails.worstFreePct;
+                                        // Calcular peor espacio REAL desde volúmenes
+                                        let worstRealPct = diskPct;
+                                        let hasAlertedVolumes = false;
+                                        try {
+                                          const vols = JSON.parse(instanceDetails[score.instanceName].discosDetails.volumesJson || '[]');
+                                          if (Array.isArray(vols) && vols.length > 0) {
+                                            const realPcts = vols.map(v => v.RealFreePct ?? v.FreePct ?? 100);
+                                            worstRealPct = Math.min(...realPcts);
+                                            hasAlertedVolumes = vols.some(v => v.IsAlerted === true);
+                                          }
+                                        } catch {}
+                                        const showRealDiff = Math.abs(worstRealPct - diskPct) > 0.5;
+                                        
+                                        return (
+                                          <div className="flex items-center justify-between text-[11px]">
+                                            <span className="text-muted-foreground">
+                                              {hasAlertedVolumes ? '🚨 Peor vol.' : 'Peor volumen'}
+                                            </span>
+                                            <div className="flex items-center gap-1">
+                                              <span className={cn(
+                                                'font-mono',
+                                                hasAlertedVolumes && 'text-red-500 font-semibold',
+                                                !hasAlertedVolumes && diskPct < 10 && 'text-amber-500',
+                                                !hasAlertedVolumes && diskPct >= 10 && diskPct < 20 && 'text-amber-400',
+                                                !hasAlertedVolumes && diskPct >= 20 && 'text-muted-foreground'
+                                              )}>
+                                                {diskPct.toFixed(0)}%
+                                              </span>
+                                              {showRealDiff && (
+                                                <span className="text-green-600 text-[10px] font-mono">
+                                                  →{worstRealPct.toFixed(0)}%
+                                                </span>
+                                              )}
+                                              {!hasAlertedVolumes && diskPct < 10 && (
+                                                <span className="text-[9px] text-green-600">(sin riesgo)</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
                                       
-                                      {/* Detalle de volúmenes */}
+                                      {/* Detalle de volúmenes v3.3 - Espacio REAL */}
                                       {(() => {
                                         try {
                                           const volumesJson = instanceDetails[score.instanceName].discosDetails.volumesJson;
@@ -1532,39 +1562,108 @@ export default function HealthScore() {
                                             );
                                           }
                                           
-                                          // Ordenar por espacio libre (menor a mayor)
-                                          const sortedVolumes = [...volumes].sort((a, b) => (a.FreePct || 100) - (b.FreePct || 100));
+                                          // v3.3: Ordenar por RealFreePct (espacio REAL) o FreePct si no existe
+                                          const sortedVolumes = [...volumes].sort((a, b) => {
+                                            const aReal = a.RealFreePct ?? a.FreePct ?? 100;
+                                            const bReal = b.RealFreePct ?? b.FreePct ?? 100;
+                                            return aReal - bReal;
+                                          });
                                           
-                                          // Categorizar volúmenes
-                                          const criticalVolumes = sortedVolumes.filter(v => v.FreePct < 10);
-                                          const warningVolumes = sortedVolumes.filter(v => v.FreePct >= 10 && v.FreePct < 20);
-                                          const okVolumes = sortedVolumes.filter(v => v.FreePct >= 20);
+                                          // v3.3: Categorizar usando IsAlerted y RealFreePct
+                                          // ALERTADOS: IsAlerted=true (growth + RealFreePct <= 10%)
+                                          // WARNING: RealFreePct 10-20% con archivos con growth
+                                          // OK: Sin riesgo real
+                                          const alertedVolumes = sortedVolumes.filter(v => v.IsAlerted === true);
+                                          const warningVolumes = sortedVolumes.filter(v => {
+                                            if (v.IsAlerted) return false;
+                                            const realPct = v.RealFreePct ?? v.FreePct ?? 100;
+                                            const hasGrowth = (v.FilesWithGrowth || 0) > 0;
+                                            return realPct < 20 && hasGrowth;
+                                          });
+                                          const okVolumes = sortedVolumes.filter(v => {
+                                            if (v.IsAlerted) return false;
+                                            const realPct = v.RealFreePct ?? v.FreePct ?? 100;
+                                            const hasGrowth = (v.FilesWithGrowth || 0) > 0;
+                                            return realPct >= 20 || !hasGrowth;
+                                          });
+                                          
+                                          // Función para mostrar el detalle de un volumen
+                                          const renderVolumeDetail = (vol: any, variant: 'critical' | 'warning' | 'ok') => {
+                                            const diskPct = vol.FreePct ?? 0;
+                                            const realPct = vol.RealFreePct ?? diskPct;
+                                            const hasGrowth = (vol.FilesWithGrowth || 0) > 0;
+                                            const internalSpaceGB = vol.FreeSpaceInGrowableFilesGB ?? 0;
+                                            const showRealDiff = hasGrowth && Math.abs(realPct - diskPct) > 0.5;
+                                            
+                                            const bgClass = variant === 'critical' ? 'bg-red-500/5' : 
+                                                           variant === 'warning' ? 'bg-amber-500/5' : '';
+                                            const textClass = variant === 'critical' ? 'text-red-600 font-semibold' : 
+                                                             variant === 'warning' ? 'text-amber-600' : 'text-muted-foreground';
+                                            
+                                            return (
+                                              <div className={`${bgClass} px-1 rounded`}>
+                                                <div className="flex items-center justify-between text-[11px]">
+                                                  <span className={`font-mono ${textClass}`}>
+                                                    {vol.MountPoint || vol.VolumeName || 'N/A'}
+                                                  </span>
+                                                  <div className="flex items-center gap-1">
+                                                    {/* Mostrar espacio en disco */}
+                                                    <span className={textClass}>
+                                                      {diskPct.toFixed(0)}%
+                                                    </span>
+                                                    {/* Si hay diferencia, mostrar espacio REAL */}
+                                                    {showRealDiff && (
+                                                      <span className="text-green-600 text-[10px]">
+                                                        →{realPct.toFixed(0)}%
+                                                      </span>
+                                                    )}
+                                                    <span className={`${textClass} text-[10px]`}>
+                                                      ({vol.FreeGB?.toFixed(0) || '?'}GB)
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                {/* Info adicional para volúmenes problemáticos */}
+                                                {variant !== 'ok' && !hasGrowth && diskPct < 20 && (
+                                                  <div className="text-[9px] text-green-600 ml-1">
+                                                    ✓ Sin growth (sin riesgo)
+                                                  </div>
+                                                )}
+                                                {variant !== 'ok' && hasGrowth && internalSpaceGB > 1 && (
+                                                  <div className="text-[9px] text-blue-600 ml-1">
+                                                    +{internalSpaceGB.toFixed(1)}GB interno disponible
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          };
                                           
                                           return (
                                             <div className="pt-1 mt-1 border-t border-yellow-500/10 space-y-0.5">
-                                              <p className="text-[10px] text-muted-foreground mb-1">Volúmenes ({volumes.length}):</p>
+                                              <p className="text-[10px] text-muted-foreground mb-1">
+                                                Volúmenes ({volumes.length})
+                                                {alertedVolumes.length > 0 && (
+                                                  <span className="text-red-500 ml-1">• {alertedVolumes.length} alertado(s)</span>
+                                                )}
+                                              </p>
                                               
-                                              {/* Críticos */}
-                                              {criticalVolumes.map((vol, idx) => (
-                                                <div key={`crit-${idx}`} className="flex items-center justify-between text-[11px] bg-red-500/5 px-1 rounded">
-                                                  <span className="font-mono text-red-600 font-semibold">{vol.MountPoint || vol.VolumeName || 'N/A'}</span>
-                                                  <span className="text-red-600 font-semibold">{vol.FreePct?.toFixed(1) || '?'}% ({vol.FreeGB?.toFixed(0) || '?'}GB)</span>
+                                              {/* Alertados (riesgo REAL) */}
+                                              {alertedVolumes.map((vol, idx) => (
+                                                <div key={`alert-${idx}`}>
+                                                  {renderVolumeDetail(vol, 'critical')}
                                                 </div>
                                               ))}
                                               
                                               {/* Warning */}
                                               {warningVolumes.map((vol, idx) => (
-                                                <div key={`warn-${idx}`} className="flex items-center justify-between text-[11px] bg-amber-500/5 px-1 rounded">
-                                                  <span className="font-mono text-amber-600">{vol.MountPoint || vol.VolumeName || 'N/A'}</span>
-                                                  <span className="text-amber-600">{vol.FreePct?.toFixed(1) || '?'}% ({vol.FreeGB?.toFixed(0) || '?'}GB)</span>
+                                                <div key={`warn-${idx}`}>
+                                                  {renderVolumeDetail(vol, 'warning')}
                                                 </div>
                                               ))}
                                               
-                                              {/* OK - Mostrar TODOS */}
+                                              {/* OK */}
                                               {okVolumes.map((vol, idx) => (
-                                                <div key={`ok-${idx}`} className="flex items-center justify-between text-[11px]">
-                                                  <span className="font-mono text-muted-foreground">{vol.MountPoint || vol.VolumeName || 'N/A'}</span>
-                                                  <span className="text-muted-foreground">{vol.FreePct?.toFixed(1) || '?'}% ({vol.FreeGB?.toFixed(0) || '?'}GB)</span>
+                                                <div key={`ok-${idx}`}>
+                                                  {renderVolumeDetail(vol, 'ok')}
                                                 </div>
                                               ))}
                                             </div>
