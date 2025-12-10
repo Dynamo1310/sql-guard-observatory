@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Health Score v3.0 FINAL - CONSOLIDADOR y Cálculo Final
+    Health Score v3.1 FINAL - CONSOLIDADOR y Cálculo Final
     
 .DESCRIPTION
     Script que:
@@ -10,12 +10,17 @@
     4. Aplica penalizaciones SELECTIVAS (solo a categorías relacionadas)
     5. Guarda en InstanceHealth_Score
     
+    NUEVO v3.1 - DISCOS con ESPACIO LIBRE REAL:
+    - Usa RealFreePct (disco + espacio interno en archivos con growth)
+    - Solo alerta si: FilesWithGrowth > 0 AND RealFreePct <= 10%
+    - NO alerta discos bajos si archivos sin growth o con espacio interno
+    
     PENALIZACIONES BALANCEADAS (NO caps globales):
     - Autogrowth crítico → Penaliza Discos, I/O, AlwaysOn
     - TempDB crítico → Penaliza I/O, CPU, Memoria
     - Backups crítico → Penaliza AlwaysOn, LogChain
     - Errores severos → Penaliza CPU, Memoria, I/O (moderado)
-    - Discos críticos → Penaliza Autogrowth, I/O
+    - Discos críticos → Penaliza Autogrowth, I/O (solo si riesgo REAL)
     
     CATEGORÍAS Y PESOS (100 puntos) - 12 CATEGORÍAS:
     
@@ -44,7 +49,7 @@
     🔴 Critical (<60): Immediate action
     
 .NOTES
-    Versión: 3.0 FINAL (12 categorías balanceadas)
+    Versión: 3.1 FINAL (12 categorías + Espacio Libre REAL)
     Frecuencia: Cada 2-5 minutos
     Ejecutar DESPUÉS de los scripts de recolección
     
@@ -504,16 +509,17 @@ function Calculate-IOScore {
     return @{ Score = $score; Cap = $cap }
 }
 
-# 8. DISCOS (7%) - MEJORADO v3.2: Considera crecimiento y espacio interno de archivos
+# 8. DISCOS (7%) - MEJORADO v3.3: Usa ESPACIO LIBRE REAL (disco + espacio interno en archivos)
 function Calculate-DiscosScore {
     <#
     .SYNOPSIS
-        Calcula el score de discos considerando espacio libre EN DISCO y EN ARCHIVOS
+        Calcula el score de discos usando el ESPACIO LIBRE REAL
     .DESCRIPTION
-        Lógica inteligente:
-        - Si los archivos NO tienen crecimiento → no penalizar disco bajo
-        - Si los archivos TIENEN espacio interno → reducir penalización
-        - Solo penalizar fuerte cuando hay archivos con growth Y sin espacio interno
+        Lógica v3.3 basada en RealFreePct e IsAlerted:
+        - RealFreePct = Espacio en disco + Espacio interno en archivos con growth
+        - IsAlerted = true si FilesWithGrowth > 0 AND RealFreePct <= 10%
+        - Solo penaliza si hay RIESGO REAL (IsAlerted = true)
+        - NO penaliza discos bajos si archivos no tienen growth o tienen espacio interno
     #>
     param(
         [object]$Data
@@ -527,101 +533,119 @@ function Calculate-DiscosScore {
     $logDiskFreePct = Get-SafeNumeric -Value $Data.LogDiskAvgFreePct -Default 100
     $worstFreePct = Get-SafeNumeric -Value $Data.WorstFreePct -Default 100
     
-    # Parsear VolumesJson para analizar archivos
-    $hasGrowthRisk = $false
-    $totalProblematicFiles = 0
-    $hasFilesWithoutGrowth = $false
-    $hasGoodInternalSpace = $false
+    # NUEVO v3.3: Analizar volúmenes para obtener espacio REAL y alertas
+    $alertedVolumes = @()
+    $worstRealFreePct = 100.0
+    $hasAnyGrowthFiles = $false
     
     if (![string]::IsNullOrWhiteSpace($Data.VolumesJson)) {
         try {
             $volumes = $Data.VolumesJson | ConvertFrom-Json
             
             foreach ($vol in $volumes) {
-                # Verificar si hay archivos problemáticos (growth + sin espacio interno)
-                $problematicFiles = Get-SafeInt -Value $vol.ProblematicFileCount -Default 0
-                $totalProblematicFiles += $problematicFiles
-                
-                # Verificar si todos los archivos NO tienen growth
-                $filesWithoutGrowth = Get-SafeInt -Value $vol.FilesWithoutGrowth -Default 0
+                # v3.3: Usar RealFreePct si está disponible
+                $realFreePct = Get-SafeNumeric -Value $vol.RealFreePct -Default $null
+                $isAlerted = $vol.IsAlerted -eq $true
                 $filesWithGrowth = Get-SafeInt -Value $vol.FilesWithGrowth -Default 0
-                $totalFiles = Get-SafeInt -Value $vol.TotalFiles -Default 0
                 
-                if ($totalFiles -gt 0 -and $filesWithoutGrowth -eq $totalFiles) {
-                    $hasFilesWithoutGrowth = $true
+                if ($filesWithGrowth -gt 0) {
+                    $hasAnyGrowthFiles = $true
                 }
                 
-                # Verificar si los archivos con growth tienen buen espacio interno
-                $avgFreeSpacePct = Get-SafeNumeric -Value $vol.AvgFreeSpacePctInGrowableFiles -Default 0
-                if ($filesWithGrowth -gt 0 -and $avgFreeSpacePct -gt 20) {
-                    $hasGoodInternalSpace = $true
+                # Si tiene RealFreePct (v3.3), usarlo
+                if ($null -ne $realFreePct) {
+                    if ($realFreePct -lt $worstRealFreePct) {
+                        $worstRealFreePct = $realFreePct
+                    }
+                    
+                    if ($isAlerted) {
+                        $alertedVolumes += $vol
+                    }
+                }
+                else {
+                    # Fallback v3.2: Calcular manualmente si no tiene RealFreePct
+                    $freePct = Get-SafeNumeric -Value $vol.FreePct -Default 100
+                    $freeSpaceInGrowableMB = Get-SafeNumeric -Value $vol.FreeSpaceInGrowableFilesMB -Default 0
+                    $totalGB = Get-SafeNumeric -Value $vol.TotalGB -Default 0
+                    $freeGB = Get-SafeNumeric -Value $vol.FreeGB -Default 0
+                    
+                    if ($totalGB -gt 0 -and $freeSpaceInGrowableMB -gt 0) {
+                        $freeSpaceInGrowableGB = $freeSpaceInGrowableMB / 1024.0
+                        $realFreeGB = $freeGB + $freeSpaceInGrowableGB
+                        $calculatedRealPct = ($realFreeGB / $totalGB) * 100.0
+                        
+                        if ($calculatedRealPct -lt $worstRealFreePct) {
+                            $worstRealFreePct = $calculatedRealPct
+                        }
+                        
+                        # Determinar si debería alertar
+                        if ($filesWithGrowth -gt 0 -and $calculatedRealPct -le 10) {
+                            $alertedVolumes += $vol
+                        }
+                    }
+                    elseif ($freePct -lt $worstRealFreePct) {
+                        $worstRealFreePct = $freePct
+                    }
                 }
             }
             
-            # Determinar si hay riesgo real de crecimiento
-            $hasGrowthRisk = ($totalProblematicFiles -gt 0)
-            
         } catch {
-            # Si falla el parseo, usar lógica tradicional
-            Write-Verbose "No se pudo parsear VolumesJson para análisis de archivos"
+            Write-Verbose "No se pudo parsear VolumesJson para análisis de espacio real"
+            # Fallback: usar worstFreePct del disco
+            $worstRealFreePct = $worstFreePct
         }
     }
+    else {
+        # Sin VolumesJson, usar worstFreePct
+        $worstRealFreePct = $worstFreePct
+    }
     
-    # Promedio ponderado de espacio en disco: priorizar Data y Log
-    $dataWeight = 0.5
-    $logWeight = 0.3
-    $otherWeight = 0.2
-    
-    $weightedFreePct = ($dataDiskFreePct * $dataWeight) + 
-                       ($logDiskFreePct * $logWeight) + 
-                       ($worstFreePct * $otherWeight)
-    
-    # SCORING BASE (solo espacio en disco)
+    # SCORING v3.3: Basado en ESPACIO LIBRE REAL
     # ≥20% = 100, 15–19% = 80, 10–14% = 60, 5–9% = 40, <5% = 0
-    if ($weightedFreePct -ge 20) {
+    if ($worstRealFreePct -ge 20) {
         $score = 100
     }
-    elseif ($weightedFreePct -ge 15) {
+    elseif ($worstRealFreePct -ge 15) {
         $score = 80
     }
-    elseif ($weightedFreePct -ge 10) {
+    elseif ($worstRealFreePct -ge 10) {
         $score = 60
     }
-    elseif ($weightedFreePct -ge 5) {
+    elseif ($worstRealFreePct -ge 5) {
         $score = 40
     }
     else {
         $score = 0
     }
     
-    # AJUSTE INTELIGENTE: Reducir penalización si no hay riesgo real
-    if ($weightedFreePct -lt 20) {
-        # CASO 1: Todos los archivos NO tienen growth → No hay riesgo, mejorar score
-        if ($hasFilesWithoutGrowth) {
-            # Disco bajo pero sin riesgo de crecimiento → mejorar +20 pts
-            $score = [Math]::Min(100, $score + 20)
-            Write-Verbose "Disco con espacio bajo pero archivos SIN growth → Score mejorado: $score"
+    # AJUSTE INTELIGENTE v3.3:
+    # Si hay volúmenes ALERTADOS (RealFreePct <= 10% Y growth habilitado) → Riesgo REAL
+    if ($alertedVolumes.Count -gt 0) {
+        # Hay riesgo REAL de quedarse sin espacio
+        $worstAlertedPct = ($alertedVolumes | ForEach-Object { 
+            Get-SafeNumeric -Value $_.RealFreePct -Default 100 
+        } | Measure-Object -Minimum).Minimum
+        
+        if ($worstAlertedPct -le 5) {
+            $score = 0   # Crítico
+            $cap = 40
         }
-        # CASO 2: Archivos con growth PERO tienen buen espacio interno → Riesgo bajo, mejorar score
-        elseif ($hasGoodInternalSpace -and -not $hasGrowthRisk) {
-            # Archivos tienen espacio interno suficiente → mejorar +10 pts
-            $score = [Math]::Min(100, $score + 10)
-            Write-Verbose "Disco con espacio bajo pero archivos con buen espacio interno → Score mejorado: $score"
+        elseif ($worstAlertedPct -le 10) {
+            $score = [Math]::Min($score, 30)  # Muy bajo
+            $cap = 50
         }
-        # CASO 3: Archivos problemáticos (growth + sin espacio interno) → Riesgo ALTO, penalizar
-        elseif ($hasGrowthRisk) {
-            # Riesgo real de quedarse sin espacio → penalizar extra -10 pts
-            $score = [Math]::Max(0, $score - 10)
-            Write-Verbose "Disco con espacio bajo Y archivos problemáticos ($totalProblematicFiles) → Score penalizado: $score"
-        }
+        
+        Write-Verbose "Discos ALERTADOS ($($alertedVolumes.Count)): RealFreePct más bajo = $([int]$worstAlertedPct)%"
     }
-    
-    # CAP: Solo aplicar cap estricto si hay riesgo real de crecimiento
-    if ($hasGrowthRisk -and ($dataDiskFreePct -lt 10 -or $logDiskFreePct -lt 10)) {
-        $cap = 40  # Cap estricto solo si hay riesgo real
+    elseif ($worstFreePct -lt 10 -and -not $hasAnyGrowthFiles) {
+        # Disco bajo pero SIN archivos con growth → Sin riesgo real, mejorar score
+        $score = [Math]::Min(100, $score + 20)
+        Write-Verbose "Disco bajo pero SIN archivos con growth → Score mejorado: $score"
     }
-    elseif ($dataDiskFreePct -lt 10 -or $logDiskFreePct -lt 10) {
-        $cap = 60  # Cap más suave si no hay riesgo de crecimiento
+    elseif ($worstFreePct -lt 10 -and $worstRealFreePct -ge 15) {
+        # Disco bajo pero buen espacio REAL (archivos con espacio interno) → Riesgo bajo
+        $score = [Math]::Min(100, $score + 10)
+        Write-Verbose "Disco bajo pero buen espacio REAL ($([int]$worstRealFreePct)%) → Score mejorado: $score"
     }
     
     return @{ Score = $score; Cap = $cap }
@@ -1387,8 +1411,9 @@ INSERT INTO dbo.InstanceHealth_Score (
 
 Write-Host ""
 Write-Host "=========================================================" -ForegroundColor Cyan
-Write-Host " Health Score v3.0 FINAL - CONSOLIDATOR (12 categorias)" -ForegroundColor Cyan
+Write-Host " Health Score v3.1 FINAL - CONSOLIDATOR (12 categorias)" -ForegroundColor Cyan
 Write-Host " Sistema de puntuacion: 100 puntos totales" -ForegroundColor Cyan
+Write-Host " Discos: Espacio Libre REAL (disco + interno archivos)" -ForegroundColor Cyan
 Write-Host "=========================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -1606,7 +1631,7 @@ Write-Progress -Activity "Calculando Health Score" -Completed
 # 3. Resumen final
 Write-Host ""
 Write-Host "=========================================================" -ForegroundColor Green
-Write-Host " RESUMEN FINAL - HEALTH SCORE v3.0 (12 CATEGORIAS)" -ForegroundColor Green
+Write-Host " RESUMEN FINAL - HEALTH SCORE v3.1 (12 CATEGORIAS)" -ForegroundColor Green
 Write-Host "=========================================================" -ForegroundColor Green
 Write-Host "  Total instancias:     $($results.Count)" -ForegroundColor White
 
