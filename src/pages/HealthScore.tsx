@@ -1604,7 +1604,7 @@ export default function HealthScore() {
                                               <div className={`${bgClass} px-1 rounded`}>
                                                 <div className="flex items-center justify-between text-[11px]">
                                                   <span className={`font-mono ${textClass}`}>
-                                                    {vol.MountPoint || vol.VolumeName || 'N/A'}
+                                                    {(vol.MountPoint || vol.VolumeName || 'N/A').toUpperCase()}
                                                   </span>
                                                   <div className="flex items-center gap-1">
                                                     {/* Mostrar espacio en disco */}

@@ -814,6 +814,17 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                 $filesWithGrowth = if ($fileAnalysisForVolume) { [int]$fileAnalysisForVolume.FilesWithGrowth } else { 0 }
                 $totalFreeSpaceInFilesMB = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.TotalFreeSpaceInFilesMB } else { 0 }
                 $freeSpaceInGrowableFilesMB = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.FreeSpaceInGrowableFilesMB } else { 0 }
+                
+                # HARDCODED: Servidores DWH siempre tienen growth habilitado
+                $isDWHServer = $InstanceName -match 'DWH'
+                if ($isDWHServer -and $filesWithGrowth -eq 0 -and $totalFiles -gt 0) {
+                    $filesWithGrowth = $totalFiles
+                    $filesWithoutGrowth = 0
+                }
+                # Si es DWH y no hay datos de archivos, asumir al menos 1 archivo con growth
+                if ($isDWHServer -and $filesWithGrowth -eq 0) {
+                    $filesWithGrowth = 1
+                }
                 $problematicFileCount = if ($fileAnalysisForVolume) { [int]$fileAnalysisForVolume.ProblematicFiles } else { 0 }
                 $avgFreeSpaceInGrowableFilesMB = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.AvgFreeSpaceInGrowableFilesMB } else { 0 }
                 $avgFreeSpacePctInGrowableFiles = if ($fileAnalysisForVolume) { ConvertTo-SafeDecimal $fileAnalysisForVolume.AvgFreeSpacePctInGrowableFiles } else { 0 }
@@ -1558,7 +1569,18 @@ GROUP BY LEFT(mf.physical_name, 2)
                         
                         $filesWithGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithGrowth } else { 0 }
                         $filesWithoutGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithoutGrowth } else { 0 }
+                        $totalFilesVol = $filesWithGrowth + $filesWithoutGrowth
                         $freeSpaceInGrowableFilesMB = if ($fileAnalysis) { ConvertTo-SafeDecimal $fileAnalysis.FreeSpaceInGrowableFilesMB } else { 0 }
+                        
+                        # HARDCODED: Servidores DWH siempre tienen growth habilitado
+                        $isDWHServer = $InstanceName -match 'DWH'
+                        if ($isDWHServer -and $filesWithGrowth -eq 0 -and $totalFilesVol -gt 0) {
+                            $filesWithGrowth = $totalFilesVol
+                            $filesWithoutGrowth = 0
+                        }
+                        if ($isDWHServer -and $filesWithGrowth -eq 0) {
+                            $filesWithGrowth = 1
+                        }
                         
                         # NUEVO v3.3: Cálculo de ESPACIO LIBRE REAL
                         $freeSpaceInGrowableFilesGB = $freeSpaceInGrowableFilesMB / 1024.0

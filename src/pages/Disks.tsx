@@ -267,23 +267,6 @@ export default function Disks() {
         />
       </div>
 
-      {/* Explicación de la lógica v3.3 */}
-      <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
-        <CardContent className="pt-4">
-          <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-blue-800 dark:text-blue-200">
-              <p className="font-medium mb-1">Lógica de alertas v3.3 (Espacio Libre REAL)</p>
-              <ul className="list-disc list-inside space-y-1 text-blue-700 dark:text-blue-300">
-                <li><strong>Crítico:</strong> Archivos con growth habilitado + espacio REAL ≤ 10% (ej: 5.4%, 8.3%)</li>
-                <li><strong>Bajo (sin riesgo):</strong> Disco físico &lt;10% pero archivos sin growth</li>
-                <li><strong>Espacio REAL</strong> = Espacio físico + Espacio interno en archivos (si hay growth)</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card className="gradient-card shadow-card">
         <CardHeader>
           <CardTitle>Filtros</CardTitle>
@@ -436,7 +419,7 @@ export default function Disks() {
                       'bg-red-50 dark:bg-red-950/30': disk.isAlerted,
                     })}>
                       <TableCell className="font-mono text-xs py-2">{disk.servidor}</TableCell>
-                      <TableCell className="font-mono text-xs font-bold py-2">{disk.drive}</TableCell>
+                      <TableCell className="font-mono text-xs font-bold py-2">{disk.drive?.toUpperCase()}</TableCell>
                       <TableCell className="text-right font-mono text-xs py-2">
                         {disk.totalGB?.toFixed(0) ?? 'N/A'}
                       </TableCell>
