@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
+using System.Text.Json;
 
 namespace SQLGuardObservatory.API.Services;
 
@@ -19,59 +20,181 @@ public class DisksService : IDisksService
     {
         try
         {
-            // Obtener la última fecha de captura
-            var ultimaCaptura = await _context.InventarioDiscosSnapshot
-                .MaxAsync(d => (DateTime?)d.CaptureDate);
+            // Usar la tabla InstanceHealth_Discos con datos más recientes por instancia
+            var query = @"
+                WITH LatestDiscos AS (
+                    SELECT 
+                        d.*,
+                        ROW_NUMBER() OVER (PARTITION BY d.InstanceName ORDER BY d.CollectedAtUtc DESC) AS rn
+                    FROM dbo.InstanceHealth_Discos d
+                )
+                SELECT 
+                    Id,
+                    InstanceName,
+                    Ambiente,
+                    HostingSite,
+                    SqlVersion,
+                    CollectedAtUtc,
+                    WorstFreePct,
+                    DataDiskAvgFreePct,
+                    LogDiskAvgFreePct,
+                    TempDBDiskFreePct,
+                    VolumesJson
+                FROM LatestDiscos
+                WHERE rn = 1
+                ORDER BY WorstFreePct ASC";
 
-            if (ultimaCaptura == null)
-            {
-                return new List<DiskDto>();
-            }
-
-            var query = _context.InventarioDiscosSnapshot
-                .Where(d => d.CaptureDate == ultimaCaptura.Value);
-
-            // Aplicar filtros
-            if (!string.IsNullOrWhiteSpace(ambiente))
-            {
-                query = query.Where(d => d.Ambiente == ambiente);
-            }
-
-            if (!string.IsNullOrWhiteSpace(hosting))
-            {
-                query = query.Where(d => d.Hosting == hosting);
-            }
-
-            if (!string.IsNullOrWhiteSpace(instance))
-            {
-                query = query.Where(d => d.InstanceName == instance);
-            }
-
-            if (!string.IsNullOrWhiteSpace(estado))
-            {
-                query = query.Where(d => d.Estado == estado);
-            }
-
-            var disks = await query
-                .OrderBy(d => d.Estado == "Critico" ? 1 : d.Estado == "Advertencia" ? 2 : 3)
-                .ThenBy(d => d.PorcentajeLibre)
-                .Select(d => new DiskDto
-                {
-                    Id = d.Id,
-                    InstanceName = d.InstanceName,
-                    Ambiente = d.Ambiente,
-                    Hosting = d.Hosting,
-                    Servidor = d.Servidor,
-                    Drive = d.Drive,
-                    TotalGB = d.TotalGB,
-                    LibreGB = d.LibreGB,
-                    PorcentajeLibre = d.PorcentajeLibre,
-                    Estado = d.Estado,
-                    CaptureDate = d.CaptureDate
-                })
+            var rawData = await _context.Database
+                .SqlQueryRaw<InstanceDiskData>(query)
                 .ToListAsync();
 
-            return disks;
+            var disks = new List<DiskDto>();
+
+            foreach (var row in rawData)
+            {
+                // Aplicar filtros
+                if (!string.IsNullOrWhiteSpace(ambiente) && row.Ambiente != ambiente)
+                    continue;
+                if (!string.IsNullOrWhiteSpace(hosting) && row.HostingSite != hosting)
+                    continue;
+                if (!string.IsNullOrWhiteSpace(instance) && row.InstanceName != instance)
+                    continue;
+
+                // Parsear VolumesJson para obtener volúmenes individuales
+                if (!string.IsNullOrWhiteSpace(row.VolumesJson))
+                {
+                    try
+                    {
+                        var volumes = JsonSerializer.Deserialize<List<DiskVolumeInfo>>(row.VolumesJson, new JsonSerializerOptions 
+                        { 
+                            PropertyNameCaseInsensitive = true 
+                        });
+
+                        if (volumes != null)
+                        {
+                            foreach (var vol in volumes)
+                            {
+                                // Obtener valores del JSON
+                                var freePct = vol.FreePct ?? 0;
+                                var realFreePct = vol.RealFreePct ?? freePct;
+                                var freeGB = vol.FreeGB ?? 0;
+                                var realFreeGB = vol.RealFreeGB ?? freeGB;
+                                var freeSpaceInGrowableFilesGB = vol.FreeSpaceInGrowableFilesGB ?? 0;
+                                var filesWithGrowth = vol.FilesWithGrowth ?? 0;
+                                var filesWithoutGrowth = vol.FilesWithoutGrowth ?? 0;
+                                var totalFiles = vol.TotalFiles ?? (filesWithGrowth + filesWithoutGrowth);
+                                var isAlerted = vol.IsAlerted ?? false;
+                                
+                                // v3.3: Determinar estado basado en la lógica del script
+                                var diskEstado = GetEstadoV33(freePct, realFreePct, filesWithGrowth, isAlerted);
+
+                                // Filtrar por estado si se especificó
+                                if (!string.IsNullOrWhiteSpace(estado) && diskEstado != estado)
+                                    continue;
+
+                                disks.Add(new DiskDto
+                                {
+                                    Id = row.Id,
+                                    InstanceName = row.InstanceName,
+                                    Ambiente = row.Ambiente,
+                                    Hosting = row.HostingSite,
+                                    Servidor = row.InstanceName.Split('\\')[0],
+                                    Drive = vol.MountPoint ?? vol.VolumeName ?? "N/A",
+                                    
+                                    // Espacio físico
+                                    TotalGB = vol.TotalGB,
+                                    LibreGB = freeGB,
+                                    PorcentajeLibre = freePct,
+                                    
+                                    // Espacio REAL (v3.3)
+                                    RealLibreGB = realFreeGB,
+                                    RealPorcentajeLibre = realFreePct,
+                                    EspacioInternoEnArchivosGB = freeSpaceInGrowableFilesGB,
+                                    
+                                    // Información de archivos
+                                    FilesWithGrowth = filesWithGrowth,
+                                    FilesWithoutGrowth = filesWithoutGrowth,
+                                    TotalFiles = totalFiles,
+                                    
+                                    // Estado y alertas
+                                    Estado = diskEstado,
+                                    IsAlerted = isAlerted,
+                                    
+                                    // Rol del disco
+                                    IsDataDisk = vol.IsDataDisk ?? false,
+                                    IsLogDisk = vol.IsLogDisk ?? false,
+                                    IsTempDBDisk = vol.IsTempDBDisk ?? false,
+                                    
+                                    CaptureDate = row.CollectedAtUtc
+                                });
+                            }
+                        }
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogWarning(ex, "Error parseando VolumesJson para {Instance}", row.InstanceName);
+                        // Agregar registro con datos agregados si falla el parseo
+                        disks.Add(new DiskDto
+                        {
+                            Id = row.Id,
+                            InstanceName = row.InstanceName,
+                            Ambiente = row.Ambiente,
+                            Hosting = row.HostingSite,
+                            Servidor = row.InstanceName.Split('\\')[0],
+                            Drive = "Agregado",
+                            TotalGB = null,
+                            LibreGB = null,
+                            PorcentajeLibre = row.WorstFreePct,
+                            RealLibreGB = null,
+                            RealPorcentajeLibre = row.WorstFreePct,
+                            EspacioInternoEnArchivosGB = null,
+                            FilesWithGrowth = 0,
+                            FilesWithoutGrowth = 0,
+                            TotalFiles = 0,
+                            Estado = GetEstadoSimple(row.WorstFreePct),
+                            IsAlerted = false,
+                            CaptureDate = row.CollectedAtUtc
+                        });
+                    }
+                }
+                else
+                {
+                    // Sin VolumesJson, usar datos agregados
+                    var diskEstado = GetEstadoSimple(row.WorstFreePct);
+                    
+                    if (!string.IsNullOrWhiteSpace(estado) && diskEstado != estado)
+                        continue;
+
+                    disks.Add(new DiskDto
+                    {
+                        Id = row.Id,
+                        InstanceName = row.InstanceName,
+                        Ambiente = row.Ambiente,
+                        Hosting = row.HostingSite,
+                        Servidor = row.InstanceName.Split('\\')[0],
+                        Drive = "Agregado",
+                        TotalGB = null,
+                        LibreGB = null,
+                        PorcentajeLibre = row.WorstFreePct,
+                        RealLibreGB = null,
+                        RealPorcentajeLibre = row.WorstFreePct,
+                        EspacioInternoEnArchivosGB = null,
+                        FilesWithGrowth = 0,
+                        FilesWithoutGrowth = 0,
+                        TotalFiles = 0,
+                        Estado = diskEstado,
+                        IsAlerted = false,
+                        CaptureDate = row.CollectedAtUtc
+                    });
+                }
+            }
+
+            // Ordenar: Primero alertados reales, luego por porcentaje real libre
+            return disks
+                .OrderByDescending(d => d.IsAlerted)
+                .ThenBy(d => d.Estado == "Critico" ? 1 : d.Estado == "Advertencia" ? 2 : 3)
+                .ThenBy(d => d.RealPorcentajeLibre ?? d.PorcentajeLibre)
+                .ToList();
         }
         catch (Exception ex)
         {
@@ -84,65 +207,25 @@ public class DisksService : IDisksService
     {
         try
         {
-            // Obtener la última fecha de captura
-            var ultimaCaptura = await _context.InventarioDiscosSnapshot
-                .MaxAsync(d => (DateTime?)d.CaptureDate);
+            var allDisks = await GetDisksAsync(ambiente, hosting, instance, null);
 
-            if (ultimaCaptura == null)
+            // Contar según la lógica v3.3
+            var alertadosReales = allDisks.Count(d => d.IsAlerted);
+            var bajosSinRiesgo = allDisks.Count(d => !d.IsAlerted && d.PorcentajeLibre < 10);
+
+            return new DiskSummaryDto
             {
-                return new DiskSummaryDto
-                {
-                    DiscosCriticos = 0,
-                    DiscosAdvertencia = 0,
-                    DiscosSaludables = 0,
-                    TotalDiscos = 0,
-                    UltimaCaptura = null
-                };
-            }
-
-            var query = _context.InventarioDiscosSnapshot
-                .Where(d => d.CaptureDate == ultimaCaptura.Value);
-
-            // Aplicar filtros
-            if (!string.IsNullOrWhiteSpace(ambiente))
-            {
-                query = query.Where(d => d.Ambiente == ambiente);
-            }
-
-            if (!string.IsNullOrWhiteSpace(hosting))
-            {
-                query = query.Where(d => d.Hosting == hosting);
-            }
-
-            if (!string.IsNullOrWhiteSpace(instance))
-            {
-                query = query.Where(d => d.InstanceName == instance);
-            }
-
-            if (!string.IsNullOrWhiteSpace(estado))
-            {
-                query = query.Where(d => d.Estado == estado);
-            }
-
-            var summary = await query
-                .GroupBy(d => 1)
-                .Select(g => new DiskSummaryDto
-                {
-                    DiscosCriticos = g.Count(d => d.Estado == "Critico"),
-                    DiscosAdvertencia = g.Count(d => d.Estado == "Advertencia"),
-                    DiscosSaludables = g.Count(d => d.Estado == "Saludable"),
-                    TotalDiscos = g.Count(),
-                    UltimaCaptura = ultimaCaptura
-                })
-                .FirstOrDefaultAsync();
-
-            return summary ?? new DiskSummaryDto
-            {
-                DiscosCriticos = 0,
-                DiscosAdvertencia = 0,
-                DiscosSaludables = 0,
-                TotalDiscos = 0,
-                UltimaCaptura = ultimaCaptura
+                // Críticos = Solo los realmente alertados (growth + espacio real bajo)
+                DiscosCriticos = alertadosReales,
+                DiscosAdvertencia = allDisks.Count(d => d.Estado == "Advertencia"),
+                DiscosSaludables = allDisks.Count(d => d.Estado == "Saludable"),
+                TotalDiscos = allDisks.Count,
+                
+                // Nuevos contadores
+                DiscosAlertadosReales = alertadosReales,
+                DiscosBajosSinRiesgo = bajosSinRiesgo,
+                
+                UltimaCaptura = allDisks.MaxBy(d => d.CaptureDate)?.CaptureDate
             };
         }
         catch (Exception ex)
@@ -156,18 +239,7 @@ public class DisksService : IDisksService
     {
         try
         {
-            // Obtener la última fecha de captura
-            var ultimaCaptura = await _context.InventarioDiscosSnapshot
-                .MaxAsync(d => (DateTime?)d.CaptureDate);
-
-            if (ultimaCaptura == null)
-            {
-                return new DiskFiltersDto();
-            }
-
-            var disks = await _context.InventarioDiscosSnapshot
-                .Where(d => d.CaptureDate == ultimaCaptura.Value)
-                .ToListAsync();
+            var disks = await GetDisksAsync();
 
             return new DiskFiltersDto
             {
@@ -188,12 +260,7 @@ public class DisksService : IDisksService
                     .Distinct()
                     .OrderBy(i => i)
                     .ToList(),
-                Estados = disks
-                    .Where(d => !string.IsNullOrWhiteSpace(d.Estado))
-                    .Select(d => d.Estado!)
-                    .Distinct()
-                    .OrderBy(e => e == "Critico" ? 1 : e == "Advertencia" ? 2 : 3)
-                    .ToList()
+                Estados = new List<string> { "Critico", "Advertencia", "Saludable" }
             };
         }
         catch (Exception ex)
@@ -202,5 +269,101 @@ public class DisksService : IDisksService
             throw;
         }
     }
+
+    /// <summary>
+    /// v3.3: Determina el estado del disco según la lógica del script de relevamiento
+    /// - Crítico: IsAlerted = true (tiene growth + espacio real <= 10%)
+    /// - Advertencia: Espacio real entre 10-20%
+    /// - Saludable: Espacio real > 20%
+    /// 
+    /// NOTA: Un disco con <10% físico pero sin growth o con espacio interno
+    /// NO se marca como crítico porque los archivos no van a crecer.
+    /// </summary>
+    private static string GetEstadoV33(decimal freePct, decimal realFreePct, int filesWithGrowth, bool isAlerted)
+    {
+        // Si está marcado como alertado por el script, es crítico
+        if (isAlerted)
+            return "Critico";
+        
+        // Si tiene archivos con growth y espacio real bajo, verificar
+        if (filesWithGrowth > 0 && realFreePct <= 10)
+            return "Critico";
+        
+        // Si no tiene archivos con growth, usar el espacio real para determinar advertencia
+        // (pero nunca crítico porque no va a crecer)
+        if (realFreePct < 20)
+            return "Advertencia";
+        
+        return "Saludable";
+    }
+
+    /// <summary>
+    /// Estado simple basado solo en porcentaje (para casos sin datos de growth)
+    /// </summary>
+    private static string GetEstadoSimple(decimal porcentajeLibre)
+    {
+        if (porcentajeLibre < 10)
+            return "Critico";
+        if (porcentajeLibre < 20)
+            return "Advertencia";
+        return "Saludable";
+    }
 }
 
+// Clase auxiliar para mapear datos de la query
+public class InstanceDiskData
+{
+    public long Id { get; set; }
+    public string InstanceName { get; set; } = string.Empty;
+    public string? Ambiente { get; set; }
+    public string? HostingSite { get; set; }
+    public string? SqlVersion { get; set; }
+    public DateTime CollectedAtUtc { get; set; }
+    public decimal WorstFreePct { get; set; }
+    public decimal DataDiskAvgFreePct { get; set; }
+    public decimal LogDiskAvgFreePct { get; set; }
+    public decimal TempDBDiskFreePct { get; set; }
+    public string? VolumesJson { get; set; }
+}
+
+// Clase para deserializar el JSON de volúmenes (DisksService)
+public class DiskVolumeInfo
+{
+    public string? MountPoint { get; set; }
+    public string? VolumeName { get; set; }
+    public decimal? TotalGB { get; set; }
+    public decimal? FreeGB { get; set; }
+    public decimal? FreePct { get; set; }
+    
+    // v3.3: Espacio libre REAL
+    public decimal? RealFreeGB { get; set; }
+    public decimal? RealFreePct { get; set; }
+    public decimal? FreeSpaceInGrowableFilesGB { get; set; }
+    public decimal? FreeSpaceInGrowableFilesMB { get; set; }
+    public bool? IsAlerted { get; set; }
+    
+    // Información de archivos
+    public int? FilesWithGrowth { get; set; }
+    public int? FilesWithoutGrowth { get; set; }
+    public int? TotalFiles { get; set; }
+    public int? ProblematicFileCount { get; set; }
+    public decimal? TotalFreeSpaceInFilesMB { get; set; }
+    public decimal? AvgFreeSpaceInGrowableFilesMB { get; set; }
+    public decimal? AvgFreeSpacePctInGrowableFiles { get; set; }
+    
+    // Roles del disco
+    public bool? IsDataDisk { get; set; }
+    public bool? IsLogDisk { get; set; }
+    public bool? IsTempDBDisk { get; set; }
+    
+    // Información de disco físico
+    public string? MediaType { get; set; }
+    public string? BusType { get; set; }
+    public string? HealthStatus { get; set; }
+    public string? OperationalStatus { get; set; }
+    
+    // Competencia
+    public int? DatabaseCount { get; set; }
+    public int? FileCount { get; set; }
+    public string? DatabaseList { get; set; }
+}

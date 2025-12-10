@@ -1,20 +1,13 @@
 // API Service para conectar con el backend .NET
-// Detectar automáticamente si estamos en localhost o en el servidor
+// Backend productivo: asprbm-nov-01:5000
 export const getApiUrl = () => {
   // Si hay variable de entorno, usarla
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
   
-  // Si no, detectar automáticamente basado en el hostname
-  const hostname = window.location.hostname;
-  
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:5000';
-  } else {
-    // Backend en producción: asprbm-nov-01 puerto 5000
-    return `http://${hostname}:5000`;
-  }
+  // URL fija del backend productivo
+  return 'http://asprbm-nov-01:5000';
 };
 
 const API_URL = getApiUrl();
@@ -343,10 +336,31 @@ export interface DiskDto {
   hosting?: string;
   servidor: string;
   drive: string;
+  
+  // Espacio físico en disco
   totalGB?: number;
   libreGB?: number;
   porcentajeLibre?: number;
+  
+  // Espacio REAL (v3.3) = Espacio físico + Espacio interno en archivos con growth
+  realLibreGB?: number;
+  realPorcentajeLibre?: number;
+  espacioInternoEnArchivosGB?: number;
+  
+  // Información de archivos
+  filesWithGrowth: number;
+  filesWithoutGrowth: number;
+  totalFiles: number;
+  
+  // Estado y alertas
   estado?: string;
+  isAlerted: boolean;
+  
+  // Rol del disco
+  isDataDisk: boolean;
+  isLogDisk: boolean;
+  isTempDBDisk: boolean;
+  
   captureDate: string;
 }
 
@@ -355,6 +369,11 @@ export interface DiskSummaryDto {
   discosAdvertencia: number;
   discosSaludables: number;
   totalDiscos: number;
+  
+  // Nuevos contadores para diferenciar tipos de alertas
+  discosAlertadosReales: number;  // Discos con growth + espacio real <= 10%
+  discosBajosSinRiesgo: number;   // Discos <10% pero sin growth o con espacio interno
+  
   ultimaCaptura?: string;
 }
 

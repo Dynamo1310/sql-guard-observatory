@@ -24,7 +24,7 @@ interface SignalRProviderProps {
  */
 export const SignalRProvider: React.FC<SignalRProviderProps> = ({ 
   children, 
-  hubUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/hubs/notifications`,
+  hubUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://asprbm-nov-01:5000'}/hubs/notifications`,
   autoReconnect = true 
 }) => {
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);

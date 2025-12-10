@@ -124,6 +124,23 @@ function ConvertTo-SafeDecimal {
     }
 }
 
+# Función para normalizar mount point a solo letra de unidad
+# Convierte "E:\DWM\DWM4\" -> "E:\" y "E:\" -> "E:\"
+function Get-NormalizedDriveLetter {
+    param([string]$MountPoint)
+    
+    if ([string]::IsNullOrWhiteSpace($MountPoint)) {
+        return $MountPoint
+    }
+    
+    # Extraer solo la letra de unidad (primeros caracteres como "E:" o "E:\")
+    if ($MountPoint -match '^([A-Za-z]:)') {
+        return $matches[1] + "\"
+    }
+    
+    return $MountPoint
+}
+
 function Get-DiskMediaType {
     <#
     .SYNOPSIS
@@ -688,12 +705,34 @@ DROP TABLE #DriveSpace
         }
         
         if ($dataSpace) {
-            # Obtener volúmenes únicos para procesamiento usando Group-Object (más robusto)
+            # Normalizar y agrupar volúmenes por letra de unidad
+            # Esto combina mount points como E:\DWM\DWM4\, E:\DWM\DWM5\ en un solo E:\
             $uniqueVolumes = $dataSpace | 
-                Group-Object -Property MountPoint | 
                 ForEach-Object {
-                    # Tomar el primer elemento de cada grupo (todos tienen los mismos valores de espacio)
-                    $_.Group[0]
+                    # Agregar propiedad de letra normalizada
+                    $_ | Add-Member -NotePropertyName NormalizedDrive -NotePropertyValue (Get-NormalizedDriveLetter $_.MountPoint) -PassThru
+                } |
+                Group-Object -Property NormalizedDrive | 
+                ForEach-Object {
+                    # Para cada letra de unidad, combinar los datos de todos los mount points
+                    $volumesInDrive = $_.Group
+                    $firstVol = $volumesInDrive[0]
+                    
+                    # Sumar espacio total y libre de todos los mount points (son volúmenes en el mismo disco físico)
+                    $combinedTotalGB = ($volumesInDrive | Measure-Object -Property TotalGB -Sum).Sum
+                    $combinedFreeGB = ($volumesInDrive | Measure-Object -Property FreeGB -Sum).Sum
+                    $combinedFreePct = if ($combinedTotalGB -gt 0) { ($combinedFreeGB / $combinedTotalGB) * 100.0 } else { 100.0 }
+                    
+                    # Crear objeto combinado con la letra normalizada
+                    [PSCustomObject]@{
+                        MountPoint = $firstVol.NormalizedDrive
+                        VolumeName = $firstVol.VolumeName
+                        TotalGB = [math]::Round($combinedTotalGB, 2)
+                        FreeGB = [math]::Round($combinedFreeGB, 2)
+                        FreePct = [math]::Round($combinedFreePct, 2)
+                        OriginalMountPoints = ($volumesInDrive | ForEach-Object { $_.MountPoint }) -join ", "
+                        MountPointCount = $volumesInDrive.Count
+                    }
                 }
             
             # Detectar roles de cada volumen consultando qué archivos tiene
@@ -717,11 +756,14 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                     -MaxRetries 1
                 
                 foreach ($roleEntry in $rolesData) {
-                    $mp = $roleEntry.MountPoint
+                    # Normalizar el mount point para agrupar roles por letra de unidad
+                    $mp = Get-NormalizedDriveLetter $roleEntry.MountPoint
                     if (-not $volumeRoles.ContainsKey($mp)) {
                         $volumeRoles[$mp] = @()
                     }
-                    $volumeRoles[$mp] += $roleEntry.DiskRole
+                    if ($volumeRoles[$mp] -notcontains $roleEntry.DiskRole) {
+                        $volumeRoles[$mp] += $roleEntry.DiskRole
+                    }
                 }
             }
             catch {
@@ -730,10 +772,25 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
             
             # Procesar cada volumen único
             $result.Volumes = $uniqueVolumes | ForEach-Object {
-                $mountPoint = $_.MountPoint
+                $mountPoint = Get-NormalizedDriveLetter $_.MountPoint
                 
-                # Obtener info de competencia para este volumen
-                $competition = $dataCompetition | Where-Object { $_.MountPoint -eq $mountPoint } | Select-Object -First 1
+                # Obtener info de competencia para este volumen (buscar por todos los mount points originales)
+                $competitionData = $dataCompetition | Where-Object { 
+                    (Get-NormalizedDriveLetter $_.MountPoint) -eq $mountPoint 
+                }
+                # Combinar datos de competencia de todos los mount points
+                $combinedDbCount = ($competitionData | Measure-Object -Property DatabaseCount -Sum).Sum
+                $combinedFileCount = ($competitionData | Measure-Object -Property FileCount -Sum).Sum
+                $combinedDbList = ($competitionData | ForEach-Object { $_.DatabaseList } | Where-Object { $_ }) -join ","
+                # Eliminar duplicados en la lista de DBs
+                $combinedDbList = ($combinedDbList -split ',' | Select-Object -Unique | Sort-Object) -join ','
+                $competition = if ($competitionData) {
+                    [PSCustomObject]@{
+                        DatabaseCount = $combinedDbCount
+                        FileCount = $combinedFileCount
+                        DatabaseList = $combinedDbList
+                    }
+                } else { $null }
                 
                 # Determinar roles del volumen (puede tener múltiples roles)
                 $roles = if ($volumeRoles.ContainsKey($mountPoint)) { $volumeRoles[$mountPoint] } else { @() }
@@ -1139,6 +1196,14 @@ if ($EnableParallel -and $PSVersionTable.PSVersion.Major -ge 7) {
             try { return [decimal]$Value } catch { return $Default }
         }
         
+        # Función para normalizar mount point a solo letra de unidad
+        function Get-NormalizedDriveLetter {
+            param([string]$MountPoint)
+            if ([string]::IsNullOrWhiteSpace($MountPoint)) { return $MountPoint }
+            if ($MountPoint -match '^([A-Za-z]:)') { return $matches[1] + "\" }
+            return $MountPoint
+        }
+        
         function Test-SqlConnection {
             param([string]$InstanceName, [int]$TimeoutSec = 10, [int]$MaxRetries = 2)
             $attempt = 0
@@ -1412,10 +1477,26 @@ DROP TABLE #DriveSpace
                 }
                 
                 if ($dataSpace) {
-                    # Obtener volúmenes únicos usando Group-Object (más robusto)
+                    # Normalizar y agrupar volúmenes por letra de unidad
                     $uniqueVolumes = $dataSpace | 
-                        Group-Object -Property MountPoint | 
-                        ForEach-Object { $_.Group[0] }
+                        ForEach-Object {
+                            $_ | Add-Member -NotePropertyName NormalizedDrive -NotePropertyValue (Get-NormalizedDriveLetter $_.MountPoint) -PassThru
+                        } |
+                        Group-Object -Property NormalizedDrive | 
+                        ForEach-Object {
+                            $volumesInDrive = $_.Group
+                            $firstVol = $volumesInDrive[0]
+                            $combinedTotalGB = ($volumesInDrive | Measure-Object -Property TotalGB -Sum).Sum
+                            $combinedFreeGB = ($volumesInDrive | Measure-Object -Property FreeGB -Sum).Sum
+                            $combinedFreePct = if ($combinedTotalGB -gt 0) { ($combinedFreeGB / $combinedTotalGB) * 100.0 } else { 100.0 }
+                            [PSCustomObject]@{
+                                MountPoint = $firstVol.NormalizedDrive
+                                VolumeName = $firstVol.VolumeName
+                                TotalGB = [math]::Round($combinedTotalGB, 2)
+                                FreeGB = [math]::Round($combinedFreeGB, 2)
+                                FreePct = [math]::Round($combinedFreePct, 2)
+                            }
+                        }
                     
                     # Detectar roles de volúmenes (simplificado para modo paralelo)
                     $queryRoles = @"
@@ -1434,11 +1515,14 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                     try {
                         $rolesData = Invoke-SqlQueryWithRetry -InstanceName $InstanceName -Query $queryRoles -TimeoutSec 5 -MaxRetries 1
                         foreach ($roleEntry in $rolesData) {
-                            $mp = $roleEntry.MountPoint
+                            # Normalizar mount point para agrupar roles por letra de unidad
+                            $mp = Get-NormalizedDriveLetter $roleEntry.MountPoint
                             if (-not $volumeRoles.ContainsKey($mp)) {
                                 $volumeRoles[$mp] = @()
                             }
-                            $volumeRoles[$mp] += $roleEntry.DiskRole
+                            if ($volumeRoles[$mp] -notcontains $roleEntry.DiskRole) {
+                                $volumeRoles[$mp] += $roleEntry.DiskRole
+                            }
                         }
                     } catch { }
                     
@@ -1464,13 +1548,16 @@ GROUP BY LEFT(mf.physical_name, 2)
                         $freeGB = ConvertTo-SafeDecimal $_.FreeGB
                         $freePct = ConvertTo-SafeDecimal $_.FreePct
                         
+                        # El MountPoint ya viene normalizado desde el agrupamiento anterior
+                        $mountPoint = $_.MountPoint
+                        
                         # Buscar análisis de archivos para este volumen
-                        # MountPoint viene como "E:\" - extraer solo "E:" para match con query
-                        $mp = $_.MountPoint
-                        $driveLetter = if ($mp.Length -ge 2) { $mp.Substring(0, 2) } else { $mp }
+                        # Extraer solo "E:" para match con query
+                        $driveLetter = if ($mountPoint.Length -ge 2) { $mountPoint.Substring(0, 2) } else { $mountPoint }
                         $fileAnalysis = $fileAnalysisData | Where-Object { $_.DriveLetter -eq $driveLetter } | Select-Object -First 1
                         
                         $filesWithGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithGrowth } else { 0 }
+                        $filesWithoutGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithoutGrowth } else { 0 }
                         $freeSpaceInGrowableFilesMB = if ($fileAnalysis) { ConvertTo-SafeDecimal $fileAnalysis.FreeSpaceInGrowableFilesMB } else { 0 }
                         
                         # NUEVO v3.3: Cálculo de ESPACIO LIBRE REAL
@@ -1482,13 +1569,16 @@ GROUP BY LEFT(mf.physical_name, 2)
                         $isAlerted = ($filesWithGrowth -gt 0) -and ($realFreePct -le 10)
                         
                         @{
-                            MountPoint = $_.MountPoint
+                            MountPoint = $mountPoint
                             VolumeName = $_.VolumeName
                             TotalGB = $totalGB
                             FreeGB = $freeGB
                             FreePct = $freePct
                             FilesWithGrowth = $filesWithGrowth
+                            FilesWithoutGrowth = $filesWithoutGrowth
+                            TotalFiles = $filesWithGrowth + $filesWithoutGrowth
                             FreeSpaceInGrowableFilesMB = $freeSpaceInGrowableFilesMB
+                            FreeSpaceInGrowableFilesGB = [math]::Round($freeSpaceInGrowableFilesGB, 2)
                             RealFreeGB = [math]::Round($realFreeGB, 2)
                             RealFreePct = [math]::Round($realFreePct, 2)
                             IsAlerted = $isAlerted
