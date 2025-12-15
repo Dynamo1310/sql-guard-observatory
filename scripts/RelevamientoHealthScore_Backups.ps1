@@ -88,7 +88,7 @@ LEFT JOIN msdb.dbo.backupset bs WITH (NOLOCK)
     ON d.name = bs.database_name
     AND bs.backup_finish_date >= '$cutoffDate'
 WHERE d.state_desc = 'ONLINE'
-  AND d.name NOT IN ('tempdb')
+  AND d.name NOT IN ('tempdb', 'SqlMant')  -- Excluye tempdb y SqlMant (base DBA mantenimiento)
   AND d.database_id > 4          -- Excluye bases de sistema (master, model, msdb, tempdb)
   AND d.is_read_only = 0          -- Excluye bases READ-ONLY
 GROUP BY d.name, d.recovery_model_desc;
@@ -111,7 +111,7 @@ SELECT
        AND bs.backup_finish_date >= '$cutoffDate') AS LastLogBackup
 FROM sys.databases d
 WHERE d.state_desc = 'ONLINE'
-  AND d.name NOT IN ('tempdb')
+  AND d.name NOT IN ('tempdb', 'SqlMant')  -- Excluye tempdb y SqlMant (base DBA mantenimiento)
   AND d.database_id > 4
   AND d.is_read_only = 0;
 "@
