@@ -54,8 +54,10 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   token: string;
+  id: string;
   domainUser: string;
   displayName: string;
+  email?: string;
   allowed: boolean;
   roles: string[];
 }
@@ -64,6 +66,7 @@ export interface UserDto {
   id: string;
   domainUser: string;
   displayName: string;
+  email?: string;
   role: string;
   active: boolean;
   createdAt: string;
@@ -72,11 +75,13 @@ export interface UserDto {
 export interface CreateUserRequest {
   domainUser: string;
   displayName: string;
+  email?: string;
   role: string;
 }
 
 export interface UpdateUserRequest {
   displayName: string;
+  email?: string;
   role: string;
   active: boolean;
 }
@@ -127,8 +132,10 @@ export const authApi = {
     if (data.token) {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify({
+        id: data.id,
         domainUser: data.domainUser,
         displayName: data.displayName,
+        email: data.email,
         roles: data.roles,
       }));
     }
@@ -147,8 +154,10 @@ export const authApi = {
     if (data.token) {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify({
+        id: data.id,
         domainUser: data.domainUser,
         displayName: data.displayName,
+        email: data.email,
         roles: data.roles,
       }));
     }
@@ -1168,6 +1177,614 @@ export const healthScoreV3Api = {
       },
     });
     return handleResponse<HealthScoreV3SummaryDto>(response);
+  },
+};
+
+// ==================== ONCALL API ====================
+
+export interface OnCallOperatorDto {
+  id: number;
+  userId: string;
+  domainUser: string;
+  displayName: string;
+  email?: string;
+  rotationOrder: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface OnCallScheduleDto {
+  id: number;
+  userId: string;
+  domainUser: string;
+  displayName: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  weekNumber: number;
+  year: number;
+  isOverride: boolean;
+  modifiedByDisplayName?: string;
+  createdAt: string;
+}
+
+export interface OnCallSwapRequestDto {
+  id: number;
+  requesterId: string;
+  requesterDomainUser: string;
+  requesterDisplayName: string;
+  targetUserId: string;
+  targetDomainUser: string;
+  targetDisplayName: string;
+  originalScheduleId: number;
+  originalWeekStartDate: string;
+  originalWeekEndDate: string;
+  swapScheduleId?: number;
+  swapWeekStartDate?: string;
+  swapWeekEndDate?: string;
+  status: string;
+  rejectionReason?: string;
+  requestReason?: string;
+  requestedAt: string;
+  respondedAt?: string;
+  isEscalationOverride: boolean;
+}
+
+export interface OnCallCurrentDto {
+  userId: string;
+  domainUser: string;
+  displayName: string;
+  email?: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  weekNumber: number;
+  isCurrentlyOnCall: boolean;
+  escalationUsers: EscalationUserDto[];
+}
+
+export interface EscalationUserDto {
+  userId: string;
+  domainUser: string;
+  displayName: string;
+  email?: string;
+  order: number;
+}
+
+export interface WhitelistUserDto {
+  id: string;
+  domainUser: string;
+  displayName: string;
+  email?: string;
+  isOperator: boolean;
+  isEscalation: boolean;
+}
+
+export interface MonthCalendarDto {
+  year: number;
+  month: number;
+  monthName: string;
+  days: CalendarDayDto[];
+  onCallWeeks: OnCallWeekDto[];
+}
+
+export interface CalendarDayDto {
+  date: string;
+  dayOfMonth: number;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  isOnCallStart: boolean;
+  isOnCallEnd: boolean;
+  onCallUserId?: string;
+  onCallDisplayName?: string;
+  colorCode?: string;
+}
+
+export interface OnCallWeekDto {
+  scheduleId: number;
+  weekStartDate: string;
+  weekEndDate: string;
+  weekNumber: number;
+  userId: string;
+  domainUser: string;
+  displayName: string;
+  colorCode: string;
+  isCurrentWeek: boolean;
+}
+
+export interface AddOperatorRequest {
+  userId: string;
+}
+
+export interface ReorderOperatorsRequest {
+  orders: { id: number; order: number }[];
+}
+
+export interface GenerateScheduleRequest {
+  startDate: string;
+  weeksToGenerate?: number;
+}
+
+export interface UpdateScheduleRequest {
+  userId: string;
+  reason?: string;
+}
+
+export interface CreateSwapRequestDto {
+  originalScheduleId: number;
+  targetUserId: string;
+  swapScheduleId?: number;
+  reason?: string;
+}
+
+export interface RejectSwapRequestDto {
+  reason: string;
+}
+
+export const onCallApi = {
+  // Operators
+  async getOperators(): Promise<OnCallOperatorDto[]> {
+    const response = await fetch(`${API_URL}/api/oncall/operators`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallOperatorDto[]>(response);
+  },
+
+  async addOperator(userId: string): Promise<OnCallOperatorDto> {
+    const response = await fetch(`${API_URL}/api/oncall/operators`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ userId }),
+    });
+    return handleResponse<OnCallOperatorDto>(response);
+  },
+
+  async removeOperator(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/oncall/operators/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Error al eliminar operador' }));
+      throw new Error(error.message);
+    }
+  },
+
+  async reorderOperators(orders: { id: number; order: number }[]): Promise<void> {
+    const response = await fetch(`${API_URL}/api/oncall/operators/reorder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ orders }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Error al reordenar' }));
+      throw new Error(error.message);
+    }
+  },
+
+  // Calendar
+  async getMonthCalendar(year: number, month: number): Promise<MonthCalendarDto> {
+    const response = await fetch(`${API_URL}/api/oncall/calendar/${year}/${month}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<MonthCalendarDto>(response);
+  },
+
+  async getSchedules(startDate?: string, endDate?: string): Promise<OnCallScheduleDto[]> {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    
+    const url = `${API_URL}/api/oncall/schedule${params.toString() ? `?${params.toString()}` : ''}`;
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallScheduleDto[]>(response);
+  },
+
+  async generateSchedule(startDate: string, weeksToGenerate?: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/schedule/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ startDate, weeksToGenerate }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async updateSchedule(id: number, userId: string, reason?: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/schedule/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ userId, reason }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async getCurrentOnCall(): Promise<OnCallCurrentDto> {
+    const response = await fetch(`${API_URL}/api/oncall/current`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallCurrentDto>(response);
+  },
+
+  async getScheduleByDate(date: string): Promise<OnCallScheduleDto | null> {
+    const response = await fetch(`${API_URL}/api/oncall/schedule-by-date?date=${encodeURIComponent(date)}`, {
+      headers: { ...getAuthHeader() },
+    });
+    if (response.status === 404) {
+      return null;
+    }
+    return handleResponse<OnCallScheduleDto>(response);
+  },
+
+  // Swap Requests
+  async getSwapRequests(): Promise<OnCallSwapRequestDto[]> {
+    const response = await fetch(`${API_URL}/api/oncall/swap-requests`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallSwapRequestDto[]>(response);
+  },
+
+  async createSwapRequest(data: CreateSwapRequestDto): Promise<OnCallSwapRequestDto> {
+    const response = await fetch(`${API_URL}/api/oncall/swap-requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OnCallSwapRequestDto>(response);
+  },
+
+  async approveSwapRequest(id: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/swap-requests/${id}/approve`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async rejectSwapRequest(id: number, reason: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/swap-requests/${id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ reason }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  // Utilities
+  async getWhitelistUsers(): Promise<WhitelistUserDto[]> {
+    const response = await fetch(`${API_URL}/api/oncall/whitelist-users`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<WhitelistUserDto[]>(response);
+  },
+
+  async isEscalationUser(): Promise<{ isEscalation: boolean }> {
+    const response = await fetch(`${API_URL}/api/oncall/is-escalation`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ isEscalation: boolean }>(response);
+  },
+
+  // Escalation Management
+  async getEscalationUsers(): Promise<EscalationUserDto[]> {
+    const response = await fetch(`${API_URL}/api/oncall/escalation-users`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<EscalationUserDto[]>(response);
+  },
+
+  async addEscalationUser(userId: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/escalation-users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ userId }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async removeEscalationUser(userId: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/escalation-users/${userId}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async updateEscalationOrder(userIds: string[]): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/escalation-users/order`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ userIds }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+};
+
+// ==================== SMTP SETTINGS API ====================
+
+export interface SmtpSettingsDto {
+  id: number;
+  host: string;
+  port: number;
+  fromEmail: string;
+  fromName: string;
+  enableSsl: boolean;
+  username?: string;
+  hasPassword: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  updatedByDisplayName?: string;
+}
+
+export interface UpdateSmtpSettingsRequest {
+  host: string;
+  port: number;
+  fromEmail: string;
+  fromName: string;
+  enableSsl: boolean;
+  username?: string;
+  password?: string;
+}
+
+export const smtpApi = {
+  async getSettings(): Promise<SmtpSettingsDto> {
+    const response = await fetch(`${API_URL}/api/smtp/settings`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<SmtpSettingsDto>(response);
+  },
+
+  async updateSettings(data: UpdateSmtpSettingsRequest): Promise<SmtpSettingsDto> {
+    const response = await fetch(`${API_URL}/api/smtp/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<SmtpSettingsDto>(response);
+  },
+
+  async testConnection(testEmail: string): Promise<{ message: string; success: boolean }> {
+    const response = await fetch(`${API_URL}/api/smtp/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ testEmail }),
+    });
+    return handleResponse<{ message: string; success: boolean }>(response);
+  },
+};
+
+// ==================== ACTIVATIONS API ====================
+
+export interface OnCallActivationDto {
+  id: number;
+  scheduleId: number;
+  scheduleWeekStart: string;
+  scheduleWeekEnd: string;
+  operatorUserId: string;
+  operatorDomainUser: string;
+  operatorDisplayName: string;
+  activatedAt: string;
+  resolvedAt?: string;
+  durationMinutes?: number;
+  category: string;
+  severity: string;
+  title: string;
+  description?: string;
+  resolution?: string;
+  instanceName?: string;
+  createdByDisplayName: string;
+  createdAt: string;
+}
+
+export interface CreateActivationRequest {
+  scheduleId: number;
+  activatedAt: string;
+  resolvedAt?: string;
+  durationMinutes?: number;
+  category: string;
+  severity: string;
+  title: string;
+  description?: string;
+  resolution?: string;
+  instanceName?: string;
+}
+
+export interface UpdateActivationRequest {
+  resolvedAt?: string;
+  durationMinutes?: number;
+  category?: string;
+  severity?: string;
+  title?: string;
+  description?: string;
+  resolution?: string;
+  instanceName?: string;
+}
+
+export interface ActivationSummaryDto {
+  totalActivations: number;
+  totalHours: number;
+  totalMinutes: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  byCategory: Record<string, number>;
+  byOperator: Record<string, number>;
+}
+
+export const activationCategories = ['Database', 'Performance', 'Connectivity', 'Backup', 'Security', 'Other'];
+export const activationSeverities = ['Low', 'Medium', 'High', 'Critical'];
+
+export const activationsApi = {
+  async getAll(startDate?: string, endDate?: string): Promise<OnCallActivationDto[]> {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${API_URL}/api/activations${query}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallActivationDto[]>(response);
+  },
+
+  async getById(id: number): Promise<OnCallActivationDto> {
+    const response = await fetch(`${API_URL}/api/activations/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallActivationDto>(response);
+  },
+
+  async create(data: CreateActivationRequest): Promise<OnCallActivationDto> {
+    const response = await fetch(`${API_URL}/api/activations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OnCallActivationDto>(response);
+  },
+
+  async update(id: number, data: UpdateActivationRequest): Promise<OnCallActivationDto> {
+    const response = await fetch(`${API_URL}/api/activations/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OnCallActivationDto>(response);
+  },
+
+  async delete(id: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/activations/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async getSummary(startDate?: string, endDate?: string): Promise<ActivationSummaryDto> {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${API_URL}/api/activations/summary${query}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ActivationSummaryDto>(response);
+  },
+};
+
+// ==================== ALERT RULES API ====================
+
+export interface AlertRecipientDto {
+  id: number;
+  email: string;
+  name?: string;
+  isEnabled: boolean;
+}
+
+export interface OnCallAlertRuleDto {
+  id: number;
+  name: string;
+  description?: string;
+  alertType: string;
+  conditionDays?: number;
+  isEnabled: boolean;
+  createdByDisplayName: string;
+  createdAt: string;
+  updatedAt?: string;
+  recipients: AlertRecipientDto[];
+}
+
+export interface CreateAlertRuleRequest {
+  name: string;
+  description?: string;
+  alertType: string;
+  conditionDays?: number;
+  recipients: { email: string; name?: string }[];
+}
+
+export interface UpdateAlertRuleRequest {
+  name?: string;
+  description?: string;
+  conditionDays?: number;
+  isEnabled?: boolean;
+}
+
+export const alertTypes = [
+  { value: 'ScheduleGenerated', label: 'Calendario Generado' },
+  { value: 'DaysRemaining', label: 'Días Restantes' },
+  { value: 'SwapRequested', label: 'Intercambio Solicitado' },
+  { value: 'SwapApproved', label: 'Intercambio Aprobado' },
+  { value: 'SwapRejected', label: 'Intercambio Rechazado' },
+  { value: 'ScheduleModified', label: 'Guardia Modificada' },
+  { value: 'ActivationCreated', label: 'Activación Registrada' },
+  { value: 'Custom', label: 'Personalizada' },
+];
+
+export const alertsApi = {
+  async getAll(): Promise<OnCallAlertRuleDto[]> {
+    const response = await fetch(`${API_URL}/api/alerts`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallAlertRuleDto[]>(response);
+  },
+
+  async getById(id: number): Promise<OnCallAlertRuleDto> {
+    const response = await fetch(`${API_URL}/api/alerts/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallAlertRuleDto>(response);
+  },
+
+  async create(data: CreateAlertRuleRequest): Promise<OnCallAlertRuleDto> {
+    const response = await fetch(`${API_URL}/api/alerts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OnCallAlertRuleDto>(response);
+  },
+
+  async update(id: number, data: UpdateAlertRuleRequest): Promise<OnCallAlertRuleDto> {
+    const response = await fetch(`${API_URL}/api/alerts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OnCallAlertRuleDto>(response);
+  },
+
+  async delete(id: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/alerts/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async addRecipient(alertId: number, email: string, name?: string): Promise<AlertRecipientDto> {
+    const response = await fetch(`${API_URL}/api/alerts/${alertId}/recipients`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ email, name }),
+    });
+    return handleResponse<AlertRecipientDto>(response);
+  },
+
+  async removeRecipient(alertId: number, recipientId: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/alerts/${alertId}/recipients/${recipientId}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async toggleRecipient(alertId: number, recipientId: number, isEnabled: boolean): Promise<AlertRecipientDto> {
+    const response = await fetch(`${API_URL}/api/alerts/${alertId}/recipients/${recipientId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ isEnabled }),
+    });
+    return handleResponse<AlertRecipientDto>(response);
   },
 };
 

@@ -21,6 +21,7 @@ public class PermissionService : IPermissionService
         { "Databases", new ViewInfo { ViewName = "Databases", DisplayName = "Bases de Datos", Description = "Información de bases de datos" } },
         { "Backups", new ViewInfo { ViewName = "Backups", DisplayName = "Backups", Description = "Estado de backups" } },
         { "Indexes", new ViewInfo { ViewName = "Indexes", DisplayName = "Índices", Description = "Fragmentación de índices" } },
+        { "OnCall", new ViewInfo { ViewName = "OnCall", DisplayName = "Guardias DBA", Description = "Calendario de guardias y gestión de turnos" } },
         { "AdminUsers", new ViewInfo { ViewName = "AdminUsers", DisplayName = "Usuarios", Description = "Administración de usuarios" } },
         { "AdminPermissions", new ViewInfo { ViewName = "AdminPermissions", DisplayName = "Permisos", Description = "Configuración de permisos por rol" } },
     };
@@ -95,7 +96,7 @@ public class PermissionService : IPermissionService
             if (existingPermission != null)
             {
                 existingPermission.Enabled = permission.Value;
-                existingPermission.UpdatedAt = DateTime.UtcNow;
+                existingPermission.UpdatedAt = DateTime.Now;
             }
             else
             {

@@ -132,6 +132,26 @@ builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IActiveDirectoryService, ActiveDirectoryService>();
 builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
 
+// Servicios de Guardias DBA (OnCall)
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IOnCallService, OnCallService>();
+builder.Services.AddScoped<ISmtpService, SmtpService>();
+
+// Servicio de notificaciones de Microsoft Teams
+builder.Services.AddHttpClient("TeamsWebhook", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddHttpClient("GraphAPI", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddHttpClient("GraphAuth", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<ITeamsNotificationService, TeamsNotificationService>();
+
 // Configurar CORS
 builder.Services.AddCors(options =>
 {

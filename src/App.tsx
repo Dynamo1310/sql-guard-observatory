@@ -16,6 +16,15 @@ import Disks from "./pages/Disks";
 import Databases from "./pages/Databases";
 import Backups from "./pages/Backups";
 import Indexes from "./pages/Indexes";
+import OnCallSchedule from "./pages/OnCallSchedule";
+import OnCallDashboard from "./pages/OnCallDashboard";
+import OnCallOperators from "./pages/OnCallOperators";
+import OnCallEscalation from "./pages/OnCallEscalation";
+import OnCallActivations from "./pages/OnCallActivations";
+import OnCallAlerts from "./pages/OnCallAlerts";
+import OnCallReports from "./pages/OnCallReports";
+import OnCallSwaps from "./pages/OnCallSwaps";
+import SmtpSettings from "./pages/SmtpSettings";
 import AdminUsers from "./pages/AdminUsers";
 import AdminPermissions from "./pages/AdminPermissions";
 import Login from "./pages/Login";
@@ -105,6 +114,56 @@ const App = () => (
                       <Route path="/indexes" element={
                         <ProtectedRoute viewName="Indexes">
                           <Indexes />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/oncall" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallDashboard />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/oncall/dashboard" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallDashboard />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/oncall/planner" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallSchedule />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/oncall/operators" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallOperators />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/oncall/escalation" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallEscalation />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/oncall/activations" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallActivations />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/oncall/alerts" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallAlerts />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/oncall/reports" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallReports />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/oncall/swaps" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallSwaps />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/smtp" element={
+                        <ProtectedRoute viewName="AdminPermissions">
+                          <SmtpSettings />
                         </ProtectedRoute>
                       } />
                       <Route path="/admin/users" element={

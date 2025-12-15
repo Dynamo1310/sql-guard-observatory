@@ -61,6 +61,7 @@ export default function AdminUsers() {
   const [formData, setFormData] = useState({
     domainUser: '',
     displayName: '',
+    email: '',
     role: 'Reader' as 'SuperAdmin' | 'Admin' | 'Reader',
     active: true
   });
@@ -132,6 +133,7 @@ export default function AdminUsers() {
       const request: CreateUserRequest = {
         domainUser: formData.domainUser,
         displayName: formData.displayName,
+        email: formData.email || undefined,
         role: formData.role
       };
 
@@ -157,6 +159,7 @@ export default function AdminUsers() {
     try {
       const request: UpdateUserRequest = {
         displayName: formData.displayName,
+        email: formData.email || undefined,
         role: formData.role,
         active: formData.active
       };
@@ -213,6 +216,7 @@ export default function AdminUsers() {
     setFormData({
       domainUser: user.domainUser,
       displayName: user.displayName,
+      email: user.email || '',
       role: user.role as 'SuperAdmin' | 'Admin' | 'Reader',
       active: user.active
     });
@@ -316,6 +320,7 @@ export default function AdminUsers() {
     setFormData({
       domainUser: '',
       displayName: '',
+      email: '',
       role: 'Reader' as 'SuperAdmin' | 'Admin' | 'Reader',
       active: true
     });
@@ -531,6 +536,19 @@ export default function AdminUsers() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="usuario@empresa.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Email para recibir notificaciones del sistema
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="role">Rol</Label>
               <Select
                 value={formData.role}
@@ -584,6 +602,19 @@ export default function AdminUsers() {
                 value={formData.displayName}
                 onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                placeholder="usuario@empresa.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Email para recibir notificaciones del sistema
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-role">Rol</Label>

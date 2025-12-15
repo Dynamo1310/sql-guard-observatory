@@ -1277,6 +1277,7 @@ LEFT JOIN LatestWaits w ON 1=1;
 
 function Get-AllInstanceNames {
     try {
+        # Excluir instancias dadas de baja (SSISC-01)
         $query = @"
 SELECT DISTINCT InstanceName
 FROM (
@@ -1286,6 +1287,7 @@ FROM (
     UNION
     SELECT InstanceName FROM dbo.InstanceHealth_LogChain
 ) AS AllInstances
+WHERE InstanceName NOT IN ('SSISC-01')  -- Instancias dadas de baja
 ORDER BY InstanceName;
 "@
         

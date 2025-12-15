@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Bot Framework SDK -->
+    <PackageReference Include="Microsoft.Bot.Builder" Version="4.22.9" />
+    <PackageReference Include="Microsoft.Bot.Builder.Integration.AspNet.Core" Version="4.22.9" />
+    
+    <!-- Adaptive Cards -->
+    <PackageReference Include="AdaptiveCards" Version="3.1.0" />
+    
+    <!-- HTTP Client for SQL Nova API -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
+
+

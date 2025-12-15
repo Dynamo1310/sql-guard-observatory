@@ -9,8 +9,10 @@ public class LoginRequest
 public class LoginResponse
 {
     public string Token { get; set; } = string.Empty;
+    public string Id { get; set; } = string.Empty;
     public string DomainUser { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    public string? Email { get; set; }
     public bool Allowed { get; set; }
     public List<string> Roles { get; set; } = new();
 }
@@ -20,6 +22,7 @@ public class UserDto
     public string Id { get; set; } = string.Empty;
     public string DomainUser { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    public string? Email { get; set; }
     public string Role { get; set; } = string.Empty;
     public bool Active { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
@@ -29,12 +32,14 @@ public class CreateUserRequest
 {
     public string DomainUser { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    public string? Email { get; set; }
     public string Role { get; set; } = "Reader";
 }
 
 public class UpdateUserRequest
 {
     public string DisplayName { get; set; } = string.Empty;
+    public string? Email { get; set; }
     public string Role { get; set; } = string.Empty;
     public bool Active { get; set; }
 }

@@ -1,8 +1,10 @@
 export type UserRole = "Admin" | "Reader";
 
 export interface User {
+  id: string;
   domainUser: string;
   displayName: string;
+  email?: string;
   allowed: boolean;
   roles: UserRole[];
 }

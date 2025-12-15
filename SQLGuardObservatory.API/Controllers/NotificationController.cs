@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using SQLGuardObservatory.API.Hubs;
+using SQLGuardObservatory.API.Services;
 
 namespace SQLGuardObservatory.API.Controllers
 {
@@ -9,13 +10,19 @@ namespace SQLGuardObservatory.API.Controllers
     public class NotificationController : ControllerBase
     {
         private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly ITeamsNotificationService _teamsService;
+        private readonly IOnCallService _onCallService;
         private readonly ILogger<NotificationController> _logger;
 
         public NotificationController(
             IHubContext<NotificationHub> hubContext,
+            ITeamsNotificationService teamsService,
+            IOnCallService onCallService,
             ILogger<NotificationController> logger)
         {
             _hubContext = hubContext;
+            _teamsService = teamsService;
+            _onCallService = onCallService;
             _logger = logger;
         }
 
@@ -53,7 +60,7 @@ namespace SQLGuardObservatory.API.Controllers
                 {
                     success = true,
                     message = $"Notificación enviada para {notification.CollectorName}",
-                    timestamp = DateTime.UtcNow
+                    timestamp = DateTime.Now
                 });
             }
             catch (Exception ex)
@@ -78,7 +85,7 @@ namespace SQLGuardObservatory.API.Controllers
                     notification.InstanceName,
                     notification.BackupType,
                     notification.BackupTime,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = DateTime.Now
                 });
 
                 return Ok(new { success = true });
@@ -113,8 +120,35 @@ namespace SQLGuardObservatory.API.Controllers
                     notification.AlertType,
                     notification.Severity,
                     notification.Message,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = DateTime.Now
                 });
+
+                // Enviar a Teams si es una alerta crítica o warning
+                if (notification.Severity == "critical" || notification.Severity == "warning")
+                {
+                    // Obtener el email del operador de guardia actual
+                    string? onCallEmail = null;
+                    try
+                    {
+                        var currentOnCall = await _onCallService.GetCurrentOnCallAsync();
+                        if (currentOnCall.IsCurrentlyOnCall && !string.IsNullOrEmpty(currentOnCall.Email))
+                        {
+                            onCallEmail = currentOnCall.Email;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "No se pudo obtener el operador de guardia actual");
+                    }
+
+                    var healthScore = notification.Severity == "critical" ? 30 : 60;
+                    await _teamsService.SendCriticalAlertAsync(
+                        notification.InstanceName,
+                        healthScore,
+                        notification.AlertType,
+                        notification.Message,
+                        onCallEmail);
+                }
 
                 return Ok(new { success = true });
             }
@@ -137,7 +171,7 @@ namespace SQLGuardObservatory.API.Controllers
                 {
                     notification.InstanceName,
                     notification.AlertType,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = DateTime.Now
                 });
 
                 return Ok(new { success = true });
@@ -164,7 +198,7 @@ namespace SQLGuardObservatory.API.Controllers
                     notification.InstanceName,
                     notification.TaskName,
                     notification.TaskType,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = DateTime.Now
                 });
 
                 return Ok(new { success = true });
@@ -190,7 +224,7 @@ namespace SQLGuardObservatory.API.Controllers
                     notification.TaskName,
                     notification.Success,
                     notification.ErrorMessage,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = DateTime.Now
                 });
 
                 return Ok(new { success = true });
@@ -218,7 +252,7 @@ namespace SQLGuardObservatory.API.Controllers
                     notification.Message,
                     notification.Type,
                     notification.Duration,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = DateTime.Now
                 });
 
                 return Ok(new { success = true });
@@ -233,7 +267,7 @@ namespace SQLGuardObservatory.API.Controllers
         // ==================== TEST ====================
 
         /// <summary>
-        /// Endpoint de prueba para verificar conectividad
+        /// Endpoint de prueba para verificar conectividad SignalR
         /// </summary>
         [HttpGet("test")]
         public async Task<IActionResult> TestNotification()
@@ -244,10 +278,131 @@ namespace SQLGuardObservatory.API.Controllers
                 Message = "SignalR está funcionando correctamente",
                 Type = "info",
                 Duration = 3000,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.Now
             });
 
-            return Ok(new { message = "Test notification sent", timestamp = DateTime.UtcNow });
+            return Ok(new { message = "Test notification sent", timestamp = DateTime.Now });
+        }
+
+        // ==================== TEAMS ====================
+
+        /// <summary>
+        /// Endpoint para probar conexión con Microsoft Teams
+        /// </summary>
+        [HttpGet("teams/test")]
+        public async Task<IActionResult> TestTeamsConnection()
+        {
+            try
+            {
+                var success = await _teamsService.TestConnectionAsync();
+                
+                if (success)
+                {
+                    return Ok(new 
+                    { 
+                        success = true, 
+                        message = "Conexión con Teams establecida correctamente",
+                        timestamp = DateTime.Now 
+                    });
+                }
+                else
+                {
+                    return Ok(new 
+                    { 
+                        success = false, 
+                        message = "Teams no está configurado o la conexión falló",
+                        timestamp = DateTime.Now 
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al probar conexión con Teams");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Enviar mensaje de prueba a Teams
+        /// </summary>
+        [HttpPost("teams/send")]
+        public async Task<IActionResult> SendTeamsMessage([FromBody] TeamsTestMessageRequest request)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(request.UserEmail))
+                {
+                    await _teamsService.SendDirectMessageAsync(
+                        request.UserEmail,
+                        request.Title ?? "Mensaje de Prueba",
+                        request.Message ?? "Este es un mensaje de prueba desde SQL Nova",
+                        request.ActionUrl,
+                        request.ActionText);
+                }
+                else
+                {
+                    await _teamsService.SendChannelMessageAsync(
+                        request.Title ?? "Mensaje de Prueba",
+                        request.Message ?? "Este es un mensaje de prueba desde SQL Nova");
+                }
+
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = "Mensaje enviado a Teams",
+                    timestamp = DateTime.Now 
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al enviar mensaje a Teams");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Enviar alerta de prueba a Teams
+        /// </summary>
+        [HttpPost("teams/test-alert")]
+        public async Task<IActionResult> SendTestAlert([FromBody] TeamsTestAlertRequest request)
+        {
+            try
+            {
+                // Obtener el email del operador de guardia actual si no se especifica
+                string? onCallEmail = request.OnCallEmail;
+                if (string.IsNullOrEmpty(onCallEmail))
+                {
+                    try
+                    {
+                        var currentOnCall = await _onCallService.GetCurrentOnCallAsync();
+                        if (currentOnCall.IsCurrentlyOnCall && !string.IsNullOrEmpty(currentOnCall.Email))
+                        {
+                            onCallEmail = currentOnCall.Email;
+                        }
+                    }
+                    catch { }
+                }
+
+                await _teamsService.SendCriticalAlertAsync(
+                    request.InstanceName ?? "TEST-INSTANCE",
+                    request.HealthScore ?? 45,
+                    request.AlertType ?? "Test",
+                    request.Message ?? "Esta es una alerta de prueba generada manualmente",
+                    onCallEmail);
+
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = "Alerta de prueba enviada a Teams",
+                    onCallEmail = onCallEmail,
+                    timestamp = DateTime.Now 
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al enviar alerta de prueba a Teams");
+                return StatusCode(500, new { error = ex.Message });
+            }
         }
     }
 
@@ -256,7 +411,7 @@ namespace SQLGuardObservatory.API.Controllers
     public class HealthScoreNotification
     {
         public string CollectorName { get; set; } = string.Empty;
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        public DateTime Timestamp { get; set; } = DateTime.Now;
         public int InstanceCount { get; set; } = 0;
     }
 
@@ -302,6 +457,26 @@ namespace SQLGuardObservatory.API.Controllers
         public string Message { get; set; } = string.Empty;
         public string Type { get; set; } = "info";
         public int Duration { get; set; } = 4000;
+    }
+
+    // ==================== TEAMS REQUEST MODELS ====================
+
+    public class TeamsTestMessageRequest
+    {
+        public string? UserEmail { get; set; }
+        public string? Title { get; set; }
+        public string? Message { get; set; }
+        public string? ActionUrl { get; set; }
+        public string? ActionText { get; set; }
+    }
+
+    public class TeamsTestAlertRequest
+    {
+        public string? InstanceName { get; set; }
+        public int? HealthScore { get; set; }
+        public string? AlertType { get; set; }
+        public string? Message { get; set; }
+        public string? OnCallEmail { get; set; }
     }
 }
 

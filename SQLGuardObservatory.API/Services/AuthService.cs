@@ -38,8 +38,10 @@ public class AuthService : IAuthService
         return new LoginResponse
         {
             Token = token,
+            Id = user.Id,
             DomainUser = user.DomainUser ?? user.UserName ?? string.Empty,
             DisplayName = user.DisplayName ?? string.Empty,
+            Email = user.Email,
             Allowed = user.IsActive,
             Roles = roles.ToList()
         };
@@ -79,8 +81,10 @@ public class AuthService : IAuthService
         return new LoginResponse
         {
             Token = token,
+            Id = user.Id,
             DomainUser = user.DomainUser ?? user.UserName ?? string.Empty,
             DisplayName = user.DisplayName ?? string.Empty,
+            Email = user.Email,
             Allowed = user.IsActive,
             Roles = roles.ToList()
         };
@@ -99,6 +103,7 @@ public class AuthService : IAuthService
                 Id = user.Id,
                 DomainUser = user.DomainUser ?? user.UserName ?? string.Empty,
                 DisplayName = user.DisplayName ?? string.Empty,
+                Email = user.Email,
                 Role = roles.FirstOrDefault() ?? "Reader",
                 Active = user.IsActive,
                 CreatedAt = user.CreatedAt.ToString("o")
@@ -122,6 +127,7 @@ public class AuthService : IAuthService
             Id = user.Id,
             DomainUser = user.DomainUser ?? user.UserName ?? string.Empty,
             DisplayName = user.DisplayName ?? string.Empty,
+            Email = user.Email,
             Role = roles.FirstOrDefault() ?? "Reader",
             Active = user.IsActive,
             CreatedAt = user.CreatedAt.ToString("o")
@@ -143,6 +149,7 @@ public class AuthService : IAuthService
             Id = user.Id,
             DomainUser = user.DomainUser ?? user.UserName ?? string.Empty,
             DisplayName = user.DisplayName ?? string.Empty,
+            Email = user.Email,
             Role = roles.FirstOrDefault() ?? "Reader",
             Active = user.IsActive,
             CreatedAt = user.CreatedAt.ToString("o")
@@ -161,8 +168,9 @@ public class AuthService : IAuthService
             UserName = request.DomainUser,
             DomainUser = request.DomainUser,
             DisplayName = request.DisplayName,
+            Email = request.Email,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.Now
         };
 
         // Crear usuario sin contraseña (autenticación de Windows)
@@ -180,6 +188,7 @@ public class AuthService : IAuthService
             Id = newUser.Id,
             DomainUser = newUser.DomainUser ?? string.Empty,
             DisplayName = newUser.DisplayName ?? string.Empty,
+            Email = newUser.Email,
             Role = request.Role,
             Active = true,
             CreatedAt = newUser.CreatedAt.ToString("o")
@@ -194,6 +203,7 @@ public class AuthService : IAuthService
             return null;
 
         user.DisplayName = request.DisplayName;
+        user.Email = request.Email;
         user.IsActive = request.Active;
 
         var updateResult = await _userManager.UpdateAsync(user);
@@ -271,7 +281,7 @@ public class AuthService : IAuthService
             issuer: jwtSettings["Issuer"],
             audience: jwtSettings["Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(expirationMinutes),
+            expires: DateTime.Now.AddMinutes(expirationMinutes),
             signingCredentials: credentials
         );
 

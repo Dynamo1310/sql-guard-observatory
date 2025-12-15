@@ -71,8 +71,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Establecer usuario desde cache local
         setUser({
+          id: userData.id,
           domainUser: userData.domainUser,
           displayName: userData.displayName,
+          email: userData.email,
           allowed: true,
           roles: userData.roles
         });

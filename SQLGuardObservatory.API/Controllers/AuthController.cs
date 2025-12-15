@@ -357,11 +357,12 @@ public class AuthController : ControllerBase
                         continue;
                     }
 
-                    // Crear el usuario
+                    // Crear el usuario (incluyendo email del AD)
                     var createRequest = new CreateUserRequest
                     {
                         DomainUser = adUser.SamAccountName,
                         DisplayName = adUser.DisplayName,
+                        Email = adUser.Email,
                         Role = request.DefaultRole
                     };
 

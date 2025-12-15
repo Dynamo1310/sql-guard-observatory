@@ -1,0 +1,70 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "TU-BOT-APP-ID-AQUI",
+  "packageName": "com.supervielle.sqlnova.bot",
+  "developer": {
+    "name": "Supervielle DBA Team",
+    "websiteUrl": "http://asprbm-nov-01:8080",
+    "privacyUrl": "http://asprbm-nov-01:8080/privacy",
+    "termsOfUseUrl": "http://asprbm-nov-01:8080/terms"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "SQL Nova",
+    "full": "SQL Nova Bot - Monitoreo SQL Server"
+  },
+  "description": {
+    "short": "Bot para consultar estado de SQL Servers",
+    "full": "Bot de SQL Nova que permite consultar el estado de salud de los servidores SQL Server, alertas activas y operador de guardia."
+  },
+  "accentColor": "#2563eb",
+  "bots": [
+    {
+      "botId": "TU-BOT-APP-ID-AQUI",
+      "scopes": [
+        "personal",
+        "team",
+        "groupChat"
+      ],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupChat"],
+          "commands": [
+            {
+              "title": "estado",
+              "description": "Ver resumen general de todas las instancias SQL"
+            },
+            {
+              "title": "alertas",
+              "description": "Ver alertas e incidentes activos"
+            },
+            {
+              "title": "guardia",
+              "description": "Ver quién está de guardia actualmente"
+            },
+            {
+              "title": "ayuda",
+              "description": "Mostrar comandos disponibles"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "asprbm-nov-01"
+  ]
+}
+
+

@@ -56,7 +56,9 @@ function Get-BackupStatus {
     param(
         [string]$InstanceName,
         [int]$TimeoutSec = 30,
-        [int]$RetryTimeoutSec = 60
+        [int]$RetryTimeoutSec = 60,
+        [switch]$IsDWH = $false,
+        [switch]$IsSql2005 = $false
     )
     
     $result = @{
@@ -65,11 +67,16 @@ function Get-BackupStatus {
         FullBackupBreached = $false
         LogBackupBreached = $false
         Details = @()
+        IsDWH = $IsDWH.IsPresent
+        IsSql2005 = $IsSql2005.IsPresent
     }
     
     # Query optimizada con límite de fechas para reducir escaneo en msdb
-    $cutoffDate = (Get-Date).AddDays(-7).ToString('yyyy-MM-dd')
+    # Para DWH usar 14 días de cutoff, para otras instancias 7 días
+    $cutoffDays = if ($IsDWH) { -14 } else { -7 }
+    $cutoffDate = (Get-Date).AddDays($cutoffDays).ToString('yyyy-MM-dd')
     
+    # Query principal (SQL Server 2008+)
     $query = @"
 SELECT 
     d.name AS DatabaseName,
@@ -86,24 +93,67 @@ WHERE d.state_desc = 'ONLINE'
   AND d.is_read_only = 0          -- Excluye bases READ-ONLY
 GROUP BY d.name, d.recovery_model_desc;
 "@
+
+    # Query de fallback para SQL Server 2005 (sin filtro de fecha en JOIN, usa subqueries)
+    $querySQL2005 = @"
+SELECT 
+    d.name AS DatabaseName,
+    d.recovery_model_desc AS RecoveryModel,
+    (SELECT MAX(bs.backup_finish_date) 
+     FROM msdb.dbo.backupset bs WITH (NOLOCK)
+     WHERE bs.database_name = d.name 
+       AND bs.type = 'D'
+       AND bs.backup_finish_date >= '$cutoffDate') AS LastFullBackup,
+    (SELECT MAX(bs.backup_finish_date) 
+     FROM msdb.dbo.backupset bs WITH (NOLOCK)
+     WHERE bs.database_name = d.name 
+       AND bs.type = 'L'
+       AND bs.backup_finish_date >= '$cutoffDate') AS LastLogBackup
+FROM sys.databases d
+WHERE d.state_desc = 'ONLINE'
+  AND d.name NOT IN ('tempdb')
+  AND d.database_id > 4
+  AND d.is_read_only = 0;
+"@
     
-    # Intentar con timeout normal
+    # Si es SQL 2005 conocido, usar query de fallback desde el inicio
     $data = $null
     $attemptCount = 0
     $lastError = $null
+    $usedFallback = $IsSql2005.IsPresent
     
-    while ($attemptCount -lt 2 -and $data -eq $null) {
+    # Para SQL 2005 conocido, empezar con la query compatible
+    if ($IsSql2005) {
+        Write-Host "      ↳ [SQL 2005] Usando query compatible para $InstanceName" -ForegroundColor DarkCyan
+    }
+    
+    while ($attemptCount -lt 3 -and $data -eq $null) {
         $attemptCount++
-        $currentTimeout = if ($attemptCount -eq 1) { $TimeoutSec } else { $RetryTimeoutSec }
+        
+        # Si es SQL 2005 conocido O es el tercer intento: usar query SQL 2005
+        # De lo contrario: usar query principal
+        $useSQL2005Query = $IsSql2005 -or ($attemptCount -eq 3)
+        
+        if ($useSQL2005Query) {
+            $currentQuery = $querySQL2005
+            $currentTimeout = $RetryTimeoutSec
+            if ($attemptCount -eq 3 -and -not $IsSql2005) {
+                $usedFallback = $true
+                Write-Host "      ↳ Usando query compatible SQL 2005 para $InstanceName (fallback)..." -ForegroundColor DarkYellow
+            }
+        } else {
+            $currentQuery = $query
+            $currentTimeout = if ($attemptCount -eq 1) { $TimeoutSec } else { $RetryTimeoutSec }
+        }
         
         try {
-            if ($attemptCount -eq 2) {
+            if ($attemptCount -eq 2 -and -not $IsSql2005) {
                 Write-Verbose "Reintentando $InstanceName con timeout extendido de ${RetryTimeoutSec}s..."
             }
             
             # Usar dbatools para ejecutar queries
             $data = Invoke-DbaQuery -SqlInstance $InstanceName `
-                -Query $query `
+                -Query $currentQuery `
                 -QueryTimeout $currentTimeout `
                 -EnableException
                 
@@ -111,14 +161,22 @@ GROUP BY d.name, d.recovery_model_desc;
             
         } catch {
             $lastError = $_
-            if ($attemptCount -eq 1) {
-                Write-Verbose "Timeout en $InstanceName (intento 1/${TimeoutSec}s), reintentando con timeout extendido..."
-                Start-Sleep -Milliseconds 500  # Pequeña pausa antes del retry
+            if ($attemptCount -eq 1 -and -not $IsSql2005) {
+                Write-Verbose "Error en $InstanceName (intento 1), reintentando con timeout extendido..."
+                Start-Sleep -Milliseconds 500
+            }
+            elseif ($attemptCount -eq 2 -and -not $IsSql2005) {
+                Write-Verbose "Error en $InstanceName (intento 2), intentando query SQL 2005 fallback..."
+                Start-Sleep -Milliseconds 500
+            }
+            elseif ($IsSql2005 -and $attemptCount -lt 3) {
+                Write-Verbose "Error en SQL 2005 $InstanceName (intento $attemptCount), reintentando..."
+                Start-Sleep -Milliseconds 500
             }
         }
     }
     
-    # Si después de 2 intentos no hay datos, reportar error
+    # Si después de 3 intentos no hay datos, reportar error
     if ($data -eq $null) {
         Write-Warning "Error obteniendo backups en ${InstanceName}: $($lastError.Exception.Message)"
         $result.FullBackupBreached = $true
@@ -126,11 +184,19 @@ GROUP BY d.name, d.recovery_model_desc;
         return $result
     }
     
+    # Log si se usó fallback exitosamente (cuando NO sabíamos que era SQL 2005)
+    if ($usedFallback -and -not $IsSql2005) {
+        Write-Host "      ↳ ✓ Query SQL 2005 fallback exitosa para $InstanceName" -ForegroundColor DarkGreen
+    }
+    
     # Procesar datos
     if ($data) {
         # Umbrales
-        $fullThreshold = (Get-Date).AddDays(-1)   # 24 horas
-        $logThreshold = (Get-Date).AddHours(-2)   # 2 horas
+        # DWH: 7 días para FULL backup (1 semana)
+        # Otras instancias: 24 horas para FULL backup
+        $fullThresholdDays = if ($IsDWH) { -7 } else { -1 }
+        $fullThreshold = (Get-Date).AddDays($fullThresholdDays)
+        $logThreshold = (Get-Date).AddHours(-2)   # 2 horas (igual para todas)
         
         # Identificar DBs con FULL backup vencido PRIMERO
         $breachedDbs = $data | Where-Object { 
@@ -362,9 +428,13 @@ function Sync-AlwaysOnBackups {
             $nodeResult.LastLogBackup = $bestLogDate
             
             # Recalcular breaches con los valores sincronizados
+            # Considerar tolerancia DWH (7 días = 168 horas) vs normal (24 horas)
+            $isDWHNode = $nodeResult.InstanceName -like "*DWH*"
+            $fullThresholdHours = if ($isDWHNode) { 168 } else { 24 }  # 7 días vs 1 día
+            
             if ($bestFullDate) {
                 $fullAge = (Get-Date) - $bestFullDate
-                $nodeResult.FullBackupBreached = $fullAge.TotalHours -gt 24
+                $nodeResult.FullBackupBreached = $fullAge.TotalHours -gt $fullThresholdHours
             } else {
                 $nodeResult.FullBackupBreached = $true
             }
@@ -473,6 +543,9 @@ try {
     # Excluir instancias con DMZ en el nombre
     $instances = $instances | Where-Object { $_.NombreInstancia -notlike "*DMZ*" }
     
+    # Excluir instancias dadas de baja
+    $instances = $instances | Where-Object { $_.NombreInstancia -ne "SSISC-01" }
+    
     if ($TestMode) {
         $instances = $instances | Select-Object -First 5
     }
@@ -514,8 +587,14 @@ foreach ($instance in $instances) {
         continue
     }
     
+    # Detectar si es instancia DWH (tolerancia de backup FULL: 7 días)
+    $isDWHInstance = $instanceName -like "*DWH*"
+    
+    # Detectar si es SQL Server 2005 (usar query de fallback desde el inicio)
+    $isSql2005 = ($sqlVersion -eq "9" -or $sqlVersion -like "9.*" -or $sqlVersion -like "*2005*")
+    
     # Recolectar métricas
-    $backups = Get-BackupStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry
+    $backups = Get-BackupStatus -InstanceName $instanceName -TimeoutSec $TimeoutSec -RetryTimeoutSec $TimeoutSecRetry -IsDWH:$isDWHInstance -IsSql2005:$isSql2005
     
     $status = "✅"
     if ($backups.FullBackupBreached -and $backups.LogBackupBreached) { 
@@ -536,7 +615,10 @@ foreach ($instance in $instances) {
         ((Get-Date) - $backups.LastLogBackup).TotalHours 
     } else { 999 }
     
-    Write-Host "   $status $instanceName - FULL:$([int]$fullAge)h LOG:$([int]$logAge)h" -ForegroundColor Gray
+    # Mostrar tags especiales (DWH y SQL 2005)
+    $dwhTag = if ($isDWHInstance) { " [DWH:7d]" } else { "" }
+    $sql2005Tag = if ($isSql2005) { " [SQL2005]" } else { "" }
+    Write-Host "   $status $instanceName$dwhTag$sql2005Tag - FULL:$([int]$fullAge)h LOG:$([int]$logAge)h" -ForegroundColor Gray
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName

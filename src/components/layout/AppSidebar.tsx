@@ -1,5 +1,10 @@
-import { Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { useState } from 'react';
+import { 
+  Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart, 
+  Phone, Calendar, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
+  ChevronDown, ChevronRight, ArrowRightLeft
+} from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
 import sqlNovaLightLogo from '/SQLNovaLightMode.png';
 import sqlNovaDarkLogo from '/SQLNovaDarkMode.png';
 import sqlNovaIcon from '/SQLNovaIcon.png';
@@ -12,11 +17,19 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 const mainItems = [
   { title: 'Overview', url: '/overview', icon: Home, permission: 'Overview' },
@@ -28,9 +41,22 @@ const mainItems = [
   { title: 'Índices', url: '/indexes', icon: ListTree, permission: 'Indexes' },
 ];
 
+// Submenús de Guardias DBA
+const onCallSubItems = [
+  { title: 'Dashboard', url: '/oncall/dashboard', icon: Home },
+  { title: 'Planificador', url: '/oncall/planner', icon: Calendar },
+  { title: 'Intercambios', url: '/oncall/swaps', icon: ArrowRightLeft },
+  { title: 'Operadores', url: '/oncall/operators', icon: UsersIcon },
+  { title: 'Escalamiento', url: '/oncall/escalation', icon: ShieldAlert },
+  { title: 'Activaciones', url: '/oncall/activations', icon: ActivityIcon },
+  { title: 'Alertas', url: '/oncall/alerts', icon: Bell },
+  { title: 'Reportes', url: '/oncall/reports', icon: FileText },
+];
+
 const adminItems = [
   { title: 'Usuarios', url: '/admin/users', icon: Users, permission: 'AdminUsers' },
   { title: 'Permisos', url: '/admin/permissions', icon: Shield, permission: 'AdminPermissions' },
+  { title: 'Config. SMTP', url: '/admin/smtp', icon: Mail, permission: 'AdminPermissions' },
 ];
 
 const superAdminItems: typeof adminItems = [];
@@ -39,20 +65,25 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const { isAdmin, isSuperAdmin, hasPermission, logout } = useAuth();
   const isCollapsed = state === 'collapsed';
+  const location = useLocation();
+  
+  // Estado para el menú desplegable de OnCall
+  const isOnCallActive = location.pathname.startsWith('/oncall');
+  const [onCallOpen, setOnCallOpen] = useState(isOnCallActive);
 
   const handleLogout = () => {
     logout();
-    // Forzar redirección a login
     window.location.href = '/login';
   };
 
   // Filtrar items principales según permisos
   const visibleMainItems = mainItems.filter(item => hasPermission(item.permission));
+  const hasOnCallPermission = hasPermission('OnCall');
   
   // Filtrar items de admin según permisos
   const visibleAdminItems = isAdmin ? adminItems.filter(item => hasPermission(item.permission)) : [];
   
-  // Items de SuperAdmin - verificar TAMBIÉN con hasPermission
+  // Items de SuperAdmin
   const visibleSuperAdminItems = isSuperAdmin ? superAdminItems.filter(item => hasPermission(item.permission)) : [];
 
   return (
@@ -60,19 +91,16 @@ export function AppSidebar() {
       <SidebarContent>
         {/* Logo Section */}
         <div className="h-16 border-b border-sidebar-border flex items-center justify-center px-2 relative">
-          {/* Logo claro (visible en modo light cuando está expandido) */}
           <img 
             src={sqlNovaLightLogo} 
             alt="SQL Nova" 
             className={`logo-light h-10 w-auto transition-none ${isCollapsed ? 'hidden' : 'block'}`}
           />
-          {/* Logo oscuro (visible en modo dark cuando está expandido) */}
           <img 
             src={sqlNovaDarkLogo} 
             alt="SQL Nova" 
             className={`logo-dark h-10 w-auto transition-none ${isCollapsed ? 'hidden' : 'block'}`}
           />
-          {/* Ícono (visible cuando está colapsado) */}
           <img 
             src={sqlNovaIcon} 
             alt="SQL Nova" 
@@ -109,6 +137,62 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+
+                {/* Menú desplegable de Guardias DBA */}
+                {hasOnCallPermission && (
+                  <Collapsible open={onCallOpen} onOpenChange={setOnCallOpen}>
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton
+                          style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
+                          className={`w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
+                            isOnCallActive
+                              ? 'bg-sidebar-accent text-sidebar-primary font-medium'
+                              : 'hover:bg-sidebar-accent/50'
+                          }`}
+                        >
+                          <Phone className="h-4 w-4 flex-shrink-0 text-teal-500" />
+                          {!isCollapsed && (
+                            <>
+                              <span className="flex-1 text-left">Guardias DBA</span>
+                              {onCallOpen ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </>
+                          )}
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      
+                      {!isCollapsed && (
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {onCallSubItems.map((subItem) => (
+                              <SidebarMenuSubItem key={subItem.url}>
+                                <SidebarMenuSubButton asChild>
+                                  <NavLink
+                                    to={subItem.url}
+                                    className={({ isActive }) =>
+                                      `flex items-center gap-2 text-sm py-1.5 px-2 rounded-md transition-colors ${
+                                        isActive
+                                          ? 'bg-sidebar-accent/70 text-sidebar-primary font-medium'
+                                          : 'hover:bg-sidebar-accent/30 text-muted-foreground'
+                                      }`
+                                    }
+                                  >
+                                    <subItem.icon className="h-3.5 w-3.5" />
+                                    <span>{subItem.title}</span>
+                                  </NavLink>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      )}
+                    </SidebarMenuItem>
+                  </Collapsible>
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

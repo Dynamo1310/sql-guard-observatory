@@ -29,6 +29,7 @@ public static class PermissionInitializer
             "Databases",
             "Backups",
             "Indexes",
+            "OnCall",
             "AdminUsers",
             "AdminPermissions"
         };
@@ -62,8 +63,8 @@ public static class PermissionInitializer
                 });
             }
 
-            // Reader: Solo vistas de observabilidad
-            var readerViews = new[] { "Overview", "Jobs", "Disks", "Databases", "Backups", "Indexes" };
+            // Reader: Solo vistas de observabilidad (incluyendo OnCall para ver calendario)
+            var readerViews = new[] { "Overview", "Jobs", "Disks", "Databases", "Backups", "Indexes", "OnCall" };
             foreach (var view in readerViews)
             {
                 permissions.Add(new RolePermission

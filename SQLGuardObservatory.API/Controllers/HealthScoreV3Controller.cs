@@ -240,7 +240,7 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var cutoffDate = DateTime.UtcNow.AddHours(-hours);
+                var cutoffDate = DateTime.Now.AddHours(-hours);
 
                 var query = @"
                     SELECT 

@@ -103,7 +103,7 @@ namespace SQLGuardObservatory.API.Controllers
                     success = true,
                     count = results.Count,
                     data = results,
-                    timestamp = DateTime.UtcNow
+                    timestamp = DateTime.Now
                 });
             }
             catch (Exception ex)
@@ -283,7 +283,7 @@ namespace SQLGuardObservatory.API.Controllers
                 {
                     success = true,
                     stats,
-                    timestamp = DateTime.UtcNow
+                    timestamp = DateTime.Now
                 });
             }
             catch (Exception ex)
@@ -340,7 +340,7 @@ namespace SQLGuardObservatory.API.Controllers
             {
                 count = results.Count,
                 data = results,
-                timestamp = DateTime.UtcNow
+                timestamp = DateTime.Now
             };
         }
     }

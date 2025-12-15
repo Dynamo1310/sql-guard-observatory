@@ -401,7 +401,7 @@ namespace SQLGuardObservatory.API.Services
                     WarningCount = warningCount,
                     CriticalCount = criticalCount,
                     AvgScore = totalInstances > 0 ? totalScore / totalInstances : 0,
-                    LastUpdate = DateTime.UtcNow // Simplificado - podrías obtenerlo de la vista
+                    LastUpdate = DateTime.Now // Simplificado - podrías obtenerlo de la vista
                 };
                 
                 // Ordenar instancias críticas
