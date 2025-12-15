@@ -24,6 +24,8 @@ public class PermissionService : IPermissionService
         { "OnCall", new ViewInfo { ViewName = "OnCall", DisplayName = "Guardias DBA", Description = "Calendario de guardias y gestión de turnos" } },
         { "AdminUsers", new ViewInfo { ViewName = "AdminUsers", DisplayName = "Usuarios", Description = "Administración de usuarios" } },
         { "AdminPermissions", new ViewInfo { ViewName = "AdminPermissions", DisplayName = "Permisos", Description = "Configuración de permisos por rol" } },
+        { "ConfigSMTP", new ViewInfo { ViewName = "ConfigSMTP", DisplayName = "Config. SMTP", Description = "Configuración del servidor de correo" } },
+        { "AlertaServidoresCaidos", new ViewInfo { ViewName = "AlertaServidoresCaidos", DisplayName = "Alerta: Servidores Caídos", Description = "Configurar alertas de servidores sin conexión" } },
     };
 
     public PermissionService(ApplicationDbContext context, UserManager<ApplicationUser> userManager)

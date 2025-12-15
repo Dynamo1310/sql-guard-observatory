@@ -15,6 +15,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<OnCallAlertRecipient> OnCallAlertRecipients { get; set; }
     public DbSet<SmtpSettingsEntity> SmtpSettings { get; set; }
     public DbSet<NotificationLog> NotificationLogs { get; set; }
+    
+    // Production Alerts
+    public DbSet<ProductionAlertConfig> ProductionAlertConfigs { get; set; } = null!;
+    public DbSet<ProductionAlertHistory> ProductionAlertHistories { get; set; } = null!;
+    public DbSet<ProductionInstanceStatus> ProductionInstanceStatuses { get; set; } = null!;
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -155,6 +160,24 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(n => n.SentAt);
             entity.HasIndex(n => n.Status);
             entity.HasIndex(n => n.NotificationType);
+        });
+
+        // Production Alerts
+        builder.Entity<ProductionAlertConfig>(entity =>
+        {
+            entity.ToTable("ProductionAlertConfig");
+        });
+
+        builder.Entity<ProductionAlertHistory>(entity =>
+        {
+            entity.ToTable("ProductionAlertHistory");
+            entity.HasIndex(h => h.SentAt);
+        });
+
+        builder.Entity<ProductionInstanceStatus>(entity =>
+        {
+            entity.ToTable("ProductionInstanceStatus");
+            entity.HasIndex(s => s.InstanceName).IsUnique();
         });
     }
 }

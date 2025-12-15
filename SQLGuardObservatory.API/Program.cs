@@ -152,6 +152,11 @@ builder.Services.AddHttpClient("GraphAuth", client =>
 });
 builder.Services.AddScoped<ITeamsNotificationService, TeamsNotificationService>();
 
+// Production Alerts - Monitoreo de servidores caídos
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<IProductionAlertService, ProductionAlertService>();
+builder.Services.AddHostedService<ProductionAlertBackgroundService>();
+
 // Configurar CORS
 builder.Services.AddCors(options =>
 {

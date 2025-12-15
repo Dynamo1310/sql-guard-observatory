@@ -93,7 +93,7 @@ WHERE d.state_desc = 'ONLINE'
   AND d.is_read_only = 0          -- Excluye bases READ-ONLY
 GROUP BY d.name, d.recovery_model_desc;
 "@
-
+    
     # Query de fallback para SQL Server 2005 (sin filtro de fecha en JOIN, usa subqueries)
     $querySQL2005 = @"
 SELECT 
@@ -143,7 +143,7 @@ WHERE d.state_desc = 'ONLINE'
             }
         } else {
             $currentQuery = $query
-            $currentTimeout = if ($attemptCount -eq 1) { $TimeoutSec } else { $RetryTimeoutSec }
+        $currentTimeout = if ($attemptCount -eq 1) { $TimeoutSec } else { $RetryTimeoutSec }
         }
         
         try {
@@ -584,6 +584,23 @@ foreach ($instance in $instances) {
     # Verificar conectividad primero
     if (-not (Test-SqlConnection -InstanceName $instanceName -TimeoutSec $TimeoutSec)) {
         Write-Host "   ⚠️  $instanceName - SIN CONEXIÓN (skipped)" -ForegroundColor Red
+        continue
+    }
+    
+    # SSCC03: Backup a nivel VM - marcar como OK sin verificar
+    if ($instanceName -eq "SSCC03") {
+        Write-Host "   ✅ $instanceName [VM Backup] - Excluido de verificación (backup a nivel VM)" -ForegroundColor Cyan
+        $results += [PSCustomObject]@{
+            InstanceName = $instanceName
+            Ambiente = $ambiente
+            HostingSite = $hostingSite
+            SqlVersion = $sqlVersion
+            LastFullBackup = Get-Date  # Fecha actual para indicar "OK"
+            LastLogBackup = Get-Date
+            FullBackupBreached = $false  # NO penalizar
+            LogBackupBreached = $false   # NO penalizar
+            BackupDetails = @("VM_BACKUP:OK")
+        }
         continue
     }
     

@@ -34,7 +34,7 @@ import {
 const mainItems = [
   { title: 'Overview', url: '/overview', icon: Home, permission: 'Overview' },
   { title: 'HealthScore', url: '/healthscore', icon: Heart, permission: 'HealthScore' },
-  { title: 'Jobs', url: '/jobs', icon: Activity, permission: 'Jobs' },
+  { title: 'Mantenimiento', url: '/jobs', icon: Activity, permission: 'Jobs' },
   { title: 'Discos', url: '/disks', icon: HardDrive, permission: 'Disks' },
   { title: 'Bases de Datos', url: '/databases', icon: Database, permission: 'Databases' },
   { title: 'Backups', url: '/backups', icon: Save, permission: 'Backups' },
@@ -56,20 +56,28 @@ const onCallSubItems = [
 const adminItems = [
   { title: 'Usuarios', url: '/admin/users', icon: Users, permission: 'AdminUsers' },
   { title: 'Permisos', url: '/admin/permissions', icon: Shield, permission: 'AdminPermissions' },
-  { title: 'Config. SMTP', url: '/admin/smtp', icon: Mail, permission: 'AdminPermissions' },
+  { title: 'Config. SMTP', url: '/admin/smtp', icon: Mail, permission: 'ConfigSMTP' },
 ];
 
-const superAdminItems: typeof adminItems = [];
+// Submenús de Alertas (cada alerta tiene su propio permiso)
+const alertsSubItems = [
+  { title: 'Servidores Caídos', url: '/admin/alerts/servers-down', icon: Bell, permission: 'AlertaServidoresCaidos' },
+  // Futuras alertas se agregarán aquí con sus propios permisos
+];
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { isAdmin, isSuperAdmin, hasPermission, logout } = useAuth();
+  const { isAdmin, hasPermission, logout } = useAuth();
   const isCollapsed = state === 'collapsed';
   const location = useLocation();
   
   // Estado para el menú desplegable de OnCall
   const isOnCallActive = location.pathname.startsWith('/oncall');
   const [onCallOpen, setOnCallOpen] = useState(isOnCallActive);
+  
+  // Estado para el menú desplegable de Alertas
+  const isAlertsActive = location.pathname.startsWith('/admin/alerts');
+  const [alertsOpen, setAlertsOpen] = useState(isAlertsActive);
 
   const handleLogout = () => {
     logout();
@@ -82,9 +90,6 @@ export function AppSidebar() {
   
   // Filtrar items de admin según permisos
   const visibleAdminItems = isAdmin ? adminItems.filter(item => hasPermission(item.permission)) : [];
-  
-  // Items de SuperAdmin
-  const visibleSuperAdminItems = isSuperAdmin ? superAdminItems.filter(item => hasPermission(item.permission)) : [];
 
   return (
     <Sidebar collapsible="icon">
@@ -199,7 +204,7 @@ export function AppSidebar() {
         )}
 
         {/* Administración */}
-        {(visibleAdminItems.length > 0 || visibleSuperAdminItems.length > 0) && (
+        {(visibleAdminItems.length > 0 || alertsSubItems.some(item => hasPermission(item.permission))) && (
           <SidebarGroup>
             <SidebarGroupLabel className={isCollapsed ? 'sr-only' : ''}>
               Administración
@@ -226,26 +231,60 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
-                {visibleSuperAdminItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
-                      <NavLink
-                        to={item.url}
-                        style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
-                        className={({ isActive }) =>
-                          `w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
-                            isActive
+                {/* Menú desplegable de Alertas */}
+                {alertsSubItems.some(item => hasPermission(item.permission)) && (
+                  <Collapsible open={alertsOpen} onOpenChange={setAlertsOpen} className="w-full">
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton
+                          style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
+                          className={`w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
+                            isAlertsActive
                               ? 'bg-sidebar-accent text-sidebar-primary font-medium'
                               : 'hover:bg-sidebar-accent/50'
-                          }`
-                        }
-                      >
-                        <item.icon className="h-4 w-4 flex-shrink-0" />
-                        {!isCollapsed && <span>{item.title}</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                          }`}
+                        >
+                          <Bell className="h-4 w-4 flex-shrink-0" />
+                          {!isCollapsed && (
+                            <>
+                              <span className="flex-1 text-left">Alertas</span>
+                              {alertsOpen ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </>
+                          )}
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      {!isCollapsed && (
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {alertsSubItems.filter(item => hasPermission(item.permission)).map((subItem) => (
+                              <SidebarMenuSubItem key={subItem.title}>
+                                <SidebarMenuSubButton asChild>
+                                  <NavLink
+                                    to={subItem.url}
+                                    className={({ isActive }) =>
+                                      `w-full flex items-center gap-2 p-2 rounded-md text-sm transition-colors ${
+                                        isActive
+                                          ? 'bg-sidebar-accent text-sidebar-primary font-medium'
+                                          : 'hover:bg-sidebar-accent/50'
+                                      }`
+                                    }
+                                  >
+                                    <subItem.icon className="h-4 w-4" />
+                                    <span>{subItem.title}</span>
+                                  </NavLink>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      )}
+                    </SidebarMenuItem>
+                  </Collapsible>
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

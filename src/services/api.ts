@@ -301,12 +301,15 @@ export const jobsApi = {
     if (ambiente && ambiente !== 'All') params.append('ambiente', ambiente);
     if (hosting && hosting !== 'All') params.append('hosting', hosting);
     if (instance && instance !== 'All') params.append('instance', instance);
+    // Cache-busting
+    params.append('_', new Date().getTime().toString());
     
-    const url = `${API_URL}/api/jobs${params.toString() ? `?${params.toString()}` : ''}`;
+    const url = `${API_URL}/api/jobs?${params.toString()}`;
     const response = await fetch(url, {
       headers: {
         ...getAuthHeader(),
       },
+      cache: 'no-cache',
     });
     return handleResponse<JobDto[]>(response);
   },
@@ -316,12 +319,15 @@ export const jobsApi = {
     if (ambiente && ambiente !== 'All') params.append('ambiente', ambiente);
     if (hosting && hosting !== 'All') params.append('hosting', hosting);
     if (instance && instance !== 'All') params.append('instance', instance);
+    // Cache-busting
+    params.append('_', new Date().getTime().toString());
     
-    const url = `${API_URL}/api/jobs/summary${params.toString() ? `?${params.toString()}` : ''}`;
+    const url = `${API_URL}/api/jobs/summary?${params.toString()}`;
     const response = await fetch(url, {
       headers: {
         ...getAuthHeader(),
       },
+      cache: 'no-cache',
     });
     return handleResponse<JobSummaryDto>(response);
   },
@@ -1785,6 +1791,160 @@ export const alertsApi = {
       body: JSON.stringify({ isEnabled }),
     });
     return handleResponse<AlertRecipientDto>(response);
+  },
+};
+
+// ==================== INVENTORY API ====================
+
+export interface InventoryInstanceDto {
+  id: number;
+  serverName: string;
+  local_net_address: string;
+  nombreInstancia: string;
+  majorVersion: string;
+  productLevel: string;
+  edition: string;
+  productUpdateLevel: string;
+  productVersion: string;
+  productUpdateReference: string;
+  collation: string;
+  alwaysOn: string;
+  hostingSite: string;
+  hostingType: string;
+  ambiente: string;
+}
+
+export const inventoryApi = {
+  // Usa el proxy del backend para evitar problemas de CORS
+  async getAll(): Promise<InventoryInstanceDto[]> {
+    const response = await fetch(`${API_URL}/api/production-alerts/inventory`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<InventoryInstanceDto[]>(response);
+  },
+};
+
+// ==================== PRODUCTION DOWNTIME ALERTS API ====================
+
+export interface ProductionAlertConfigDto {
+  id: number;
+  name: string;
+  description?: string;
+  isEnabled: boolean;
+  checkIntervalMinutes: number;  // Intervalo de verificación (cada cuánto chequea conexiones)
+  alertIntervalMinutes: number;  // Intervalo de alerta (cada cuánto envía mail si sigue caído)
+  recipients: string[];
+  ambientes: string[];  // Ambientes a monitorear (Produccion, Desarrollo, Testing)
+  lastRunAt?: string;
+  lastAlertSentAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  updatedByDisplayName?: string;
+}
+
+export interface InstanceConnectionStatus {
+  instanceName: string;
+  serverName: string;
+  ambiente: string;
+  hostingSite: string;
+  isConnected: boolean;
+  lastCheckedAt?: string;
+  lastError?: string;
+  downSince?: string;
+}
+
+export interface ProductionAlertHistoryDto {
+  id: number;
+  configId: number;
+  sentAt: string;
+  recipientCount: number;
+  instancesDown: string[];
+  success: boolean;
+  errorMessage?: string;
+}
+
+export interface CreateProductionAlertRequest {
+  name: string;
+  description?: string;
+  checkIntervalMinutes: number;
+  alertIntervalMinutes: number;
+  recipients: string[];
+  ambientes: string[];
+}
+
+export interface UpdateProductionAlertRequest {
+  name?: string;
+  description?: string;
+  isEnabled?: boolean;
+  checkIntervalMinutes?: number;
+  alertIntervalMinutes?: number;
+  recipients?: string[];
+  ambientes?: string[];
+}
+
+export const productionAlertsApi = {
+  async getConfig(): Promise<ProductionAlertConfigDto | null> {
+    const response = await fetch(`${API_URL}/api/production-alerts/config`, {
+      headers: { ...getAuthHeader() },
+    });
+    if (response.status === 404) return null;
+    return handleResponse<ProductionAlertConfigDto>(response);
+  },
+
+  async createConfig(data: CreateProductionAlertRequest): Promise<ProductionAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/production-alerts/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<ProductionAlertConfigDto>(response);
+  },
+
+  async updateConfig(data: UpdateProductionAlertRequest): Promise<ProductionAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/production-alerts/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<ProductionAlertConfigDto>(response);
+  },
+
+  async getHistory(limit: number = 20): Promise<ProductionAlertHistoryDto[]> {
+    const response = await fetch(`${API_URL}/api/production-alerts/history?limit=${limit}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ProductionAlertHistoryDto[]>(response);
+  },
+
+  async getConnectionStatus(): Promise<InstanceConnectionStatus[]> {
+    const response = await fetch(`${API_URL}/api/production-alerts/status`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<InstanceConnectionStatus[]>(response);
+  },
+
+  async testAlert(): Promise<{ success: boolean; message: string; instancesDown?: string[] }> {
+    const response = await fetch(`${API_URL}/api/production-alerts/test`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ success: boolean; message: string; instancesDown?: string[] }>(response);
+  },
+
+  async runNow(): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/production-alerts/run`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ success: boolean; message: string }>(response);
+  },
+
+  async checkInstance(instanceName: string): Promise<{ isConnected: boolean; error?: string }> {
+    const response = await fetch(`${API_URL}/api/production-alerts/check/${encodeURIComponent(instanceName)}`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ isConnected: boolean; error?: string }>(response);
   },
 };
 
