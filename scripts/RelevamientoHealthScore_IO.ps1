@@ -1,12 +1,17 @@
 <#
 .SYNOPSIS
-    Health Score v3.0 - Recolección de métricas de IO (Latencia / IOPS)
+    Health Score v3.1 - Recolección de métricas de IO (Latencia / IOPS)
     
 .DESCRIPTION
     Script de frecuencia media (cada 5 minutos) que recolecta:
     - Latencia de lectura/escritura (data y log)
     - IOPS por disco
     - Stalls (tiempo de espera en I/O)
+    
+    MÉTODO: Snapshot Delta (2 segundos)
+    - Toma 2 snapshots con 2 segundos de diferencia
+    - Calcula latencia ACTUAL (no histórica acumulada)
+    - Valores equivalentes a Performance Monitor de Windows
     
     Guarda en: InstanceHealth_IO
     
@@ -15,9 +20,9 @@
     Cap: Log p95 >20ms => cap 70
     
 .NOTES
-    Versión: 3.0
+    Versión: 3.1
     Frecuencia: Cada 5 minutos
-    Timeout: 15 segundos
+    Timeout: 15 segundos (incluye 2s de muestreo interno)
     
 .REQUIRES
     - dbatools (Install-Module -Name dbatools -Force)
@@ -76,41 +81,71 @@ function Get-IOMetrics {
     
     try {
         $query = @"
--- Obtener uptime del servidor en segundos
-DECLARE @UptimeSeconds BIGINT;
-SELECT @UptimeSeconds = DATEDIFF(SECOND, sqlserver_start_time, GETDATE())
-FROM sys.dm_os_sys_info;
+-- =====================================================
+-- SNAPSHOT DELTA: Mide latencia ACTUAL (no histórica)
+-- Toma 2 snapshots con 2 segundos de diferencia
+-- Esto da valores similares a Performance Monitor
+-- =====================================================
 
--- Evitar división por cero si el servidor acaba de reiniciar
-IF @UptimeSeconds < 60 SET @UptimeSeconds = 60;
+-- Snapshot inicial
+SELECT 
+    vfs.database_id,
+    vfs.file_id,
+    vfs.num_of_reads,
+    vfs.num_of_writes,
+    vfs.io_stall_read_ms,
+    vfs.io_stall_write_ms
+INTO #snapshot1
+FROM sys.dm_io_virtual_file_stats(NULL, NULL) vfs;
 
--- Latencias por archivo (data vs log) + IOPS calculados
+-- Esperar 2 segundos para capturar actividad
+WAITFOR DELAY '00:00:02';
+
+-- Snapshot final y cálculo de delta
 SELECT 
     DB_NAME(vfs.database_id) AS DatabaseName,
     mf.type_desc AS FileType,
     mf.physical_name AS PhysicalName,
+    -- Operaciones totales (para compatibilidad)
     vfs.num_of_reads AS NumReads,
     vfs.num_of_writes AS NumWrites,
-    CASE WHEN vfs.num_of_reads = 0 THEN 0 
-         ELSE (vfs.io_stall_read_ms / vfs.num_of_reads) 
+    -- Delta de operaciones en el período
+    (vfs.num_of_reads - ISNULL(s1.num_of_reads, 0)) AS DeltaReads,
+    (vfs.num_of_writes - ISNULL(s1.num_of_writes, 0)) AS DeltaWrites,
+    -- Latencia ACTUAL (delta stall / delta operaciones)
+    CASE 
+        WHEN (vfs.num_of_reads - ISNULL(s1.num_of_reads, 0)) > 0 
+        THEN CAST((vfs.io_stall_read_ms - ISNULL(s1.io_stall_read_ms, 0)) * 1.0 / 
+             (vfs.num_of_reads - s1.num_of_reads) AS DECIMAL(18,2))
+        ELSE 0 
     END AS AvgReadLatencyMs,
-    CASE WHEN vfs.num_of_writes = 0 THEN 0 
-         ELSE (vfs.io_stall_write_ms / vfs.num_of_writes) 
+    CASE 
+        WHEN (vfs.num_of_writes - ISNULL(s1.num_of_writes, 0)) > 0 
+        THEN CAST((vfs.io_stall_write_ms - ISNULL(s1.io_stall_write_ms, 0)) * 1.0 / 
+             (vfs.num_of_writes - s1.num_of_writes) AS DECIMAL(18,2))
+        ELSE 0 
     END AS AvgWriteLatencyMs,
-    vfs.io_stall_read_ms AS TotalReadStallMs,
-    vfs.io_stall_write_ms AS TotalWriteStallMs,
-    -- IOPS = operaciones totales / uptime en segundos
-    CAST(CAST(vfs.num_of_reads AS BIGINT) * 1.0 / @UptimeSeconds AS DECIMAL(18,2)) AS ReadIOPS,
-    CAST(CAST(vfs.num_of_writes AS BIGINT) * 1.0 / @UptimeSeconds AS DECIMAL(18,2)) AS WriteIOPS,
-    @UptimeSeconds AS UptimeSeconds
+    -- Delta de stalls (para cálculo ponderado en PowerShell)
+    (vfs.io_stall_read_ms - ISNULL(s1.io_stall_read_ms, 0)) AS TotalReadStallMs,
+    (vfs.io_stall_write_ms - ISNULL(s1.io_stall_write_ms, 0)) AS TotalWriteStallMs,
+    -- IOPS = operaciones en el período / 2 segundos
+    CAST((vfs.num_of_reads - ISNULL(s1.num_of_reads, 0)) / 2.0 AS DECIMAL(18,2)) AS ReadIOPS,
+    CAST((vfs.num_of_writes - ISNULL(s1.num_of_writes, 0)) / 2.0 AS DECIMAL(18,2)) AS WriteIOPS,
+    2 AS SampleSeconds
 FROM sys.dm_io_virtual_file_stats(NULL, NULL) vfs
 INNER JOIN sys.master_files mf 
     ON vfs.database_id = mf.database_id 
     AND vfs.file_id = mf.file_id
-WHERE vfs.num_of_reads > 0 OR vfs.num_of_writes > 0
+LEFT JOIN #snapshot1 s1 
+    ON vfs.database_id = s1.database_id 
+    AND vfs.file_id = s1.file_id
+WHERE (vfs.num_of_reads - ISNULL(s1.num_of_reads, 0)) > 0 
+   OR (vfs.num_of_writes - ISNULL(s1.num_of_writes, 0)) > 0
 ORDER BY 
-    CASE WHEN vfs.num_of_reads > 0 THEN (vfs.io_stall_read_ms / vfs.num_of_reads) ELSE 0 END DESC,
-    CASE WHEN vfs.num_of_writes > 0 THEN (vfs.io_stall_write_ms / vfs.num_of_writes) ELSE 0 END DESC;
+    AvgReadLatencyMs DESC,
+    AvgWriteLatencyMs DESC;
+
+DROP TABLE #snapshot1;
 "@
         
         $data = Invoke-DbaQuery -SqlInstance $InstanceName `
@@ -119,15 +154,15 @@ ORDER BY
             -EnableException
         
         if ($data) {
-            # Calcular métricas agregadas usando PROMEDIO PONDERADO
-            # Fórmula correcta: TotalStallMs / TotalOperaciones (igual que Performance Monitor)
-            $allReads = $data | Where-Object { $_.NumReads -gt 0 }
-            $allWrites = $data | Where-Object { $_.NumWrites -gt 0 }
+            # Calcular métricas usando DELTA (actividad del período de muestreo)
+            # Usa DeltaReads/DeltaWrites que son las operaciones en los últimos 2 segundos
+            $allReads = $data | Where-Object { $_.DeltaReads -gt 0 }
+            $allWrites = $data | Where-Object { $_.DeltaWrites -gt 0 }
             
             if ($allReads) {
-                # Promedio ponderado: suma de stalls / suma de operaciones
+                # Promedio ponderado: suma de stalls DELTA / suma de operaciones DELTA
                 $totalReadStall = ($allReads | Measure-Object -Property TotalReadStallMs -Sum).Sum
-                $totalReadOps = ($allReads | Measure-Object -Property NumReads -Sum).Sum
+                $totalReadOps = ($allReads | Measure-Object -Property DeltaReads -Sum).Sum
                 $result.AvgReadLatencyMs = if ($totalReadOps -gt 0) { [decimal]($totalReadStall / $totalReadOps) } else { 0 }
                 $result.MaxReadLatencyMs = [decimal](($allReads | Measure-Object -Property AvgReadLatencyMs -Maximum).Maximum)
                 # Sumar todos los ReadIOPS de todos los archivos
@@ -135,9 +170,9 @@ ORDER BY
             }
             
             if ($allWrites) {
-                # Promedio ponderado: suma de stalls / suma de operaciones
+                # Promedio ponderado: suma de stalls DELTA / suma de operaciones DELTA
                 $totalWriteStall = ($allWrites | Measure-Object -Property TotalWriteStallMs -Sum).Sum
-                $totalWriteOps = ($allWrites | Measure-Object -Property NumWrites -Sum).Sum
+                $totalWriteOps = ($allWrites | Measure-Object -Property DeltaWrites -Sum).Sum
                 $result.AvgWriteLatencyMs = if ($totalWriteOps -gt 0) { [decimal]($totalWriteStall / $totalWriteOps) } else { 0 }
                 $result.MaxWriteLatencyMs = [decimal](($allWrites | Measure-Object -Property AvgWriteLatencyMs -Maximum).Maximum)
                 # Sumar todos los WriteIOPS de todos los archivos
@@ -147,31 +182,31 @@ ORDER BY
             # IOPS totales = suma de lectura + escritura
             $result.TotalIOPS = $result.ReadIOPS + $result.WriteIOPS
             
-            # Métricas específicas por tipo de archivo (también con promedio ponderado)
+            # Métricas específicas por tipo de archivo (también con delta)
             $dataFiles = $data | Where-Object { $_.FileType -eq 'ROWS' }
             $logFiles = $data | Where-Object { $_.FileType -eq 'LOG' }
             
             if ($dataFiles) {
-                $dataReads = $dataFiles | Where-Object { $_.NumReads -gt 0 }
-                $dataWrites = $dataFiles | Where-Object { $_.NumWrites -gt 0 }
+                $dataReads = $dataFiles | Where-Object { $_.DeltaReads -gt 0 }
+                $dataWrites = $dataFiles | Where-Object { $_.DeltaWrites -gt 0 }
                 
                 if ($dataReads) {
                     $totalDataReadStall = ($dataReads | Measure-Object -Property TotalReadStallMs -Sum).Sum
-                    $totalDataReadOps = ($dataReads | Measure-Object -Property NumReads -Sum).Sum
+                    $totalDataReadOps = ($dataReads | Measure-Object -Property DeltaReads -Sum).Sum
                     $result.DataFileAvgReadMs = if ($totalDataReadOps -gt 0) { [decimal]($totalDataReadStall / $totalDataReadOps) } else { 0 }
                 }
                 if ($dataWrites) {
                     $totalDataWriteStall = ($dataWrites | Measure-Object -Property TotalWriteStallMs -Sum).Sum
-                    $totalDataWriteOps = ($dataWrites | Measure-Object -Property NumWrites -Sum).Sum
+                    $totalDataWriteOps = ($dataWrites | Measure-Object -Property DeltaWrites -Sum).Sum
                     $result.DataFileAvgWriteMs = if ($totalDataWriteOps -gt 0) { [decimal]($totalDataWriteStall / $totalDataWriteOps) } else { 0 }
                 }
             }
             
             if ($logFiles) {
-                $logWrites = $logFiles | Where-Object { $_.NumWrites -gt 0 }
+                $logWrites = $logFiles | Where-Object { $_.DeltaWrites -gt 0 }
                 if ($logWrites) {
                     $totalLogWriteStall = ($logWrites | Measure-Object -Property TotalWriteStallMs -Sum).Sum
-                    $totalLogWriteOps = ($logWrites | Measure-Object -Property NumWrites -Sum).Sum
+                    $totalLogWriteOps = ($logWrites | Measure-Object -Property DeltaWrites -Sum).Sum
                     $result.LogFileAvgWriteMs = if ($totalLogWriteOps -gt 0) { [decimal]($totalLogWriteStall / $totalLogWriteOps) } else { 0 }
                 }
             }
@@ -181,7 +216,7 @@ ORDER BY
                 "$($_.DatabaseName):$($_.FileType):Read=$([int]$_.AvgReadLatencyMs)ms:Write=$([int]$_.AvgWriteLatencyMs)ms"
             }
             
-            # Agrupar métricas por volumen (disco físico) usando PROMEDIO PONDERADO
+            # Agrupar métricas por volumen (disco físico) usando DELTA
             $volumeMetrics = @{}
             foreach ($file in $data) {
                 # Extraer letra de unidad del physical_name (ej: "C:\..." -> "C:")
@@ -191,10 +226,10 @@ ORDER BY
                     if (-not $volumeMetrics.ContainsKey($volume)) {
                         $volumeMetrics[$volume] = @{
                             MountPoint = $volume
-                            TotalReadStallMs = 0      # Suma de stalls (para promedio ponderado)
-                            TotalWriteStallMs = 0     # Suma de stalls (para promedio ponderado)
-                            TotalNumReads = 0         # Suma de operaciones de lectura
-                            TotalNumWrites = 0        # Suma de operaciones de escritura
+                            TotalReadStallMs = 0      # Suma de stalls DELTA
+                            TotalWriteStallMs = 0     # Suma de stalls DELTA
+                            TotalDeltaReads = 0       # Suma de operaciones DELTA de lectura
+                            TotalDeltaWrites = 0      # Suma de operaciones DELTA de escritura
                             TotalReadIOPS = 0
                             TotalWriteIOPS = 0
                             MaxReadLatency = 0
@@ -202,19 +237,19 @@ ORDER BY
                         }
                     }
                     
-                    # Acumular métricas usando stalls totales y operaciones totales
+                    # Acumular métricas usando DELTAS (operaciones del período de muestreo)
                     $vol = $volumeMetrics[$volume]
-                    if ($file.NumReads -gt 0) {
+                    if ($file.DeltaReads -gt 0) {
                         $vol.TotalReadStallMs += $file.TotalReadStallMs
-                        $vol.TotalNumReads += $file.NumReads
+                        $vol.TotalDeltaReads += $file.DeltaReads
                         $vol.TotalReadIOPS += $file.ReadIOPS
                         if ($file.AvgReadLatencyMs -gt $vol.MaxReadLatency) {
                             $vol.MaxReadLatency = $file.AvgReadLatencyMs
                         }
                     }
-                    if ($file.NumWrites -gt 0) {
+                    if ($file.DeltaWrites -gt 0) {
                         $vol.TotalWriteStallMs += $file.TotalWriteStallMs
-                        $vol.TotalNumWrites += $file.NumWrites
+                        $vol.TotalDeltaWrites += $file.DeltaWrites
                         $vol.TotalWriteIOPS += $file.WriteIOPS
                         if ($file.AvgWriteLatencyMs -gt $vol.MaxWriteLatency) {
                             $vol.MaxWriteLatency = $file.AvgWriteLatencyMs
@@ -223,12 +258,12 @@ ORDER BY
                 }
             }
             
-            # Calcular promedios PONDERADOS y crear lista de volúmenes
-            # Fórmula: TotalStallMs / TotalOperaciones (igual que Performance Monitor)
+            # Calcular promedios usando DELTA (igual que Performance Monitor)
+            # Fórmula: DeltaStallMs / DeltaOperaciones
             $result.IOByVolume = $volumeMetrics.Keys | Sort-Object | ForEach-Object {
                 $vol = $volumeMetrics[$_]
-                $avgRead = if ($vol.TotalNumReads -gt 0) { $vol.TotalReadStallMs / $vol.TotalNumReads } else { 0 }
-                $avgWrite = if ($vol.TotalNumWrites -gt 0) { $vol.TotalWriteStallMs / $vol.TotalNumWrites } else { 0 }
+                $avgRead = if ($vol.TotalDeltaReads -gt 0) { $vol.TotalReadStallMs / $vol.TotalDeltaReads } else { 0 }
+                $avgWrite = if ($vol.TotalDeltaWrites -gt 0) { $vol.TotalWriteStallMs / $vol.TotalDeltaWrites } else { 0 }
                 
                 [PSCustomObject]@{
                     MountPoint = $vol.MountPoint
@@ -345,7 +380,8 @@ INSERT INTO dbo.InstanceHealth_IO (
 
 Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Health Score v3.0 - IO METRICS (Latencia / IOPS)    ║" -ForegroundColor Cyan
+Write-Host "║  Health Score v3.1 - IO METRICS (Latencia / IOPS)    ║" -ForegroundColor Cyan
+Write-Host "║  Método: Snapshot Delta (2s) - Como PerfMon          ║" -ForegroundColor Cyan
 Write-Host "║  Frecuencia: 5 minutos                                ║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
