@@ -118,8 +118,8 @@ export default function Overview() {
     const critical = productionScores.filter(s => s.healthScore < 60).length;
     const avgScore = total > 0 ? Math.round(productionScores.reduce((sum, s) => sum + s.healthScore, 0) / total) : 0;
     
-    // Backups atrasados: donde score_Backups < 100 (excluir SSCC03 - se backupea VM completa)
-    const backupsOverdue = productionScores.filter(s => (s.score_Backups ?? 100) < 100 && s.instanceName !== 'SSCC03').length;
+    // Backups atrasados: donde score_Backups < 100
+    const backupsOverdue = productionScores.filter(s => (s.score_Backups ?? 100) < 100).length;
     
     // Discos críticos: según vista de discos (isAlerted = true, que indica growth + espacio real <= 10%)
     const criticalDisks = productionDisks.filter(d => d.isAlerted === true).length;
@@ -152,10 +152,10 @@ export default function Overview() {
       .sort((a, b) => a.healthScore - b.healthScore);
   }, [productionScores]);
 
-  // Backups atrasados de producción (excluir SSCC03 - se backupea VM completa)
+  // Backups atrasados de producción
   const backupIssues: BackupIssueData[] = useMemo(() => {
     return productionScores
-      .filter(s => (s.score_Backups ?? 100) < 100 && s.instanceName !== 'SSCC03')
+      .filter(s => (s.score_Backups ?? 100) < 100)
       .map(s => {
         const issues: string[] = [];
         const backupScore = s.score_Backups ?? 100;

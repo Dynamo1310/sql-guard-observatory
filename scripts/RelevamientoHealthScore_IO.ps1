@@ -119,19 +119,26 @@ ORDER BY
             -EnableException
         
         if ($data) {
-            # Calcular métricas agregadas
+            # Calcular métricas agregadas usando PROMEDIO PONDERADO
+            # Fórmula correcta: TotalStallMs / TotalOperaciones (igual que Performance Monitor)
             $allReads = $data | Where-Object { $_.NumReads -gt 0 }
             $allWrites = $data | Where-Object { $_.NumWrites -gt 0 }
             
             if ($allReads) {
-                $result.AvgReadLatencyMs = [decimal](($allReads | Measure-Object -Property AvgReadLatencyMs -Average).Average)
+                # Promedio ponderado: suma de stalls / suma de operaciones
+                $totalReadStall = ($allReads | Measure-Object -Property TotalReadStallMs -Sum).Sum
+                $totalReadOps = ($allReads | Measure-Object -Property NumReads -Sum).Sum
+                $result.AvgReadLatencyMs = if ($totalReadOps -gt 0) { [decimal]($totalReadStall / $totalReadOps) } else { 0 }
                 $result.MaxReadLatencyMs = [decimal](($allReads | Measure-Object -Property AvgReadLatencyMs -Maximum).Maximum)
                 # Sumar todos los ReadIOPS de todos los archivos
                 $result.ReadIOPS = [decimal](($allReads | Measure-Object -Property ReadIOPS -Sum).Sum)
             }
             
             if ($allWrites) {
-                $result.AvgWriteLatencyMs = [decimal](($allWrites | Measure-Object -Property AvgWriteLatencyMs -Average).Average)
+                # Promedio ponderado: suma de stalls / suma de operaciones
+                $totalWriteStall = ($allWrites | Measure-Object -Property TotalWriteStallMs -Sum).Sum
+                $totalWriteOps = ($allWrites | Measure-Object -Property NumWrites -Sum).Sum
+                $result.AvgWriteLatencyMs = if ($totalWriteOps -gt 0) { [decimal]($totalWriteStall / $totalWriteOps) } else { 0 }
                 $result.MaxWriteLatencyMs = [decimal](($allWrites | Measure-Object -Property AvgWriteLatencyMs -Maximum).Maximum)
                 # Sumar todos los WriteIOPS de todos los archivos
                 $result.WriteIOPS = [decimal](($allWrites | Measure-Object -Property WriteIOPS -Sum).Sum)
@@ -140,7 +147,7 @@ ORDER BY
             # IOPS totales = suma de lectura + escritura
             $result.TotalIOPS = $result.ReadIOPS + $result.WriteIOPS
             
-            # Métricas específicas por tipo de archivo
+            # Métricas específicas por tipo de archivo (también con promedio ponderado)
             $dataFiles = $data | Where-Object { $_.FileType -eq 'ROWS' }
             $logFiles = $data | Where-Object { $_.FileType -eq 'LOG' }
             
@@ -149,17 +156,23 @@ ORDER BY
                 $dataWrites = $dataFiles | Where-Object { $_.NumWrites -gt 0 }
                 
                 if ($dataReads) {
-                    $result.DataFileAvgReadMs = [decimal](($dataReads | Measure-Object -Property AvgReadLatencyMs -Average).Average)
+                    $totalDataReadStall = ($dataReads | Measure-Object -Property TotalReadStallMs -Sum).Sum
+                    $totalDataReadOps = ($dataReads | Measure-Object -Property NumReads -Sum).Sum
+                    $result.DataFileAvgReadMs = if ($totalDataReadOps -gt 0) { [decimal]($totalDataReadStall / $totalDataReadOps) } else { 0 }
                 }
                 if ($dataWrites) {
-                    $result.DataFileAvgWriteMs = [decimal](($dataWrites | Measure-Object -Property AvgWriteLatencyMs -Average).Average)
+                    $totalDataWriteStall = ($dataWrites | Measure-Object -Property TotalWriteStallMs -Sum).Sum
+                    $totalDataWriteOps = ($dataWrites | Measure-Object -Property NumWrites -Sum).Sum
+                    $result.DataFileAvgWriteMs = if ($totalDataWriteOps -gt 0) { [decimal]($totalDataWriteStall / $totalDataWriteOps) } else { 0 }
                 }
             }
             
             if ($logFiles) {
                 $logWrites = $logFiles | Where-Object { $_.NumWrites -gt 0 }
                 if ($logWrites) {
-                    $result.LogFileAvgWriteMs = [decimal](($logWrites | Measure-Object -Property AvgWriteLatencyMs -Average).Average)
+                    $totalLogWriteStall = ($logWrites | Measure-Object -Property TotalWriteStallMs -Sum).Sum
+                    $totalLogWriteOps = ($logWrites | Measure-Object -Property NumWrites -Sum).Sum
+                    $result.LogFileAvgWriteMs = if ($totalLogWriteOps -gt 0) { [decimal]($totalLogWriteStall / $totalLogWriteOps) } else { 0 }
                 }
             }
             
@@ -168,7 +181,7 @@ ORDER BY
                 "$($_.DatabaseName):$($_.FileType):Read=$([int]$_.AvgReadLatencyMs)ms:Write=$([int]$_.AvgWriteLatencyMs)ms"
             }
             
-            # Agrupar métricas por volumen (disco físico)
+            # Agrupar métricas por volumen (disco físico) usando PROMEDIO PONDERADO
             $volumeMetrics = @{}
             foreach ($file in $data) {
                 # Extraer letra de unidad del physical_name (ej: "C:\..." -> "C:")
@@ -178,10 +191,10 @@ ORDER BY
                     if (-not $volumeMetrics.ContainsKey($volume)) {
                         $volumeMetrics[$volume] = @{
                             MountPoint = $volume
-                            TotalReadLatency = 0
-                            TotalWriteLatency = 0
-                            ReadCount = 0
-                            WriteCount = 0
+                            TotalReadStallMs = 0      # Suma de stalls (para promedio ponderado)
+                            TotalWriteStallMs = 0     # Suma de stalls (para promedio ponderado)
+                            TotalNumReads = 0         # Suma de operaciones de lectura
+                            TotalNumWrites = 0        # Suma de operaciones de escritura
                             TotalReadIOPS = 0
                             TotalWriteIOPS = 0
                             MaxReadLatency = 0
@@ -189,19 +202,19 @@ ORDER BY
                         }
                     }
                     
-                    # Acumular métricas
+                    # Acumular métricas usando stalls totales y operaciones totales
                     $vol = $volumeMetrics[$volume]
                     if ($file.NumReads -gt 0) {
-                        $vol.TotalReadLatency += $file.AvgReadLatencyMs
-                        $vol.ReadCount++
+                        $vol.TotalReadStallMs += $file.TotalReadStallMs
+                        $vol.TotalNumReads += $file.NumReads
                         $vol.TotalReadIOPS += $file.ReadIOPS
                         if ($file.AvgReadLatencyMs -gt $vol.MaxReadLatency) {
                             $vol.MaxReadLatency = $file.AvgReadLatencyMs
                         }
                     }
                     if ($file.NumWrites -gt 0) {
-                        $vol.TotalWriteLatency += $file.AvgWriteLatencyMs
-                        $vol.WriteCount++
+                        $vol.TotalWriteStallMs += $file.TotalWriteStallMs
+                        $vol.TotalNumWrites += $file.NumWrites
                         $vol.TotalWriteIOPS += $file.WriteIOPS
                         if ($file.AvgWriteLatencyMs -gt $vol.MaxWriteLatency) {
                             $vol.MaxWriteLatency = $file.AvgWriteLatencyMs
@@ -210,11 +223,12 @@ ORDER BY
                 }
             }
             
-            # Calcular promedios y crear lista de volúmenes
+            # Calcular promedios PONDERADOS y crear lista de volúmenes
+            # Fórmula: TotalStallMs / TotalOperaciones (igual que Performance Monitor)
             $result.IOByVolume = $volumeMetrics.Keys | Sort-Object | ForEach-Object {
                 $vol = $volumeMetrics[$_]
-                $avgRead = if ($vol.ReadCount -gt 0) { $vol.TotalReadLatency / $vol.ReadCount } else { 0 }
-                $avgWrite = if ($vol.WriteCount -gt 0) { $vol.TotalWriteLatency / $vol.WriteCount } else { 0 }
+                $avgRead = if ($vol.TotalNumReads -gt 0) { $vol.TotalReadStallMs / $vol.TotalNumReads } else { 0 }
+                $avgWrite = if ($vol.TotalNumWrites -gt 0) { $vol.TotalWriteStallMs / $vol.TotalNumWrites } else { 0 }
                 
                 [PSCustomObject]@{
                     MountPoint = $vol.MountPoint
