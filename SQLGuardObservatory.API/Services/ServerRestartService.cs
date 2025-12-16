@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Hubs;
@@ -27,6 +28,7 @@ public class ServerRestartService : IServerRestartService
     private readonly ILogger<ServerRestartService> _logger;
     private readonly IConfiguration _configuration;
     private readonly HttpClient _httpClient;
+    private readonly IServiceScopeFactory _scopeFactory;
     
     // Ruta del script PowerShell
     private const string SCRIPT_PATH = @"C:\Apps\SQLGuardObservatory\Scripts\SQLRestartNova_WebAPI.ps1";
@@ -40,13 +42,15 @@ public class ServerRestartService : IServerRestartService
         IHubContext<NotificationHub> hubContext,
         ILogger<ServerRestartService> logger,
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IServiceScopeFactory scopeFactory)
     {
         _context = context;
         _hubContext = hubContext;
         _logger = logger;
         _configuration = configuration;
         _httpClient = httpClientFactory.CreateClient();
+        _scopeFactory = scopeFactory;
     }
 
     /// <summary>
@@ -74,6 +78,11 @@ public class ServerRestartService : IServerRestartService
 
             return inventory
                 .Where(s => !string.IsNullOrEmpty(s.ServerName))
+                // Excluir servidores de AWS
+                .Where(s => !s.hostingSite.Equals("AWS", StringComparison.OrdinalIgnoreCase))
+                // Excluir servidores con DMZ en el nombre
+                .Where(s => !s.ServerName.Contains("DMZ", StringComparison.OrdinalIgnoreCase) &&
+                           !s.NombreInstancia.Contains("DMZ", StringComparison.OrdinalIgnoreCase))
                 .Select(s => new RestartableServerDto
                 {
                     ServerName = s.ServerName,
@@ -84,12 +93,11 @@ public class ServerRestartService : IServerRestartService
                     MajorVersion = s.MajorVersion,
                     Edition = s.Edition,
                     IsAlwaysOn = !string.IsNullOrEmpty(s.AlwaysOn) && 
-                                 s.AlwaysOn.ToLower() != "no" && 
-                                 s.AlwaysOn.ToLower() != "none",
+                                 s.AlwaysOn.Equals("Enabled", StringComparison.OrdinalIgnoreCase),
                     IsStandalone = string.IsNullOrEmpty(s.AlwaysOn) || 
-                                   s.AlwaysOn.ToLower() == "no" || 
-                                   s.AlwaysOn.ToLower() == "none",
-                    IsConnected = connectionStatuses.TryGetValue(s.NombreInstancia, out var status) && status.IsConnected,
+                                   s.AlwaysOn.Equals("Disabled", StringComparison.OrdinalIgnoreCase),
+                    // Si hay datos de monitoreo, usar ese estado; si no, asumir conectado (está en inventario activo)
+                    IsConnected = !connectionStatuses.TryGetValue(s.NombreInstancia, out var status) || status.IsConnected,
                     LastCheckedAt = connectionStatuses.TryGetValue(s.NombreInstancia, out var st) ? st.LastCheckedAt : null
                 })
                 .OrderBy(s => s.ServerName)
@@ -170,10 +178,14 @@ public class ServerRestartService : IServerRestartService
         var startTime = DateTime.Now;
         Process? process = null;
 
+        // Crear un nuevo scope para operaciones de BD en background
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
         try
         {
             // Actualizar estado a Running
-            await UpdateTaskStatusAsync(taskId, RestartTaskStatus.Running);
+            await UpdateTaskStatusAsync(dbContext, taskId, RestartTaskStatus.Running);
 
             // Enviar notificación de inicio
             await _hubContext.Clients.Group($"restart_{taskId}").SendAsync("RestartOutput", new
@@ -232,7 +244,7 @@ public class ServerRestartService : IServerRestartService
                 await SendOutputLine(taskId, errorMsg, "error");
                 outputBuilder.AppendLine(errorMsg);
                 
-                await UpdateTaskStatusAsync(taskId, RestartTaskStatus.Failed, errorMessage: errorMsg);
+                await UpdateTaskStatusAsync(dbContext, taskId, RestartTaskStatus.Failed, errorMessage: errorMsg);
                 return;
             }
 
@@ -267,7 +279,7 @@ public class ServerRestartService : IServerRestartService
             process.Start();
             
             // Guardar el PID
-            await UpdateTaskProcessIdAsync(taskId, process.Id);
+            await UpdateTaskProcessIdAsync(dbContext, taskId, process.Id);
 
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
@@ -285,7 +297,7 @@ public class ServerRestartService : IServerRestartService
                 : RestartTaskStatus.Failed;
 
             // Actualizar la tarea en BD
-            await UpdateTaskCompletedAsync(taskId, finalStatus, outputBuilder.ToString(), successCount, failureCount);
+            await UpdateTaskCompletedAsync(dbContext, taskId, finalStatus, outputBuilder.ToString(), successCount, failureCount);
 
             // Notificar completado
             await _hubContext.Clients.Group($"restart_{taskId}").SendAsync("RestartCompleted", new
@@ -311,7 +323,7 @@ public class ServerRestartService : IServerRestartService
             outputBuilder.AppendLine($"[EXCEPTION] {ex.Message}");
             await SendOutputLine(taskId, $"Error crítico: {ex.Message}", "error");
 
-            await UpdateTaskStatusAsync(taskId, RestartTaskStatus.Failed, 
+            await UpdateTaskStatusAsync(dbContext, taskId, RestartTaskStatus.Failed, 
                 outputBuilder.ToString(), ex.Message);
 
             var duration = (DateTime.Now - startTime).TotalSeconds;
@@ -396,23 +408,30 @@ public class ServerRestartService : IServerRestartService
         var successCount = 0;
         var failureCount = 0;
 
-        // Buscar patrones de éxito/fallo en el output
-        var successMatches = Regex.Matches(output, @"✔|Success|exitoso|completó correctamente", RegexOptions.IgnoreCase);
-        var failureMatches = Regex.Matches(output, @"❌|Failure|error|falló", RegexOptions.IgnoreCase);
+        // Buscar el resumen final del script que tiene el formato exacto:
+        // "Exitosos: X ✓" y "Fallidos: X ✗"
+        var successMatch = Regex.Match(output, @"Exitosos:\s*(\d+)", RegexOptions.IgnoreCase);
+        var failureMatch = Regex.Match(output, @"Fallidos:\s*(\d+)", RegexOptions.IgnoreCase);
 
-        // Estimación basada en patrones (se puede mejorar parseando el resumen JSON del script)
-        successCount = successMatches.Count;
-        failureCount = failureMatches.Count;
+        if (successMatch.Success && int.TryParse(successMatch.Groups[1].Value, out var s))
+        {
+            successCount = s;
+        }
+
+        if (failureMatch.Success && int.TryParse(failureMatch.Groups[1].Value, out var f))
+        {
+            failureCount = f;
+        }
 
         return (successCount, failureCount);
     }
 
     /// <summary>
-    /// Actualiza el estado de una tarea
+    /// Actualiza el estado de una tarea (usa el context pasado para operaciones en background)
     /// </summary>
-    private async Task UpdateTaskStatusAsync(Guid taskId, string status, string? outputLog = null, string? errorMessage = null)
+    private async Task UpdateTaskStatusAsync(ApplicationDbContext dbContext, Guid taskId, string status, string? outputLog = null, string? errorMessage = null)
     {
-        var task = await _context.ServerRestartTasks.FirstOrDefaultAsync(t => t.TaskId == taskId);
+        var task = await dbContext.ServerRestartTasks.FirstOrDefaultAsync(t => t.TaskId == taskId);
         if (task != null)
         {
             task.Status = status;
@@ -422,29 +441,29 @@ public class ServerRestartService : IServerRestartService
             {
                 task.CompletedAt = DateTime.Now;
             }
-            await _context.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
     }
 
     /// <summary>
     /// Actualiza el PID del proceso
     /// </summary>
-    private async Task UpdateTaskProcessIdAsync(Guid taskId, int processId)
+    private async Task UpdateTaskProcessIdAsync(ApplicationDbContext dbContext, Guid taskId, int processId)
     {
-        var task = await _context.ServerRestartTasks.FirstOrDefaultAsync(t => t.TaskId == taskId);
+        var task = await dbContext.ServerRestartTasks.FirstOrDefaultAsync(t => t.TaskId == taskId);
         if (task != null)
         {
             task.ProcessId = processId;
-            await _context.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
     }
 
     /// <summary>
     /// Actualiza una tarea completada
     /// </summary>
-    private async Task UpdateTaskCompletedAsync(Guid taskId, string status, string outputLog, int successCount, int failureCount)
+    private async Task UpdateTaskCompletedAsync(ApplicationDbContext dbContext, Guid taskId, string status, string outputLog, int successCount, int failureCount)
     {
-        var task = await _context.ServerRestartTasks.FirstOrDefaultAsync(t => t.TaskId == taskId);
+        var task = await dbContext.ServerRestartTasks.FirstOrDefaultAsync(t => t.TaskId == taskId);
         if (task != null)
         {
             task.Status = status;
@@ -452,7 +471,7 @@ public class ServerRestartService : IServerRestartService
             task.CompletedAt = DateTime.Now;
             task.SuccessCount = successCount;
             task.FailureCount = failureCount;
-            await _context.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
     }
 

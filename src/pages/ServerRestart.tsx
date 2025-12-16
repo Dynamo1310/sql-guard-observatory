@@ -6,7 +6,6 @@ import {
   RefreshCw,
   Download,
   Search,
-  Filter,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -14,12 +13,12 @@ import {
   History,
   Terminal,
   Loader2,
-  ChevronDown,
   ChevronRight,
-  Wifi,
-  WifiOff,
   Pause,
   SkipForward,
+  RotateCcw,
+  X,
+  ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,7 +26,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -44,18 +42,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import {
   serverRestartApi,
@@ -68,10 +61,10 @@ import { cn } from '@/lib/utils';
 
 // Colores para el terminal
 const OUTPUT_COLORS: Record<string, string> = {
-  info: 'text-cyan-400',
+  info: 'text-sky-400',
   error: 'text-red-400',
-  warning: 'text-yellow-400',
-  success: 'text-green-400',
+  warning: 'text-amber-400',
+  success: 'text-emerald-400',
 };
 
 export default function ServerRestart() {
@@ -88,7 +81,6 @@ export default function ServerRestart() {
   const [filterAmbiente, setFilterAmbiente] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   
   // Ref para auto-scroll del terminal
@@ -280,78 +272,169 @@ export default function ServerRestart() {
   const renderTaskStatus = (status: string) => {
     switch (status) {
       case 'Pending':
-        return <Badge variant="outline" className="bg-slate-500/10"><Clock className="w-3 h-3 mr-1" />Pendiente</Badge>;
+        return <Badge variant="secondary" className="text-xs"><Clock className="w-3 h-3 mr-1" />Pendiente</Badge>;
       case 'Running':
-        return <Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-blue-500/50"><Loader2 className="w-3 h-3 mr-1 animate-spin" />En ejecución</Badge>;
+        return <Badge className="text-xs bg-blue-500"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Ejecutando</Badge>;
       case 'Completed':
-        return <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/50"><CheckCircle2 className="w-3 h-3 mr-1" />Completado</Badge>;
+        return <Badge className="text-xs bg-emerald-500"><CheckCircle2 className="w-3 h-3 mr-1" />Completado</Badge>;
       case 'Failed':
-        return <Badge variant="outline" className="bg-red-500/20 text-red-400 border-red-500/50"><XCircle className="w-3 h-3 mr-1" />Fallido</Badge>;
+        return <Badge variant="destructive" className="text-xs"><XCircle className="w-3 h-3 mr-1" />Fallido</Badge>;
       case 'Cancelled':
-        return <Badge variant="outline" className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50"><AlertTriangle className="w-3 h-3 mr-1" />Cancelado</Badge>;
+        return <Badge variant="outline" className="text-xs text-amber-500 border-amber-500"><AlertTriangle className="w-3 h-3 mr-1" />Cancelado</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline" className="text-xs">{status}</Badge>;
     }
   };
 
+  // Obtener color del ambiente
+  const getAmbienteColor = (ambiente?: string) => {
+    const amb = ambiente?.toLowerCase();
+    if (amb === 'produccion' || amb === 'production' || amb === 'prod') {
+      return 'bg-red-500/10 text-red-500 border-red-500/20';
+    }
+    if (amb === 'qa' || amb === 'testing' || amb === 'test') {
+      return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+    }
+    if (amb === 'desarrollo' || amb === 'development' || amb === 'dev') {
+      return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
+    }
+    return 'bg-slate-500/10 text-slate-500 border-slate-500/20';
+  };
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reinicio de Servidores SQL</h1>
-          <p className="text-muted-foreground text-sm">
-            Selecciona los servidores a reiniciar y monitorea el proceso en tiempo real
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Indicador de conexión SignalR */}
-          <Badge variant={isConnected ? "outline" : "destructive"} className="gap-1">
-            {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            {isConnected ? 'Conectado' : 'Desconectado'}
-          </Badge>
+      <div className="shrink-0 border-b bg-card px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-orange-500/10">
+              <RotateCcw className="w-5 h-5 text-orange-500" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold">Reinicio de Servidores SQL</h1>
+              <p className="text-sm text-muted-foreground">
+                Selecciona servidores y monitorea el proceso en tiempo real
+              </p>
+            </div>
+          </div>
           
-          <Button variant="outline" size="sm" onClick={() => setShowHistoryPanel(!showHistoryPanel)}>
-            <History className="w-4 h-4 mr-2" />
-            Historial
-          </Button>
-          
-          <Button variant="outline" size="sm" onClick={loadServers} disabled={loading}>
-            <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
-            Actualizar
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Estado de conexión */}
+            <div className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
+              isConnected 
+                ? "bg-emerald-500/10 text-emerald-500" 
+                : "bg-red-500/10 text-red-500"
+            )}>
+              <div className={cn("w-1.5 h-1.5 rounded-full", isConnected ? "bg-emerald-500" : "bg-red-500")} />
+              {isConnected ? 'Conectado' : 'Desconectado'}
+            </div>
+            
+            {/* Historial */}
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" onClick={loadHistory}>
+                  <History className="w-4 h-4 mr-2" />
+                  Historial
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-[400px] sm:w-[450px]">
+                <SheetHeader>
+                  <SheetTitle>Historial de Reinicios</SheetTitle>
+                  <SheetDescription>
+                    Últimas tareas de reinicio ejecutadas
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="mt-6">
+                  {loadingHistory ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : taskHistory.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No hay historial disponible
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[calc(100vh-180px)]">
+                      <div className="space-y-3 pr-4">
+                        {taskHistory.map(task => (
+                          <Card key={task.taskId} className="p-4">
+                            <div className="flex items-start justify-between gap-2">
+                              {renderTaskStatus(task.status)}
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(task.startedAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <div className="mt-3 space-y-1">
+                              <div className="flex items-center gap-2 text-sm">
+                                <Server className="w-3.5 h-3.5 text-muted-foreground" />
+                                <span>{task.serverCount} servidor(es)</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>{new Date(task.startedAt).toLocaleTimeString()}</span>
+                                {task.durationSeconds && (
+                                  <span>• {formatDuration(task.durationSeconds)}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                              <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-500">
+                                ✓ {task.successCount}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs bg-red-500/10 text-red-500">
+                                ✗ {task.failureCount}
+                              </Badge>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </div>
+              </SheetContent>
+            </Sheet>
+            
+            {/* Actualizar */}
+            <Button variant="outline" size="sm" onClick={loadServers} disabled={loading}>
+              <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+              Actualizar
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0">
         {/* Panel izquierdo - Lista de servidores */}
-        <div className="w-1/2 border-r flex flex-col">
+        <div className="w-1/2 max-w-2xl border-r flex flex-col bg-card/50">
           {/* Filtros */}
-          <div className="p-4 border-b space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar servidor..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
+          <div className="shrink-0 p-4 space-y-3 border-b">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar servidor..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+            
+            <div className="flex gap-2">
               <Select value={filterAmbiente} onValueChange={setFilterAmbiente}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="h-9 flex-1">
                   <SelectValue placeholder="Ambiente" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="all">Todos los ambientes</SelectItem>
                   {availableAmbientes.map(amb => (
                     <SelectItem key={amb} value={amb.toLowerCase()}>{amb}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              
               <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="h-9 flex-1">
                   <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -362,16 +445,16 @@ export default function ServerRestart() {
               </Select>
             </div>
             
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">
-                {selectedServers.size} seleccionado(s) de {filteredServers.length}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                {selectedServers.size} de {filteredServers.length} seleccionados
               </span>
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={selectAllFiltered}>
-                  Seleccionar todos
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAllFiltered}>
+                  Seleccionar todo
                 </Button>
-                <Button variant="ghost" size="sm" onClick={deselectAll}>
-                  Deseleccionar
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={deselectAll}>
+                  Limpiar
                 </Button>
               </div>
             </div>
@@ -383,72 +466,66 @@ export default function ServerRestart() {
               <div className="flex items-center justify-center h-40">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
+            ) : filteredServers.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Server className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                <p>No se encontraron servidores</p>
+              </div>
             ) : (
-              <div className="divide-y">
+              <div className="p-2">
                 {filteredServers.map(server => (
                   <div
                     key={server.serverName}
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3 hover:bg-muted/50 cursor-pointer transition-colors",
-                      selectedServers.has(server.serverName) && "bg-primary/5"
-                    )}
                     onClick={() => toggleServer(server.serverName)}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all mb-1",
+                      "hover:bg-accent/50",
+                      selectedServers.has(server.serverName) && "bg-primary/5 ring-1 ring-primary/20"
+                    )}
                   >
                     <Checkbox
                       checked={selectedServers.has(server.serverName)}
                       onCheckedChange={() => toggleServer(server.serverName)}
+                      className="shrink-0"
                     />
-                    <Server className="w-5 h-5 text-muted-foreground" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{server.serverName}</div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {server.instanceName} • {server.majorVersion} {server.edition}
+                    
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{server.serverName}</span>
+                        {server.isConnected ? (
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Conectado" />
+                        ) : (
+                          <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" title="Desconectado" />
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate mt-0.5">
+                        {server.majorVersion} {server.edition && `• ${server.edition}`}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {server.isAlwaysOn ? (
-                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30">
-                          AlwaysOn
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-xs">Standalone</Badge>
-                      )}
+                    
+                    <div className="flex flex-col items-end gap-1 shrink-0">
                       <Badge 
                         variant="outline" 
-                        className={cn(
-                          "text-xs",
-                          server.ambiente?.toLowerCase() === 'produccion' 
-                            ? "bg-red-500/10 text-red-400 border-red-500/30"
-                            : server.ambiente?.toLowerCase() === 'qa'
-                            ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
-                            : "bg-slate-500/10"
-                        )}
+                        className={cn("text-[10px] px-1.5 py-0", getAmbienteColor(server.ambiente))}
                       >
                         {server.ambiente || 'N/A'}
                       </Badge>
-                      {server.isConnected ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-red-500" />
+                      {server.isAlwaysOn && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-500/10 text-purple-500 border-purple-500/20">
+                          AG
+                        </Badge>
                       )}
                     </div>
                   </div>
                 ))}
-                
-                {filteredServers.length === 0 && (
-                  <div className="text-center py-10 text-muted-foreground">
-                    No se encontraron servidores
-                  </div>
-                )}
               </div>
             )}
           </ScrollArea>
 
-          {/* Acciones */}
-          <div className="p-4 border-t">
+          {/* Botón de acción */}
+          <div className="shrink-0 p-4 border-t bg-card">
             <Button
-              className="w-full"
-              size="lg"
+              className="w-full h-10"
               onClick={handleStartRestart}
               disabled={selectedServers.size === 0 || isStreaming || starting}
             >
@@ -460,55 +537,68 @@ export default function ServerRestart() {
               ) : (
                 <>
                   <Play className="w-4 h-4 mr-2" />
-                  Reiniciar {selectedServers.size > 0 ? `(${selectedServers.size})` : ''} Servidor(es)
+                  Reiniciar {selectedServers.size > 0 && `(${selectedServers.size})`}
                 </>
               )}
             </Button>
           </div>
         </div>
 
-        {/* Panel derecho - Terminal / Output */}
-        <div className="w-1/2 flex flex-col bg-slate-950">
+        {/* Panel derecho - Terminal */}
+        <div className="flex-1 flex flex-col min-w-0 bg-[#0d1117]">
           {/* Header del terminal */}
-          <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
+          <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-[#30363d]">
             <div className="flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-green-400" />
-              <span className="text-sm font-medium text-slate-300">Output en tiempo real</span>
+              <Terminal className="w-4 h-4 text-emerald-400" />
+              <span className="text-sm font-medium text-slate-200">Terminal</span>
               {isStreaming && (
-                <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/50 text-xs animate-pulse">
-                  STREAMING
-                </Badge>
+                <span className="flex items-center gap-1 text-xs text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  En vivo
+                </span>
               )}
             </div>
+            
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
+                className="h-7 w-7 text-slate-400 hover:text-slate-200 hover:bg-[#30363d]"
                 onClick={() => setAutoScroll(!autoScroll)}
-                className={cn(
-                  "text-slate-400 hover:text-slate-200",
-                  autoScroll && "text-green-400"
-                )}
+                title={autoScroll ? "Pausar auto-scroll" : "Activar auto-scroll"}
               >
-                {autoScroll ? <SkipForward className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                {autoScroll ? <SkipForward className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
               </Button>
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
+                className="h-7 w-7 text-slate-400 hover:text-slate-200 hover:bg-[#30363d]"
                 onClick={handleDownloadLog}
                 disabled={outputLines.length === 0}
-                className="text-slate-400 hover:text-slate-200"
+                title="Descargar log"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
               </Button>
               {isStreaming && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon"
+                  className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/10"
                   onClick={handleCancelTask}
-                  className="text-red-400 hover:text-red-300"
+                  title="Cancelar"
                 >
-                  <Square className="w-4 h-4" />
+                  <Square className="w-3.5 h-3.5" />
+                </Button>
+              )}
+              {completed && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-slate-400 hover:text-slate-200 hover:bg-[#30363d]"
+                  onClick={clearState}
+                  title="Limpiar"
+                >
+                  <X className="w-3.5 h-3.5" />
                 </Button>
               )}
             </div>
@@ -516,14 +606,14 @@ export default function ServerRestart() {
 
           {/* Progress bar */}
           {progress && (
-            <div className="px-4 py-2 bg-slate-900/50 border-b border-slate-800">
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span>{progress.phase}: {progress.currentServer}</span>
-                <span>{progress.currentIndex}/{progress.totalServers} ({progress.percentComplete}%)</span>
+            <div className="shrink-0 px-4 py-2 bg-[#161b22]/50 border-b border-[#30363d]">
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+                <span className="truncate">{progress.phase}: {progress.currentServer}</span>
+                <span className="shrink-0 ml-2">{progress.percentComplete}%</span>
               </div>
-              <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-1 bg-[#30363d] rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-green-500 transition-all duration-300"
+                  className="h-full bg-emerald-500 transition-all duration-300 ease-out"
                   style={{ width: `${progress.percentComplete}%` }}
                 />
               </div>
@@ -533,26 +623,33 @@ export default function ServerRestart() {
           {/* Terminal output */}
           <div
             ref={terminalRef}
-            className="flex-1 overflow-auto p-4 font-mono text-sm"
+            className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed"
           >
             {outputLines.length === 0 && !isStreaming ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                <Terminal className="w-12 h-12 mb-4 opacity-50" />
-                <p>Selecciona servidores e inicia el reinicio</p>
-                <p className="text-xs mt-1">El output aparecerá aquí en tiempo real</p>
+                <Terminal className="w-16 h-16 mb-4 opacity-30" />
+                <p className="text-sm">Esperando ejecución...</p>
+                <p className="text-xs mt-1 text-slate-600">
+                  El output aparecerá aquí en tiempo real
+                </p>
               </div>
             ) : (
               <div className="space-y-0.5">
                 {outputLines.map((line, index) => (
-                  <div key={index} className={cn("leading-relaxed", OUTPUT_COLORS[line.type] || 'text-slate-300')}>
-                    <span className="text-slate-600 text-xs mr-2">
+                  <div key={index} className="flex gap-3">
+                    <span className="text-slate-600 text-xs shrink-0 w-20 text-right">
                       {new Date(line.timestamp).toLocaleTimeString()}
                     </span>
-                    {line.line}
+                    <span className={cn("flex-1", OUTPUT_COLORS[line.type] || 'text-slate-300')}>
+                      {line.line}
+                    </span>
                   </div>
                 ))}
                 {isStreaming && (
-                  <div className="inline-block w-2 h-4 bg-green-400 animate-pulse" />
+                  <div className="flex gap-3">
+                    <span className="text-slate-600 text-xs shrink-0 w-20" />
+                    <span className="inline-block w-2 h-4 bg-emerald-400 animate-pulse" />
+                  </div>
                 )}
               </div>
             )}
@@ -561,141 +658,77 @@ export default function ServerRestart() {
           {/* Completed summary */}
           {completed && (
             <div className={cn(
-              "px-4 py-3 border-t",
-              completed.status === 'Completed' ? "bg-green-950/50 border-green-900" :
-              completed.status === 'Failed' ? "bg-red-950/50 border-red-900" :
-              "bg-yellow-950/50 border-yellow-900"
+              "shrink-0 px-4 py-3 border-t",
+              completed.status === 'Completed' ? "bg-emerald-500/10 border-emerald-500/20" :
+              completed.status === 'Failed' ? "bg-red-500/10 border-red-500/20" :
+              "bg-amber-500/10 border-amber-500/20"
             )}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {completed.status === 'Completed' ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-400" />
-                  ) : completed.status === 'Failed' ? (
-                    <XCircle className="w-5 h-5 text-red-400" />
-                  ) : (
-                    <AlertTriangle className="w-5 h-5 text-yellow-400" />
-                  )}
-                  <div>
-                    <div className="font-medium text-slate-200">
-                      {completed.status === 'Completed' ? 'Proceso completado' :
-                       completed.status === 'Failed' ? 'Proceso fallido' :
-                       'Proceso cancelado'}
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      Exitosos: {completed.successCount} • Fallidos: {completed.failureCount} • Duración: {formatDuration(completed.durationSeconds)}
-                    </div>
+              <div className="flex items-center gap-3">
+                {completed.status === 'Completed' ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                ) : completed.status === 'Failed' ? (
+                  <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-200">
+                    {completed.status === 'Completed' ? 'Proceso completado' :
+                     completed.status === 'Failed' ? 'Proceso fallido' :
+                     'Proceso cancelado'}
+                  </div>
+                  <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+                    <span>✓ {completed.successCount} exitosos</span>
+                    <span>•</span>
+                    <span>✗ {completed.failureCount} fallidos</span>
+                    <span>•</span>
+                    <span>{formatDuration(completed.durationSeconds)}</span>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={clearState}
-                  className="border-slate-700"
-                >
-                  Limpiar
-                </Button>
               </div>
             </div>
           )}
         </div>
-
-        {/* Panel de historial (colapsable) */}
-        {showHistoryPanel && (
-          <div className="absolute right-0 top-0 bottom-0 w-96 bg-background border-l shadow-xl z-10 flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b">
-              <h3 className="font-semibold">Historial de Reinicios</h3>
-              <Button variant="ghost" size="sm" onClick={() => setShowHistoryPanel(false)}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-            <ScrollArea className="flex-1">
-              {loadingHistory ? (
-                <div className="flex items-center justify-center h-40">
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {taskHistory.map(task => (
-                    <div key={task.taskId} className="p-4 hover:bg-muted/50">
-                      <div className="flex items-center justify-between mb-2">
-                        {renderTaskStatus(task.status)}
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(task.startedAt).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="text-sm">
-                        <span className="font-medium">{task.serverCount}</span> servidor(es)
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Por: {task.initiatedByUserName || 'Desconocido'}
-                      </div>
-                      {task.durationSeconds && (
-                        <div className="text-xs text-muted-foreground">
-                          Duración: {formatDuration(task.durationSeconds)}
-                        </div>
-                      )}
-                      <div className="flex gap-2 mt-2">
-                        <Badge variant="outline" className="text-xs bg-green-500/10">
-                          ✓ {task.successCount}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs bg-red-500/10">
-                          ✗ {task.failureCount}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {taskHistory.length === 0 && (
-                    <div className="text-center py-10 text-muted-foreground">
-                      No hay historial de reinicios
-                    </div>
-                  )}
-                </div>
-              )}
-            </ScrollArea>
-            <div className="p-3 border-t">
-              <Button variant="outline" size="sm" className="w-full" onClick={loadHistory} disabled={loadingHistory}>
-                <RefreshCw className={cn("w-4 h-4 mr-2", loadingHistory && "animate-spin")} />
-                Actualizar
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Modal de confirmación */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-yellow-500">
-              <AlertTriangle className="w-5 h-5" />
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
               Confirmar Reinicio
             </DialogTitle>
             <DialogDescription>
-              Estás a punto de reiniciar los siguientes servidores. Esta acción es crítica y puede afectar servicios en producción.
+              Esta acción reiniciará los servidores seleccionados. Asegúrate de que no haya operaciones críticas en curso.
             </DialogDescription>
           </DialogHeader>
           
           <div className="my-4">
-            <div className="text-sm font-medium mb-2">
-              Servidores seleccionados ({selectedServers.size}):
+            <div className="text-sm font-medium mb-2 flex items-center justify-between">
+              <span>Servidores a reiniciar</span>
+              <Badge variant="secondary">{selectedServers.size}</Badge>
             </div>
-            <ScrollArea className="h-40 border rounded-md p-2">
-              {Array.from(selectedServers).map(serverName => {
-                const server = servers.find(s => s.serverName === serverName);
-                return (
-                  <div key={serverName} className="flex items-center justify-between py-1">
-                    <span className="text-sm">{serverName}</span>
-                    {server?.ambiente?.toLowerCase() === 'produccion' && (
-                      <Badge variant="destructive" className="text-xs">PROD</Badge>
-                    )}
-                  </div>
-                );
-              })}
+            <ScrollArea className="h-48 rounded-md border p-3">
+              <div className="space-y-2">
+                {Array.from(selectedServers).map(serverName => {
+                  const server = servers.find(s => s.serverName === serverName);
+                  return (
+                    <div key={serverName} className="flex items-center justify-between text-sm">
+                      <span className="truncate">{serverName}</span>
+                      {server?.ambiente?.toLowerCase().includes('prod') && (
+                        <Badge variant="destructive" className="text-[10px] ml-2 shrink-0">
+                          PROD
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </ScrollArea>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
               Cancelar
             </Button>
@@ -709,4 +742,3 @@ export default function ServerRestart() {
     </div>
   );
 }
-

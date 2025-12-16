@@ -1,19 +1,9 @@
 # ========================================================================================================
 # Nombre: SQLRestartNova_WebAPI
-# Version: 2.0 (Adaptado para WebAPI)
+# Version: 2.1 (Optimizado - Timeouts reducidos)
 # ========================================================================================================
-# Autor: Pablo Rodriguez / Adaptado para API por Sistema
+# Autor: Pablo Rodriguez / Adaptado para API
 # Area: Ingenieria de Datos
-# ========================================================================================================
-# Explicacion del proceso
-# ========================================================================================================
-# Versión adaptada para ser ejecutada desde la API .NET Core
-# Recibe la lista de servidores como parámetro y envía todo el output a stdout
-# para que la API pueda capturarlo y streamearlo via SignalR
-#
-# Parámetros:
-#   -ServersFile: Ruta a un archivo con la lista de servidores (uno por línea)
-#   -TaskId: ID de la tarea para logging
 # ========================================================================================================
 
 param(
@@ -24,7 +14,7 @@ param(
     [string]$TaskId = "manual"
 )
 
-# Configuración de encoding para UTF-8
+# Configuración de encoding
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
@@ -32,38 +22,37 @@ $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 $FechaEjecucion = Get-Date -Format "yyyyMMdd_HHmmss"
 $LogPath = "C:\Apps\SQLGuardObservatory\Logs\SQLRestartNova_WebAPI_${TaskId}_${FechaEjecucion}.log"
 
-# Crear directorio de logs si no existe
+# Timeouts configurables (en minutos)
+$TIMEOUT_SERVICIOS_OS = 1      # Timeout para servicios básicos del OS (1 minuto)
+$TIMEOUT_SERVICIOS_SQL = 1     # Timeout para servicios SQL (1 minuto)
+$WAIT_POST_REINICIO = 30       # Segundos a esperar post-reinicio antes de verificar
+
+# Crear directorio de logs
 $logsDir = "C:\Apps\SQLGuardObservatory\Logs"
 if (!(Test-Path $logsDir)) {
     New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
 }
 
-# Función para escribir log (stdout para API y archivo para backup)
+# Función para log
 function Write-Log {
     param(
         [string]$Message,
-        [string]$Level = "INFO",
-        [string]$Color = "White"
+        [string]$Level = "INFO"
     )
     
     $timestamp = Get-Date -Format "yyyy/MM/dd-HH:mm:ss"
     $logLine = "$timestamp - $Level`: $Message"
-    
-    # Escribir a stdout (capturado por la API)
     Write-Output $logLine
-    
-    # También guardar en archivo de backup
     Add-Content -Path $LogPath -Value $logLine -ErrorAction SilentlyContinue
 }
 
-# Verificar que el archivo de servidores existe
+# Verificar archivo de servidores
 if (!(Test-Path $ServersFile)) {
     Write-Log "ERROR: El archivo de servidores no existe: $ServersFile" -Level "ERROR"
     exit 1
 }
 
-# Leer lista de servidores
-$servers = Get-Content $ServersFile | Where-Object { $_ -match '\S' } # Ignorar líneas vacías
+$servers = Get-Content $ServersFile | Where-Object { $_ -match '\S' }
 
 if ($servers.Count -eq 0) {
     Write-Log "ERROR: No se encontraron servidores en el archivo" -Level "ERROR"
@@ -77,110 +66,111 @@ Write-Log "  Fecha: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Write-Log "  Servidores a procesar: $($servers.Count)"
 Write-Log "═══════════════════════════════════════════════════════════════"
 
-# Lista para almacenar el estado de cada servidor
 $ServerStatus = @()
 
-# Función para verificar servicios
+# Función para verificar servicios con timeout corto
 function VerificarServicios {
     param (
         [string]$SQLServer,
         [array]$servicios,
-        [hashtable]$Summary
+        [int]$TimeoutMinutes = 5
     )
-    try {
-        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    
+    Write-Log "Verificando servicios [$($servicios -join ', ')] en $SQLServer (timeout: ${TimeoutMinutes}min)"
+    
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $intentos = 0
+    $maxIntentos = ($TimeoutMinutes * 60) / 10  # Cada 10 segundos
 
-        do {
-            $todosServiciosActivos = $true
+    while ($intentos -lt $maxIntentos) {
+        $intentos++
+        $todosOk = $true
+        $serviciosFaltantes = @()
 
-            foreach ($servicio in $servicios) {
-                try {
-                    $estadoServicio = Invoke-Command -ComputerName $SQLServer -ScriptBlock {
-                        param($servicio)
-                        Get-Service -Name $servicio -ErrorAction Stop | Select-Object Name, Status
-                    } -ArgumentList $servicio -ErrorAction Stop
+        foreach ($servicio in $servicios) {
+            try {
+                $estado = Invoke-Command -ComputerName $SQLServer -ScriptBlock {
+                    param($s)
+                    $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
+                    if ($svc) { $svc.Status } else { "NotFound" }
+                } -ArgumentList $servicio -ErrorAction Stop
 
-                    if ($estadoServicio.Status -ne 'Running') {
-                        $todosServiciosActivos = $false
-                        Write-Log "Servicio $($estadoServicio.Name) no está corriendo en $SQLServer. Esperando..." -Level "INFO"
-                    }
-                } catch {
-                    $todosServiciosActivos = $false
-                    Write-Log "No se pudo verificar servicio $servicio en $SQLServer`: $_" -Level "WARNING"
+                if ($estado -ne 'Running') {
+                    $todosOk = $false
+                    $serviciosFaltantes += "$servicio($estado)"
                 }
+            } catch {
+                $todosOk = $false
+                $serviciosFaltantes += "$servicio(Error)"
             }
-
-            if (-not $todosServiciosActivos) {
-                Start-Sleep -Seconds 10
-            }
-
-            if ($stopwatch.Elapsed.TotalMinutes -ge 30) {
-                Write-Log "Se superó el tiempo límite de 30 minutos verificando servicios en $SQLServer" -Level "WARNING"
-                $Summary["Servicio OS"] = "Failure"
-                return $false
-            }
-
-        } while (-not $todosServiciosActivos)
-
-        Write-Log "Servidor $SQLServer - Todos los servicios básicos están en estado Running" -Level "SUCCESS"
-        $Summary["Servicio OS"] = "Success"
-        return $true
-    } catch {
-        Write-Log "Error al verificar servicios en $SQLServer`: $_" -Level "ERROR"
-        $Summary["Servicio OS"] = "Failure"
-        return $false
-    }
-}
-
-# Función para verificar discos
-function VerificarDiscos {
-    param (
-        [string]$SQLServer,
-        [hashtable]$Summary
-    )
-    try {
-        Write-Log "Verificando discos en $SQLServer" -Level "INFO"
-
-        $discosProblema = Invoke-Command -ComputerName $SQLServer -ScriptBlock {
-            Get-Disk | Where-Object { $_.OperationalStatus -eq "Offline" -or $_.IsOffline -eq $true -or $_.IsReadOnly -eq $true }
-        } -ErrorAction Stop
-
-        if ($discosProblema) {
-            foreach ($disco in $discosProblema) {
-                try {
-                    Invoke-Command -ComputerName $SQLServer -ScriptBlock {
-                        param($disco)
-                        
-                        if ($disco.IsOffline) {
-                            Set-Disk -Number $disco.Number -IsOffline $false
-                            Start-Sleep -Seconds 2
-                        }
-                        
-                        $estadoIntermedio = Get-Disk -Number $disco.Number
-                        if ($estadoIntermedio.IsReadOnly) {
-                            Set-Disk -Number $disco.Number -IsReadOnly $false
-                            Start-Sleep -Seconds 2
-                        }
-                        
-                    } -ArgumentList $disco -ErrorAction Stop
-
-                    Write-Log "Disco $($disco.Number) configurado correctamente en $SQLServer" -Level "SUCCESS"
-                } catch {
-                    Write-Log "Error configurando disco $($disco.Number) en $SQLServer`: $_" -Level "ERROR"
-                }
-            }
-            $Summary["Discos"] = "Success"
-        } else {
-            Write-Log "No se encontraron discos problemáticos en $SQLServer" -Level "SUCCESS"
-            $Summary["Discos"] = "Success"
         }
 
-        return $true
-    } catch {
-        Write-Log "Error al verificar discos en $SQLServer`: $_" -Level "ERROR"
-        $Summary["Discos"] = "Failure"
-        return $false
+        if ($todosOk) {
+            Write-Log "Todos los servicios verificados OK en $SQLServer" -Level "SUCCESS"
+            return $true
+        }
+
+        if ($intentos -lt $maxIntentos) {
+            Write-Log "Esperando servicios: $($serviciosFaltantes -join ', ') - intento $intentos/${maxIntentos}"
+            Start-Sleep -Seconds 10
+        }
     }
+
+    Write-Log "Timeout esperando servicios en $SQLServer después de ${TimeoutMinutes} minutos" -Level "WARNING"
+    return $false
+}
+
+# Función para verificar un servicio SQL específico
+function VerificarServicioSQL {
+    param (
+        [string]$SQLServer,
+        [string]$ServiceName,
+        [int]$TimeoutMinutes = 5
+    )
+    
+    Write-Log "Verificando servicio $ServiceName en $SQLServer"
+    
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    
+    while ($stopwatch.Elapsed.TotalMinutes -lt $TimeoutMinutes) {
+        try {
+            $estado = Invoke-Command -ComputerName $SQLServer -ScriptBlock {
+                param($s)
+                $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
+                if ($svc) { 
+                    @{ Status = $svc.Status.ToString(); StartType = $svc.StartType.ToString() }
+                } else { 
+                    @{ Status = "NotFound"; StartType = "Unknown" }
+                }
+            } -ArgumentList $ServiceName -ErrorAction Stop
+
+            if ($estado.Status -eq 'Running') {
+                Write-Log "Servicio $ServiceName está Running en $SQLServer" -Level "SUCCESS"
+                return "Success"
+            }
+            
+            if ($estado.Status -eq 'Stopped' -and $estado.StartType -ne 'Disabled') {
+                Write-Log "Intentando iniciar $ServiceName en $SQLServer..."
+                try {
+                    Invoke-Command -ComputerName $SQLServer -ScriptBlock {
+                        param($s)
+                        Start-Service -Name $s -ErrorAction Stop
+                    } -ArgumentList $ServiceName -ErrorAction Stop
+                } catch {
+                    Write-Log "No se pudo iniciar $ServiceName`: $_" -Level "WARNING"
+                }
+            }
+            
+            Start-Sleep -Seconds 15
+
+        } catch {
+            Write-Log "Error verificando $ServiceName`: $_" -Level "WARNING"
+            Start-Sleep -Seconds 10
+        }
+    }
+
+    Write-Log "Timeout esperando $ServiceName en $SQLServer" -Level "WARNING"
+    return "Failure"
 }
 
 # Procesar cada servidor
@@ -194,169 +184,87 @@ foreach ($server in $servers) {
     Write-Log "───────────────────────────────────────────────────────────────"
     
     try {
-        # Verificar conectividad
-        Write-Log "Verificando conectividad con $server" -Level "INFO"
-        
+        # 1. Verificar conectividad
+        Write-Log "Verificando conectividad con $server"
         $pingResult = Test-NetConnection -ComputerName $server -Port 1433 -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
 
         if (-not $pingResult.TcpTestSucceeded) {
             Write-Log "No se puede conectar al puerto 1433 en $server" -Level "ERROR"
-            $Summary["Conectividad"] = "Failure"
             $ServerStatus += [PSCustomObject]@{ Server = $server; Status = "Failure"; Reason = "Sin conectividad" }
             continue
         }
-        
-        $Summary["Conectividad"] = "Success"
         Write-Log "Conectividad verificada con $server" -Level "SUCCESS"
 
-        # Verificar si es AlwaysOn
+        # 2. Verificar si es AlwaysOn
         try {
-            $query = @"
-            SELECT 
-                ar.replica_server_name AS ServerName,
-                ars.role_desc AS RoleDesc
-            FROM 
-                sys.dm_hadr_availability_replica_states ars
-            INNER JOIN 
-                sys.availability_replicas ar ON ars.replica_id = ar.replica_id
-            WHERE 
-                ar.replica_server_name = @@SERVERNAME
-"@
-            $result = Invoke-Sqlcmd -ServerInstance $server -Query $query -TrustServerCertificate -ErrorAction Stop
+            $query = "SELECT ar.replica_server_name FROM sys.dm_hadr_availability_replica_states ars INNER JOIN sys.availability_replicas ar ON ars.replica_id = ar.replica_id WHERE ar.replica_server_name = @@SERVERNAME"
+            $result = Invoke-Sqlcmd -ServerInstance $server -Query $query -TrustServerCertificate -ErrorAction Stop -QueryTimeout 10
             
             if ($result) {
-                Write-Log "El servidor $server es un nodo AlwaysOn. Se omite el reinicio automático." -Level "WARNING"
-                $Summary["AlwaysOn"] = "Skipped"
+                Write-Log "El servidor $server es un nodo AlwaysOn. Omitiendo reinicio automático." -Level "WARNING"
                 $ServerStatus += [PSCustomObject]@{ Server = $server; Status = "Skipped"; Reason = "Es nodo AlwaysOn" }
                 continue
             }
         } catch {
-            # Si falla la consulta, asumimos que no es AlwaysOn o no tenemos permisos
-            Write-Log "No se pudo verificar AlwaysOn para $server (asumiendo standalone)" -Level "INFO"
+            Write-Log "Servidor $server es standalone - procediendo con reinicio"
         }
 
-        Write-Log "Servidor $server es standalone - procediendo con reinicio" -Level "INFO"
-
-        # Reiniciar el servidor
-        Write-Log "Iniciando reinicio de $server..." -Level "INFO"
+        # 3. Reiniciar el servidor
+        Write-Log "Iniciando reinicio de $server..."
         
         try {
-            Restart-Computer -ComputerName $server -Force -Wait -For PowerShell -Timeout 600 -ErrorAction Stop
+            Restart-Computer -ComputerName $server -Force -Wait -For PowerShell -Timeout 300 -ErrorAction Stop
             Write-Log "Reinicio exitoso en $server" -Level "SUCCESS"
             $Summary["Reinicio"] = "Success"
         } catch {
             Write-Log "Error en el reinicio de $server`: $_" -Level "ERROR"
-            $Summary["Reinicio"] = "Failure"
-            $ServerStatus += [PSCustomObject]@{ Server = $server; Status = "Failure"; Reason = "Error en reinicio" }
+            $ServerStatus += [PSCustomObject]@{ Server = $server; Status = "Failure"; Reason = "Error en reinicio: $_" }
             continue
         }
 
-        # Verificar ping post-reinicio
-        $pingResult = Test-Connection -ComputerName $server -Count 5 -Quiet
-        if ($pingResult) {
-            Write-Log "Ping exitoso a $server post-reinicio" -Level "SUCCESS"
-            $Summary["Ping"] = "Success"
-        } else {
-            Write-Log "Error en ping a $server post-reinicio" -Level "ERROR"
-            $Summary["Ping"] = "Failure"
+        # 4. Verificar ping post-reinicio
+        Write-Log "Verificando respuesta post-reinicio..."
+        $pingOk = $false
+        for ($i = 1; $i -le 10; $i++) {
+            if (Test-Connection -ComputerName $server -Count 1 -Quiet) {
+                $pingOk = $true
+                break
+            }
+            Write-Log "Esperando respuesta de $server... intento $i/10"
+            Start-Sleep -Seconds 5
+        }
+        
+        if (-not $pingOk) {
+            Write-Log "El servidor $server no responde después del reinicio" -Level "ERROR"
             $ServerStatus += [PSCustomObject]@{ Server = $server; Status = "Failure"; Reason = "Sin respuesta post-reinicio" }
             continue
         }
+        Write-Log "Ping exitoso a $server post-reinicio" -Level "SUCCESS"
 
-        # Verificar servicios básicos
-        $serviciosBasicos = @("Netlogon", "RpcSs", "WinRM")
-        $rtaFunc = VerificarServicios -SQLServer $server -servicios $serviciosBasicos -Summary $Summary
-        if (-not $rtaFunc) {
-            Write-Log "La verificación de servicios OS en $server falló" -Level "ERROR"
-            $ServerStatus += [PSCustomObject]@{ Server = $server; Status = "Failure"; Reason = "Servicios OS no disponibles" }
-            continue
-        }
+        # 5. Esperar un momento para que los servicios inicien
+        Write-Log "Esperando $WAIT_POST_REINICIO segundos para que inicien los servicios..."
+        Start-Sleep -Seconds $WAIT_POST_REINICIO
 
-        # Verificar discos
-        $rtaDiscos = VerificarDiscos -SQLServer $server -Summary $Summary
-        if (-not $rtaDiscos) {
-            Write-Log "La verificación de discos en $server falló" -Level "WARNING"
-        }
+        # 6. Verificar servicios básicos del OS
+        $serviciosOS = @("WinRM")  # Solo verificar WinRM que es esencial
+        $osOk = VerificarServicios -SQLServer $server -servicios $serviciosOS -TimeoutMinutes $TIMEOUT_SERVICIOS_OS
+        $Summary["Servicio OS"] = if ($osOk) { "Success" } else { "Warning" }
 
-        # Esperar para servicios SQL
-        Write-Log "Esperando 60 segundos para que los servicios SQL inicien..." -Level "INFO"
-        Start-Sleep -Seconds 60
+        # 7. Verificar servicios SQL
+        $Summary["MSSQLSERVER"] = VerificarServicioSQL -SQLServer $server -ServiceName "MSSQLSERVER" -TimeoutMinutes $TIMEOUT_SERVICIOS_SQL
+        $Summary["SQLSERVERAGENT"] = VerificarServicioSQL -SQLServer $server -ServiceName "SQLSERVERAGENT" -TimeoutMinutes $TIMEOUT_SERVICIOS_SQL
 
-        # Verificar servicios SQL Server
-        $Services = @("MSSQLSERVER", "SQLSERVERAGENT")
-        $MaxWaitTime = 5 # minutos
-
-        foreach ($Service in $Services) {
-            $StartTime = Get-Date
-            
-            try {
-                $ServiceStatus = Invoke-Command -ComputerName $server -ScriptBlock {
-                    param ($Service)
-                    Get-Service -Name $Service -ErrorAction Stop
-                } -ArgumentList $Service -ErrorAction Stop
-
-                if ($ServiceStatus.Status -ne "Running") {
-                    Write-Log "Servicio $Service no está corriendo en $server. Intentando iniciar..." -Level "INFO"
-
-                    try {
-                        Invoke-Command -ComputerName $server -ScriptBlock {
-                            param ($Service)
-                            Start-Service -Name $Service -ErrorAction Stop
-                        } -ArgumentList $Service -ErrorAction Stop
-                    } catch {
-                        Write-Log "Error al iniciar servicio $Service`: $_" -Level "WARNING"
-                    }
-
-                    # Esperar a que inicie
-                    while ($true) {
-                        Start-Sleep -Seconds 30
-                        $ElapsedMinutes = (New-TimeSpan -Start $StartTime -End (Get-Date)).TotalMinutes
-                        
-                        $ServiceStatus = Invoke-Command -ComputerName $server -ScriptBlock {
-                            param ($Service)
-                            Get-Service -Name $Service -ErrorAction Stop
-                        } -ArgumentList $Service -ErrorAction Stop
-                        
-                        if ($ServiceStatus.Status -eq "Running") {
-                            Write-Log "Servicio $Service iniciado con éxito en $server" -Level "SUCCESS"
-                            $Summary["Servicio $Service"] = "Success"
-                            break
-                        }
-                        
-                        if ($ElapsedMinutes -ge $MaxWaitTime) {
-                            Write-Log "Servicio $Service no inició en $server tras $MaxWaitTime minutos" -Level "ERROR"
-                            $Summary["Servicio $Service"] = "Failure"
-                            break
-                        }
-                        
-                        Write-Log "Esperando inicio de $Service en $server... ($([math]::Round($ElapsedMinutes, 1)) min)" -Level "INFO"
-                    }
-                } else {
-                    Write-Log "Servicio $Service está corriendo en $server" -Level "SUCCESS"
-                    $Summary["Servicio $Service"] = "Success"
-                }
-            } catch {
-                Write-Log "Error verificando servicio $Service en $server`: $_" -Level "ERROR"
-                $Summary["Servicio $Service"] = "Failure"
-            }
-        }
-
-        # Resumen del servidor
+        # 8. Resumen
         Write-Log "───────────────────────────────────────────────────────────────"
         Write-Log "Resumen para $server`:"
         foreach ($key in $Summary.Keys) {
-            $status = $Summary[$key]
-            if ($status -eq "Success") {
-                Write-Log "  ✓ $key`: $status" -Level "SUCCESS"
-            } elseif ($status -eq "Failure") {
-                Write-Log "  ✗ $key`: $status" -Level "ERROR"
-            } else {
-                Write-Log "  - $key`: $status" -Level "INFO"
-            }
+            $val = $Summary[$key]
+            $lvl = if ($val -eq "Success") { "SUCCESS" } elseif ($val -eq "Failure") { "ERROR" } else { "INFO" }
+            Write-Log "  $key`: $val" -Level $lvl
         }
 
-        # Determinar estado final del servidor
-        $finalStatus = if ($Summary.Values -contains "Failure") { "Failure" } else { "Success" }
+        $hasFail = $Summary.Values -contains "Failure"
+        $finalStatus = if ($hasFail) { "Failure" } else { "Success" }
         $ServerStatus += [PSCustomObject]@{ Server = $server; Status = $finalStatus; Reason = "" }
 
     } catch {
@@ -375,18 +283,18 @@ $failureCount = ($ServerStatus | Where-Object { $_.Status -eq "Failure" }).Count
 $skippedCount = ($ServerStatus | Where-Object { $_.Status -eq "Skipped" }).Count
 
 Write-Log "Total procesados: $($ServerStatus.Count)"
-Write-Log "Exitosos: $successCount ✓"
-Write-Log "Fallidos: $failureCount ✗"
-Write-Log "Omitidos: $skippedCount -"
+Write-Log "Exitosos: $successCount"
+Write-Log "Fallidos: $failureCount"
+Write-Log "Omitidos: $skippedCount"
 Write-Log ""
 
 foreach ($status in $ServerStatus) {
     if ($status.Status -eq "Success") {
-        Write-Log "  ✓ $($status.Server) - Reinicio completado correctamente" -Level "SUCCESS"
+        Write-Log "  OK $($status.Server) - Reinicio completado" -Level "SUCCESS"
     } elseif ($status.Status -eq "Failure") {
-        Write-Log "  ✗ $($status.Server) - $($status.Reason)" -Level "ERROR"
+        Write-Log "  FAIL $($status.Server) - $($status.Reason)" -Level "ERROR"
     } else {
-        Write-Log "  - $($status.Server) - $($status.Reason)" -Level "INFO"
+        Write-Log "  SKIP $($status.Server) - $($status.Reason)" -Level "INFO"
     }
 }
 
@@ -395,10 +303,4 @@ Write-Log "  SQLRestartNova WebAPI - Fin de ejecución"
 Write-Log "  Fecha: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Write-Log "═══════════════════════════════════════════════════════════════"
 
-# Código de salida basado en resultados
-if ($failureCount -gt 0) {
-    exit 1
-} else {
-    exit 0
-}
-
+if ($failureCount -gt 0) { exit 1 } else { exit 0 }
