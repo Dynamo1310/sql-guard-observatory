@@ -143,14 +143,20 @@ export const authApi = {
     return data;
   },
 
-  async windowsLogin(): Promise<LoginResponse> {
+  async windowsLogin(attempt = 1): Promise<LoginResponse> {
     const response = await fetch(`${API_URL}/api/auth/windows-login`, {
       method: 'GET',
-      credentials: 'include', // Importante: enviar credenciales de Windows
+      credentials: 'include',
     });
+    
+    // Si el servidor está ocupado (503), reintentar hasta 3 veces
+    if (response.status === 503 && attempt < 3) {
+      await new Promise(r => setTimeout(r, 1000));
+      return this.windowsLogin(attempt + 1);
+    }
+    
     const data = await handleResponse<LoginResponse>(response);
     
-    // Guardar token en localStorage
     if (data.token) {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify({

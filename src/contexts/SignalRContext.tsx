@@ -32,8 +32,51 @@ export const SignalRProvider: React.FC<SignalRProviderProps> = ({
   const [connectionState, setConnectionState] = useState<signalR.HubConnectionState>(
     signalR.HubConnectionState.Disconnected
   );
+  
+  // Ref para evitar múltiples conexiones
+  const connectionRef = useRef<signalR.HubConnection | null>(null);
+  
+  // Monitorear cambios en el token para conectar/desconectar SignalR
+  const [hasToken, setHasToken] = useState(() => !!localStorage.getItem('token'));
+  
+  // Escuchar cambios en localStorage (para detectar login/logout)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setHasToken(!!localStorage.getItem('token'));
+    };
+    
+    // Escuchar eventos de storage (cambios desde otras pestañas)
+    window.addEventListener('storage', handleStorageChange);
+    
+    // También verificar periódicamente (para cambios en la misma pestaña)
+    const interval = setInterval(handleStorageChange, 1000);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
+    // NO conectar SignalR hasta que el usuario esté autenticado
+    // Esto evita interferir con el handshake NTLM de Windows Auth
+    if (!hasToken) {
+      // Si no hay token y hay conexión, desconectar
+      if (connectionRef.current) {
+        connectionRef.current.stop();
+        connectionRef.current = null;
+        setConnection(null);
+        setIsConnected(false);
+        setConnectionState(signalR.HubConnectionState.Disconnected);
+      }
+      return;
+    }
+
+    // Si ya hay conexión activa, no crear otra
+    if (connectionRef.current) {
+      return;
+    }
+
     // Configurar conexión SignalR
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
@@ -85,14 +128,16 @@ export const SignalRProvider: React.FC<SignalRProviderProps> = ({
       }
     };
 
-    startConnection();
+    connectionRef.current = newConnection;
     setConnection(newConnection);
+    startConnection();
 
     // Cleanup
     return () => {
       newConnection.stop();
+      connectionRef.current = null;
     };
-  }, [hubUrl, autoReconnect]);
+  }, [hubUrl, autoReconnect, hasToken]);
 
   /**
    * Suscribirse a un evento de SignalR

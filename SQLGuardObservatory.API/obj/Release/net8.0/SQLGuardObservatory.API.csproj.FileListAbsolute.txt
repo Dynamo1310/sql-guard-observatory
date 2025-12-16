@@ -186,3 +186,4 @@ C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bi
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\Serilog.Sinks.Console.dll
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\Serilog.Sinks.Debug.dll
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\Serilog.Sinks.File.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\SQLGuardObservatory.API.staticwebassets.runtime.json

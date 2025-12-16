@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
@@ -9,6 +10,7 @@ namespace SQLGuardObservatory.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[EnableCors("AllowFrontend")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -51,7 +53,18 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Preflight OPTIONS para windows-login (requerido por CORS)
+    /// </summary>
+    [HttpOptions("windows-login")]
+    [AllowAnonymous]
+    public IActionResult WindowsLoginOptions()
+    {
+        return Ok();
+    }
+
+    /// <summary>
     /// Autenticación con Windows (autenticación automática)
+    /// Usa Negotiate authentication para obtener credenciales de Windows
     /// </summary>
     [HttpGet("windows-login")]
     [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)]
@@ -82,6 +95,31 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Error en login de Windows");
             return StatusCode(500, new { message = "Error al procesar el login con Windows" });
+        }
+    }
+
+    /// <summary>
+    /// Endpoint alternativo para obtener el usuario de Windows actual
+    /// Útil para diagnóstico cuando hay problemas con Negotiate
+    /// </summary>
+    [HttpGet("windows-identity")]
+    [AllowAnonymous]
+    public IActionResult GetWindowsIdentity()
+    {
+        try
+        {
+            var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            return Ok(new 
+            { 
+                name = identity.Name,
+                isAuthenticated = identity.IsAuthenticated,
+                authenticationType = identity.AuthenticationType
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener Windows Identity");
+            return StatusCode(500, new { message = ex.Message });
         }
     }
 

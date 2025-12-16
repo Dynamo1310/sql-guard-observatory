@@ -63,18 +63,18 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <SignalRProvider
-        hubUrl={`${import.meta.env.VITE_API_BASE_URL || 'http://asprbm-nov-01:5000'}/hubs/notifications`}
-        autoReconnect={true}
-      >
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="*" element={
-                <AuthGate>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="*" element={
+              <AuthGate>
+                <SignalRProvider
+                  hubUrl={`${import.meta.env.VITE_API_BASE_URL || 'http://asprbm-nov-01:5000'}/hubs/notifications`}
+                  autoReconnect={true}
+                >
                   <Routes>
                     <Route element={<AppLayout />}>
                       <Route path="/" element={<DefaultRoute />} />
@@ -193,12 +193,12 @@ const App = () => (
                     </Route>
                     <Route path="*" element={<NotFound />} />
                   </Routes>
-                </AuthGate>
-              } />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </SignalRProvider>
+                </SignalRProvider>
+              </AuthGate>
+            } />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

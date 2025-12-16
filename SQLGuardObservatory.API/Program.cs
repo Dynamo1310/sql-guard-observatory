@@ -54,6 +54,7 @@ try
 
     // Configurar para ejecutarse como servicio de Windows
     builder.Host.UseWindowsService();
+    
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -112,11 +113,7 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero // Sin tolerancia - expiración estricta
     };
 })
-.AddNegotiate(options =>
-{
-    // Configurar para aceptar solo autenticación de Windows
-    options.PersistKerberosCredentials = true;
-});
+.AddNegotiate();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -213,7 +210,34 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 // app.UseHttpsRedirection(); // Deshabilitado - solo usamos HTTP
+
+// CORS primero
 app.UseCors("AllowFrontend");
+
+// Middleware para OPTIONS y manejo de errores NTLM
+app.Use(async (context, next) =>
+{
+    if (context.Request.Method == "OPTIONS")
+    {
+        context.Response.StatusCode = 204;
+        return;
+    }
+    
+    try
+    {
+        await next();
+    }
+    catch (InvalidOperationException ex) when (ex.Message.Contains("anonymous request"))
+    {
+        // Error de NTLM - devolver 503 para que el frontend reintente
+        // NO usar 401 porque muestra diálogo de credenciales
+        if (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode = 503;
+        }
+    }
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
