@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Server.HttpSys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SQLGuardObservatory.API.Data;
@@ -48,6 +49,16 @@ try
     Log.Information("==============================================");
 
     var builder = WebApplication.CreateBuilder(args);
+
+    // ========== USAR HTTP.SYS EN LUGAR DE KESTREL ==========
+    // HttpSys es el servidor web nativo de Windows y tiene soporte completo
+    // para autenticación Windows (NTLM/Kerberos) sin problemas de solicitudes concurrentes
+    builder.WebHost.UseHttpSys(options =>
+    {
+        options.Authentication.Schemes = AuthenticationSchemes.NTLM | AuthenticationSchemes.Negotiate;
+        options.Authentication.AllowAnonymous = true; // Permite endpoints anónimos también
+        options.UrlPrefixes.Add("http://*:5000"); // Escuchar en el puerto 5000
+    });
 
     // Usar Serilog como proveedor de logging
     builder.Host.UseSerilog();
@@ -214,7 +225,7 @@ app.UseSwaggerUI();
 // CORS primero
 app.UseCors("AllowFrontend");
 
-// Middleware para OPTIONS y manejo de errores NTLM
+// Middleware para OPTIONS - manejar preflight requests
 app.Use(async (context, next) =>
 {
     if (context.Request.Method == "OPTIONS")
@@ -223,19 +234,7 @@ app.Use(async (context, next) =>
         return;
     }
     
-    try
-    {
-        await next();
-    }
-    catch (InvalidOperationException ex) when (ex.Message.Contains("anonymous request"))
-    {
-        // Error de NTLM - devolver 503 para que el frontend reintente
-        // NO usar 401 porque muestra diálogo de credenciales
-        if (!context.Response.HasStarted)
-        {
-            context.Response.StatusCode = 503;
-        }
-    }
+    await next();
 });
 
 app.UseAuthentication();
@@ -243,7 +242,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Mapear Hub de SignalR para notificaciones en tiempo real
-app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<NotificationHub>("/hubs/notifications").AllowAnonymous();
 
 Log.Information("SQLGuard Observatory API iniciada correctamente");
 app.Run();

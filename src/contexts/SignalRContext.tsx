@@ -59,7 +59,6 @@ export const SignalRProvider: React.FC<SignalRProviderProps> = ({
 
   useEffect(() => {
     // NO conectar SignalR hasta que el usuario esté autenticado
-    // Esto evita interferir con el handshake NTLM de Windows Auth
     if (!hasToken) {
       // Si no hay token y hay conexión, desconectar
       if (connectionRef.current) {
@@ -132,10 +131,13 @@ export const SignalRProvider: React.FC<SignalRProviderProps> = ({
     setConnection(newConnection);
     startConnection();
 
-    // Cleanup
+    // Cleanup - detener conexión de forma silenciosa
     return () => {
-      newConnection.stop();
       connectionRef.current = null;
+      setConnection(null);
+      setIsConnected(false);
+      // Detener en background sin esperar
+      newConnection.stop().catch(() => {});
     };
   }, [hubUrl, autoReconnect, hasToken]);
 

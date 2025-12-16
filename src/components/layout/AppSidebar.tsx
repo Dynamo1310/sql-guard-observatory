@@ -88,9 +88,11 @@ export function AppSidebar() {
   const isOperationsActive = location.pathname.startsWith('/operations');
   const [operationsOpen, setOperationsOpen] = useState(isOperationsActive);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     logout();
-    window.location.href = '/login';
+    // Esperar a que SignalR se desconecte antes de redirigir
+    await new Promise(r => setTimeout(r, 500));
+    window.location.replace('/login');
   };
 
   // Filtrar items principales según permisos
