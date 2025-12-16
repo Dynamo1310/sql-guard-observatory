@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
   Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart, 
   Phone, Calendar, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
-  ChevronDown, ChevronRight, ArrowRightLeft
+  ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Wrench
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import sqlNovaLightLogo from '/SQLNovaLightMode.png';
@@ -65,6 +65,11 @@ const alertsSubItems = [
   // Futuras alertas se agregarán aquí con sus propios permisos
 ];
 
+// Items de Operaciones
+const operationsItems = [
+  { title: 'Reinicio de Servidores', url: '/operations/server-restart', icon: RotateCcw, permission: 'ServerRestart' },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const { isAdmin, hasPermission, logout } = useAuth();
@@ -78,6 +83,10 @@ export function AppSidebar() {
   // Estado para el menú desplegable de Alertas
   const isAlertsActive = location.pathname.startsWith('/admin/alerts');
   const [alertsOpen, setAlertsOpen] = useState(isAlertsActive);
+  
+  // Estado para la sección de Operaciones
+  const isOperationsActive = location.pathname.startsWith('/operations');
+  const [operationsOpen, setOperationsOpen] = useState(isOperationsActive);
 
   const handleLogout = () => {
     logout();
@@ -90,6 +99,9 @@ export function AppSidebar() {
   
   // Filtrar items de admin según permisos
   const visibleAdminItems = isAdmin ? adminItems.filter(item => hasPermission(item.permission)) : [];
+  
+  // Filtrar items de operaciones según permisos
+  const visibleOperationsItems = operationsItems.filter(item => hasPermission(item.permission));
 
   return (
     <Sidebar collapsible="icon">
@@ -198,6 +210,39 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                   </Collapsible>
                 )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Operaciones */}
+        {visibleOperationsItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className={isCollapsed ? 'sr-only' : ''}>
+              Operaciones
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {visibleOperationsItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={item.url}
+                        style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
+                        className={({ isActive }) =>
+                          `w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
+                            isActive
+                              ? 'bg-sidebar-accent text-sidebar-primary font-medium'
+                              : 'hover:bg-sidebar-accent/50'
+                          }`
+                        }
+                      >
+                        <item.icon className="h-4 w-4 flex-shrink-0 text-orange-500" />
+                        {!isCollapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

@@ -1948,6 +1948,145 @@ export const productionAlertsApi = {
   },
 };
 
+// ==================== SERVER RESTART API ====================
+
+export interface RestartableServerDto {
+  serverName: string;
+  instanceName: string;
+  ambiente?: string;
+  hostingSite?: string;
+  hostingType?: string;
+  majorVersion?: string;
+  edition?: string;
+  isAlwaysOn: boolean;
+  isStandalone: boolean;
+  isConnected: boolean;
+  lastCheckedAt?: string;
+}
+
+export interface ServerRestartTaskDto {
+  id: number;
+  taskId: string;
+  servers: string[];
+  serverCount: number;
+  status: 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Cancelled';
+  startedAt: string;
+  completedAt?: string;
+  initiatedByUserId: string;
+  initiatedByUserName?: string;
+  successCount: number;
+  failureCount: number;
+  errorMessage?: string;
+  details: ServerRestartDetailDto[];
+  durationSeconds?: number;
+}
+
+export interface ServerRestartDetailDto {
+  id: number;
+  serverName: string;
+  status: string;
+  startedAt?: string;
+  completedAt?: string;
+  errorMessage?: string;
+  restartResult?: string;
+  pingResult?: string;
+  servicioOSResult?: string;
+  discosResult?: string;
+  servicioMSSQLSERVERResult?: string;
+  servicioSQLSERVERAGENTResult?: string;
+}
+
+export interface StartRestartRequest {
+  servers: string[];
+}
+
+export interface StartRestartResponse {
+  success: boolean;
+  taskId: string;
+  message: string;
+  serverCount: number;
+}
+
+export interface RestartOutputMessage {
+  taskId: string;
+  line: string;
+  type: 'info' | 'error' | 'warning' | 'success';
+  serverName?: string;
+  timestamp: string;
+}
+
+export interface RestartProgressMessage {
+  taskId: string;
+  currentServer: string;
+  currentIndex: number;
+  totalServers: number;
+  phase: string;
+  percentComplete: number;
+  timestamp: string;
+}
+
+export interface RestartCompletedMessage {
+  taskId: string;
+  status: string;
+  successCount: number;
+  failureCount: number;
+  completedAt: string;
+  durationSeconds: number;
+  errorMessage?: string;
+}
+
+export interface RestartStatusResponse {
+  hasRunningTask: boolean;
+  runningTask?: ServerRestartTaskDto;
+}
+
+export const serverRestartApi = {
+  async getServers(): Promise<RestartableServerDto[]> {
+    const response = await fetch(`${API_URL}/api/serverrestart/servers`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<RestartableServerDto[]>(response);
+  },
+
+  async startRestart(request: StartRestartRequest): Promise<StartRestartResponse> {
+    const response = await fetch(`${API_URL}/api/serverrestart/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<StartRestartResponse>(response);
+  },
+
+  async getTasks(limit: number = 50): Promise<ServerRestartTaskDto[]> {
+    const response = await fetch(`${API_URL}/api/serverrestart/tasks?limit=${limit}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ServerRestartTaskDto[]>(response);
+  },
+
+  async getTask(taskId: string): Promise<ServerRestartTaskDto> {
+    const response = await fetch(`${API_URL}/api/serverrestart/tasks/${taskId}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ServerRestartTaskDto>(response);
+  },
+
+  async cancelTask(taskId: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/serverrestart/tasks/${taskId}/cancel`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async getStatus(): Promise<RestartStatusResponse> {
+    const response = await fetch(`${API_URL}/api/serverrestart/status`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<RestartStatusResponse>(response);
+  },
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 export function isAuthenticated(): boolean {

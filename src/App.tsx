@@ -26,6 +26,7 @@ import OnCallReports from "./pages/OnCallReports";
 import OnCallSwaps from "./pages/OnCallSwaps";
 import SmtpSettings from "./pages/SmtpSettings";
 import ProductionAlerts from "./pages/ProductionAlerts";
+import ServerRestart from "./pages/ServerRestart";
 import AdminUsers from "./pages/AdminUsers";
 import AdminPermissions from "./pages/AdminPermissions";
 import Login from "./pages/Login";
@@ -170,6 +171,12 @@ const App = () => (
                       <Route path="/admin/alerts/servers-down" element={
                         <ProtectedRoute viewName="AlertaServidoresCaidos">
                           <ProductionAlerts />
+                        </ProtectedRoute>
+                      } />
+                      {/* Operaciones */}
+                      <Route path="/operations/server-restart" element={
+                        <ProtectedRoute viewName="ServerRestart">
+                          <ServerRestart />
                         </ProtectedRoute>
                       } />
                       <Route path="/admin/users" element={

@@ -157,6 +157,9 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<IProductionAlertService, ProductionAlertService>();
 builder.Services.AddHostedService<ProductionAlertBackgroundService>();
 
+// Server Restart Service - Reinicio de servidores SQL
+builder.Services.AddScoped<IServerRestartService, ServerRestartService>();
+
 // Configurar CORS
 builder.Services.AddCors(options =>
 {

@@ -20,6 +20,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ProductionAlertConfig> ProductionAlertConfigs { get; set; } = null!;
     public DbSet<ProductionAlertHistory> ProductionAlertHistories { get; set; } = null!;
     public DbSet<ProductionInstanceStatus> ProductionInstanceStatuses { get; set; } = null!;
+    
+    // Server Restart Tasks
+    public DbSet<ServerRestartTask> ServerRestartTasks { get; set; } = null!;
+    public DbSet<ServerRestartDetail> ServerRestartDetails { get; set; } = null!;
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -178,6 +182,32 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.ToTable("ProductionInstanceStatus");
             entity.HasIndex(s => s.InstanceName).IsUnique();
+        });
+
+        // Server Restart Tasks
+        builder.Entity<ServerRestartTask>(entity =>
+        {
+            entity.ToTable("ServerRestartTask");
+            entity.HasIndex(t => t.TaskId).IsUnique();
+            entity.HasIndex(t => t.Status);
+            entity.HasIndex(t => t.StartedAt);
+            entity.HasIndex(t => t.InitiatedByUserId);
+
+            entity.HasOne(t => t.InitiatedByUser)
+                .WithMany()
+                .HasForeignKey(t => t.InitiatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        builder.Entity<ServerRestartDetail>(entity =>
+        {
+            entity.ToTable("ServerRestartDetail");
+            entity.HasIndex(d => d.TaskId);
+
+            entity.HasOne(d => d.Task)
+                .WithMany(t => t.Details)
+                .HasForeignKey(d => d.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

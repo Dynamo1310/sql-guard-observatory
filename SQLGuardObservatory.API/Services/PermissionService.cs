@@ -26,6 +26,7 @@ public class PermissionService : IPermissionService
         { "AdminPermissions", new ViewInfo { ViewName = "AdminPermissions", DisplayName = "Permisos", Description = "Configuración de permisos por rol" } },
         { "ConfigSMTP", new ViewInfo { ViewName = "ConfigSMTP", DisplayName = "Config. SMTP", Description = "Configuración del servidor de correo" } },
         { "AlertaServidoresCaidos", new ViewInfo { ViewName = "AlertaServidoresCaidos", DisplayName = "Alerta: Servidores Caídos", Description = "Configurar alertas de servidores sin conexión" } },
+        { "ServerRestart", new ViewInfo { ViewName = "ServerRestart", DisplayName = "Reinicio de Servidores", Description = "Reiniciar servidores SQL Server (operación crítica)" } },
     };
 
     public PermissionService(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
