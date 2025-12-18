@@ -33,11 +33,13 @@ interface CriticalDiskData {
 
 interface MaintenanceOverdueData {
   instanceName: string;
+  displayName: string; // AGName si pertenece a un AG, sino instanceName
   tipo: string; // "CHECKDB", "IndexOptimize", "Ambos"
   lastCheckdb: string | null;
   lastIndexOptimize: string | null;
   checkdbVencido: boolean;
   indexOptimizeVencido: boolean;
+  agName?: string; // Nombre del AG si pertenece a uno
 }
 
 export default function Overview() {
@@ -191,48 +193,63 @@ export default function Overview() {
 
   // Mantenimiento atrasado de producción - Usa los campos CheckdbOk e IndexOptimizeOk 
   // directamente de la tabla InstanceHealth_Maintenance (la misma que usa HealthScore)
+  // Agrupa por AGName si la instancia pertenece a un AG
   const maintenanceOverdueData: MaintenanceOverdueData[] = useMemo(() => {
-    const result: MaintenanceOverdueData[] = [];
+    const tempResults: MaintenanceOverdueData[] = [];
+    const agProcessed = new Set<string>(); // Para evitar duplicados de AG
     
     productionScores.forEach(s => {
       const details = instanceDetails[s.instanceName];
       const maintenance = details?.maintenanceDetails;
       
       // Usar directamente los flags de la tabla InstanceHealth_Maintenance
-      // checkdbOk = false significa que el CHECKDB no está al día
-      // indexOptimizeOk = false significa que el IndexOptimize no está al día
       const checkdbVencido = maintenance?.checkdbOk === false;
       const indexOptimizeVencido = maintenance?.indexOptimizeOk === false;
       
       const lastCheckdb = maintenance?.lastCheckdb || null;
       const lastIndexOptimize = maintenance?.lastIndexOptimize || null;
+      const agName = maintenance?.agName || undefined;
+      
+      // Si pertenece a un AG y ya lo procesamos, saltar
+      if (agName && agProcessed.has(agName)) {
+        return;
+      }
       
       if (checkdbVencido || indexOptimizeVencido) {
         let tipo = '';
         if (checkdbVencido && indexOptimizeVencido) {
-          tipo = 'Ambos';
+          tipo = 'CHECKDB e IndexOptimize';
         } else if (checkdbVencido) {
           tipo = 'CHECKDB';
         } else {
           tipo = 'IndexOptimize';
         }
         
-        result.push({
+        // Si pertenece a un AG, marcar como procesado y usar el nombre del AG
+        if (agName) {
+          agProcessed.add(agName);
+        }
+        
+        tempResults.push({
           instanceName: s.instanceName,
+          displayName: agName || s.instanceName, // Mostrar AGName si existe, sino instanceName
           tipo,
           lastCheckdb,
           lastIndexOptimize,
           checkdbVencido,
-          indexOptimizeVencido
+          indexOptimizeVencido,
+          agName
         });
       }
     });
     
-    // Ordenar: primero "Ambos", luego por nombre
-    return result.sort((a, b) => {
-      if (a.tipo === 'Ambos' && b.tipo !== 'Ambos') return -1;
-      if (a.tipo !== 'Ambos' && b.tipo === 'Ambos') return 1;
-      return a.instanceName.localeCompare(b.instanceName);
+    // Ordenar: primero los que tienen ambos vencidos, luego por nombre
+    return tempResults.sort((a, b) => {
+      const aHasBoth = a.checkdbVencido && a.indexOptimizeVencido;
+      const bHasBoth = b.checkdbVencido && b.indexOptimizeVencido;
+      if (aHasBoth && !bHasBoth) return -1;
+      if (!aHasBoth && bHasBoth) return 1;
+      return a.displayName.localeCompare(b.displayName);
     });
   }, [productionScores, instanceDetails]);
 
@@ -530,9 +547,9 @@ export default function Overview() {
                 <TableRow>
                   <TableHead 
                     className="text-xs cursor-pointer hover:bg-accent"
-                    onClick={() => requestSortMaintenance('instanceName')}
+                    onClick={() => requestSortMaintenance('displayName')}
                   >
-                    Instancia {getSortIndicatorMaintenance('instanceName')}
+                    Instancia/AG {getSortIndicatorMaintenance('displayName')}
                   </TableHead>
                   <TableHead 
                     className="text-xs cursor-pointer hover:bg-accent text-center"
@@ -546,9 +563,12 @@ export default function Overview() {
                 {sortedMaintenanceOverdue.length > 0 ? (
                   sortedMaintenanceOverdue.map((item, idx) => (
                     <TableRow key={idx}>
-                      <TableCell className="font-mono text-xs py-2">{item.instanceName}</TableCell>
+                      <TableCell className="font-mono text-xs py-2">
+                        {item.displayName}
+                        {item.agName && <span className="ml-1 text-muted-foreground">(AG)</span>}
+                      </TableCell>
                       <TableCell className="py-2 text-center">
-                        <StatusBadge status={item.tipo === 'Ambos' ? 'critical' : 'warning'}>
+                        <StatusBadge status={item.checkdbVencido && item.indexOptimizeVencido ? 'critical' : 'warning'}>
                           {item.tipo}
                         </StatusBadge>
                       </TableCell>

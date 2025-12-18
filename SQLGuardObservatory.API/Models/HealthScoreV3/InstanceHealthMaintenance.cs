@@ -30,5 +30,9 @@ public class InstanceHealthMaintenance
     
     public bool CheckdbOk { get; set; }
     public bool IndexOptimizeOk { get; set; }
+    
+    // Nombre del AG si la instancia pertenece a uno (para agrupar en el Overview)
+    [MaxLength(255)]
+    public string? AGName { get; set; }
 }
 

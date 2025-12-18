@@ -983,6 +983,7 @@ export interface MaintenanceDetails {
   lastIndexOptimize?: string;
   checkdbOk: boolean;
   indexOptimizeOk: boolean;
+  agName?: string;  // Nombre del AG si la instancia pertenece a uno
 }
 
 export interface ConfiguracionTempdbDetails {

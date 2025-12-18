@@ -767,6 +767,7 @@ function Write-ToSqlServer {
             # Sanitizar valores NULL
             $lastCheckdb = if ($row.LastCheckdb) { "'$($row.LastCheckdb.ToString('yyyy-MM-dd HH:mm:ss'))'" } else { "NULL" }
             $lastIndexOpt = if ($row.LastIndexOptimize) { "'$($row.LastIndexOptimize.ToString('yyyy-MM-dd HH:mm:ss'))'" } else { "NULL" }
+            $agName = if ($row.AGName) { "'$($row.AGName)'" } else { "NULL" }
             
             $query = @"
 INSERT INTO dbo.InstanceHealth_Maintenance (
@@ -778,7 +779,8 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
     LastCheckdb,
     CheckdbOk,
     LastIndexOptimize,
-    IndexOptimizeOk
+    IndexOptimizeOk,
+    AGName
 ) VALUES (
     '$($row.InstanceName)',
     '$($row.Ambiente)',
@@ -788,7 +790,8 @@ INSERT INTO dbo.InstanceHealth_Maintenance (
     $lastCheckdb,
     $(if ($row.CheckdbOk) {1} else {0}),
     $lastIndexOpt,
-    $(if ($row.IndexOptimizeOk) {1} else {0})
+    $(if ($row.IndexOptimizeOk) {1} else {0}),
+    $agName
 );
 "@
             
@@ -910,7 +913,11 @@ foreach ($instance in $instances) {
     $checkdbAge = if ($maintenance.LastCheckdb) { ((Get-Date) - $maintenance.LastCheckdb).Days } else { "N/A" }
     $indexOptAge = if ($maintenance.LastIndexOptimize) { ((Get-Date) - $maintenance.LastIndexOptimize).Days } else { "N/A" }
     
-    Write-Host "   $status $instanceName - CHECKDB:$checkdbAge days IndexOpt:$indexOptAge days$extraInfo" -ForegroundColor $statusColor
+    # Obtener nombre del AG si la instancia pertenece a uno
+    $agName = $agInfo.NodeToGroup[$instanceName]
+    $agDisplay = if ($agName) { " [AG: $agName]" } else { "" }
+    
+    Write-Host "   $status $instanceName$agDisplay - CHECKDB:$checkdbAge days IndexOpt:$indexOptAge days$extraInfo" -ForegroundColor $statusColor
     
     $results += [PSCustomObject]@{
         InstanceName = $instanceName
@@ -923,6 +930,7 @@ foreach ($instance in $instances) {
         IndexOptimizeOk = $maintenance.IndexOptimizeOk
         CheckdbJobs = $maintenance.CheckdbJobs  # Para sincronización AlwaysOn
         IndexOptimizeJobs = $maintenance.IndexOptimizeJobs  # Para sincronización AlwaysOn
+        AGName = $agName  # Nombre del AG (null si no pertenece a ninguno)
     }
 }
 
