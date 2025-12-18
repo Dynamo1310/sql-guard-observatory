@@ -126,6 +126,7 @@ WITH JobsWithHistory AS (
 ),
 JobsWithoutHistory AS (
     -- Jobs SIN historial pero CON datos en sysjobservers (última ejecución)
+    -- Estos jobs participan igual que los demás en la selección del más reciente
     SELECT 
         j.job_id,
         j.name AS JobName,
@@ -142,10 +143,11 @@ JobsWithoutHistory AS (
                      AS DATETIME)
             )
         ELSE NULL END AS FinishTime,
-        -- Sin historial, asumimos que ejecutó al menos 2 pasos si terminó OK
-        CASE WHEN js.last_run_outcome = 1 THEN 2 ELSE 1 END AS TotalSteps,
+        -- Sin historial detallado, asumimos TotalSteps = 2 para que participe normalmente
+        -- El resultado (OK/FAIL) se determina por run_status, no por los pasos
+        2 AS TotalSteps,
         CASE WHEN js.last_run_outcome = 1 THEN 2 ELSE 0 END AS SuccessfulSteps,
-        CASE WHEN js.last_run_outcome = 1 THEN 0 ELSE 1 END AS FailedSteps,
+        CASE WHEN js.last_run_outcome = 1 THEN 0 ELSE 2 END AS FailedSteps,
         0 AS HasHistory
     FROM msdb.dbo.sysjobs j
     INNER JOIN msdb.dbo.sysjobservers js ON j.job_id = js.job_id
@@ -262,6 +264,7 @@ WITH JobsWithHistory AS (
 ),
 JobsWithoutHistory AS (
     -- Jobs SIN historial pero CON datos en sysjobservers (última ejecución)
+    -- Estos jobs participan igual que los demás en la selección del más reciente
     SELECT 
         j.job_id,
         j.name AS JobName,
@@ -277,10 +280,11 @@ JobsWithoutHistory AS (
                      AS DATETIME)
             )
         ELSE NULL END AS FinishTime,
-        -- Sin historial, asumimos que ejecutó al menos 2 pasos si terminó OK
-        CASE WHEN js.last_run_outcome = 1 THEN 2 ELSE 1 END AS TotalSteps,
+        -- Sin historial detallado, asumimos TotalSteps = 2 para que participe normalmente
+        -- El resultado (OK/FAIL) se determina por run_status, no por los pasos
+        2 AS TotalSteps,
         CASE WHEN js.last_run_outcome = 1 THEN 2 ELSE 0 END AS SuccessfulSteps,
-        CASE WHEN js.last_run_outcome = 1 THEN 0 ELSE 1 END AS FailedSteps,
+        CASE WHEN js.last_run_outcome = 1 THEN 0 ELSE 2 END AS FailedSteps,
         0 AS HasHistory
     FROM msdb.dbo.sysjobs j
     INNER JOIN msdb.dbo.sysjobservers js ON j.job_id = js.job_id
