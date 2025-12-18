@@ -782,61 +782,97 @@ function Sync-AlwaysOnMaintenance {
         
         # === ENCONTRAR EL RESULTADO REAL DE CHECKDB PARA EL AG ===
         # En un AG, el mantenimiento solo se ejecuta en el primario.
-        # Lógica: 
-        #   1. Filtrar jobs que ejecutaron TODOS los pasos (TotalSteps > 1)
-        #      - Jobs con TotalSteps = 1 solo verificaron rol primario y salieron
-        #   2. De esos, tomar el que tenga FINISH TIME MÁS RECIENTE (sin importar si fue exitoso o fallido)
-        #   3. Ese es el resultado REAL del AG
+        # Lógica de prioridad para determinar el resultado real del AG:
+        #   PRIORIDAD 1: Jobs CON historial que ejecutaron mantenimiento real (TotalSteps > 1)
+        #                - Estos tienen información confiable de cuántos pasos se ejecutaron
+        #   PRIORIDAD 2: Jobs CON historial pero con pocos pasos
+        #   PRIORIDAD 3: Jobs SIN historial (último recurso, no sabemos qué pasos ejecutaron)
+        #   
+        #   Dentro de cada prioridad: gana el de FINISH TIME más reciente
         $allCheckdbOk = $false
         $bestCheckdb = $null
         $cutoffDate = (Get-Date).AddDays(-7)
         
         if ($allCheckdbJobs.Count -gt 0) {
-            # Filtrar jobs que ejecutaron más de 1 paso (mantenimiento real, no solo verificación de rol)
-            $realCheckdbJobs = $allCheckdbJobs | Where-Object { $_.TotalSteps -gt 1 }
+            # Separar jobs CON historial de los SIN historial
+            $jobsWithHistory = $allCheckdbJobs | Where-Object { $_.HasHistory -eq $true }
+            $jobsWithoutHistory = $allCheckdbJobs | Where-Object { $_.HasHistory -eq $false }
             
-            if ($realCheckdbJobs.Count -gt 0) {
+            Write-Host "      📊 CHECKDB - Jobs con historial: $($jobsWithHistory.Count), sin historial: $($jobsWithoutHistory.Count)" -ForegroundColor DarkGray
+            
+            # PRIORIDAD 1: Jobs CON historial que ejecutaron mantenimiento real (TotalSteps > 1)
+            $realJobsWithHistory = $jobsWithHistory | Where-Object { $_.TotalSteps -gt 1 }
+            
+            if ($realJobsWithHistory.Count -gt 0) {
                 # Tomar el que tenga FINISH TIME más reciente (sin importar si fue exitoso o fallido)
-                $mostRecentReal = $realCheckdbJobs | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
+                $mostRecentReal = $realJobsWithHistory | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
                 
                 $bestCheckdb = $mostRecentReal.FinishTime
-                # El AG está OK si el más reciente que ejecutó todos los pasos fue exitoso Y está dentro de 7 días
                 $allCheckdbOk = ($mostRecentReal.IsSuccess -eq $true) -and ($mostRecentReal.FinishTime -ge $cutoffDate)
+                Write-Host "      ✅ Usando job CON historial con mantenimiento real: $($mostRecentReal.JobName) - FinishTime: $($mostRecentReal.FinishTime) - Success: $($mostRecentReal.IsSuccess)" -ForegroundColor DarkGray
             }
-            # Si no hay jobs con mantenimiento real, buscar en todos (fallback)
-            else {
-                $mostRecent = $allCheckdbJobs | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
+            # PRIORIDAD 2: Jobs CON historial pero con pocos pasos
+            elseif ($jobsWithHistory.Count -gt 0) {
+                $mostRecent = $jobsWithHistory | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
                 if ($mostRecent.FinishTime) {
                     $bestCheckdb = $mostRecent.FinishTime
                     $allCheckdbOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.FinishTime -ge $cutoffDate)
+                    Write-Host "      ⚠️ Usando job CON historial (pocos pasos): $($mostRecent.JobName) - FinishTime: $($mostRecent.FinishTime)" -ForegroundColor DarkGray
+                }
+            }
+            # PRIORIDAD 3: Jobs SIN historial (último recurso)
+            elseif ($jobsWithoutHistory.Count -gt 0) {
+                $mostRecent = $jobsWithoutHistory | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
+                if ($mostRecent.FinishTime) {
+                    $bestCheckdb = $mostRecent.FinishTime
+                    $allCheckdbOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.FinishTime -ge $cutoffDate)
+                    Write-Host "      ⚠️ Usando job SIN historial (fallback): $($mostRecent.JobName) - FinishTime: $($mostRecent.FinishTime)" -ForegroundColor DarkYellow
                 }
             }
         }
         
         # === ENCONTRAR EL RESULTADO REAL DE INDEX OPTIMIZE PARA EL AG ===
-        # Misma lógica: jobs con TotalSteps > 1 son los que ejecutaron mantenimiento real
-        # Ordenar por FINISH TIME (tiempo de finalización), no tiempo de inicio
+        # Misma lógica de prioridad que CHECKDB:
+        #   PRIORIDAD 1: Jobs CON historial que ejecutaron mantenimiento real (TotalSteps > 1)
+        #   PRIORIDAD 2: Jobs CON historial pero con pocos pasos
+        #   PRIORIDAD 3: Jobs SIN historial (último recurso)
         $allIndexOptimizeOk = $false
         $bestIndexOptimize = $null
         
         if ($allIndexOptimizeJobs.Count -gt 0) {
-            # Filtrar jobs que ejecutaron más de 1 paso (mantenimiento real)
-            $realIndexOptJobs = $allIndexOptimizeJobs | Where-Object { $_.TotalSteps -gt 1 }
+            # Separar jobs CON historial de los SIN historial
+            $jobsWithHistory = $allIndexOptimizeJobs | Where-Object { $_.HasHistory -eq $true }
+            $jobsWithoutHistory = $allIndexOptimizeJobs | Where-Object { $_.HasHistory -eq $false }
             
-            if ($realIndexOptJobs.Count -gt 0) {
+            Write-Host "      📊 IndexOptimize - Jobs con historial: $($jobsWithHistory.Count), sin historial: $($jobsWithoutHistory.Count)" -ForegroundColor DarkGray
+            
+            # PRIORIDAD 1: Jobs CON historial que ejecutaron mantenimiento real (TotalSteps > 1)
+            $realJobsWithHistory = $jobsWithHistory | Where-Object { $_.TotalSteps -gt 1 }
+            
+            if ($realJobsWithHistory.Count -gt 0) {
                 # Tomar el que tenga FINISH TIME más reciente (sin importar si fue exitoso o fallido)
-                $mostRecentReal = $realIndexOptJobs | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
+                $mostRecentReal = $realJobsWithHistory | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
                 
                 $bestIndexOptimize = $mostRecentReal.FinishTime
-                # El AG está OK si el más reciente que ejecutó todos los pasos fue exitoso Y está dentro de 7 días
                 $allIndexOptimizeOk = ($mostRecentReal.IsSuccess -eq $true) -and ($mostRecentReal.FinishTime -ge $cutoffDate)
+                Write-Host "      ✅ Usando job CON historial con mantenimiento real: $($mostRecentReal.JobName) - FinishTime: $($mostRecentReal.FinishTime) - Success: $($mostRecentReal.IsSuccess)" -ForegroundColor DarkGray
             }
-            # Fallback si no hay jobs con mantenimiento real
-            else {
-                $mostRecent = $allIndexOptimizeJobs | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
+            # PRIORIDAD 2: Jobs CON historial pero con pocos pasos
+            elseif ($jobsWithHistory.Count -gt 0) {
+                $mostRecent = $jobsWithHistory | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
                 if ($mostRecent.FinishTime) {
                     $bestIndexOptimize = $mostRecent.FinishTime
                     $allIndexOptimizeOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.FinishTime -ge $cutoffDate)
+                    Write-Host "      ⚠️ Usando job CON historial (pocos pasos): $($mostRecent.JobName) - FinishTime: $($mostRecent.FinishTime)" -ForegroundColor DarkGray
+                }
+            }
+            # PRIORIDAD 3: Jobs SIN historial (último recurso)
+            elseif ($jobsWithoutHistory.Count -gt 0) {
+                $mostRecent = $jobsWithoutHistory | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
+                if ($mostRecent.FinishTime) {
+                    $bestIndexOptimize = $mostRecent.FinishTime
+                    $allIndexOptimizeOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.FinishTime -ge $cutoffDate)
+                    Write-Host "      ⚠️ Usando job SIN historial (fallback): $($mostRecent.JobName) - FinishTime: $($mostRecent.FinishTime)" -ForegroundColor DarkYellow
                 }
             }
         }
