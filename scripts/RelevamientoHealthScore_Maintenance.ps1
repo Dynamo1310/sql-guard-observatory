@@ -80,9 +80,10 @@ function Get-MaintenanceJobs {
         # 2. TODOS los pasos individuales (step_id > 0) de esa ejecución están en status 1
         # 3. Se ejecutó más de 1 paso (evita jobs que solo verifican rol primario y salen)
         $query = @"
--- TODOS los IntegrityCheck con su última ejecución REAL (todos los pasos OK)
-WITH JobExecutions AS (
-    -- Obtener todas las ejecuciones del job (step_id = 0 es el resumen)
+-- TODOS los IntegrityCheck con su última ejecución
+-- Incluye jobs SIN historial pero CON datos en sysjobservers
+WITH JobsWithHistory AS (
+    -- Jobs que tienen historial en sysjobhistory
     SELECT 
         j.job_id,
         j.name AS JobName,
@@ -116,11 +117,47 @@ WITH JobExecutions AS (
          WHERE jh2.job_id = j.job_id 
            AND jh2.run_date = jh.run_date 
            AND jh2.step_id > 0 
-           AND jh2.run_status <> 1) AS FailedSteps
+           AND jh2.run_status <> 1) AS FailedSteps,
+        1 AS HasHistory
     FROM msdb.dbo.sysjobs j
     INNER JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
     WHERE j.name LIKE '%IntegrityCheck%'
       AND j.name NOT LIKE '%STOP%'
+),
+JobsWithoutHistory AS (
+    -- Jobs SIN historial pero CON datos en sysjobservers (última ejecución)
+    SELECT 
+        j.job_id,
+        j.name AS JobName,
+        js.last_run_date AS run_date,
+        js.last_run_time AS run_time,
+        js.last_run_duration AS run_duration,
+        js.last_run_outcome AS run_status,
+        -- Calcular tiempo de finalización desde sysjobservers
+        CASE WHEN js.last_run_date > 0 THEN
+            DATEADD(SECOND, 
+                (js.last_run_duration / 10000) * 3600 + ((js.last_run_duration / 100) % 100) * 60 + (js.last_run_duration % 100),
+                CAST(CAST(js.last_run_date AS VARCHAR) + ' ' + 
+                     STUFF(STUFF(RIGHT('000000' + CAST(js.last_run_time AS VARCHAR), 6), 5, 0, ':'), 3, 0, ':') 
+                     AS DATETIME)
+            )
+        ELSE NULL END AS FinishTime,
+        -- Sin historial, asumimos que ejecutó al menos 2 pasos si terminó OK
+        CASE WHEN js.last_run_outcome = 1 THEN 2 ELSE 1 END AS TotalSteps,
+        CASE WHEN js.last_run_outcome = 1 THEN 2 ELSE 0 END AS SuccessfulSteps,
+        CASE WHEN js.last_run_outcome = 1 THEN 0 ELSE 1 END AS FailedSteps,
+        0 AS HasHistory
+    FROM msdb.dbo.sysjobs j
+    INNER JOIN msdb.dbo.sysjobservers js ON j.job_id = js.job_id
+    WHERE j.name LIKE '%IntegrityCheck%'
+      AND j.name NOT LIKE '%STOP%'
+      AND js.last_run_date > 0  -- Tiene datos de última ejecución
+      AND NOT EXISTS (SELECT 1 FROM msdb.dbo.sysjobhistory jh WHERE jh.job_id = j.job_id AND jh.step_id = 0)
+),
+AllJobExecutions AS (
+    SELECT * FROM JobsWithHistory
+    UNION ALL
+    SELECT * FROM JobsWithoutHistory
 ),
 RankedExecutions AS (
     SELECT 
@@ -134,6 +171,7 @@ RankedExecutions AS (
         TotalSteps,
         SuccessfulSteps,
         FailedSteps,
+        HasHistory,
         -- Un job es realmente exitoso si:
         -- 1. El job terminó exitoso (run_status = 1)
         -- 2. Todos los pasos fueron exitosos (FailedSteps = 0)
@@ -143,7 +181,7 @@ RankedExecutions AS (
               AND TotalSteps >= 1
              THEN 1 ELSE 0 END AS IsRealSuccess,
         ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY FinishTime DESC) AS rn
-    FROM JobExecutions
+    FROM AllJobExecutions
 ),
 LastJobRuns AS (
     SELECT 
@@ -161,7 +199,8 @@ LastJobRuns AS (
         r.TotalSteps,
         r.SuccessfulSteps,
         r.FailedSteps,
-        r.IsRealSuccess
+        r.IsRealSuccess,
+        r.HasHistory
     FROM RankedExecutions r
     LEFT JOIN msdb.dbo.sysjobservers js ON r.job_id = js.job_id
     WHERE r.rn = 1
@@ -171,18 +210,20 @@ SELECT
     COALESCE(HistoryRunDate, ServerRunDate) AS LastRunDate,
     COALESCE(HistoryRunTime, ServerRunTime) AS LastRunTime,
     COALESCE(HistoryRunDuration, ServerRunDuration) AS LastRunDuration,
-    -- Mantener el status original para mostrar, pero agregar IsRealSuccess para validación
     COALESCE(HistoryRunStatus, ServerRunOutcome) AS LastRunStatus,
     HistoryFinishTime AS LastFinishTime,
     TotalSteps,
     SuccessfulSteps,
     FailedSteps,
-    IsRealSuccess
+    IsRealSuccess,
+    HasHistory
 FROM LastJobRuns;
 
 -- ===SPLIT_INDEXOPTIMIZE===
--- TODOS los IndexOptimize con su última ejecución REAL (todos los pasos OK)
-WITH JobExecutions AS (
+-- TODOS los IndexOptimize con su última ejecución
+-- Incluye jobs SIN historial pero CON datos en sysjobservers
+WITH JobsWithHistory AS (
+    -- Jobs que tienen historial en sysjobhistory
     SELECT 
         j.job_id,
         j.name AS JobName,
@@ -212,11 +253,46 @@ WITH JobExecutions AS (
          WHERE jh2.job_id = j.job_id 
            AND jh2.run_date = jh.run_date 
            AND jh2.step_id > 0 
-           AND jh2.run_status <> 1) AS FailedSteps
+           AND jh2.run_status <> 1) AS FailedSteps,
+        1 AS HasHistory
     FROM msdb.dbo.sysjobs j
     INNER JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
     WHERE j.name LIKE '%IndexOptimize%'
       AND j.name NOT LIKE '%STOP%'
+),
+JobsWithoutHistory AS (
+    -- Jobs SIN historial pero CON datos en sysjobservers (última ejecución)
+    SELECT 
+        j.job_id,
+        j.name AS JobName,
+        js.last_run_date AS run_date,
+        js.last_run_time AS run_time,
+        js.last_run_duration AS run_duration,
+        js.last_run_outcome AS run_status,
+        CASE WHEN js.last_run_date > 0 THEN
+            DATEADD(SECOND, 
+                (js.last_run_duration / 10000) * 3600 + ((js.last_run_duration / 100) % 100) * 60 + (js.last_run_duration % 100),
+                CAST(CAST(js.last_run_date AS VARCHAR) + ' ' + 
+                     STUFF(STUFF(RIGHT('000000' + CAST(js.last_run_time AS VARCHAR), 6), 5, 0, ':'), 3, 0, ':') 
+                     AS DATETIME)
+            )
+        ELSE NULL END AS FinishTime,
+        -- Sin historial, asumimos que ejecutó al menos 2 pasos si terminó OK
+        CASE WHEN js.last_run_outcome = 1 THEN 2 ELSE 1 END AS TotalSteps,
+        CASE WHEN js.last_run_outcome = 1 THEN 2 ELSE 0 END AS SuccessfulSteps,
+        CASE WHEN js.last_run_outcome = 1 THEN 0 ELSE 1 END AS FailedSteps,
+        0 AS HasHistory
+    FROM msdb.dbo.sysjobs j
+    INNER JOIN msdb.dbo.sysjobservers js ON j.job_id = js.job_id
+    WHERE j.name LIKE '%IndexOptimize%'
+      AND j.name NOT LIKE '%STOP%'
+      AND js.last_run_date > 0  -- Tiene datos de última ejecución
+      AND NOT EXISTS (SELECT 1 FROM msdb.dbo.sysjobhistory jh WHERE jh.job_id = j.job_id AND jh.step_id = 0)
+),
+AllJobExecutions AS (
+    SELECT * FROM JobsWithHistory
+    UNION ALL
+    SELECT * FROM JobsWithoutHistory
 ),
 RankedExecutions AS (
     SELECT 
@@ -230,12 +306,13 @@ RankedExecutions AS (
         TotalSteps,
         SuccessfulSteps,
         FailedSteps,
+        HasHistory,
         CASE WHEN run_status = 1 
               AND FailedSteps = 0 
               AND TotalSteps >= 1
              THEN 1 ELSE 0 END AS IsRealSuccess,
         ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY FinishTime DESC) AS rn
-    FROM JobExecutions
+    FROM AllJobExecutions
 ),
 LastJobRuns AS (
     SELECT 
@@ -253,7 +330,8 @@ LastJobRuns AS (
         r.TotalSteps,
         r.SuccessfulSteps,
         r.FailedSteps,
-        r.IsRealSuccess
+        r.IsRealSuccess,
+        r.HasHistory
     FROM RankedExecutions r
     LEFT JOIN msdb.dbo.sysjobservers js ON r.job_id = js.job_id
     WHERE r.rn = 1
@@ -268,7 +346,8 @@ SELECT
     TotalSteps,
     SuccessfulSteps,
     FailedSteps,
-    IsRealSuccess
+    IsRealSuccess,
+    HasHistory
 FROM LastJobRuns;
 "@
         
