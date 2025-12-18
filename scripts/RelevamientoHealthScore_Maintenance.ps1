@@ -671,70 +671,55 @@ function Sync-AlwaysOnMaintenance {
             $allIndexOptimizeJobs += $nodeResult.IndexOptimizeJobs
         }
         
-        # === ENCONTRAR EL MEJOR CHECKDB (CON VALIDACIÓN DE TODOS LOS PASOS) ===
-        # Ahora usa IsRealSuccess que valida que TODOS los pasos del job estén OK
-        $allCheckdbOk = $true
+        # === ENCONTRAR EL MEJOR CHECKDB PARA EL AG ===
+        # En un AG, el mantenimiento solo se ejecuta en el primario.
+        # Lógica: Si ALGÚN nodo tiene un job exitoso reciente, el AG está OK.
+        # Buscamos el job EXITOSO más reciente entre todos los nodos.
+        $allCheckdbOk = $false  # Asumimos false hasta encontrar uno exitoso
         $bestCheckdb = $null
         $cutoffDate = (Get-Date).AddDays(-7)
         
         if ($allCheckdbJobs.Count -gt 0) {
-            # Agrupar jobs por nombre (para evaluar cada tipo de job independientemente)
-            $checkdbByName = $allCheckdbJobs | Group-Object -Property JobName
+            # Filtrar solo jobs exitosos
+            $successfulCheckdbJobs = $allCheckdbJobs | Where-Object { $_.IsSuccess -eq $true }
             
-            foreach ($jobGroup in $checkdbByName) {
-                # Encontrar el más reciente de este tipo de job
-                # Ordenar por tiempo de finalización DESC, luego por IsSuccess (éxito primero)
-                $mostRecentJob = $jobGroup.Group | Sort-Object `
-                    @{Expression={$_.LastRun}; Descending=$true}, `
-                    @{Expression={
-                        if ($_.IsSuccess -eq $true) { 0 }
-                        else { 1 }
-                    }; Descending=$false} | Select-Object -First 1
+            if ($successfulCheckdbJobs.Count -gt 0) {
+                # Encontrar el más reciente EXITOSO
+                $mostRecentSuccessful = $successfulCheckdbJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
                 
-                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
-                if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
-                    $allCheckdbOk = $false
-                }
-                
-                # Actualizar el más reciente global (solo si fue éxito)
-                if ($mostRecentJob.IsSuccess -and $mostRecentJob.LastRun -and (-not $bestCheckdb -or $mostRecentJob.LastRun -gt $bestCheckdb)) {
-                    $bestCheckdb = $mostRecentJob.LastRun
+                if ($mostRecentSuccessful.LastRun -and $mostRecentSuccessful.LastRun -ge $cutoffDate) {
+                    $allCheckdbOk = $true
+                    $bestCheckdb = $mostRecentSuccessful.LastRun
+                } else {
+                    # El más reciente exitoso está vencido
+                    $bestCheckdb = $mostRecentSuccessful.LastRun
                 }
             }
-        } else {
-            $allCheckdbOk = $false
+            # Si no hay exitosos, bestCheckdb queda null y allCheckdbOk queda false
         }
         
-        # === ENCONTRAR EL MEJOR INDEX OPTIMIZE (CON VALIDACIÓN DE TODOS LOS PASOS) ===
-        $allIndexOptimizeOk = $true
+        # === ENCONTRAR EL MEJOR INDEX OPTIMIZE PARA EL AG ===
+        # Misma lógica: Si ALGÚN nodo tiene un job exitoso reciente, el AG está OK.
+        $allIndexOptimizeOk = $false
         $bestIndexOptimize = $null
         
         if ($allIndexOptimizeJobs.Count -gt 0) {
-            # Agrupar jobs por nombre (para evaluar cada tipo de job independientemente)
-            $indexOptByName = $allIndexOptimizeJobs | Group-Object -Property JobName
+            # Filtrar solo jobs exitosos
+            $successfulIndexOptJobs = $allIndexOptimizeJobs | Where-Object { $_.IsSuccess -eq $true }
             
-            foreach ($jobGroup in $indexOptByName) {
-                # Encontrar el más reciente de este tipo de job
-                # Ordenar por tiempo de finalización DESC, luego por IsSuccess
-                $mostRecentJob = $jobGroup.Group | Sort-Object `
-                    @{Expression={$_.LastRun}; Descending=$true}, `
-                    @{Expression={
-                        if ($_.IsSuccess -eq $true) { 0 }
-                        else { 1 }
-                    }; Descending=$false} | Select-Object -First 1
+            if ($successfulIndexOptJobs.Count -gt 0) {
+                # Encontrar el más reciente EXITOSO
+                $mostRecentSuccessful = $successfulIndexOptJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
                 
-                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
-                if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
-                    $allIndexOptimizeOk = $false
-                }
-                
-                # Actualizar el más reciente global (solo si fue éxito)
-                if ($mostRecentJob.IsSuccess -and $mostRecentJob.LastRun -and (-not $bestIndexOptimize -or $mostRecentJob.LastRun -gt $bestIndexOptimize)) {
-                    $bestIndexOptimize = $mostRecentJob.LastRun
+                if ($mostRecentSuccessful.LastRun -and $mostRecentSuccessful.LastRun -ge $cutoffDate) {
+                    $allIndexOptimizeOk = $true
+                    $bestIndexOptimize = $mostRecentSuccessful.LastRun
+                } else {
+                    # El más reciente exitoso está vencido
+                    $bestIndexOptimize = $mostRecentSuccessful.LastRun
                 }
             }
-        } else {
-            $allIndexOptimizeOk = $false
+            # Si no hay exitosos, bestIndexOptimize queda null y allIndexOptimizeOk queda false
         }
         
         Write-Host "    🔄 Mejor CHECKDB: $bestCheckdb (OK: $allCheckdbOk)" -ForegroundColor Gray
