@@ -671,55 +671,64 @@ function Sync-AlwaysOnMaintenance {
             $allIndexOptimizeJobs += $nodeResult.IndexOptimizeJobs
         }
         
-        # === ENCONTRAR EL MEJOR CHECKDB PARA EL AG ===
+        # === ENCONTRAR EL RESULTADO REAL DE CHECKDB PARA EL AG ===
         # En un AG, el mantenimiento solo se ejecuta en el primario.
-        # Lógica: Si ALGÚN nodo tiene un job exitoso reciente, el AG está OK.
-        # Buscamos el job EXITOSO más reciente entre todos los nodos.
-        $allCheckdbOk = $false  # Asumimos false hasta encontrar uno exitoso
+        # Lógica: 
+        #   1. Filtrar jobs que ejecutaron TODOS los pasos (TotalSteps > 1)
+        #      - Jobs con TotalSteps = 1 solo verificaron rol primario y salieron
+        #   2. De esos, tomar el MÁS RECIENTE (sin importar si fue exitoso o fallido)
+        #   3. Ese es el resultado REAL del AG
+        $allCheckdbOk = $false
         $bestCheckdb = $null
         $cutoffDate = (Get-Date).AddDays(-7)
         
         if ($allCheckdbJobs.Count -gt 0) {
-            # Filtrar solo jobs exitosos
-            $successfulCheckdbJobs = $allCheckdbJobs | Where-Object { $_.IsSuccess -eq $true }
+            # Filtrar jobs que ejecutaron más de 1 paso (mantenimiento real, no solo verificación de rol)
+            $realCheckdbJobs = $allCheckdbJobs | Where-Object { $_.TotalSteps -gt 1 }
             
-            if ($successfulCheckdbJobs.Count -gt 0) {
-                # Encontrar el más reciente EXITOSO
-                $mostRecentSuccessful = $successfulCheckdbJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
+            if ($realCheckdbJobs.Count -gt 0) {
+                # Tomar el más reciente (sin importar si fue exitoso o fallido)
+                $mostRecentReal = $realCheckdbJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
                 
-                if ($mostRecentSuccessful.LastRun -and $mostRecentSuccessful.LastRun -ge $cutoffDate) {
-                    $allCheckdbOk = $true
-                    $bestCheckdb = $mostRecentSuccessful.LastRun
-                } else {
-                    # El más reciente exitoso está vencido
-                    $bestCheckdb = $mostRecentSuccessful.LastRun
+                $bestCheckdb = $mostRecentReal.LastRun
+                # El AG está OK si el más reciente que ejecutó todos los pasos fue exitoso Y está dentro de 7 días
+                $allCheckdbOk = ($mostRecentReal.IsSuccess -eq $true) -and ($mostRecentReal.LastRun -ge $cutoffDate)
+            }
+            # Si no hay jobs con mantenimiento real, buscar en todos (fallback)
+            else {
+                $mostRecent = $allCheckdbJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
+                if ($mostRecent.LastRun) {
+                    $bestCheckdb = $mostRecent.LastRun
+                    $allCheckdbOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.LastRun -ge $cutoffDate)
                 }
             }
-            # Si no hay exitosos, bestCheckdb queda null y allCheckdbOk queda false
         }
         
-        # === ENCONTRAR EL MEJOR INDEX OPTIMIZE PARA EL AG ===
-        # Misma lógica: Si ALGÚN nodo tiene un job exitoso reciente, el AG está OK.
+        # === ENCONTRAR EL RESULTADO REAL DE INDEX OPTIMIZE PARA EL AG ===
+        # Misma lógica: jobs con TotalSteps > 1 son los que ejecutaron mantenimiento real
         $allIndexOptimizeOk = $false
         $bestIndexOptimize = $null
         
         if ($allIndexOptimizeJobs.Count -gt 0) {
-            # Filtrar solo jobs exitosos
-            $successfulIndexOptJobs = $allIndexOptimizeJobs | Where-Object { $_.IsSuccess -eq $true }
+            # Filtrar jobs que ejecutaron más de 1 paso (mantenimiento real)
+            $realIndexOptJobs = $allIndexOptimizeJobs | Where-Object { $_.TotalSteps -gt 1 }
             
-            if ($successfulIndexOptJobs.Count -gt 0) {
-                # Encontrar el más reciente EXITOSO
-                $mostRecentSuccessful = $successfulIndexOptJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
+            if ($realIndexOptJobs.Count -gt 0) {
+                # Tomar el más reciente (sin importar si fue exitoso o fallido)
+                $mostRecentReal = $realIndexOptJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
                 
-                if ($mostRecentSuccessful.LastRun -and $mostRecentSuccessful.LastRun -ge $cutoffDate) {
-                    $allIndexOptimizeOk = $true
-                    $bestIndexOptimize = $mostRecentSuccessful.LastRun
-                } else {
-                    # El más reciente exitoso está vencido
-                    $bestIndexOptimize = $mostRecentSuccessful.LastRun
+                $bestIndexOptimize = $mostRecentReal.LastRun
+                # El AG está OK si el más reciente que ejecutó todos los pasos fue exitoso Y está dentro de 7 días
+                $allIndexOptimizeOk = ($mostRecentReal.IsSuccess -eq $true) -and ($mostRecentReal.LastRun -ge $cutoffDate)
+            }
+            # Fallback si no hay jobs con mantenimiento real
+            else {
+                $mostRecent = $allIndexOptimizeJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
+                if ($mostRecent.LastRun) {
+                    $bestIndexOptimize = $mostRecent.LastRun
+                    $allIndexOptimizeOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.LastRun -ge $cutoffDate)
                 }
             }
-            # Si no hay exitosos, bestIndexOptimize queda null y allIndexOptimizeOk queda false
         }
         
         Write-Host "    🔄 Mejor CHECKDB: $bestCheckdb (OK: $allCheckdbOk)" -ForegroundColor Gray
