@@ -273,7 +273,7 @@ FROM LastJobRuns;
         
         # dbatools NO devuelve múltiples resultsets correctamente, ejecutar queries por separado
         # Ejecutar query CHECKDB con retry
-        $checkdbQuery = ($query -split '; -- TODOS los IndexOptimize')[0]
+        $checkdbQuery = ($query -split '-- TODOS los IndexOptimize con su última ejecución REAL')[0]
         $checkdbJobs = $null
         $attemptCount = 0
         $lastError = $null
@@ -316,7 +316,7 @@ FROM LastJobRuns;
         }
         
         # Ejecutar query IndexOptimize con retry
-        $indexOptQuery = ($query -split '-- TODOS los IndexOptimize con su última ejecución \(excluir STOP\)')[1]
+        $indexOptQuery = ($query -split '-- TODOS los IndexOptimize con su última ejecución REAL')[1]
         $indexOptJobs = $null
         $attemptCount = 0
         $lastError = $null
