@@ -54,12 +54,24 @@ public class ServerRestartService : IServerRestartService
     }
 
     /// <summary>
-    /// Obtiene la lista de servidores disponibles desde el inventario
+    /// Obtiene la lista de servidores disponibles para reinicio.
+    /// Solo devuelve servidores que estén configurados en OperationalServers con EnabledForRestart = true.
+    /// Si no hay servidores configurados, devuelve todos los del inventario (comportamiento legacy).
+    /// Incluye tanto servidores del inventario como servidores agregados manualmente.
     /// </summary>
     public async Task<List<RestartableServerDto>> GetAvailableServersAsync()
     {
         try
         {
+            // Obtener servidores configurados en OperationalServers habilitados para reinicio
+            var operationalServers = await _context.OperationalServers
+                .Where(s => s.Enabled && s.EnabledForRestart)
+                .ToListAsync();
+
+            var hasOperationalServersConfigured = operationalServers.Any();
+            var enabledServerNames = operationalServers.Select(s => s.ServerName.ToLower()).ToHashSet();
+
+            // Obtener inventario
             var response = await _httpClient.GetAsync(INVENTORY_URL);
             response.EnsureSuccessStatusCode();
             
@@ -67,41 +79,98 @@ public class ServerRestartService : IServerRestartService
             var inventory = JsonSerializer.Deserialize<List<InventoryServerDto>>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
-            });
-
-            if (inventory == null)
-                return new List<RestartableServerDto>();
+            }) ?? new List<InventoryServerDto>();
 
             // Obtener estados de conexión de ProductionInstanceStatus
             var connectionStatuses = await _context.ProductionInstanceStatuses
                 .ToDictionaryAsync(s => s.InstanceName, s => s);
 
-            return inventory
-                .Where(s => !string.IsNullOrEmpty(s.ServerName))
-                // Excluir servidores de AWS
-                .Where(s => !s.hostingSite.Equals("AWS", StringComparison.OrdinalIgnoreCase))
-                // Excluir servidores con DMZ en el nombre
-                .Where(s => !s.ServerName.Contains("DMZ", StringComparison.OrdinalIgnoreCase) &&
-                           !s.NombreInstancia.Contains("DMZ", StringComparison.OrdinalIgnoreCase))
-                .Select(s => new RestartableServerDto
+            var result = new List<RestartableServerDto>();
+
+            if (hasOperationalServersConfigured)
+            {
+                _logger.LogDebug("Filtrando servidores por OperationalServers: {Count} habilitados", operationalServers.Count);
+
+                // Crear un diccionario del inventario para búsqueda rápida
+                var inventoryDict = inventory
+                    .Where(s => !string.IsNullOrEmpty(s.ServerName))
+                    .GroupBy(s => s.ServerName.ToLower())
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                foreach (var opServer in operationalServers)
                 {
-                    ServerName = s.ServerName,
-                    InstanceName = s.NombreInstancia,
-                    Ambiente = s.ambiente,
-                    HostingSite = s.hostingSite,
-                    HostingType = s.hostingType,
-                    MajorVersion = s.MajorVersion,
-                    Edition = s.Edition,
-                    IsAlwaysOn = !string.IsNullOrEmpty(s.AlwaysOn) && 
-                                 s.AlwaysOn.Equals("Enabled", StringComparison.OrdinalIgnoreCase),
-                    IsStandalone = string.IsNullOrEmpty(s.AlwaysOn) || 
-                                   s.AlwaysOn.Equals("Disabled", StringComparison.OrdinalIgnoreCase),
-                    // Si hay datos de monitoreo, usar ese estado; si no, asumir conectado (está en inventario activo)
-                    IsConnected = !connectionStatuses.TryGetValue(s.NombreInstancia, out var status) || status.IsConnected,
-                    LastCheckedAt = connectionStatuses.TryGetValue(s.NombreInstancia, out var st) ? st.LastCheckedAt : null
-                })
-                .OrderBy(s => s.ServerName)
-                .ToList();
+                    var serverNameLower = opServer.ServerName.ToLower();
+                    
+                    // Buscar en el inventario
+                    if (inventoryDict.TryGetValue(serverNameLower, out var invServer))
+                    {
+                        // Servidor existe en el inventario - usar datos del inventario
+                        result.Add(new RestartableServerDto
+                        {
+                            ServerName = invServer.ServerName,
+                            InstanceName = invServer.NombreInstancia,
+                            Ambiente = invServer.ambiente,
+                            HostingSite = invServer.hostingSite,
+                            HostingType = invServer.hostingType,
+                            MajorVersion = invServer.MajorVersion,
+                            Edition = invServer.Edition,
+                            IsAlwaysOn = !string.IsNullOrEmpty(invServer.AlwaysOn) && 
+                                         invServer.AlwaysOn.Equals("Enabled", StringComparison.OrdinalIgnoreCase),
+                            IsStandalone = string.IsNullOrEmpty(invServer.AlwaysOn) || 
+                                           invServer.AlwaysOn.Equals("Disabled", StringComparison.OrdinalIgnoreCase),
+                            IsConnected = !connectionStatuses.TryGetValue(invServer.NombreInstancia, out var status) || status.IsConnected,
+                            LastCheckedAt = connectionStatuses.TryGetValue(invServer.NombreInstancia, out var st) ? st.LastCheckedAt : null
+                        });
+                    }
+                    else
+                    {
+                        // Servidor manual (no está en inventario) - usar datos de OperationalServers
+                        result.Add(new RestartableServerDto
+                        {
+                            ServerName = opServer.ServerName,
+                            InstanceName = opServer.InstanceName ?? opServer.ServerName,
+                            Ambiente = opServer.Ambiente,
+                            HostingSite = "Manual",
+                            HostingType = "Manual",
+                            MajorVersion = null,
+                            Edition = null,
+                            IsAlwaysOn = false,
+                            IsStandalone = true,
+                            // Para servidores manuales, verificar si hay estado de conexión, si no asumir conectado
+                            IsConnected = !connectionStatuses.TryGetValue(opServer.InstanceName ?? opServer.ServerName, out var status) || status.IsConnected,
+                            LastCheckedAt = connectionStatuses.TryGetValue(opServer.InstanceName ?? opServer.ServerName, out var st) ? st.LastCheckedAt : null
+                        });
+                    }
+                }
+            }
+            else
+            {
+                // Comportamiento legacy: mostrar todos los del inventario
+                result = inventory
+                    .Where(s => !string.IsNullOrEmpty(s.ServerName))
+                    .Where(s => !s.hostingSite.Equals("AWS", StringComparison.OrdinalIgnoreCase))
+                    .Where(s => !s.ServerName.Contains("DMZ", StringComparison.OrdinalIgnoreCase) &&
+                               !s.NombreInstancia.Contains("DMZ", StringComparison.OrdinalIgnoreCase))
+                    .Select(s => new RestartableServerDto
+                    {
+                        ServerName = s.ServerName,
+                        InstanceName = s.NombreInstancia,
+                        Ambiente = s.ambiente,
+                        HostingSite = s.hostingSite,
+                        HostingType = s.hostingType,
+                        MajorVersion = s.MajorVersion,
+                        Edition = s.Edition,
+                        IsAlwaysOn = !string.IsNullOrEmpty(s.AlwaysOn) && 
+                                     s.AlwaysOn.Equals("Enabled", StringComparison.OrdinalIgnoreCase),
+                        IsStandalone = string.IsNullOrEmpty(s.AlwaysOn) || 
+                                       s.AlwaysOn.Equals("Disabled", StringComparison.OrdinalIgnoreCase),
+                        IsConnected = !connectionStatuses.TryGetValue(s.NombreInstancia, out var status) || status.IsConnected,
+                        LastCheckedAt = connectionStatuses.TryGetValue(s.NombreInstancia, out var st) ? st.LastCheckedAt : null
+                    })
+                    .ToList();
+            }
+
+            return result.OrderBy(s => s.ServerName).ToList();
         }
         catch (Exception ex)
         {

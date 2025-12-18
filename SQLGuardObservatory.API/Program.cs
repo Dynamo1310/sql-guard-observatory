@@ -168,6 +168,9 @@ builder.Services.AddHostedService<ProductionAlertBackgroundService>();
 // Server Restart Service - Reinicio de servidores SQL
 builder.Services.AddScoped<IServerRestartService, ServerRestartService>();
 
+// Index Analysis Service - Análisis exhaustivo de índices
+builder.Services.AddScoped<IIndexAnalysisService, IndexAnalysisService>();
+
 // Configurar CORS
 builder.Services.AddCors(options =>
 {

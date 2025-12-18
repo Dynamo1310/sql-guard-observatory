@@ -60,6 +60,7 @@ export interface LoginResponse {
   email?: string;
   allowed: boolean;
   roles: string[];
+  isOnCallEscalation: boolean;
 }
 
 export interface UserDto {
@@ -137,6 +138,7 @@ export const authApi = {
         displayName: data.displayName,
         email: data.email,
         roles: data.roles,
+        isOnCallEscalation: data.isOnCallEscalation,
       }));
     }
     
@@ -159,6 +161,7 @@ export const authApi = {
         displayName: data.displayName,
         email: data.email,
         roles: data.roles,
+        isOnCallEscalation: data.isOnCallEscalation,
       }));
     }
     
@@ -2084,6 +2087,487 @@ export const serverRestartApi = {
       headers: { ...getAuthHeader() },
     });
     return handleResponse<RestartStatusResponse>(response);
+  },
+};
+
+// ==================== OPERATIONAL SERVERS API ====================
+
+export interface OperationalServerDto {
+  id: number;
+  serverName: string;
+  instanceName?: string;
+  description?: string;
+  ambiente?: string;
+  isFromInventory: boolean;
+  enabled: boolean;
+  enabledForRestart: boolean;
+  enabledForFailover: boolean;
+  enabledForPatching: boolean;
+  createdAt: string;
+  createdByUserName?: string;
+  updatedAt?: string;
+  updatedByUserName?: string;
+  notes?: string;
+}
+
+export interface CreateOperationalServerRequest {
+  serverName: string;
+  instanceName?: string;
+  description?: string;
+  ambiente?: string;
+  isFromInventory?: boolean;
+  enabledForRestart?: boolean;
+  enabledForFailover?: boolean;
+  enabledForPatching?: boolean;
+  notes?: string;
+}
+
+export interface UpdateOperationalServerRequest {
+  description?: string;
+  ambiente?: string;
+  enabled: boolean;
+  enabledForRestart: boolean;
+  enabledForFailover: boolean;
+  enabledForPatching: boolean;
+  notes?: string;
+}
+
+export interface ImportServersFromInventoryRequest {
+  serverNames: string[];
+}
+
+export interface ImportServersResponse {
+  success: boolean;
+  message: string;
+  importedCount: number;
+  skippedCount: number;
+  errors: string[];
+}
+
+export interface InventoryServerInfoDto {
+  serverName: string;
+  instanceName?: string;
+  ambiente?: string;
+  majorVersion?: string;
+  edition?: string;
+  isAlwaysOn: boolean;
+  alreadyAdded: boolean;
+}
+
+export interface OperationalServerAuditDto {
+  id: number;
+  operationalServerId: number;
+  serverName: string;
+  action: string;
+  changedAt: string;
+  changedByUserName?: string;
+  oldValues?: string;
+  newValues?: string;
+}
+
+export const operationalServersApi = {
+  async getServers(): Promise<OperationalServerDto[]> {
+    const response = await fetch(`${API_URL}/api/operationalservers`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OperationalServerDto[]>(response);
+  },
+
+  async getServer(id: number): Promise<OperationalServerDto> {
+    const response = await fetch(`${API_URL}/api/operationalservers/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OperationalServerDto>(response);
+  },
+
+  async getInventoryServers(): Promise<InventoryServerInfoDto[]> {
+    const response = await fetch(`${API_URL}/api/operationalservers/inventory`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<InventoryServerInfoDto[]>(response);
+  },
+
+  async createServer(request: CreateOperationalServerRequest): Promise<OperationalServerDto> {
+    const response = await fetch(`${API_URL}/api/operationalservers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<OperationalServerDto>(response);
+  },
+
+  async importFromInventory(request: ImportServersFromInventoryRequest): Promise<ImportServersResponse> {
+    const response = await fetch(`${API_URL}/api/operationalservers/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<ImportServersResponse>(response);
+  },
+
+  async updateServer(id: number, request: UpdateOperationalServerRequest): Promise<OperationalServerDto> {
+    const response = await fetch(`${API_URL}/api/operationalservers/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<OperationalServerDto>(response);
+  },
+
+  async toggleServer(id: number): Promise<{ enabled: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/operationalservers/${id}/toggle`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ enabled: boolean; message: string }>(response);
+  },
+
+  async deleteServer(id: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/operationalservers/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async getAuditHistory(limit: number = 100): Promise<OperationalServerAuditDto[]> {
+    const response = await fetch(`${API_URL}/api/operationalservers/audit?limit=${limit}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OperationalServerAuditDto[]>(response);
+  },
+
+  async checkPermission(): Promise<{ hasPermission: boolean }> {
+    const response = await fetch(`${API_URL}/api/operationalservers/check-permission`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ hasPermission: boolean }>(response);
+  },
+};
+
+// ==================== INDEX ANALYSIS API ====================
+
+export interface IndexAnalysisInstanceDto {
+  instanceName: string;
+  serverName: string;
+  ambiente: string;
+  hostingSite: string;
+  majorVersion?: string;
+  edition?: string;
+}
+
+export interface DatabaseInfoDto {
+  databaseId: number;
+  databaseName: string;
+  state: string;
+  recoveryModel: string;
+  sizeMB: number;
+}
+
+export interface FragmentedIndexDto {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  indexType: string;
+  fragmentationPct: number;
+  pageCount: number;
+  sizeMB: number;
+  suggestion: string;
+  isDisabled: boolean;
+  isPrimaryKey: boolean;
+  isUnique: boolean;
+  fillFactor: number;
+  rebuildScript?: string;
+  reorganizeScript?: string;
+}
+
+export interface UnusedIndexDto {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  indexType: string;
+  userSeeks: number;
+  userScans: number;
+  userLookups: number;
+  userUpdates: number;
+  lastUserSeek?: string;
+  lastUserScan?: string;
+  lastUserLookup?: string;
+  lastUserUpdate?: string;
+  sizeMB: number;
+  pageCount: number;
+  isPrimaryKey: boolean;
+  isUnique: boolean;
+  isDisabled: boolean;
+  columns: string;
+  includedColumns?: string;
+  dropScript?: string;
+  severity: string;
+}
+
+export interface DuplicateIndexDto {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  duplicateOfIndex: string;
+  indexType: string;
+  keyColumns: string;
+  includedColumns?: string;
+  sizeMB: number;
+  pageCount: number;
+  isPrimaryKey: boolean;
+  isUnique: boolean;
+  duplicateType: string;
+  dropScript?: string;
+}
+
+export interface MissingIndexDto {
+  schemaName: string;
+  tableName: string;
+  equalityColumns: string;
+  inequalityColumns?: string;
+  includedColumns?: string;
+  improvementMeasure: number;
+  userSeeks: number;
+  userScans: number;
+  avgTotalUserCost: number;
+  avgUserImpact: number;
+  lastUserSeek?: string;
+  lastUserScan?: string;
+  createScript?: string;
+  severity: string;
+}
+
+export interface DisabledIndexDto {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  indexType: string;
+  isPrimaryKey: boolean;
+  isUnique: boolean;
+  keyColumns: string;
+  includedColumns?: string;
+  createDate?: string;
+  modifyDate?: string;
+  rebuildScript?: string;
+}
+
+export interface OverlappingIndexDto {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  overlappedByIndex: string;
+  indexType: string;
+  keyColumns: string;
+  includedColumns?: string;
+  overlappingKeyColumns: string;
+  overlappingIncludedColumns?: string;
+  sizeMB: number;
+  pageCount: number;
+  userSeeks: number;
+  userScans: number;
+  userUpdates: number;
+  overlapType: string;
+  dropScript?: string;
+}
+
+export interface BadIndexDto {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  indexType: string;
+  keyColumns: string;
+  includedColumns?: string;
+  keyColumnCount: number;
+  includedColumnCount: number;
+  totalColumnCount: number;
+  keySizeBytes: number;
+  sizeMB: number;
+  problem: string;
+  severity: string;
+  recommendation: string;
+}
+
+export interface IndexAnalysisSummaryDto {
+  instanceName: string;
+  databaseName: string;
+  analyzedAt: string;
+  totalIndexes: number;
+  fragmentedCount: number;
+  unusedCount: number;
+  duplicateCount: number;
+  missingCount: number;
+  disabledCount: number;
+  overlappingCount: number;
+  badIndexCount: number;
+  totalIndexSizeMB: number;
+  wastedSpaceMB: number;
+  potentialSavingsMB: number;
+  healthScore: number;
+  healthStatus: string;
+  topRecommendations: string[];
+}
+
+export interface FullIndexAnalysisDto {
+  summary: IndexAnalysisSummaryDto;
+  fragmentedIndexes: FragmentedIndexDto[];
+  unusedIndexes: UnusedIndexDto[];
+  duplicateIndexes: DuplicateIndexDto[];
+  missingIndexes: MissingIndexDto[];
+  disabledIndexes: DisabledIndexDto[];
+  overlappingIndexes: OverlappingIndexDto[];
+  badIndexes: BadIndexDto[];
+}
+
+export interface IndexAnalysisRequestDto {
+  instanceName: string;
+  databaseName: string;
+  minPageCount?: number;
+  minFragmentationPct?: number;
+  includeSystemDatabases?: boolean;
+  includeHeaps?: boolean;
+  generateScripts?: boolean;
+}
+
+export const indexAnalysisApi = {
+  // Obtener instancias filtradas del inventario
+  async getInstances(): Promise<IndexAnalysisInstanceDto[]> {
+    const response = await fetch(`${API_URL}/api/index-analysis/instances`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<IndexAnalysisInstanceDto[]>(response);
+  },
+
+  // Obtener bases de datos de una instancia
+  async getDatabases(instanceName: string): Promise<DatabaseInfoDto[]> {
+    const response = await fetch(`${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/databases`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DatabaseInfoDto[]>(response);
+  },
+
+  // Probar conexión a una instancia
+  async testConnection(instanceName: string): Promise<{ instanceName: string; isConnected: boolean; error?: string }> {
+    const response = await fetch(`${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/test-connection`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ instanceName: string; isConnected: boolean; error?: string }>(response);
+  },
+
+  // Obtener índices fragmentados
+  async getFragmentedIndexes(
+    instanceName: string,
+    databaseName: string,
+    minPageCount: number = 1000,
+    minFragmentationPct: number = 10.0
+  ): Promise<FragmentedIndexDto[]> {
+    const params = new URLSearchParams();
+    params.append('minPageCount', minPageCount.toString());
+    params.append('minFragmentationPct', minFragmentationPct.toString());
+    
+    const response = await fetch(
+      `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/fragmented?${params}`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<FragmentedIndexDto[]>(response);
+  },
+
+  // Obtener índices sin uso
+  async getUnusedIndexes(instanceName: string, databaseName: string, minPageCount: number = 1000): Promise<UnusedIndexDto[]> {
+    const params = new URLSearchParams();
+    params.append('minPageCount', minPageCount.toString());
+    
+    const response = await fetch(
+      `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/unused?${params}`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<UnusedIndexDto[]>(response);
+  },
+
+  // Obtener índices duplicados
+  async getDuplicateIndexes(instanceName: string, databaseName: string): Promise<DuplicateIndexDto[]> {
+    const response = await fetch(
+      `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/duplicate`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<DuplicateIndexDto[]>(response);
+  },
+
+  // Obtener missing indexes
+  async getMissingIndexes(instanceName: string, databaseName: string): Promise<MissingIndexDto[]> {
+    const response = await fetch(
+      `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/missing`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<MissingIndexDto[]>(response);
+  },
+
+  // Obtener índices deshabilitados
+  async getDisabledIndexes(instanceName: string, databaseName: string): Promise<DisabledIndexDto[]> {
+    const response = await fetch(
+      `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/disabled`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<DisabledIndexDto[]>(response);
+  },
+
+  // Obtener índices solapados
+  async getOverlappingIndexes(instanceName: string, databaseName: string): Promise<OverlappingIndexDto[]> {
+    const response = await fetch(
+      `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/overlapping`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<OverlappingIndexDto[]>(response);
+  },
+
+  // Obtener índices problemáticos
+  async getBadIndexes(instanceName: string, databaseName: string): Promise<BadIndexDto[]> {
+    const response = await fetch(
+      `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/bad`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<BadIndexDto[]>(response);
+  },
+
+  // Obtener análisis completo
+  async getFullAnalysis(
+    instanceName: string,
+    databaseName: string,
+    options?: { minPageCount?: number; minFragmentationPct?: number; generateScripts?: boolean }
+  ): Promise<FullIndexAnalysisDto> {
+    const params = new URLSearchParams();
+    if (options?.minPageCount) params.append('minPageCount', options.minPageCount.toString());
+    if (options?.minFragmentationPct) params.append('minFragmentationPct', options.minFragmentationPct.toString());
+    if (options?.generateScripts !== undefined) params.append('generateScripts', options.generateScripts.toString());
+    
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(
+      `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/full${queryString}`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<FullIndexAnalysisDto>(response);
+  },
+
+  // Analizar con opciones avanzadas (POST)
+  async analyze(request: IndexAnalysisRequestDto): Promise<FullIndexAnalysisDto> {
+    const response = await fetch(`${API_URL}/api/index-analysis/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<FullIndexAnalysisDto>(response);
+  },
+
+  // Obtener solo el resumen
+  async getSummary(instanceName: string, databaseName: string): Promise<IndexAnalysisSummaryDto> {
+    const response = await fetch(
+      `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/summary`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<IndexAnalysisSummaryDto>(response);
   },
 };
 

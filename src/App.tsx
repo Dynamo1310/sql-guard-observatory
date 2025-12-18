@@ -27,6 +27,7 @@ import OnCallSwaps from "./pages/OnCallSwaps";
 import SmtpSettings from "./pages/SmtpSettings";
 import ProductionAlerts from "./pages/ProductionAlerts";
 import ServerRestart from "./pages/ServerRestart";
+import OperationalServersConfig from "./pages/OperationalServersConfig";
 import AdminUsers from "./pages/AdminUsers";
 import AdminPermissions from "./pages/AdminPermissions";
 import Login from "./pages/Login";
@@ -174,6 +175,11 @@ const App = () => (
                       <Route path="/operations/server-restart" element={
                         <ProtectedRoute viewName="ServerRestart">
                           <ServerRestart />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/operations/servers-config" element={
+                        <ProtectedRoute viewName="OperationsConfig">
+                          <OperationalServersConfig />
                         </ProtectedRoute>
                       } />
                       <Route path="/admin/users" element={

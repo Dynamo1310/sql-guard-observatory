@@ -24,6 +24,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Server Restart Tasks
     public DbSet<ServerRestartTask> ServerRestartTasks { get; set; } = null!;
     public DbSet<ServerRestartDetail> ServerRestartDetails { get; set; } = null!;
+    
+    // Operational Servers (para operaciones controladas)
+    public DbSet<OperationalServer> OperationalServers { get; set; } = null!;
+    public DbSet<OperationalServerAudit> OperationalServerAudits { get; set; } = null!;
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -208,6 +212,37 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(t => t.Details)
                 .HasForeignKey(d => d.TaskId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Operational Servers
+        builder.Entity<OperationalServer>(entity =>
+        {
+            entity.ToTable("OperationalServers");
+            entity.HasIndex(s => s.ServerName).IsUnique();
+            entity.HasIndex(s => s.Enabled);
+            entity.HasIndex(s => s.Ambiente);
+
+            entity.HasOne(s => s.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(s => s.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        builder.Entity<OperationalServerAudit>(entity =>
+        {
+            entity.ToTable("OperationalServersAudit");
+            entity.HasIndex(a => a.OperationalServerId);
+            entity.HasIndex(a => a.ChangedAt);
+
+            entity.HasOne(a => a.ChangedByUser)
+                .WithMany()
+                .HasForeignKey(a => a.ChangedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
         });
     }
 }

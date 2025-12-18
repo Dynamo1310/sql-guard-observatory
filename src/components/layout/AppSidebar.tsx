@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
   Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart, 
   Phone, Calendar, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
-  ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Wrench
+  ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Wrench, Settings, Cog
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import sqlNovaLightLogo from '/SQLNovaLightMode.png';
@@ -65,14 +65,15 @@ const alertsSubItems = [
   // Futuras alertas se agregarán aquí con sus propios permisos
 ];
 
-// Items de Operaciones
-const operationsItems = [
+// Submenús de Operaciones
+const operationsSubItems = [
   { title: 'Reinicio de Servidores', url: '/operations/server-restart', icon: RotateCcw, permission: 'ServerRestart' },
+  { title: 'Config. Servidores', url: '/operations/servers-config', icon: Settings, permission: 'OperationsConfig' },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { isAdmin, hasPermission, logout } = useAuth();
+  const { isAdmin, isSuperAdmin, isOnCallEscalation, hasPermission, logout, user } = useAuth();
   const isCollapsed = state === 'collapsed';
   const location = useLocation();
   
@@ -84,7 +85,7 @@ export function AppSidebar() {
   const isAlertsActive = location.pathname.startsWith('/admin/alerts');
   const [alertsOpen, setAlertsOpen] = useState(isAlertsActive);
   
-  // Estado para la sección de Operaciones
+  // Estado para la sección de Operaciones (ahora es menú desplegable)
   const isOperationsActive = location.pathname.startsWith('/operations');
   const [operationsOpen, setOperationsOpen] = useState(isOperationsActive);
 
@@ -103,7 +104,20 @@ export function AppSidebar() {
   const visibleAdminItems = isAdmin ? adminItems.filter(item => hasPermission(item.permission)) : [];
   
   // Filtrar items de operaciones según permisos
-  const visibleOperationsItems = operationsItems.filter(item => hasPermission(item.permission));
+  // OperationsConfig requiere SuperAdmin o IsOnCallEscalation
+  const visibleOperationsSubItems = operationsSubItems.filter(item => {
+    // ServerRestart usa permisos normales
+    if (item.permission === 'ServerRestart') {
+      return hasPermission(item.permission);
+    }
+    // OperationsConfig: mostrar si es SuperAdmin o usuario de escalamiento
+    if (item.permission === 'OperationsConfig') {
+      return isSuperAdmin || isOnCallEscalation;
+    }
+    return hasPermission(item.permission);
+  });
+  
+  const hasAnyOperationsPermission = visibleOperationsSubItems.length > 0;
 
   return (
     <Sidebar collapsible="icon">
@@ -218,33 +232,65 @@ export function AppSidebar() {
         )}
 
         {/* Operaciones */}
-        {visibleOperationsItems.length > 0 && (
+        {hasAnyOperationsPermission && (
           <SidebarGroup>
             <SidebarGroupLabel className={isCollapsed ? 'sr-only' : ''}>
               Operaciones
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {visibleOperationsItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
-                      <NavLink
-                        to={item.url}
+                <Collapsible open={operationsOpen} onOpenChange={setOperationsOpen}>
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
                         style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
-                        className={({ isActive }) =>
-                          `w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
-                            isActive
-                              ? 'bg-sidebar-accent text-sidebar-primary font-medium'
-                              : 'hover:bg-sidebar-accent/50'
-                          }`
-                        }
+                        className={`w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
+                          isOperationsActive
+                            ? 'bg-sidebar-accent text-sidebar-primary font-medium'
+                            : 'hover:bg-sidebar-accent/50'
+                        }`}
                       >
-                        <item.icon className="h-4 w-4 flex-shrink-0 text-orange-500" />
-                        {!isCollapsed && <span>{item.title}</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
+                        <Cog className="h-4 w-4 flex-shrink-0 text-orange-500" />
+                        {!isCollapsed && (
+                          <>
+                            <span className="flex-1 text-left">Operaciones</span>
+                            {operationsOpen ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </>
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    
+                    {!isCollapsed && (
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {visibleOperationsSubItems.map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.url}>
+                              <SidebarMenuSubButton asChild>
+                                <NavLink
+                                  to={subItem.url}
+                                  className={({ isActive }) =>
+                                    `flex items-center gap-2 text-sm py-1.5 px-2 rounded-md transition-colors ${
+                                      isActive
+                                        ? 'bg-sidebar-accent/70 text-sidebar-primary font-medium'
+                                        : 'hover:bg-sidebar-accent/30 text-muted-foreground'
+                                    }`
+                                  }
+                                >
+                                  <subItem.icon className="h-3.5 w-3.5" />
+                                  <span>{subItem.title}</span>
+                                </NavLink>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    )}
                   </SidebarMenuItem>
-                ))}
+                </Collapsible>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

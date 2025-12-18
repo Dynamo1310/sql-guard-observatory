@@ -7,6 +7,7 @@ export interface User {
   email?: string;
   allowed: boolean;
   roles: UserRole[];
+  isOnCallEscalation?: boolean;
 }
 
 export interface AuthResponse {
@@ -137,4 +138,188 @@ export interface HealthScoreSummaryDto {
   criticalCount: number;
   avgScore: number;
   lastUpdate?: string;
+}
+
+// ==================== INDEX ANALYSIS TYPES ====================
+
+export interface IndexAnalysisInstance {
+  instanceName: string;
+  serverName: string;
+  ambiente: string;
+  hostingSite: string;
+  majorVersion?: string;
+  edition?: string;
+}
+
+export interface DatabaseInfo {
+  databaseId: number;
+  databaseName: string;
+  state: string;
+  recoveryModel: string;
+  sizeMB: number;
+}
+
+export interface FragmentedIndex {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  indexType: string;
+  fragmentationPct: number;
+  pageCount: number;
+  sizeMB: number;
+  suggestion: 'REBUILD' | 'REORGANIZE' | 'NONE';
+  isDisabled: boolean;
+  isPrimaryKey: boolean;
+  isUnique: boolean;
+  fillFactor: number;
+  rebuildScript?: string;
+  reorganizeScript?: string;
+}
+
+export interface UnusedIndex {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  indexType: string;
+  userSeeks: number;
+  userScans: number;
+  userLookups: number;
+  userUpdates: number;
+  lastUserSeek?: string;
+  lastUserScan?: string;
+  lastUserLookup?: string;
+  lastUserUpdate?: string;
+  sizeMB: number;
+  pageCount: number;
+  isPrimaryKey: boolean;
+  isUnique: boolean;
+  isDisabled: boolean;
+  columns: string;
+  includedColumns?: string;
+  dropScript?: string;
+  severity: 'Warning' | 'Critical';
+}
+
+export interface DuplicateIndex {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  duplicateOfIndex: string;
+  indexType: string;
+  keyColumns: string;
+  includedColumns?: string;
+  sizeMB: number;
+  pageCount: number;
+  isPrimaryKey: boolean;
+  isUnique: boolean;
+  duplicateType: 'Exact' | 'Similar';
+  dropScript?: string;
+}
+
+export interface MissingIndex {
+  schemaName: string;
+  tableName: string;
+  equalityColumns: string;
+  inequalityColumns?: string;
+  includedColumns?: string;
+  improvementMeasure: number;
+  userSeeks: number;
+  userScans: number;
+  avgTotalUserCost: number;
+  avgUserImpact: number;
+  lastUserSeek?: string;
+  lastUserScan?: string;
+  createScript?: string;
+  severity: 'Info' | 'Warning' | 'Critical';
+}
+
+export interface DisabledIndex {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  indexType: string;
+  isPrimaryKey: boolean;
+  isUnique: boolean;
+  keyColumns: string;
+  includedColumns?: string;
+  createDate?: string;
+  modifyDate?: string;
+  rebuildScript?: string;
+}
+
+export interface OverlappingIndex {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  overlappedByIndex: string;
+  indexType: string;
+  keyColumns: string;
+  includedColumns?: string;
+  overlappingKeyColumns: string;
+  overlappingIncludedColumns?: string;
+  sizeMB: number;
+  pageCount: number;
+  userSeeks: number;
+  userScans: number;
+  userUpdates: number;
+  overlapType: 'Subset' | 'Prefix';
+  dropScript?: string;
+}
+
+export interface BadIndex {
+  schemaName: string;
+  tableName: string;
+  indexName: string;
+  indexType: string;
+  keyColumns: string;
+  includedColumns?: string;
+  keyColumnCount: number;
+  includedColumnCount: number;
+  totalColumnCount: number;
+  keySizeBytes: number;
+  sizeMB: number;
+  problem: 'TooWide' | 'TooManyKeyColumns' | 'TooManyColumns' | 'LowSelectivity';
+  severity: 'Warning' | 'Critical';
+  recommendation: string;
+}
+
+export interface IndexAnalysisSummary {
+  instanceName: string;
+  databaseName: string;
+  analyzedAt: string;
+  totalIndexes: number;
+  fragmentedCount: number;
+  unusedCount: number;
+  duplicateCount: number;
+  missingCount: number;
+  disabledCount: number;
+  overlappingCount: number;
+  badIndexCount: number;
+  totalIndexSizeMB: number;
+  wastedSpaceMB: number;
+  potentialSavingsMB: number;
+  healthScore: number;
+  healthStatus: 'Healthy' | 'Warning' | 'Critical';
+  topRecommendations: string[];
+}
+
+export interface FullIndexAnalysis {
+  summary: IndexAnalysisSummary;
+  fragmentedIndexes: FragmentedIndex[];
+  unusedIndexes: UnusedIndex[];
+  duplicateIndexes: DuplicateIndex[];
+  missingIndexes: MissingIndex[];
+  disabledIndexes: DisabledIndex[];
+  overlappingIndexes: OverlappingIndex[];
+  badIndexes: BadIndex[];
+}
+
+export interface IndexAnalysisRequest {
+  instanceName: string;
+  databaseName: string;
+  minPageCount?: number;
+  minFragmentationPct?: number;
+  includeSystemDatabases?: boolean;
+  includeHeaps?: boolean;
+  generateScripts?: boolean;
 }

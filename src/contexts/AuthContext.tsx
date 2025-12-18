@@ -23,6 +23,7 @@ interface AuthContextType {
   logout: () => void;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  isOnCallEscalation: boolean;
   permissions: string[];
   hasPermission: (viewName: string) => boolean;
 }
@@ -76,7 +77,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           displayName: userData.displayName,
           email: userData.email,
           allowed: true,
-          roles: userData.roles
+          roles: userData.roles,
+          isOnCallEscalation: userData.isOnCallEscalation || false
         });
         
         // Cargar permisos
@@ -121,6 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isAdmin = user?.roles.includes('Admin') || user?.roles.includes('SuperAdmin') || false;
   const isSuperAdmin = user?.roles.includes('SuperAdmin') || false;
+  const isOnCallEscalation = user?.isOnCallEscalation || false;
 
   return (
     <AuthContext.Provider value={{ 
@@ -131,6 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logout, 
       isAdmin, 
       isSuperAdmin,
+      isOnCallEscalation,
       permissions,
       hasPermission
     }}>

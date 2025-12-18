@@ -189,15 +189,8 @@ export default function Overview() {
       .sort((a, b) => a.porcentajeLibre - b.porcentajeLibre);
   }, [productionDisks]);
 
-  // Helper para calcular días desde última ejecución
-  const getDaysAgo = (dateStr: string | null | undefined): number => {
-    if (!dateStr) return 9999; // Sin datos = muy vencido
-    const date = new Date(dateStr);
-    const now = new Date();
-    return Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-  };
-
-  // Mantenimiento atrasado de producción (CHECKDB o IndexOptimize vencidos)
+  // Mantenimiento atrasado de producción - Usa los campos CheckdbOk e IndexOptimizeOk 
+  // directamente de la tabla InstanceHealth_Maintenance (la misma que usa HealthScore)
   const maintenanceOverdueData: MaintenanceOverdueData[] = useMemo(() => {
     const result: MaintenanceOverdueData[] = [];
     
@@ -205,16 +198,14 @@ export default function Overview() {
       const details = instanceDetails[s.instanceName];
       const maintenance = details?.maintenanceDetails;
       
+      // Usar directamente los flags de la tabla InstanceHealth_Maintenance
+      // checkdbOk = false significa que el CHECKDB no está al día
+      // indexOptimizeOk = false significa que el IndexOptimize no está al día
+      const checkdbVencido = maintenance?.checkdbOk === false;
+      const indexOptimizeVencido = maintenance?.indexOptimizeOk === false;
+      
       const lastCheckdb = maintenance?.lastCheckdb || null;
       const lastIndexOptimize = maintenance?.lastIndexOptimize || null;
-      
-      // Calcular días desde última ejecución
-      const checkdbDays = getDaysAgo(lastCheckdb);
-      const indexOptDays = getDaysAgo(lastIndexOptimize);
-      
-      // Vencido si han pasado más de 7 días (tolerancia de 7 días)
-      const checkdbVencido = checkdbDays > 7;
-      const indexOptimizeVencido = indexOptDays > 7;
       
       if (checkdbVencido || indexOptimizeVencido) {
         let tipo = '';

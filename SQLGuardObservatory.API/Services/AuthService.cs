@@ -43,7 +43,8 @@ public class AuthService : IAuthService
             DisplayName = user.DisplayName ?? string.Empty,
             Email = user.Email,
             Allowed = user.IsActive,
-            Roles = roles.ToList()
+            Roles = roles.ToList(),
+            IsOnCallEscalation = user.IsOnCallEscalation
         };
     }
 
@@ -86,7 +87,8 @@ public class AuthService : IAuthService
             DisplayName = user.DisplayName ?? string.Empty,
             Email = user.Email,
             Allowed = user.IsActive,
-            Roles = roles.ToList()
+            Roles = roles.ToList(),
+            IsOnCallEscalation = user.IsOnCallEscalation
         };
     }
 

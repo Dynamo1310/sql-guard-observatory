@@ -15,6 +15,11 @@ public class LoginResponse
     public string? Email { get; set; }
     public bool Allowed { get; set; }
     public List<string> Roles { get; set; } = new();
+    /// <summary>
+    /// Indica si el usuario es guardia de escalamiento.
+    /// Los usuarios de escalamiento tienen acceso a la configuración de operaciones.
+    /// </summary>
+    public bool IsOnCallEscalation { get; set; }
 }
 
 public class UserDto
