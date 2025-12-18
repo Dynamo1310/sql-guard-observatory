@@ -78,10 +78,9 @@ function Get-MaintenanceJobs {
         # Un job solo se considera exitoso si:
         # 1. El step_id = 0 (resumen) está en status 1 (Succeeded)
         # 2. TODOS los pasos individuales (step_id > 0) de esa ejecución están en status 1
-        # Esto evita falsos positivos donde el paso 1 verifica rol primario y sale sin hacer nada
+        # 3. Se ejecutó más de 1 paso (evita jobs que solo verifican rol primario y salen)
         $query = @"
 -- TODOS los IntegrityCheck con su última ejecución REAL (todos los pasos OK)
--- Excluye ejecuciones donde solo corrió el paso de verificación de rol primario
 WITH JobExecutions AS (
     -- Obtener todas las ejecuciones del job (step_id = 0 es el resumen)
     SELECT 
@@ -111,22 +110,19 @@ WITH JobExecutions AS (
            AND jh2.run_date = jh.run_date 
            AND jh2.step_id > 0 
            AND jh2.run_status = 1) AS SuccessfulSteps,
-        -- Verificar si hubo pasos de mantenimiento real (más de 1 paso = ejecutó algo más que verificar rol)
+        -- Contar pasos fallidos en esta ejecución
         (SELECT COUNT(*) 
          FROM msdb.dbo.sysjobhistory jh2 
          WHERE jh2.job_id = j.job_id 
            AND jh2.run_date = jh.run_date 
-           AND jh2.step_id > 1) AS MaintenanceSteps
+           AND jh2.step_id > 0 
+           AND jh2.run_status <> 1) AS FailedSteps
     FROM msdb.dbo.sysjobs j
     INNER JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
     WHERE j.name LIKE '%IntegrityCheck%'
       AND j.name NOT LIKE '%STOP%'
 ),
-ValidExecutions AS (
-    -- Solo considerar ejecuciones donde:
-    -- 1. El job terminó exitoso (run_status = 1)
-    -- 2. Todos los pasos fueron exitosos (TotalSteps = SuccessfulSteps)
-    -- 3. Se ejecutaron pasos de mantenimiento real (MaintenanceSteps > 0 O TotalSteps > 1)
+RankedExecutions AS (
     SELECT 
         job_id,
         JobName,
@@ -137,55 +133,52 @@ ValidExecutions AS (
         FinishTime AS HistoryFinishTime,
         TotalSteps,
         SuccessfulSteps,
-        MaintenanceSteps,
-        -- Un job es realmente exitoso si todos sus pasos están OK Y ejecutó mantenimiento real
+        FailedSteps,
+        -- Un job es realmente exitoso si:
+        -- 1. El job terminó exitoso (run_status = 1)
+        -- 2. Todos los pasos fueron exitosos (FailedSteps = 0)
+        -- 3. Se ejecutó al menos 1 paso
         CASE WHEN run_status = 1 
-              AND TotalSteps > 0 
-              AND TotalSteps = SuccessfulSteps 
-              AND (MaintenanceSteps > 0 OR TotalSteps > 1)
+              AND FailedSteps = 0 
+              AND TotalSteps >= 1
              THEN 1 ELSE 0 END AS IsRealSuccess,
         ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY FinishTime DESC) AS rn
     FROM JobExecutions
 ),
 LastJobRuns AS (
     SELECT 
-        v.job_id,
-        v.JobName,
-        v.HistoryRunDate,
-        v.HistoryRunTime,
-        v.HistoryRunDuration,
-        -- Usar IsRealSuccess en lugar del run_status original
-        CASE WHEN v.IsRealSuccess = 1 THEN 1 ELSE 0 END AS HistoryRunStatus,
+        r.job_id,
+        r.JobName,
+        r.HistoryRunDate,
+        r.HistoryRunTime,
+        r.HistoryRunDuration,
+        r.HistoryRunStatus,
         js.last_run_date AS ServerRunDate,
         js.last_run_time AS ServerRunTime,
         js.last_run_duration AS ServerRunDuration,
         js.last_run_outcome AS ServerRunOutcome,
-        v.HistoryFinishTime,
-        v.TotalSteps,
-        v.SuccessfulSteps,
-        v.MaintenanceSteps,
-        v.IsRealSuccess,
-        ROW_NUMBER() OVER (PARTITION BY v.job_id ORDER BY 
-            v.HistoryFinishTime DESC,
-            v.IsRealSuccess DESC
-        ) AS rn
-    FROM ValidExecutions v
-    LEFT JOIN msdb.dbo.sysjobservers js ON v.job_id = js.job_id
-    WHERE v.rn = 1
+        r.HistoryFinishTime,
+        r.TotalSteps,
+        r.SuccessfulSteps,
+        r.FailedSteps,
+        r.IsRealSuccess
+    FROM RankedExecutions r
+    LEFT JOIN msdb.dbo.sysjobservers js ON r.job_id = js.job_id
+    WHERE r.rn = 1
 )
 SELECT 
     JobName,
     COALESCE(HistoryRunDate, ServerRunDate) AS LastRunDate,
     COALESCE(HistoryRunTime, ServerRunTime) AS LastRunTime,
     COALESCE(HistoryRunDuration, ServerRunDuration) AS LastRunDuration,
+    -- Mantener el status original para mostrar, pero agregar IsRealSuccess para validación
     COALESCE(HistoryRunStatus, ServerRunOutcome) AS LastRunStatus,
     HistoryFinishTime AS LastFinishTime,
     TotalSteps,
     SuccessfulSteps,
-    MaintenanceSteps,
+    FailedSteps,
     IsRealSuccess
-FROM LastJobRuns
-WHERE rn = 1;
+FROM LastJobRuns;
 
 -- TODOS los IndexOptimize con su última ejecución REAL (todos los pasos OK)
 WITH JobExecutions AS (
@@ -217,13 +210,14 @@ WITH JobExecutions AS (
          FROM msdb.dbo.sysjobhistory jh2 
          WHERE jh2.job_id = j.job_id 
            AND jh2.run_date = jh.run_date 
-           AND jh2.step_id > 1) AS MaintenanceSteps
+           AND jh2.step_id > 0 
+           AND jh2.run_status <> 1) AS FailedSteps
     FROM msdb.dbo.sysjobs j
     INNER JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
     WHERE j.name LIKE '%IndexOptimize%'
       AND j.name NOT LIKE '%STOP%'
 ),
-ValidExecutions AS (
+RankedExecutions AS (
     SELECT 
         job_id,
         JobName,
@@ -234,39 +228,34 @@ ValidExecutions AS (
         FinishTime AS HistoryFinishTime,
         TotalSteps,
         SuccessfulSteps,
-        MaintenanceSteps,
+        FailedSteps,
         CASE WHEN run_status = 1 
-              AND TotalSteps > 0 
-              AND TotalSteps = SuccessfulSteps 
-              AND (MaintenanceSteps > 0 OR TotalSteps > 1)
+              AND FailedSteps = 0 
+              AND TotalSteps >= 1
              THEN 1 ELSE 0 END AS IsRealSuccess,
         ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY FinishTime DESC) AS rn
     FROM JobExecutions
 ),
 LastJobRuns AS (
     SELECT 
-        v.job_id,
-        v.JobName,
-        v.HistoryRunDate,
-        v.HistoryRunTime,
-        v.HistoryRunDuration,
-        CASE WHEN v.IsRealSuccess = 1 THEN 1 ELSE 0 END AS HistoryRunStatus,
+        r.job_id,
+        r.JobName,
+        r.HistoryRunDate,
+        r.HistoryRunTime,
+        r.HistoryRunDuration,
+        r.HistoryRunStatus,
         js.last_run_date AS ServerRunDate,
         js.last_run_time AS ServerRunTime,
         js.last_run_duration AS ServerRunDuration,
         js.last_run_outcome AS ServerRunOutcome,
-        v.HistoryFinishTime,
-        v.TotalSteps,
-        v.SuccessfulSteps,
-        v.MaintenanceSteps,
-        v.IsRealSuccess,
-        ROW_NUMBER() OVER (PARTITION BY v.job_id ORDER BY 
-            v.HistoryFinishTime DESC,
-            v.IsRealSuccess DESC
-        ) AS rn
-    FROM ValidExecutions v
-    LEFT JOIN msdb.dbo.sysjobservers js ON v.job_id = js.job_id
-    WHERE v.rn = 1
+        r.HistoryFinishTime,
+        r.TotalSteps,
+        r.SuccessfulSteps,
+        r.FailedSteps,
+        r.IsRealSuccess
+    FROM RankedExecutions r
+    LEFT JOIN msdb.dbo.sysjobservers js ON r.job_id = js.job_id
+    WHERE r.rn = 1
 )
 SELECT 
     JobName,
@@ -277,10 +266,9 @@ SELECT
     HistoryFinishTime AS LastFinishTime,
     TotalSteps,
     SuccessfulSteps,
-    MaintenanceSteps,
+    FailedSteps,
     IsRealSuccess
-FROM LastJobRuns
-WHERE rn = 1;
+FROM LastJobRuns;
 "@
         
         # dbatools NO devuelve múltiples resultsets correctamente, ejecutar queries por separado
@@ -393,8 +381,7 @@ WHERE rn = 1;
             }
             
             if ($lastRun) {
-                # Usar IsRealSuccess en lugar de solo LastRunStatus
-                # IsRealSuccess = 1 significa que TODOS los pasos terminaron OK y se ejecutó mantenimiento real
+                # Usar IsRealSuccess que valida que TODOS los pasos terminaron OK
                 $isRealSuccess = if ($job.IsRealSuccess -ne $null -and $job.IsRealSuccess -ne [DBNull]::Value) { 
                     $job.IsRealSuccess -eq 1 
                 } else { 
@@ -406,7 +393,7 @@ WHERE rn = 1;
                 # Info de pasos para diagnóstico
                 $totalSteps = if ($job.TotalSteps -ne $null -and $job.TotalSteps -ne [DBNull]::Value) { $job.TotalSteps } else { 0 }
                 $successfulSteps = if ($job.SuccessfulSteps -ne $null -and $job.SuccessfulSteps -ne [DBNull]::Value) { $job.SuccessfulSteps } else { 0 }
-                $maintenanceSteps = if ($job.MaintenanceSteps -ne $null -and $job.MaintenanceSteps -ne [DBNull]::Value) { $job.MaintenanceSteps } else { 0 }
+                $failedSteps = if ($job.FailedSteps -ne $null -and $job.FailedSteps -ne [DBNull]::Value) { $job.FailedSteps } else { 0 }
             
                 $result.CheckdbJobs += @{
                     JobName = $job.JobName
@@ -417,7 +404,7 @@ WHERE rn = 1;
                     Duration = $duration
                     TotalSteps = $totalSteps
                     SuccessfulSteps = $successfulSteps
-                    MaintenanceSteps = $maintenanceSteps
+                    FailedSteps = $failedSteps
                     IsRealSuccess = $isRealSuccess
                 }
                 
@@ -441,7 +428,7 @@ WHERE rn = 1;
                     Duration = 0
                     TotalSteps = 0
                     SuccessfulSteps = 0
-                    MaintenanceSteps = 0
+                    FailedSteps = 0
                     IsRealSuccess = $false
                 }
                 $allCheckdbOk = $false
@@ -472,7 +459,7 @@ WHERE rn = 1;
             }
             
             if ($lastRun) {
-                # Usar IsRealSuccess en lugar de solo LastRunStatus
+                # Usar IsRealSuccess que valida que TODOS los pasos terminaron OK
                 $isRealSuccess = if ($job.IsRealSuccess -ne $null -and $job.IsRealSuccess -ne [DBNull]::Value) { 
                     $job.IsRealSuccess -eq 1 
                 } else { 
@@ -484,7 +471,7 @@ WHERE rn = 1;
                 # Info de pasos para diagnóstico
                 $totalSteps = if ($job.TotalSteps -ne $null -and $job.TotalSteps -ne [DBNull]::Value) { $job.TotalSteps } else { 0 }
                 $successfulSteps = if ($job.SuccessfulSteps -ne $null -and $job.SuccessfulSteps -ne [DBNull]::Value) { $job.SuccessfulSteps } else { 0 }
-                $maintenanceSteps = if ($job.MaintenanceSteps -ne $null -and $job.MaintenanceSteps -ne [DBNull]::Value) { $job.MaintenanceSteps } else { 0 }
+                $failedSteps = if ($job.FailedSteps -ne $null -and $job.FailedSteps -ne [DBNull]::Value) { $job.FailedSteps } else { 0 }
             
                 $result.IndexOptimizeJobs += @{
                     JobName = $job.JobName
@@ -495,7 +482,7 @@ WHERE rn = 1;
                     Duration = $duration
                     TotalSteps = $totalSteps
                     SuccessfulSteps = $successfulSteps
-                    MaintenanceSteps = $maintenanceSteps
+                    FailedSteps = $failedSteps
                     IsRealSuccess = $isRealSuccess
                 }
                 
@@ -519,7 +506,7 @@ WHERE rn = 1;
                     Duration = 0
                     TotalSteps = 0
                     SuccessfulSteps = 0
-                    MaintenanceSteps = 0
+                    FailedSteps = 0
                     IsRealSuccess = $false
                 }
                 $allIndexOptOk = $false
@@ -695,23 +682,21 @@ function Sync-AlwaysOnMaintenance {
             
             foreach ($jobGroup in $checkdbByName) {
                 # Encontrar el más reciente de este tipo de job
-                # Ordenar por tiempo de finalización DESC, luego por IsRealSuccess (éxito real primero)
+                # Ordenar por tiempo de finalización DESC, luego por IsSuccess (éxito primero)
                 $mostRecentJob = $jobGroup.Group | Sort-Object `
                     @{Expression={$_.LastRun}; Descending=$true}, `
                     @{Expression={
-                        # Priorizar éxito REAL (todos los pasos OK)
-                        if ($_.IsRealSuccess -eq $true) { 0 }
-                        elseif ($_.IsSuccess -eq $true) { 1 }
-                        else { 2 }
+                        if ($_.IsSuccess -eq $true) { 0 }
+                        else { 1 }
                     }; Descending=$false} | Select-Object -First 1
                 
-                # Si el más reciente de este tipo NO está OK (usando IsRealSuccess), marcar grupo como no OK
-                if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsRealSuccess) {
+                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
+                if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
                     $allCheckdbOk = $false
                 }
                 
-                # Actualizar el más reciente global (solo si fue éxito real)
-                if ($mostRecentJob.IsRealSuccess -and $mostRecentJob.LastRun -and (-not $bestCheckdb -or $mostRecentJob.LastRun -gt $bestCheckdb)) {
+                # Actualizar el más reciente global (solo si fue éxito)
+                if ($mostRecentJob.IsSuccess -and $mostRecentJob.LastRun -and (-not $bestCheckdb -or $mostRecentJob.LastRun -gt $bestCheckdb)) {
                     $bestCheckdb = $mostRecentJob.LastRun
                 }
             }
@@ -729,22 +714,21 @@ function Sync-AlwaysOnMaintenance {
             
             foreach ($jobGroup in $indexOptByName) {
                 # Encontrar el más reciente de este tipo de job
-                # Ordenar por tiempo de finalización DESC, luego por IsRealSuccess
+                # Ordenar por tiempo de finalización DESC, luego por IsSuccess
                 $mostRecentJob = $jobGroup.Group | Sort-Object `
                     @{Expression={$_.LastRun}; Descending=$true}, `
                     @{Expression={
-                        if ($_.IsRealSuccess -eq $true) { 0 }
-                        elseif ($_.IsSuccess -eq $true) { 1 }
-                        else { 2 }
+                        if ($_.IsSuccess -eq $true) { 0 }
+                        else { 1 }
                     }; Descending=$false} | Select-Object -First 1
                 
-                # Si el más reciente de este tipo NO está OK (usando IsRealSuccess), marcar grupo como no OK
-                if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsRealSuccess) {
+                # Si el más reciente de este tipo NO está OK, marcar grupo como no OK
+                if (-not $mostRecentJob.LastRun -or $mostRecentJob.LastRun -lt $cutoffDate -or -not $mostRecentJob.IsSuccess) {
                     $allIndexOptimizeOk = $false
                 }
                 
-                # Actualizar el más reciente global (solo si fue éxito real)
-                if ($mostRecentJob.IsRealSuccess -and $mostRecentJob.LastRun -and (-not $bestIndexOptimize -or $mostRecentJob.LastRun -gt $bestIndexOptimize)) {
+                # Actualizar el más reciente global (solo si fue éxito)
+                if ($mostRecentJob.IsSuccess -and $mostRecentJob.LastRun -and (-not $bestIndexOptimize -or $mostRecentJob.LastRun -gt $bestIndexOptimize)) {
                     $bestIndexOptimize = $mostRecentJob.LastRun
                 }
             }
@@ -920,12 +904,12 @@ foreach ($instance in $instances) {
         $statusColor = "Yellow"
     }
     
-    # Detectar si hay jobs que solo ejecutaron verificación de rol primario (sin mantenimiento real)
-    $checkdbJobsWithNoMaint = $maintenance.CheckdbJobs | Where-Object { $_.MaintenanceSteps -eq 0 -and $_.TotalSteps -le 1 }
-    $indexOptJobsWithNoMaint = $maintenance.IndexOptimizeJobs | Where-Object { $_.MaintenanceSteps -eq 0 -and $_.TotalSteps -le 1 }
+    # Detectar si hay pasos fallidos
+    $checkdbFailedSteps = ($maintenance.CheckdbJobs | Where-Object { $_.FailedSteps -gt 0 }).Count
+    $indexOptFailedSteps = ($maintenance.IndexOptimizeJobs | Where-Object { $_.FailedSteps -gt 0 }).Count
     
-    if ($checkdbJobsWithNoMaint.Count -gt 0 -or $indexOptJobsWithNoMaint.Count -gt 0) {
-        $extraInfo = " [Solo verificó rol primario]"
+    if ($checkdbFailedSteps -gt 0 -or $indexOptFailedSteps -gt 0) {
+        $extraInfo = " [Pasos fallidos detectados]"
     }
     
     $checkdbAge = if ($maintenance.LastCheckdb) { ((Get-Date) - $maintenance.LastCheckdb).Days } else { "N/A" }
