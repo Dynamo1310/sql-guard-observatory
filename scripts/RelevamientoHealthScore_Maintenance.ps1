@@ -452,36 +452,46 @@ FROM LastJobRuns;
         $mostRecentCheckdb = $null
         
         foreach ($job in $checkdbJobs) {
-            # Usar LastFinishTime si está disponible, sino calcular desde LastRunDate + LastRunTime
-            $lastRun = $null
+            # Usar LastFinishTime si está disponible, sino calcular tiempo de FINALIZACIÓN desde LastRunDate + LastRunTime + Duration
+            $finishTime = $null
             if ($job.LastFinishTime -and $job.LastFinishTime -ne [DBNull]::Value) {
-                $lastRun = [datetime]$job.LastFinishTime
+                $finishTime = [datetime]$job.LastFinishTime
             } elseif ($job.LastRunDate -and $job.LastRunDate -ne [DBNull]::Value -and $job.LastRunTime -ne $null -and $job.LastRunTime -ne [DBNull]::Value) {
                 try {
                     $runDate = $job.LastRunDate.ToString()
                     $runTime = $job.LastRunTime.ToString().PadLeft(6, '0')
-                    $lastRun = [datetime]::ParseExact("$runDate$runTime", "yyyyMMddHHmmss", $null)
+                    $startTime = [datetime]::ParseExact("$runDate$runTime", "yyyyMMddHHmmss", $null)
+                    
+                    # Calcular tiempo de FINALIZACIÓN: inicio + duración
+                    $durationInt = if ($job.LastRunDuration -and $job.LastRunDuration -ne [DBNull]::Value) { [int]$job.LastRunDuration } else { 0 }
+                    # Formato HHMMSS: horas = /10000, minutos = (/100)%100, segundos = %100
+                    $hours = [math]::Floor($durationInt / 10000)
+                    $minutes = [math]::Floor(($durationInt / 100) % 100)
+                    $seconds = $durationInt % 100
+                    $finishTime = $startTime.AddHours($hours).AddMinutes($minutes).AddSeconds($seconds)
                 } catch {}
             }
             
-            if ($lastRun) {
+            if ($finishTime) {
                 # Usar IsRealSuccess que valida que TODOS los pasos terminaron OK
                 $isRealSuccess = if ($job.IsRealSuccess -ne $null -and $job.IsRealSuccess -ne [DBNull]::Value) { 
                     $job.IsRealSuccess -eq 1 
                 } else { 
                     $job.LastRunStatus -eq 1 
                 }
-                $isRecent = ($lastRun -ge $cutoffDate -and $isRealSuccess)
+                $isRecent = ($finishTime -ge $cutoffDate -and $isRealSuccess)
                 $duration = if ($job.LastRunDuration -and $job.LastRunDuration -ne [DBNull]::Value) { $job.LastRunDuration } else { 0 }
                 
                 # Info de pasos para diagnóstico
                 $totalSteps = if ($job.TotalSteps -ne $null -and $job.TotalSteps -ne [DBNull]::Value) { $job.TotalSteps } else { 0 }
                 $successfulSteps = if ($job.SuccessfulSteps -ne $null -and $job.SuccessfulSteps -ne [DBNull]::Value) { $job.SuccessfulSteps } else { 0 }
                 $failedSteps = if ($job.FailedSteps -ne $null -and $job.FailedSteps -ne [DBNull]::Value) { $job.FailedSteps } else { 0 }
+                $hasHistory = if ($job.HasHistory -ne $null -and $job.HasHistory -ne [DBNull]::Value) { $job.HasHistory -eq 1 } else { $true }
             
                 $result.CheckdbJobs += @{
                     JobName = $job.JobName
-                    LastRun = $lastRun
+                    LastRun = $finishTime
+                    FinishTime = $finishTime  # Tiempo de FINALIZACIÓN (no inicio)
                     IsSuccess = $isRealSuccess
                     IsRecent = $isRecent
                     LastRunStatus = $job.LastRunStatus
@@ -490,11 +500,12 @@ FROM LastJobRuns;
                     SuccessfulSteps = $successfulSteps
                     FailedSteps = $failedSteps
                     IsRealSuccess = $isRealSuccess
+                    HasHistory = $hasHistory
                 }
                 
                 # Actualizar más reciente (solo si fue éxito real)
-                if ($isRealSuccess -and (-not $mostRecentCheckdb -or $lastRun -gt $mostRecentCheckdb)) {
-                    $mostRecentCheckdb = $lastRun
+                if ($isRealSuccess -and (-not $mostRecentCheckdb -or $finishTime -gt $mostRecentCheckdb)) {
+                    $mostRecentCheckdb = $finishTime
                 }
                 
                 # Si alguno NO está OK (con validación de todos los pasos), marcar como no OK
@@ -502,10 +513,11 @@ FROM LastJobRuns;
                     $allCheckdbOk = $false
                 }
             } else {
-                # Job existe pero no tiene historial reciente
+                # Job existe pero no tiene historial reciente ni datos válidos
                 $result.CheckdbJobs += @{
                     JobName = $job.JobName
                     LastRun = $null
+                    FinishTime = $null
                     IsSuccess = $false
                     IsRecent = $false
                     LastRunStatus = 999  # Indicador de "sin datos"
@@ -514,6 +526,7 @@ FROM LastJobRuns;
                     SuccessfulSteps = 0
                     FailedSteps = 0
                     IsRealSuccess = $false
+                    HasHistory = $false
                 }
                 $allCheckdbOk = $false
             }
@@ -530,36 +543,46 @@ FROM LastJobRuns;
         $mostRecentIndexOpt = $null
         
         foreach ($job in $indexOptJobs) {
-            # Usar LastFinishTime si está disponible, sino calcular desde LastRunDate + LastRunTime
-            $lastRun = $null
+            # Usar LastFinishTime si está disponible, sino calcular tiempo de FINALIZACIÓN desde LastRunDate + LastRunTime + Duration
+            $finishTime = $null
             if ($job.LastFinishTime -and $job.LastFinishTime -ne [DBNull]::Value) {
-                $lastRun = [datetime]$job.LastFinishTime
+                $finishTime = [datetime]$job.LastFinishTime
             } elseif ($job.LastRunDate -and $job.LastRunDate -ne [DBNull]::Value -and $job.LastRunTime -ne $null -and $job.LastRunTime -ne [DBNull]::Value) {
                 try {
                     $runDate = $job.LastRunDate.ToString()
                     $runTime = $job.LastRunTime.ToString().PadLeft(6, '0')
-                    $lastRun = [datetime]::ParseExact("$runDate$runTime", "yyyyMMddHHmmss", $null)
+                    $startTime = [datetime]::ParseExact("$runDate$runTime", "yyyyMMddHHmmss", $null)
+                    
+                    # Calcular tiempo de FINALIZACIÓN: inicio + duración
+                    $durationInt = if ($job.LastRunDuration -and $job.LastRunDuration -ne [DBNull]::Value) { [int]$job.LastRunDuration } else { 0 }
+                    # Formato HHMMSS: horas = /10000, minutos = (/100)%100, segundos = %100
+                    $hours = [math]::Floor($durationInt / 10000)
+                    $minutes = [math]::Floor(($durationInt / 100) % 100)
+                    $seconds = $durationInt % 100
+                    $finishTime = $startTime.AddHours($hours).AddMinutes($minutes).AddSeconds($seconds)
                 } catch {}
             }
             
-            if ($lastRun) {
+            if ($finishTime) {
                 # Usar IsRealSuccess que valida que TODOS los pasos terminaron OK
                 $isRealSuccess = if ($job.IsRealSuccess -ne $null -and $job.IsRealSuccess -ne [DBNull]::Value) { 
                     $job.IsRealSuccess -eq 1 
                 } else { 
                     $job.LastRunStatus -eq 1 
                 }
-                $isRecent = ($lastRun -ge $cutoffDate -and $isRealSuccess)
+                $isRecent = ($finishTime -ge $cutoffDate -and $isRealSuccess)
                 $duration = if ($job.LastRunDuration -and $job.LastRunDuration -ne [DBNull]::Value) { $job.LastRunDuration } else { 0 }
                 
                 # Info de pasos para diagnóstico
                 $totalSteps = if ($job.TotalSteps -ne $null -and $job.TotalSteps -ne [DBNull]::Value) { $job.TotalSteps } else { 0 }
                 $successfulSteps = if ($job.SuccessfulSteps -ne $null -and $job.SuccessfulSteps -ne [DBNull]::Value) { $job.SuccessfulSteps } else { 0 }
                 $failedSteps = if ($job.FailedSteps -ne $null -and $job.FailedSteps -ne [DBNull]::Value) { $job.FailedSteps } else { 0 }
+                $hasHistory = if ($job.HasHistory -ne $null -and $job.HasHistory -ne [DBNull]::Value) { $job.HasHistory -eq 1 } else { $true }
             
                 $result.IndexOptimizeJobs += @{
                     JobName = $job.JobName
-                    LastRun = $lastRun
+                    LastRun = $finishTime
+                    FinishTime = $finishTime  # Tiempo de FINALIZACIÓN (no inicio)
                     IsSuccess = $isRealSuccess
                     IsRecent = $isRecent
                     LastRunStatus = $job.LastRunStatus
@@ -568,11 +591,12 @@ FROM LastJobRuns;
                     SuccessfulSteps = $successfulSteps
                     FailedSteps = $failedSteps
                     IsRealSuccess = $isRealSuccess
+                    HasHistory = $hasHistory
                 }
                 
                 # Actualizar más reciente (solo si fue éxito real)
-                if ($isRealSuccess -and (-not $mostRecentIndexOpt -or $lastRun -gt $mostRecentIndexOpt)) {
-                    $mostRecentIndexOpt = $lastRun
+                if ($isRealSuccess -and (-not $mostRecentIndexOpt -or $finishTime -gt $mostRecentIndexOpt)) {
+                    $mostRecentIndexOpt = $finishTime
                 }
                 
                 # Si alguno NO está OK (con validación de todos los pasos), marcar como no OK
@@ -580,10 +604,11 @@ FROM LastJobRuns;
                     $allIndexOptOk = $false
                 }
             } else {
-                # Job existe pero no tiene historial reciente
+                # Job existe pero no tiene historial reciente ni datos válidos
                 $result.IndexOptimizeJobs += @{
                     JobName = $job.JobName
                     LastRun = $null
+                    FinishTime = $null
                     IsSuccess = $false
                     IsRecent = $false
                     LastRunStatus = 999  # Indicador de "sin datos"
@@ -592,6 +617,7 @@ FROM LastJobRuns;
                     SuccessfulSteps = 0
                     FailedSteps = 0
                     IsRealSuccess = $false
+                    HasHistory = $false
                 }
                 $allIndexOptOk = $false
             }
@@ -759,7 +785,7 @@ function Sync-AlwaysOnMaintenance {
         # Lógica: 
         #   1. Filtrar jobs que ejecutaron TODOS los pasos (TotalSteps > 1)
         #      - Jobs con TotalSteps = 1 solo verificaron rol primario y salieron
-        #   2. De esos, tomar el MÁS RECIENTE (sin importar si fue exitoso o fallido)
+        #   2. De esos, tomar el que tenga FINISH TIME MÁS RECIENTE (sin importar si fue exitoso o fallido)
         #   3. Ese es el resultado REAL del AG
         $allCheckdbOk = $false
         $bestCheckdb = $null
@@ -770,25 +796,26 @@ function Sync-AlwaysOnMaintenance {
             $realCheckdbJobs = $allCheckdbJobs | Where-Object { $_.TotalSteps -gt 1 }
             
             if ($realCheckdbJobs.Count -gt 0) {
-                # Tomar el más reciente (sin importar si fue exitoso o fallido)
-                $mostRecentReal = $realCheckdbJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
+                # Tomar el que tenga FINISH TIME más reciente (sin importar si fue exitoso o fallido)
+                $mostRecentReal = $realCheckdbJobs | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
                 
-                $bestCheckdb = $mostRecentReal.LastRun
+                $bestCheckdb = $mostRecentReal.FinishTime
                 # El AG está OK si el más reciente que ejecutó todos los pasos fue exitoso Y está dentro de 7 días
-                $allCheckdbOk = ($mostRecentReal.IsSuccess -eq $true) -and ($mostRecentReal.LastRun -ge $cutoffDate)
+                $allCheckdbOk = ($mostRecentReal.IsSuccess -eq $true) -and ($mostRecentReal.FinishTime -ge $cutoffDate)
             }
             # Si no hay jobs con mantenimiento real, buscar en todos (fallback)
             else {
-                $mostRecent = $allCheckdbJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
-                if ($mostRecent.LastRun) {
-                    $bestCheckdb = $mostRecent.LastRun
-                    $allCheckdbOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.LastRun -ge $cutoffDate)
+                $mostRecent = $allCheckdbJobs | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
+                if ($mostRecent.FinishTime) {
+                    $bestCheckdb = $mostRecent.FinishTime
+                    $allCheckdbOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.FinishTime -ge $cutoffDate)
                 }
             }
         }
         
         # === ENCONTRAR EL RESULTADO REAL DE INDEX OPTIMIZE PARA EL AG ===
         # Misma lógica: jobs con TotalSteps > 1 son los que ejecutaron mantenimiento real
+        # Ordenar por FINISH TIME (tiempo de finalización), no tiempo de inicio
         $allIndexOptimizeOk = $false
         $bestIndexOptimize = $null
         
@@ -797,19 +824,19 @@ function Sync-AlwaysOnMaintenance {
             $realIndexOptJobs = $allIndexOptimizeJobs | Where-Object { $_.TotalSteps -gt 1 }
             
             if ($realIndexOptJobs.Count -gt 0) {
-                # Tomar el más reciente (sin importar si fue exitoso o fallido)
-                $mostRecentReal = $realIndexOptJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
+                # Tomar el que tenga FINISH TIME más reciente (sin importar si fue exitoso o fallido)
+                $mostRecentReal = $realIndexOptJobs | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
                 
-                $bestIndexOptimize = $mostRecentReal.LastRun
+                $bestIndexOptimize = $mostRecentReal.FinishTime
                 # El AG está OK si el más reciente que ejecutó todos los pasos fue exitoso Y está dentro de 7 días
-                $allIndexOptimizeOk = ($mostRecentReal.IsSuccess -eq $true) -and ($mostRecentReal.LastRun -ge $cutoffDate)
+                $allIndexOptimizeOk = ($mostRecentReal.IsSuccess -eq $true) -and ($mostRecentReal.FinishTime -ge $cutoffDate)
             }
             # Fallback si no hay jobs con mantenimiento real
             else {
-                $mostRecent = $allIndexOptimizeJobs | Sort-Object -Property LastRun -Descending | Select-Object -First 1
-                if ($mostRecent.LastRun) {
-                    $bestIndexOptimize = $mostRecent.LastRun
-                    $allIndexOptimizeOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.LastRun -ge $cutoffDate)
+                $mostRecent = $allIndexOptimizeJobs | Sort-Object -Property FinishTime -Descending | Select-Object -First 1
+                if ($mostRecent.FinishTime) {
+                    $bestIndexOptimize = $mostRecent.FinishTime
+                    $allIndexOptimizeOk = ($mostRecent.IsSuccess -eq $true) -and ($mostRecent.FinishTime -ge $cutoffDate)
                 }
             }
         }
