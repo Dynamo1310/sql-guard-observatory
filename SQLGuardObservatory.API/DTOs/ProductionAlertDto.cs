@@ -8,6 +8,10 @@ public class ProductionAlertConfigDto
     public bool IsEnabled { get; set; }
     public int CheckIntervalMinutes { get; set; }
     public int AlertIntervalMinutes { get; set; }
+    /// <summary>
+    /// Cantidad de chequeos fallidos consecutivos requeridos antes de enviar la primera alerta
+    /// </summary>
+    public int FailedChecksBeforeAlert { get; set; } = 1;
     public List<string> Recipients { get; set; } = new();
     public List<string> Ambientes { get; set; } = new() { "Produccion" };
     public DateTime? LastRunAt { get; set; }
@@ -23,6 +27,7 @@ public class CreateProductionAlertRequest
     public string? Description { get; set; }
     public int CheckIntervalMinutes { get; set; } = 1;
     public int AlertIntervalMinutes { get; set; } = 15;
+    public int FailedChecksBeforeAlert { get; set; } = 1;
     public List<string> Recipients { get; set; } = new();
     public List<string> Ambientes { get; set; } = new() { "Produccion" };
 }
@@ -34,6 +39,7 @@ public class UpdateProductionAlertRequest
     public bool? IsEnabled { get; set; }
     public int? CheckIntervalMinutes { get; set; }
     public int? AlertIntervalMinutes { get; set; }
+    public int? FailedChecksBeforeAlert { get; set; }
     public List<string>? Recipients { get; set; }
     public List<string>? Ambientes { get; set; }
 }
@@ -59,6 +65,10 @@ public class InstanceConnectionStatusDto
     public DateTime? LastCheckedAt { get; set; }
     public string? LastError { get; set; }
     public DateTime? DownSince { get; set; }
+    /// <summary>
+    /// Contador de chequeos fallidos consecutivos
+    /// </summary>
+    public int ConsecutiveFailures { get; set; } = 0;
 }
 
 public class InventoryInstanceDto

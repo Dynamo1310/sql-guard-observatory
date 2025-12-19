@@ -44,6 +44,7 @@ public class ProductionAlertService : IProductionAlertService
             Description = request.Description,
             CheckIntervalMinutes = request.CheckIntervalMinutes,
             AlertIntervalMinutes = request.AlertIntervalMinutes,
+            FailedChecksBeforeAlert = request.FailedChecksBeforeAlert,
             Recipients = string.Join(",", request.Recipients),
             Ambientes = string.Join(",", request.Ambientes),
             CreatedAt = DateTime.Now,
@@ -71,6 +72,7 @@ public class ProductionAlertService : IProductionAlertService
         if (request.IsEnabled.HasValue) config.IsEnabled = request.IsEnabled.Value;
         if (request.CheckIntervalMinutes.HasValue) config.CheckIntervalMinutes = request.CheckIntervalMinutes.Value;
         if (request.AlertIntervalMinutes.HasValue) config.AlertIntervalMinutes = request.AlertIntervalMinutes.Value;
+        if (request.FailedChecksBeforeAlert.HasValue) config.FailedChecksBeforeAlert = request.FailedChecksBeforeAlert.Value;
         if (request.Recipients != null) config.Recipients = string.Join(",", request.Recipients);
         if (request.Ambientes != null) config.Ambientes = string.Join(",", request.Ambientes);
         
@@ -170,16 +172,30 @@ public class ProductionAlertService : IProductionAlertService
                 filteredInstances.Count, instances.Count);
 
             var downInstances = new List<string>();
+            var instancesReadyToAlert = new List<string>();
 
             // 3. Verificar conexión a cada instancia
             foreach (var instance in filteredInstances)
             {
                 var isConnected = await TestConnectionAsync(instance.NombreInstancia);
-                await UpdateInstanceStatusAsync(instance, isConnected);
+                var consecutiveFailures = await UpdateInstanceStatusAsync(instance, isConnected);
 
                 if (!isConnected)
                 {
                     downInstances.Add(instance.NombreInstancia);
+                    
+                    // Solo agregar a la lista de alertas si alcanzó el umbral de fallas consecutivas
+                    if (consecutiveFailures >= config.FailedChecksBeforeAlert)
+                    {
+                        instancesReadyToAlert.Add(instance.NombreInstancia);
+                        _logger.LogInformation("Instance {Instance} reached failure threshold ({Failures}/{Required})",
+                            instance.NombreInstancia, consecutiveFailures, config.FailedChecksBeforeAlert);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Instance {Instance} failed check ({Failures}/{Required}) - not alerting yet",
+                            instance.NombreInstancia, consecutiveFailures, config.FailedChecksBeforeAlert);
+                    }
                 }
             }
 
@@ -187,10 +203,10 @@ public class ProductionAlertService : IProductionAlertService
             config.LastRunAt = DateTime.Now;
             await _context.SaveChangesAsync();
 
-            // 5. Enviar alerta si hay instancias caídas
-            if (downInstances.Any())
+            // 5. Enviar alerta solo si hay instancias que alcanzaron el umbral de fallas
+            if (instancesReadyToAlert.Any())
             {
-                await SendAlertIfNeededAsync(config, downInstances);
+                await SendAlertIfNeededAsync(config, instancesReadyToAlert);
             }
 
             _logger.LogInformation("Production check completed. Down instances: {Count}", downInstances.Count);
@@ -227,6 +243,7 @@ public class ProductionAlertService : IProductionAlertService
 <ul>
 <li>Intervalo de verificación: {config.CheckIntervalMinutes} minuto(s)</li>
 <li>Intervalo de alertas: {config.AlertIntervalMinutes} minuto(s)</li>
+<li>Chequeos fallidos antes de alertar: {config.FailedChecksBeforeAlert}</li>
 <li>Estado: {(config.IsEnabled ? "Activa" : "Inactiva")}</li>
 </ul>
 <p style='color: #666; font-size: 12px;'>Enviado desde SQLNova - {DateTime.Now:dd/MM/yyyy HH:mm:ss}</p>
@@ -269,7 +286,10 @@ public class ProductionAlertService : IProductionAlertService
         }
     }
 
-    private async Task UpdateInstanceStatusAsync(InventoryInstanceDto instance, bool isConnected)
+    /// <summary>
+    /// Actualiza el estado de conexión de una instancia y retorna el contador de fallas consecutivas
+    /// </summary>
+    private async Task<int> UpdateInstanceStatusAsync(InventoryInstanceDto instance, bool isConnected)
     {
         var status = await _context.Set<ProductionInstanceStatus>()
             .FirstOrDefaultAsync(s => s.InstanceName == instance.NombreInstancia);
@@ -281,7 +301,8 @@ public class ProductionAlertService : IProductionAlertService
                 InstanceName = instance.NombreInstancia,
                 ServerName = instance.ServerName,
                 Ambiente = instance.ambiente,
-                HostingSite = instance.hostingSite
+                HostingSite = instance.hostingSite,
+                ConsecutiveFailures = 0
             };
             _context.Set<ProductionInstanceStatus>().Add(status);
         }
@@ -293,20 +314,28 @@ public class ProductionAlertService : IProductionAlertService
         status.Ambiente = instance.ambiente;
         status.HostingSite = instance.hostingSite;
 
-        if (!isConnected && wasConnected)
+        if (!isConnected)
         {
-            // Acaba de caer
-            status.DownSince = DateTime.Now;
+            // Incrementar contador de fallas consecutivas
+            status.ConsecutiveFailures++;
             status.LastError = "Connection failed";
+            
+            if (wasConnected)
+            {
+                // Acaba de caer - registrar el momento
+                status.DownSince = DateTime.Now;
+            }
         }
-        else if (isConnected)
+        else
         {
-            // Se recuperó
+            // Se recuperó - resetear contador y limpiar estado
+            status.ConsecutiveFailures = 0;
             status.DownSince = null;
             status.LastError = null;
         }
 
         await _context.SaveChangesAsync();
+        return status.ConsecutiveFailures;
     }
 
     private async Task SendAlertIfNeededAsync(ProductionAlertConfig config, List<string> downInstances)
@@ -352,7 +381,8 @@ public class ProductionAlertService : IProductionAlertService
 
 <hr style='border: none; border-top: 1px solid #ddd; margin: 20px 0;'>
 <p style='color: #666; font-size: 12px;'>
-Esta alerta se envía cada {config.AlertIntervalMinutes} minutos mientras los servidores permanezcan sin respuesta.<br>
+Esta alerta se envía cada {config.AlertIntervalMinutes} minuto(s) mientras los servidores permanezcan sin respuesta.<br>
+Se requieren {config.FailedChecksBeforeAlert} chequeo(s) fallido(s) consecutivo(s) antes de enviar la primera alerta.<br>
 Enviado desde SQLNova - {DateTime.Now:dd/MM/yyyy HH:mm:ss}
 </p>
 </body>

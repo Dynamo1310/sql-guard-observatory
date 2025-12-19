@@ -71,6 +71,17 @@ const alertIntervalOptions = [
   { value: 240, label: '4 horas' },
 ];
 
+const failedChecksOptions = [
+  { value: 1, label: '1 intento (inmediato)' },
+  { value: 2, label: '2 intentos' },
+  { value: 3, label: '3 intentos' },
+  { value: 4, label: '4 intentos' },
+  { value: 5, label: '5 intentos' },
+  { value: 6, label: '6 intentos' },
+  { value: 10, label: '10 intentos' },
+  { value: 15, label: '15 intentos' },
+];
+
 export default function ProductionAlerts() {
   const [config, setConfig] = useState<ProductionAlertConfigDto | null>(null);
   const [history, setHistory] = useState<ProductionAlertHistoryDto[]>([]);
@@ -89,6 +100,7 @@ export default function ProductionAlerts() {
   const [isEnabled, setIsEnabled] = useState(false);
   const [checkIntervalMinutes, setCheckIntervalMinutes] = useState(1);
   const [alertIntervalMinutes, setAlertIntervalMinutes] = useState(15);
+  const [failedChecksBeforeAlert, setFailedChecksBeforeAlert] = useState(1);
   const [recipients, setRecipients] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState('');
   const [selectedAmbientes, setSelectedAmbientes] = useState<string[]>(['Produccion']);
@@ -130,6 +142,7 @@ export default function ProductionAlerts() {
         setIsEnabled(configData.isEnabled);
         setCheckIntervalMinutes(configData.checkIntervalMinutes || 1);
         setAlertIntervalMinutes(configData.alertIntervalMinutes || 15);
+        setFailedChecksBeforeAlert(configData.failedChecksBeforeAlert || 1);
         setRecipients(configData.recipients || []);
         setSelectedAmbientes(configData.ambientes || ['Produccion']);
       }
@@ -205,6 +218,7 @@ export default function ProductionAlerts() {
         isEnabled,
         checkIntervalMinutes,
         alertIntervalMinutes,
+        failedChecksBeforeAlert,
         recipients,
         ambientes: selectedAmbientes,
       };
@@ -480,6 +494,32 @@ export default function ProductionAlerts() {
               </div>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="failedChecks">
+                <AlertTriangle className="h-4 w-4 inline mr-1" />
+                Chequeos Fallidos Antes de Alertar
+              </Label>
+              <Select value={failedChecksBeforeAlert.toString()} onValueChange={(v) => setFailedChecksBeforeAlert(parseInt(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {failedChecksOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value.toString()}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Cantidad de verificaciones fallidas consecutivas requeridas antes de enviar la primera alerta.
+                <br />
+                <span className="text-amber-600">
+                  Ejemplo: Si el intervalo es 1 minuto y los intentos son 5, se enviará alerta después de 5 minutos de fallas consecutivas.
+                </span>
+              </p>
+            </div>
+
             {/* Selector de Ambientes */}
             <div className="space-y-3">
               <Label>Ambientes a Monitorear</Label>
@@ -676,6 +716,7 @@ export default function ProductionAlerts() {
                     <TableHead>Ambiente</TableHead>
                     <TableHead>Hosting</TableHead>
                     <TableHead>Versión</TableHead>
+                    <TableHead>Fallas</TableHead>
                     <TableHead>Última Verificación</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -707,6 +748,18 @@ export default function ProductionAlerts() {
                         <TableCell className="text-sm">{inst.hostingSite}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {inst.majorVersion?.replace('Microsoft SQL Server ', '')}
+                        </TableCell>
+                        <TableCell>
+                          {status && status.consecutiveFailures > 0 ? (
+                            <Badge 
+                              variant={status.consecutiveFailures >= failedChecksBeforeAlert ? 'destructive' : 'secondary'}
+                              className="font-mono"
+                            >
+                              {status.consecutiveFailures}/{failedChecksBeforeAlert}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">0</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs font-mono">
                           {status?.lastCheckedAt ? formatDate(status.lastCheckedAt) : '-'}
@@ -793,7 +846,14 @@ export default function ProductionAlerts() {
         <AlertDescription>
           <strong>¿Cómo funciona?</strong> El sistema obtiene la lista de instancias de <code className="bg-muted px-1 rounded">http://asprbm-nov-01/InventoryDBA/inventario/</code> cada {checkIntervalMinutes} minuto(s).
           Se excluyen automáticamente las instancias con <strong>hostingSite = "AWS"</strong> o que contengan <strong>"DMZ"</strong> en el nombre.
-          Si se detecta una falla de conexión, se envía un email a los destinatarios configurados cada {alertIntervalMinutes} minutos mientras el servidor siga sin responder.
+          <br /><br />
+          <strong>Lógica de alertas:</strong> Cuando se detecta una falla de conexión, el sistema cuenta las verificaciones fallidas consecutivas. 
+          Solo después de alcanzar <strong>{failedChecksBeforeAlert} chequeo(s) fallido(s)</strong> consecutivo(s) se envía la primera alerta por email.
+          Luego, se envía un email cada <strong>{alertIntervalMinutes} minuto(s)</strong> mientras el servidor siga sin responder.
+          <br />
+          <span className="text-muted-foreground">
+            Esto evita falsos positivos por micro cortes de red momentáneos.
+          </span>
         </AlertDescription>
       </Alert>
     </div>

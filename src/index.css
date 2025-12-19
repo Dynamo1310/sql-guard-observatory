@@ -235,4 +235,140 @@ All colors MUST be HSL.
   .severity-critical {
     @apply bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400;
   }
+
+  /* HealthScore Animations */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(0.8);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1.5);
+      opacity: 0;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.2s ease-out forwards;
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.3s ease-out forwards;
+  }
+
+  .animate-pulse-ring {
+    animation: pulse-ring 1.5s ease-out infinite;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.1) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Staggered animation delays for grid items */
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.1s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.2s; }
+  .stagger-5 { animation-delay: 0.25s; }
+  .stagger-6 { animation-delay: 0.3s; }
+  .stagger-7 { animation-delay: 0.35s; }
+  .stagger-8 { animation-delay: 0.4s; }
+
+  /* Health status colors - refined */
+  .health-healthy {
+    @apply bg-green-500/10 border-green-500/30 text-green-600;
+  }
+  
+  .health-warning {
+    @apply bg-yellow-500/10 border-yellow-500/30 text-yellow-600;
+  }
+  
+  .health-risk {
+    @apply bg-orange-500/10 border-orange-500/30 text-orange-600;
+  }
+  
+  .health-critical {
+    @apply bg-red-500/10 border-red-500/30 text-red-600;
+  }
+
+  /* Live indicator pulse */
+  .live-pulse {
+    @apply relative;
+  }
+
+  .live-pulse::before {
+    content: '';
+    @apply absolute inset-0 rounded-full bg-current opacity-75;
+    animation: pulse-ring 1.5s ease-out infinite;
+  }
+
+  /* Score circle glow effect */
+  .score-glow-green {
+    filter: drop-shadow(0 0 8px hsl(142 71% 45% / 0.4));
+  }
+  
+  .score-glow-yellow {
+    filter: drop-shadow(0 0 8px hsl(38 92% 50% / 0.4));
+  }
+  
+  .score-glow-orange {
+    filter: drop-shadow(0 0 8px hsl(25 95% 53% / 0.4));
+  }
+  
+  .score-glow-red {
+    filter: drop-shadow(0 0 8px hsl(0 84% 60% / 0.4));
+  }
 }

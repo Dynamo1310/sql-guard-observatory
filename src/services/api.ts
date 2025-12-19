@@ -1837,6 +1837,7 @@ export interface ProductionAlertConfigDto {
   isEnabled: boolean;
   checkIntervalMinutes: number;  // Intervalo de verificación (cada cuánto chequea conexiones)
   alertIntervalMinutes: number;  // Intervalo de alerta (cada cuánto envía mail si sigue caído)
+  failedChecksBeforeAlert: number;  // Cantidad de chequeos fallidos consecutivos antes de alertar
   recipients: string[];
   ambientes: string[];  // Ambientes a monitorear (Produccion, Desarrollo, Testing)
   lastRunAt?: string;
@@ -1855,6 +1856,7 @@ export interface InstanceConnectionStatus {
   lastCheckedAt?: string;
   lastError?: string;
   downSince?: string;
+  consecutiveFailures: number;  // Contador de chequeos fallidos consecutivos
 }
 
 export interface ProductionAlertHistoryDto {
@@ -1872,6 +1874,7 @@ export interface CreateProductionAlertRequest {
   description?: string;
   checkIntervalMinutes: number;
   alertIntervalMinutes: number;
+  failedChecksBeforeAlert: number;
   recipients: string[];
   ambientes: string[];
 }
@@ -1882,6 +1885,7 @@ export interface UpdateProductionAlertRequest {
   isEnabled?: boolean;
   checkIntervalMinutes?: number;
   alertIntervalMinutes?: number;
+  failedChecksBeforeAlert?: number;
   recipients?: string[];
   ambientes?: string[];
 }

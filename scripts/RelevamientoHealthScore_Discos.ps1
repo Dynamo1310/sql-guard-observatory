@@ -326,7 +326,7 @@ ORDER BY FreePct ASC;
 -- Tabla temporal para resultados
 IF OBJECT_ID('tempdb..#FileSpaceAnalysis') IS NOT NULL DROP TABLE #FileSpaceAnalysis;
 CREATE TABLE #FileSpaceAnalysis (
-    DriveLetter CHAR(2),
+    DriveLetter VARCHAR(2),
     TotalFiles INT,
     FilesWithoutGrowth INT,
     FilesWithGrowth INT,
@@ -342,7 +342,7 @@ SELECT @sql = @sql + N'
 USE ' + QUOTENAME(d.name) + N';
 INSERT INTO #FileSpaceAnalysis
 SELECT 
-    LEFT(mf.physical_name, 2) AS DriveLetter,
+    RTRIM(LEFT(mf.physical_name, 2)) AS DriveLetter,
     COUNT(*) AS TotalFiles,
     SUM(CASE WHEN mf.growth = 0 THEN 1 ELSE 0 END) AS FilesWithoutGrowth,
     SUM(CASE WHEN mf.growth != 0 THEN 1 ELSE 0 END) AS FilesWithGrowth,
@@ -353,7 +353,7 @@ SELECT
 FROM sys.database_files mf
 INNER JOIN sys.dm_db_file_space_used fs ON mf.file_id = fs.file_id
 WHERE mf.type IN (0, 1)  -- ROWS y LOG
-GROUP BY LEFT(mf.physical_name, 2);
+GROUP BY RTRIM(LEFT(mf.physical_name, 2));
 '
 FROM sys.databases d
 WHERE d.name NOT IN ('master', 'model', 'msdb', 'tempdb')
@@ -818,7 +818,7 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                 $fileAnalysisForVolume = $null
                 if ($dataFileAnalysis) {
                     $fileAnalysisForVolume = $dataFileAnalysis | Where-Object { 
-                        $_.DriveLetter -eq $driveLetter 
+                        $_.DriveLetter.ToString().Trim() -eq $driveLetter.Trim() 
                     } | Select-Object -First 1
                 }
                 
@@ -1556,7 +1556,7 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
 -- Análisis de espacio interno usando sys.dm_db_file_space_used (cross-database)
 IF OBJECT_ID('tempdb..#FileSpaceAnalysis') IS NOT NULL DROP TABLE #FileSpaceAnalysis;
 CREATE TABLE #FileSpaceAnalysis (
-    DriveLetter CHAR(2),
+    DriveLetter VARCHAR(2),
     FilesWithoutGrowth INT,
     FilesWithGrowth INT,
     FreeSpaceInGrowableFilesMB DECIMAL(18,2)
@@ -1567,14 +1567,14 @@ SELECT @sql = @sql + N'
 USE ' + QUOTENAME(d.name) + N';
 INSERT INTO #FileSpaceAnalysis
 SELECT 
-    LEFT(mf.physical_name, 2),
+    RTRIM(LEFT(mf.physical_name, 2)),
     SUM(CASE WHEN mf.growth = 0 THEN 1 ELSE 0 END),
     SUM(CASE WHEN mf.growth != 0 THEN 1 ELSE 0 END),
     CAST(SUM(CASE WHEN mf.growth != 0 THEN fs.unallocated_extent_page_count * 8.0 / 1024 ELSE 0 END) AS DECIMAL(18,2))
 FROM sys.database_files mf
 INNER JOIN sys.dm_db_file_space_used fs ON mf.file_id = fs.file_id
 WHERE mf.type IN (0, 1)
-GROUP BY LEFT(mf.physical_name, 2);
+GROUP BY RTRIM(LEFT(mf.physical_name, 2));
 '
 FROM sys.databases d
 WHERE d.name NOT IN ('master', 'model', 'msdb', 'tempdb') AND d.state = 0 AND d.is_read_only = 0;
@@ -1602,7 +1602,7 @@ DROP TABLE #FileSpaceAnalysis;
                         # Buscar análisis de archivos para este volumen
                         # Extraer solo "E:" para match con query
                         $driveLetter = if ($mountPoint.Length -ge 2) { $mountPoint.Substring(0, 2) } else { $mountPoint }
-                        $fileAnalysis = $fileAnalysisData | Where-Object { $_.DriveLetter -eq $driveLetter } | Select-Object -First 1
+                        $fileAnalysis = $fileAnalysisData | Where-Object { $_.DriveLetter.ToString().Trim() -eq $driveLetter.Trim() } | Select-Object -First 1
                         
                         $filesWithGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithGrowth } else { 0 }
                         $filesWithoutGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithoutGrowth } else { 0 }

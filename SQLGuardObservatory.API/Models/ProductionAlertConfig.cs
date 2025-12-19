@@ -29,6 +29,12 @@ public class ProductionAlertConfig
     public int AlertIntervalMinutes { get; set; } = 15;
     
     /// <summary>
+    /// Cantidad de chequeos fallidos consecutivos requeridos antes de enviar la primera alerta (default: 1)
+    /// Esto evita falsos positivos por micro cortes de red
+    /// </summary>
+    public int FailedChecksBeforeAlert { get; set; } = 1;
+    
+    /// <summary>
     /// Lista de emails separados por coma
     /// </summary>
     [MaxLength(2000)]
@@ -111,5 +117,10 @@ public class ProductionInstanceStatus
     /// Última vez que se envió alerta por esta instancia
     /// </summary>
     public DateTime? LastAlertSentAt { get; set; }
+    
+    /// <summary>
+    /// Contador de chequeos fallidos consecutivos para esta instancia
+    /// </summary>
+    public int ConsecutiveFailures { get; set; } = 0;
 }
 

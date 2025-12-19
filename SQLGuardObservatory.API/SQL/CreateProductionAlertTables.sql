@@ -37,6 +37,14 @@ BEGIN
         PRINT 'Columna Ambientes agregada a ProductionAlertConfig'
     END
     
+    -- Agregar columna FailedChecksBeforeAlert si no existe
+    -- Define cuántos chequeos fallidos consecutivos se requieren antes de enviar la primera alerta
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('ProductionAlertConfig') AND name = 'FailedChecksBeforeAlert')
+    BEGIN
+        ALTER TABLE [dbo].[ProductionAlertConfig] ADD [FailedChecksBeforeAlert] INT NOT NULL DEFAULT 1
+        PRINT 'Columna FailedChecksBeforeAlert agregada a ProductionAlertConfig'
+    END
+    
     PRINT 'Tabla ProductionAlertConfig ya existe'
 END
 GO
@@ -79,6 +87,7 @@ BEGIN
         [LastError] NVARCHAR(1000) NULL,
         [DownSince] DATETIME2 NULL,
         [LastAlertSentAt] DATETIME2 NULL,
+        [ConsecutiveFailures] INT NOT NULL DEFAULT 0,  -- Contador de chequeos fallidos consecutivos
         
         CONSTRAINT UQ_ProductionInstanceStatus_InstanceName UNIQUE ([InstanceName])
     )
@@ -90,6 +99,13 @@ BEGIN
 END
 ELSE
 BEGIN
+    -- Agregar columna ConsecutiveFailures si no existe
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('ProductionInstanceStatus') AND name = 'ConsecutiveFailures')
+    BEGIN
+        ALTER TABLE [dbo].[ProductionInstanceStatus] ADD [ConsecutiveFailures] INT NOT NULL DEFAULT 0
+        PRINT 'Columna ConsecutiveFailures agregada a ProductionInstanceStatus'
+    END
+    
     PRINT 'Tabla ProductionInstanceStatus ya existe'
 END
 GO

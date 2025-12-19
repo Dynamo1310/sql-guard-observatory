@@ -43,6 +43,7 @@ public class ProductionAlertsController : ControllerBase
                     IsEnabled = false,
                     CheckIntervalMinutes = 1,
                     AlertIntervalMinutes = 15,
+                    FailedChecksBeforeAlert = 1,
                     Recipients = new List<string>(),
                     Ambientes = new List<string> { "Produccion" },
                     LastRunAt = null,
@@ -61,6 +62,7 @@ public class ProductionAlertsController : ControllerBase
                 IsEnabled = config.IsEnabled,
                 CheckIntervalMinutes = config.CheckIntervalMinutes,
                 AlertIntervalMinutes = config.AlertIntervalMinutes,
+                FailedChecksBeforeAlert = config.FailedChecksBeforeAlert,
                 Recipients = config.Recipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
                 Ambientes = config.Ambientes?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string> { "Produccion" },
                 LastRunAt = config.LastRunAt,
@@ -92,6 +94,7 @@ public class ProductionAlertsController : ControllerBase
                 IsEnabled = config.IsEnabled,
                 CheckIntervalMinutes = config.CheckIntervalMinutes,
                 AlertIntervalMinutes = config.AlertIntervalMinutes,
+                FailedChecksBeforeAlert = config.FailedChecksBeforeAlert,
                 Recipients = config.Recipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
                 Ambientes = config.Ambientes?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string> { "Produccion" },
                 LastRunAt = config.LastRunAt,
@@ -123,6 +126,7 @@ public class ProductionAlertsController : ControllerBase
                 IsEnabled = config.IsEnabled,
                 CheckIntervalMinutes = config.CheckIntervalMinutes,
                 AlertIntervalMinutes = config.AlertIntervalMinutes,
+                FailedChecksBeforeAlert = config.FailedChecksBeforeAlert,
                 Recipients = config.Recipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
                 Ambientes = config.Ambientes?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string> { "Produccion" },
                 LastRunAt = config.LastRunAt,
@@ -170,7 +174,8 @@ public class ProductionAlertsController : ControllerBase
             IsConnected = s.IsConnected,
             LastCheckedAt = s.LastCheckedAt,
             LastError = s.LastError,
-            DownSince = s.DownSince
+            DownSince = s.DownSince,
+            ConsecutiveFailures = s.ConsecutiveFailures
         }).ToList());
     }
 
