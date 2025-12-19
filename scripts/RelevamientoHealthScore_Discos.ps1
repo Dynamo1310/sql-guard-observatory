@@ -315,13 +315,13 @@ ORDER BY FreePct ASC;
 "@
         }
 
-        # Query 1b: Análisis completo de archivos por disco (MEJORADO v3.3)
+        # Query 1b: Análisis completo de archivos por disco (MEJORADO v3.4)
         # Calcula métricas por volumen: archivos con/sin growth, espacio interno, ESPACIO LIBRE REAL
-        # NOTA: Usa sys.dm_db_file_space_used que requiere iterar por cada base de datos
+        # NOTA: Usa FILEPROPERTY que es compatible con todas las versiones de SQL Server
         $queryFileAnalysis = @"
--- Análisis de espacio interno en archivos usando sys.dm_db_file_space_used
+-- Análisis de espacio interno en archivos usando FILEPROPERTY (compatible con todas las versiones)
 -- Esta query itera por cada base de datos para obtener el espacio usado real
--- v3.3: Calcula FreeSpaceInGrowableFilesMB correctamente
+-- v3.4: Usa FILEPROPERTY en lugar de sys.dm_db_file_space_used para mayor compatibilidad
 
 -- Tabla temporal para resultados
 IF OBJECT_ID('tempdb..#FileSpaceAnalysis') IS NOT NULL DROP TABLE #FileSpaceAnalysis;
@@ -347,11 +347,10 @@ SELECT
     SUM(CASE WHEN mf.growth = 0 THEN 1 ELSE 0 END) AS FilesWithoutGrowth,
     SUM(CASE WHEN mf.growth != 0 THEN 1 ELSE 0 END) AS FilesWithGrowth,
     CAST(SUM(mf.size * 8.0 / 1024) AS DECIMAL(18,2)) AS TotalFileSizeMB,
-    CAST(SUM(fs.unallocated_extent_page_count * 8.0 / 1024) AS DECIMAL(18,2)) AS TotalFreeSpaceInFilesMB,
-    CAST(SUM(CASE WHEN mf.growth != 0 THEN fs.unallocated_extent_page_count * 8.0 / 1024 ELSE 0 END) AS DECIMAL(18,2)) AS FreeSpaceInGrowableFilesMB,
-    SUM(CASE WHEN mf.growth != 0 AND fs.unallocated_extent_page_count * 8.0 / 1024 < 30 THEN 1 ELSE 0 END) AS ProblematicFiles
+    CAST(SUM((mf.size - FILEPROPERTY(mf.name, ''SpaceUsed'')) * 8.0 / 1024) AS DECIMAL(18,2)) AS TotalFreeSpaceInFilesMB,
+    CAST(SUM(CASE WHEN mf.growth != 0 THEN (mf.size - FILEPROPERTY(mf.name, ''SpaceUsed'')) * 8.0 / 1024 ELSE 0 END) AS DECIMAL(18,2)) AS FreeSpaceInGrowableFilesMB,
+    SUM(CASE WHEN mf.growth != 0 AND (mf.size - FILEPROPERTY(mf.name, ''SpaceUsed'')) * 8.0 / 1024 < 30 THEN 1 ELSE 0 END) AS ProblematicFiles
 FROM sys.database_files mf
-INNER JOIN sys.dm_db_file_space_used fs ON mf.file_id = fs.file_id
 WHERE mf.type IN (0, 1)  -- ROWS y LOG
 GROUP BY RTRIM(LEFT(mf.physical_name, 2));
 '
@@ -1551,9 +1550,9 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                         }
                     } catch { }
                     
-                    # NUEVO v3.3: Query de análisis de archivos para modo paralelo
+                    # NUEVO v3.4: Query de análisis de archivos para modo paralelo (usando FILEPROPERTY)
                     $queryFileAnalysisParallel = @"
--- Análisis de espacio interno usando sys.dm_db_file_space_used (cross-database)
+-- Análisis de espacio interno usando FILEPROPERTY (compatible con todas las versiones)
 IF OBJECT_ID('tempdb..#FileSpaceAnalysis') IS NOT NULL DROP TABLE #FileSpaceAnalysis;
 CREATE TABLE #FileSpaceAnalysis (
     DriveLetter VARCHAR(2),
@@ -1570,9 +1569,8 @@ SELECT
     RTRIM(LEFT(mf.physical_name, 2)),
     SUM(CASE WHEN mf.growth = 0 THEN 1 ELSE 0 END),
     SUM(CASE WHEN mf.growth != 0 THEN 1 ELSE 0 END),
-    CAST(SUM(CASE WHEN mf.growth != 0 THEN fs.unallocated_extent_page_count * 8.0 / 1024 ELSE 0 END) AS DECIMAL(18,2))
+    CAST(SUM(CASE WHEN mf.growth != 0 THEN (mf.size - FILEPROPERTY(mf.name, ''SpaceUsed'')) * 8.0 / 1024 ELSE 0 END) AS DECIMAL(18,2))
 FROM sys.database_files mf
-INNER JOIN sys.dm_db_file_space_used fs ON mf.file_id = fs.file_id
 WHERE mf.type IN (0, 1)
 GROUP BY RTRIM(LEFT(mf.physical_name, 2));
 '
