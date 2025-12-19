@@ -818,7 +818,7 @@ CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
                 $fileAnalysisForVolume = $null
                 if ($dataFileAnalysis) {
                     $fileAnalysisForVolume = $dataFileAnalysis | Where-Object { 
-                        $_.DriveLetter.ToString().Trim() -eq $driveLetter.Trim() 
+                        ($null -ne $_.DriveLetter) -and ($_.DriveLetter.ToString().Trim() -eq $driveLetter.Trim())
                     } | Select-Object -First 1
                 }
                 
@@ -1602,7 +1602,9 @@ DROP TABLE #FileSpaceAnalysis;
                         # Buscar análisis de archivos para este volumen
                         # Extraer solo "E:" para match con query
                         $driveLetter = if ($mountPoint.Length -ge 2) { $mountPoint.Substring(0, 2) } else { $mountPoint }
-                        $fileAnalysis = $fileAnalysisData | Where-Object { $_.DriveLetter.ToString().Trim() -eq $driveLetter.Trim() } | Select-Object -First 1
+                        $fileAnalysis = if ($fileAnalysisData) { 
+                            $fileAnalysisData | Where-Object { ($null -ne $_.DriveLetter) -and ($_.DriveLetter.ToString().Trim() -eq $driveLetter.Trim()) } | Select-Object -First 1 
+                        } else { $null }
                         
                         $filesWithGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithGrowth } else { 0 }
                         $filesWithoutGrowth = if ($fileAnalysis) { [int]$fileAnalysis.FilesWithoutGrowth } else { 0 }
