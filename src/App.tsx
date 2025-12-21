@@ -39,6 +39,7 @@ import VaultGroupDetail from "./pages/VaultGroupDetail";
 import VaultMyCredentials from "./pages/VaultMyCredentials";
 import VaultGroups from "./pages/VaultGroups";
 import VaultAudit from "./pages/VaultAudit";
+import VaultMigration from "./pages/VaultMigration";
 import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
@@ -231,6 +232,9 @@ const App = () => (
                         <ProtectedRoute viewName="VaultAudit">
                           <VaultAudit />
                         </ProtectedRoute>
+                      } />
+                      <Route path="/vault/migration" element={
+                        <VaultMigration />
                       } />
                       <Route path="/vault/groups/:id" element={
                         <ProtectedRoute viewName="VaultCredentials">

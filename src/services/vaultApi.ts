@@ -256,6 +256,57 @@ export interface ShareCredentialRequest {
 }
 
 // =============================================
+// Tipos de Migración Enterprise (Solo SuperAdmin)
+// =============================================
+
+export interface BackfillStatus {
+  totalCredentials: number;
+  migratedCredentials: number;
+  pendingCredentials: number;
+  percentComplete: number;
+  lastBackfillAt?: string;
+}
+
+export interface BackfillError {
+  credentialId: number;
+  credentialName: string;
+  errorMessage: string;
+  occurredAt: string;
+}
+
+export interface BackfillResult {
+  totalProcessed: number;
+  successful: number;
+  failed: number;
+  errors: BackfillError[];
+  duration: string;
+  isComplete: boolean;
+}
+
+export interface ValidationError {
+  credentialId: number;
+  credentialName: string;
+  validationError_: string;
+  canDecryptLegacy: boolean;
+  canDecryptEnterprise: boolean;
+}
+
+export interface ValidationResult {
+  totalValidated: number;
+  validCount: number;
+  invalidCount: number;
+  errors: ValidationError[];
+  allValid: boolean;
+}
+
+export interface CleanupReadinessResult {
+  canProceed: boolean;
+  migrationStatus: BackfillStatus;
+  validationResult: ValidationResult;
+  blockers: string[];
+}
+
+// =============================================
 // Helper Functions
 // =============================================
 
@@ -742,6 +793,75 @@ export const vaultApi = {
       }
     });
     return handleResponse<SharedWithMeCredentialDto[]>(response);
+  },
+
+  // ==================== Migración Enterprise (Solo SuperAdmin) ====================
+
+  /**
+   * Obtiene el estado actual de la migración del vault
+   */
+  async getMigrationStatus(): Promise<BackfillStatus> {
+    const response = await fetch(`${API_URL}/api/VaultMigration/status`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<BackfillStatus>(response);
+  },
+
+  /**
+   * Ejecuta el backfill de credenciales pendientes
+   */
+  async executeBackfill(batchSize: number = 100): Promise<BackfillResult> {
+    const response = await fetch(`${API_URL}/api/VaultMigration/backfill?batchSize=${batchSize}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<BackfillResult>(response);
+  },
+
+  /**
+   * Valida que todas las credenciales migradas pueden ser descifradas
+   */
+  async validateMigration(): Promise<ValidationResult> {
+    const response = await fetch(`${API_URL}/api/VaultMigration/validate`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<ValidationResult>(response);
+  },
+
+  /**
+   * Verifica si se puede proceder con Phase 8 (cleanup)
+   */
+  async canProceedWithCleanup(): Promise<CleanupReadinessResult> {
+    const response = await fetch(`${API_URL}/api/VaultMigration/can-cleanup`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<CleanupReadinessResult>(response);
+  },
+
+  /**
+   * Revierte una credencial específica al formato legacy
+   */
+  async revertCredential(credentialId: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/VaultMigration/revert/${credentialId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    await handleResponse<void>(response);
   }
 };
 

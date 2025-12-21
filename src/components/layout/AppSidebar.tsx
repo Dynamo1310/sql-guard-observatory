@@ -3,7 +3,7 @@ import {
   Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart, 
   Phone, Calendar, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
   ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Wrench, Settings, Cog, ShieldCheck,
-  Key, Lock, History, KeyRound, Share2, FolderLock
+  Key, Lock, History, KeyRound, Share2, FolderLock, DatabaseBackup
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import sqlNovaLightLogo from '/SQLNovaLightMode.png';
@@ -85,6 +85,7 @@ const vaultSubItems = [
   { title: 'Compartidas Conmigo', url: '/vault/shared-with-me', icon: Share2, permission: 'VaultCredentials' },
   { title: 'Mis Credenciales', url: '/vault/my-credentials', icon: Lock, permission: 'VaultMyCredentials' },
   { title: 'Auditoría', url: '/vault/audit', icon: History, permission: 'VaultAudit' },
+  { title: 'Migración Enterprise', url: '/vault/migration', icon: DatabaseBackup, permission: 'VaultMigration', superAdminOnly: true },
 ];
 
 export function AppSidebar() {
@@ -154,6 +155,10 @@ export function AppSidebar() {
   
   // Filtrar items del Vault según permisos
   const visibleVaultSubItems = vaultSubItems.filter(item => {
+    // Items solo para SuperAdmin
+    if ('superAdminOnly' in item && item.superAdminOnly) {
+      return isSuperAdmin;
+    }
     // VaultAudit solo para Admin/SuperAdmin
     if (item.permission === 'VaultAudit') {
       return isAdmin || isSuperAdmin;
