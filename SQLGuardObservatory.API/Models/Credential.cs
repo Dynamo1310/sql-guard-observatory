@@ -62,6 +62,69 @@ public class Credential
     [MaxLength(256)]
     public string IV { get; set; } = string.Empty;
 
+    // =============================================
+    // NUEVAS COLUMNAS - Enterprise Vault v2.1
+    // =============================================
+
+    /// <summary>
+    /// Password cifrado en formato VARBINARY (nuevo formato enterprise)
+    /// </summary>
+    public byte[]? EncryptedPasswordBin { get; set; }
+
+    /// <summary>
+    /// Salt en formato VARBINARY (nuevo formato enterprise)
+    /// </summary>
+    public byte[]? SaltBin { get; set; }
+
+    /// <summary>
+    /// IV en formato VARBINARY (nuevo formato enterprise)
+    /// </summary>
+    public byte[]? IVBin { get; set; }
+
+    /// <summary>
+    /// Authentication Tag separado (nuevo formato enterprise)
+    /// </summary>
+    public byte[]? AuthTagBin { get; set; }
+
+    /// <summary>
+    /// ID de la llave de cifrado usada
+    /// </summary>
+    public Guid? KeyId { get; set; }
+
+    /// <summary>
+    /// Versión de la llave de cifrado
+    /// </summary>
+    public int? KeyVersion { get; set; }
+
+    /// <summary>
+    /// Notas cifradas (opcional)
+    /// </summary>
+    public byte[]? EncryptedNotes { get; set; }
+
+    /// <summary>
+    /// IV para notas cifradas
+    /// </summary>
+    public byte[]? NotesIV { get; set; }
+
+    /// <summary>
+    /// KeyId para notas (si es diferente)
+    /// </summary>
+    public Guid? NotesKeyId { get; set; }
+
+    /// <summary>
+    /// KeyVersion para notas
+    /// </summary>
+    public int? NotesKeyVersion { get; set; }
+
+    /// <summary>
+    /// Indica si esta credencial ya fue migrada al nuevo formato
+    /// </summary>
+    public bool IsMigratedToV2 { get; set; } = false;
+
+    // =============================================
+    // FIN NUEVAS COLUMNAS
+    // =============================================
+
     /// <summary>
     /// Dominio para credenciales Windows/AD
     /// </summary>

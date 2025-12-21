@@ -25,6 +25,7 @@ public class VaultService : IVaultService
     private readonly ApplicationDbContext _context;
     private readonly SQLNovaDbContext _sqlNovaContext;
     private readonly ICryptoService _cryptoService;
+    private readonly IDualReadCryptoService? _dualReadCryptoService;
     private readonly IVaultNotificationService _notificationService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<VaultService> _logger;
@@ -37,11 +38,13 @@ public class VaultService : IVaultService
         ICryptoService cryptoService,
         IVaultNotificationService notificationService,
         IHttpClientFactory httpClientFactory,
-        ILogger<VaultService> logger)
+        ILogger<VaultService> logger,
+        IDualReadCryptoService? dualReadCryptoService = null)
     {
         _context = context;
         _sqlNovaContext = sqlNovaContext;
         _cryptoService = cryptoService;
+        _dualReadCryptoService = dualReadCryptoService;
         _notificationService = notificationService;
         _httpClient = httpClientFactory.CreateClient();
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
@@ -210,17 +213,12 @@ public class VaultService : IVaultService
     {
         try
         {
-            // Cifrar password
-            var (cipherText, salt, iv) = _cryptoService.Encrypt(request.Password);
-
+            // Cifrar password - usar formato enterprise si está disponible
             var credential = new Credential
             {
                 Name = request.Name,
                 CredentialType = request.CredentialType,
                 Username = request.Username,
-                EncryptedPassword = cipherText,
-                Salt = salt,
-                IV = iv,
                 Domain = request.Domain,
                 Description = request.Description,
                 Notes = request.Notes,
@@ -230,6 +228,35 @@ public class VaultService : IVaultService
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow
             };
+
+            if (_dualReadCryptoService != null)
+            {
+                // Usar formato enterprise
+                var encryptedData = _dualReadCryptoService.EncryptWithEnterprise(request.Password);
+                
+                // También guardar en formato legacy para compatibilidad dual-read
+                var (cipherText, salt, iv) = _cryptoService.Encrypt(request.Password);
+                credential.EncryptedPassword = cipherText;
+                credential.Salt = salt;
+                credential.IV = iv;
+                
+                // Guardar en formato enterprise
+                credential.EncryptedPasswordBin = encryptedData.CipherText;
+                credential.SaltBin = encryptedData.Salt;
+                credential.IVBin = encryptedData.IV;
+                credential.AuthTagBin = encryptedData.AuthTag;
+                credential.KeyId = encryptedData.KeyId;
+                credential.KeyVersion = encryptedData.KeyVersion;
+                credential.IsMigratedToV2 = true;
+            }
+            else
+            {
+                // Solo formato legacy
+                var (cipherText, salt, iv) = _cryptoService.Encrypt(request.Password);
+                credential.EncryptedPassword = cipherText;
+                credential.Salt = salt;
+                credential.IV = iv;
+            }
 
             _context.Credentials.Add(credential);
             await _context.SaveChangesAsync();
@@ -405,10 +432,33 @@ public class VaultService : IVaultService
         // Actualizar password si se proporcionó uno nuevo
         if (!string.IsNullOrEmpty(request.NewPassword))
         {
-            var (cipherText, salt, iv) = _cryptoService.Encrypt(request.NewPassword);
-            credential.EncryptedPassword = cipherText;
-            credential.Salt = salt;
-            credential.IV = iv;
+            if (_dualReadCryptoService != null)
+            {
+                // Usar formato enterprise
+                var encryptedData = _dualReadCryptoService.EncryptWithEnterprise(request.NewPassword);
+                
+                // También actualizar formato legacy para compatibilidad
+                var (cipherText, salt, iv) = _cryptoService.Encrypt(request.NewPassword);
+                credential.EncryptedPassword = cipherText;
+                credential.Salt = salt;
+                credential.IV = iv;
+                
+                // Actualizar formato enterprise
+                credential.EncryptedPasswordBin = encryptedData.CipherText;
+                credential.SaltBin = encryptedData.Salt;
+                credential.IVBin = encryptedData.IV;
+                credential.AuthTagBin = encryptedData.AuthTag;
+                credential.KeyId = encryptedData.KeyId;
+                credential.KeyVersion = encryptedData.KeyVersion;
+                credential.IsMigratedToV2 = true;
+            }
+            else
+            {
+                var (cipherText, salt, iv) = _cryptoService.Encrypt(request.NewPassword);
+                credential.EncryptedPassword = cipherText;
+                credential.Salt = salt;
+                credential.IV = iv;
+            }
             changedFields["Password"] = "Changed";
         }
 
@@ -549,12 +599,33 @@ public class VaultService : IVaultService
 
         try
         {
-            // Descifrar password
-            var password = _cryptoService.Decrypt(
-                credential.EncryptedPassword,
-                credential.Salt,
-                credential.IV
-            );
+            string password;
+
+            // DUAL-READ: Usar el formato apropiado según el estado de migración
+            if (_dualReadCryptoService != null)
+            {
+                password = _dualReadCryptoService.DecryptCredentialPassword(
+                    credential.IsMigratedToV2,
+                    // Legacy format
+                    credential.EncryptedPassword,
+                    credential.Salt,
+                    credential.IV,
+                    // Enterprise format
+                    credential.EncryptedPasswordBin,
+                    credential.SaltBin,
+                    credential.IVBin,
+                    credential.AuthTagBin,
+                    credential.KeyId,
+                    credential.KeyVersion);
+            }
+            else
+            {
+                // Fallback a legacy si dual-read no está disponible
+                password = _cryptoService.Decrypt(
+                    credential.EncryptedPassword,
+                    credential.Salt,
+                    credential.IV);
+            }
 
             // Registrar auditoría
             await LogAuditAsync(credential.Id, credential.Name, CredentialAuditActions.PasswordRevealed,

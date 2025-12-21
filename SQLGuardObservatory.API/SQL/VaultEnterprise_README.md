@@ -20,46 +20,88 @@ Ejecutar los scripts en el siguiente orden:
    - Crea procedimiento `sp_DropDefaultConstraintSafe`
    - Crea tablas de logging
 
-### Migración de Datos
+### Migración de Schema
 
 3. **VaultEnterprise_Phase1_EncryptionKeys.sql**
    - Crea tabla `VaultEncryptionKeys`
-   - Agrega columnas VARBINARY a Credentials
-   - Ejecuta backfill de KeyId/KeyVersion
 
-4. **VaultEnterprise_Phase1_ForeignKeys.sql**
+4. **VaultEnterprise_Phase1_InitialKey.sql**
+   - Crea la primera llave de cifrado activa
+   - **Requerido antes de backfill**
+
+5. **VaultEnterprise_Phase1_ForeignKeys.sql**
+   - Agrega columnas VARBINARY a Credentials
    - Crea FK compuestas con NOCHECK
    - Valida integridad
-   - Habilita CHECK constraints
 
-5. **VaultEnterprise_Phase3_Permissions.sql**
+6. **VaultEnterprise_Phase3_Permissions.sql**
    - Crea tablas de permisos
    - Migra Permission string a PermissionBitMask
    - ⚠️ Migración conservadora: View → Viewer (incluye Reveal)
 
-6. **VaultEnterprise_Phase4_AuditAccessLog.sql**
+7. **VaultEnterprise_Phase4_AuditAccessLog.sql**
    - Expande CredentialAuditLog
    - Crea CredentialAccessLog
    - Alinea timestamps a Argentina (UTC-3)
 
-7. **VaultEnterprise_Phase7_Indexes.sql**
+8. **VaultEnterprise_Phase7_Indexes.sql**
    - Crea índices de performance
    - NO incluye columnas legacy
 
+---
+
+## ⏸️ PAUSA OBLIGATORIA - Backfill y Validación
+
+**Antes de ejecutar Phase8, se debe completar el backfill de datos:**
+
+### Opción A: Backfill via API (Recomendado)
+
+```bash
+# 1. Verificar estado actual
+GET /api/VaultMigration/status
+
+# 2. Ejecutar backfill
+POST /api/VaultMigration/backfill?batchSize=100
+
+# 3. Validar credenciales migradas
+GET /api/VaultMigration/validate
+
+# 4. Verificar si puede proceder con cleanup
+GET /api/VaultMigration/can-cleanup
+```
+
+### Opción B: Backfill via SQL (Solo validación)
+
+9. **VaultEnterprise_Phase2_Backfill.sql**
+   - Crea vistas de monitoreo
+   - `EXEC sp_BackfillReport` - Ver estado
+   - `EXEC sp_ValidatePreCleanup` - Verificar antes de Phase8
+
+### Checklist Pausa Obligatoria
+
+- [ ] Deploy de aplicación con dual-read habilitado
+- [ ] Llave inicial creada (Phase1_InitialKey.sql)
+- [ ] Backfill ejecutado (`POST /api/VaultMigration/backfill`)
+- [ ] Todas las credenciales migradas (`GET /api/VaultMigration/status` → PendingCredentials = 0)
+- [ ] Validación exitosa (`GET /api/VaultMigration/validate` → AllValid = true)
+- [ ] `EXEC sp_ValidatePreCleanup` → CanProceed = 1
+
+---
+
 ### Post-Migración Gates
 
-8. **VaultEnterprise_Recertification_RevealPermissions.sql**
-   - Ejecutar 0-24h post-migración
-   - Generar reporte para Security
-   - Gate obligatorio antes de cerrar migración
+10. **VaultEnterprise_Recertification_RevealPermissions.sql**
+    - Ejecutar 0-24h post-migración
+    - Generar reporte para Security
+    - Gate obligatorio antes de cerrar migración
 
 ### Cleanup (Solo después de todos los gates)
 
-9. **VaultEnterprise_Phase8_Cleanup.sql**
-   - Elimina columnas legacy
-   - Renombra columnas VARBINARY
-   - Rebuild de índices
-   - ⚠️ EJECUTAR SOLO después de Deploy 2 (single-read)
+11. **VaultEnterprise_Phase8_Cleanup.sql**
+    - Elimina columnas legacy
+    - Renombra columnas VARBINARY
+    - Rebuild de índices
+    - ⚠️ EJECUTAR SOLO después de Deploy 2 (single-read)
 
 ## Documentación Operativa
 
@@ -90,13 +132,24 @@ Ejecutar los scripts en el siguiente orden:
 
 ## Archivos C# Relacionados
 
+### Criptografía Enterprise
 - `Services/CryptoServiceV2.cs` - Nuevo servicio de criptografía
 - `Services/ICryptoServiceV2.cs` - Interfaz
 - `Services/KeyManager.cs` - Gestor de llaves
 - `Services/IKeyManager.cs` - Interfaz
-- `Models/VaultEncryptionKey.cs` - Modelo EF
-- `Models/CredentialAccessLog.cs` - Modelo EF
 - `Exceptions/CryptoValidationException.cs` - Excepción de validación
+
+### Dual-Read y Backfill
+- `Services/DualReadCryptoService.cs` - Servicio dual-read (legacy + enterprise)
+- `Services/IDualReadCryptoService.cs` - Interfaz
+- `Services/BackfillService.cs` - Servicio de backfill
+- `Services/IBackfillService.cs` - Interfaz
+- `Controllers/VaultMigrationController.cs` - API de migración
+
+### Modelos
+- `Models/VaultEncryptionKey.cs` - Modelo EF para llaves
+- `Models/CredentialAccessLog.cs` - Modelo EF para access log
+- `Models/Credential.cs` - Actualizado con columnas enterprise
 
 ## Notas Importantes
 

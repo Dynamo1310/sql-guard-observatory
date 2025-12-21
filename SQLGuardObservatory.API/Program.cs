@@ -179,6 +179,12 @@ builder.Services.AddScoped<ICryptoService, CryptoService>();
 builder.Services.AddScoped<IVaultNotificationService, VaultNotificationService>();
 builder.Services.AddScoped<IVaultService, VaultService>();
 
+// Vault Enterprise v2.1 - Servicios de migración
+builder.Services.AddScoped<ICryptoServiceV2, CryptoServiceV2>();
+builder.Services.AddScoped<IKeyManager, KeyManager>();
+builder.Services.AddScoped<IDualReadCryptoService, DualReadCryptoService>();
+builder.Services.AddScoped<IBackfillService, BackfillService>();
+
 // Configurar CORS
 builder.Services.AddCors(options =>
 {
