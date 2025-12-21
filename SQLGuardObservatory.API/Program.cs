@@ -171,6 +171,14 @@ builder.Services.AddScoped<IServerRestartService, ServerRestartService>();
 // Index Analysis Service - Análisis exhaustivo de índices
 builder.Services.AddScoped<IIndexAnalysisService, IndexAnalysisService>();
 
+// Patching Service - Estado de parcheo de servidores SQL Server
+builder.Services.AddScoped<IPatchingService, PatchingService>();
+
+// Vault de Credenciales DBA
+builder.Services.AddScoped<ICryptoService, CryptoService>();
+builder.Services.AddScoped<IVaultNotificationService, VaultNotificationService>();
+builder.Services.AddScoped<IVaultService, VaultService>();
+
 // Configurar CORS
 builder.Services.AddCors(options =>
 {

@@ -766,3 +766,6 @@ internal class InventoryServerData
     public string ambiente { get; set; } = "";
 }
 
+
+
+

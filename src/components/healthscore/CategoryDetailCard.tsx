@@ -346,3 +346,6 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
   }
 }
 
+
+
+

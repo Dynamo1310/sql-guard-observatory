@@ -187,3 +187,6 @@ C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bi
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\Serilog.Sinks.Debug.dll
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\Serilog.Sinks.File.dll
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\SQLGuardObservatory.API.staticwebassets.runtime.json
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\System.Management.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\runtimes\win\lib\net8.0\System.Management.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\Data\dbatools-buildref-index.json

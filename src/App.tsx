@@ -30,6 +30,15 @@ import ServerRestart from "./pages/ServerRestart";
 import OperationalServersConfig from "./pages/OperationalServersConfig";
 import AdminUsers from "./pages/AdminUsers";
 import AdminPermissions from "./pages/AdminPermissions";
+import PatchStatus from "./pages/PatchStatus";
+import PatchComplianceConfig from "./pages/PatchComplianceConfig";
+import VaultDashboard from "./pages/VaultDashboard";
+import VaultCredentials from "./pages/VaultCredentials";
+import VaultSharedWithMe from "./pages/VaultSharedWithMe";
+import VaultGroupDetail from "./pages/VaultGroupDetail";
+import VaultMyCredentials from "./pages/VaultMyCredentials";
+import VaultGroups from "./pages/VaultGroups";
+import VaultAudit from "./pages/VaultAudit";
 import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
@@ -116,6 +125,16 @@ const App = () => (
                           <Indexes />
                         </ProtectedRoute>
                       } />
+                      <Route path="/patching" element={
+                        <ProtectedRoute viewName="Patching">
+                          <PatchStatus />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/patching/config" element={
+                        <ProtectedRoute viewName="PatchingConfig">
+                          <PatchComplianceConfig />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/oncall" element={
                         <ProtectedRoute viewName="OnCall">
                           <OnCallDashboard />
@@ -180,6 +199,47 @@ const App = () => (
                       <Route path="/operations/servers-config" element={
                         <ProtectedRoute viewName="OperationsConfig">
                           <OperationalServersConfig />
+                        </ProtectedRoute>
+                      } />
+                      {/* Vault DBA */}
+                      <Route path="/vault" element={
+                        <ProtectedRoute viewName="VaultDashboard">
+                          <VaultDashboard />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/vault/dashboard" element={
+                        <ProtectedRoute viewName="VaultDashboard">
+                          <VaultDashboard />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/vault/credentials" element={
+                        <ProtectedRoute viewName="VaultCredentials">
+                          <VaultCredentials />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/vault/shared-with-me" element={
+                        <ProtectedRoute viewName="VaultCredentials">
+                          <VaultSharedWithMe />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/vault/my-credentials" element={
+                        <ProtectedRoute viewName="VaultMyCredentials">
+                          <VaultMyCredentials />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/vault/audit" element={
+                        <ProtectedRoute viewName="VaultAudit">
+                          <VaultAudit />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/vault/groups/:id" element={
+                        <ProtectedRoute viewName="VaultCredentials">
+                          <VaultGroupDetail />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/vault/groups" element={
+                        <ProtectedRoute viewName="VaultCredentials">
+                          <VaultGroups />
                         </ProtectedRoute>
                       } />
                       <Route path="/admin/users" element={

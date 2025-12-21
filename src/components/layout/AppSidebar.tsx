@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { 
   Home, Activity, HardDrive, Database, Save, ListTree, Users, Shield, LogOut, Heart, 
   Phone, Calendar, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
-  ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Wrench, Settings, Cog
+  ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Wrench, Settings, Cog, ShieldCheck,
+  Key, Lock, History, KeyRound, Share2, FolderLock
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import sqlNovaLightLogo from '/SQLNovaLightMode.png';
@@ -41,6 +42,12 @@ const mainItems = [
   { title: 'Índices', url: '/indexes', icon: ListTree, permission: 'Indexes' },
 ];
 
+// Submenús de Parcheos
+const patchingSubItems = [
+  { title: 'Dashboard', url: '/patching', icon: ShieldCheck, permission: 'Patching' },
+  { title: 'Configuración Compliance', url: '/patching/config', icon: Settings, permission: 'PatchingConfig' },
+];
+
 // Submenús de Guardias DBA
 const onCallSubItems = [
   { title: 'Dashboard', url: '/oncall/dashboard', icon: Home },
@@ -71,11 +78,24 @@ const operationsSubItems = [
   { title: 'Config. Servidores', url: '/operations/servers-config', icon: Settings, permission: 'OperationsConfig' },
 ];
 
+// Submenús de Vault DBA (Seguridad)
+const vaultSubItems = [
+  { title: 'Dashboard', url: '/vault/dashboard', icon: Home, permission: 'VaultDashboard' },
+  { title: 'Grupos', url: '/vault/groups', icon: FolderLock, permission: 'VaultCredentials' },
+  { title: 'Compartidas Conmigo', url: '/vault/shared-with-me', icon: Share2, permission: 'VaultCredentials' },
+  { title: 'Mis Credenciales', url: '/vault/my-credentials', icon: Lock, permission: 'VaultMyCredentials' },
+  { title: 'Auditoría', url: '/vault/audit', icon: History, permission: 'VaultAudit' },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const { isAdmin, isSuperAdmin, isOnCallEscalation, hasPermission, logout, user } = useAuth();
   const isCollapsed = state === 'collapsed';
   const location = useLocation();
+  
+  // Estado para el menú desplegable de Parcheos
+  const isPatchingActive = location.pathname.startsWith('/patching');
+  const [patchingOpen, setPatchingOpen] = useState(isPatchingActive);
   
   // Estado para el menú desplegable de OnCall
   const isOnCallActive = location.pathname.startsWith('/oncall');
@@ -88,6 +108,10 @@ export function AppSidebar() {
   // Estado para la sección de Operaciones (ahora es menú desplegable)
   const isOperationsActive = location.pathname.startsWith('/operations');
   const [operationsOpen, setOperationsOpen] = useState(isOperationsActive);
+  
+  // Estado para el menú desplegable de Vault DBA
+  const isVaultActive = location.pathname.startsWith('/vault');
+  const [vaultOpen, setVaultOpen] = useState(isVaultActive);
 
   const handleLogout = async () => {
     logout();
@@ -99,6 +123,15 @@ export function AppSidebar() {
   // Filtrar items principales según permisos
   const visibleMainItems = mainItems.filter(item => hasPermission(item.permission));
   const hasOnCallPermission = hasPermission('OnCall');
+  
+  // Filtrar items de Parcheos según permisos
+  const visiblePatchingSubItems = patchingSubItems.filter(item => {
+    if (item.permission === 'PatchingConfig') {
+      return isSuperAdmin; // Solo SuperAdmin puede configurar compliance
+    }
+    return hasPermission(item.permission);
+  });
+  const hasAnyPatchingPermission = visiblePatchingSubItems.length > 0;
   
   // Filtrar items de admin según permisos
   const visibleAdminItems = isAdmin ? adminItems.filter(item => hasPermission(item.permission)) : [];
@@ -118,6 +151,16 @@ export function AppSidebar() {
   });
   
   const hasAnyOperationsPermission = visibleOperationsSubItems.length > 0;
+  
+  // Filtrar items del Vault según permisos
+  const visibleVaultSubItems = vaultSubItems.filter(item => {
+    // VaultAudit solo para Admin/SuperAdmin
+    if (item.permission === 'VaultAudit') {
+      return isAdmin || isSuperAdmin;
+    }
+    return hasPermission(item.permission);
+  });
+  const hasAnyVaultPermission = visibleVaultSubItems.length > 0;
 
   return (
     <Sidebar collapsible="icon">
@@ -170,6 +213,63 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+
+                {/* Menú desplegable de Parcheos */}
+                {hasAnyPatchingPermission && (
+                  <Collapsible open={patchingOpen} onOpenChange={setPatchingOpen}>
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton
+                          style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
+                          className={`w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
+                            isPatchingActive
+                              ? 'bg-sidebar-accent text-sidebar-primary font-medium'
+                              : 'hover:bg-sidebar-accent/50'
+                          }`}
+                        >
+                          <ShieldCheck className="h-4 w-4 flex-shrink-0 text-blue-500" />
+                          {!isCollapsed && (
+                            <>
+                              <span className="flex-1 text-left">Parcheos</span>
+                              {patchingOpen ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </>
+                          )}
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      
+                      {!isCollapsed && (
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {visiblePatchingSubItems.map((subItem) => (
+                              <SidebarMenuSubItem key={subItem.url}>
+                                <SidebarMenuSubButton asChild>
+                                  <NavLink
+                                    to={subItem.url}
+                                    end={subItem.url === '/patching'}
+                                    className={({ isActive }) =>
+                                      `flex items-center gap-2 text-sm py-1.5 px-2 rounded-md transition-colors ${
+                                        isActive
+                                          ? 'bg-sidebar-accent/70 text-sidebar-primary font-medium'
+                                          : 'hover:bg-sidebar-accent/30 text-muted-foreground'
+                                      }`
+                                    }
+                                  >
+                                    <subItem.icon className="h-3.5 w-3.5" />
+                                    <span>{subItem.title}</span>
+                                  </NavLink>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      )}
+                    </SidebarMenuItem>
+                  </Collapsible>
+                )}
 
                 {/* Menú desplegable de Guardias DBA */}
                 {hasOnCallPermission && (
@@ -272,6 +372,72 @@ export function AppSidebar() {
                               <SidebarMenuSubButton asChild>
                                 <NavLink
                                   to={subItem.url}
+                                  className={({ isActive }) =>
+                                    `flex items-center gap-2 text-sm py-1.5 px-2 rounded-md transition-colors ${
+                                      isActive
+                                        ? 'bg-sidebar-accent/70 text-sidebar-primary font-medium'
+                                        : 'hover:bg-sidebar-accent/30 text-muted-foreground'
+                                    }`
+                                  }
+                                >
+                                  <subItem.icon className="h-3.5 w-3.5" />
+                                  <span>{subItem.title}</span>
+                                </NavLink>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    )}
+                  </SidebarMenuItem>
+                </Collapsible>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Seguridad - Vault DBA */}
+        {hasAnyVaultPermission && (
+          <SidebarGroup>
+            <SidebarGroupLabel className={isCollapsed ? 'sr-only' : ''}>
+              Seguridad
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <Collapsible open={vaultOpen} onOpenChange={setVaultOpen}>
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        style={isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : undefined}
+                        className={`w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
+                          isVaultActive
+                            ? 'bg-sidebar-accent text-sidebar-primary font-medium'
+                            : 'hover:bg-sidebar-accent/50'
+                        }`}
+                      >
+                        <KeyRound className="h-4 w-4 flex-shrink-0 text-amber-500" />
+                        {!isCollapsed && (
+                          <>
+                            <span className="flex-1 text-left">Vault DBA</span>
+                            {vaultOpen ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </>
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    
+                    {!isCollapsed && (
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {visibleVaultSubItems.map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.url}>
+                              <SidebarMenuSubButton asChild>
+                                <NavLink
+                                  to={subItem.url}
+                                  end={subItem.url === '/vault/dashboard'}
                                   className={({ isActive }) =>
                                     `flex items-center gap-2 text-sm py-1.5 px-2 rounded-md transition-colors ${
                                       isActive

@@ -26,8 +26,10 @@ interface CriticalDiskData {
   instanceName: string;
   drive: string;
   porcentajeLibre: number;
+  realPorcentajeLibre: number;
   libreGB: number;
   realLibreGB: number;
+  espacioInternoEnArchivosGB: number;
   estado: string;
 }
 
@@ -184,11 +186,13 @@ export default function Overview() {
         instanceName: d.instanceName,
         drive: d.drive || 'N/A',
         porcentajeLibre: d.porcentajeLibre ?? 0,
+        realPorcentajeLibre: d.realPorcentajeLibre ?? d.porcentajeLibre ?? 0,
         libreGB: d.libreGB ?? 0,
         realLibreGB: d.realLibreGB ?? d.libreGB ?? 0,
+        espacioInternoEnArchivosGB: d.espacioInternoEnArchivosGB ?? 0,
         estado: d.estado || 'Crítico'
       }))
-      .sort((a, b) => a.porcentajeLibre - b.porcentajeLibre);
+      .sort((a, b) => a.realPorcentajeLibre - b.realPorcentajeLibre);
   }, [productionDisks]);
 
   // Mantenimiento atrasado de producción - Usa los campos CheckdbOk e IndexOptimizeOk 
@@ -493,7 +497,13 @@ export default function Overview() {
                     className="text-xs cursor-pointer hover:bg-accent text-center"
                     onClick={() => requestSortDisks('porcentajeLibre')}
                   >
-                    % Libre {getSortIndicatorDisks('porcentajeLibre')}
+                    % Disco {getSortIndicatorDisks('porcentajeLibre')}
+                  </TableHead>
+                  <TableHead 
+                    className="text-xs cursor-pointer hover:bg-accent text-center"
+                    onClick={() => requestSortDisks('realPorcentajeLibre')}
+                  >
+                    % Real {getSortIndicatorDisks('realPorcentajeLibre')}
                   </TableHead>
                   <TableHead 
                     className="text-xs cursor-pointer hover:bg-accent text-center"
@@ -510,18 +520,30 @@ export default function Overview() {
                       <TableCell className="font-mono text-xs py-2">{disk.instanceName}</TableCell>
                       <TableCell className="text-xs py-2 text-center font-medium">{disk.drive}</TableCell>
                       <TableCell className="py-2 text-center">
-                        <StatusBadge status={disk.porcentajeLibre < 5 ? 'critical' : 'warning'}>
+                        <span className="text-xs text-muted-foreground">
                           {disk.porcentajeLibre.toFixed(1)}%
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-2 text-center">
+                        <StatusBadge status={disk.realPorcentajeLibre < 5 ? 'critical' : 'warning'}>
+                          {disk.realPorcentajeLibre.toFixed(1)}%
                         </StatusBadge>
                       </TableCell>
                       <TableCell className="text-xs py-2 text-center">
-                        {disk.libreGB.toFixed(1)} GB
+                        <div className="flex flex-col items-center">
+                          <span>{disk.libreGB.toFixed(1)} GB</span>
+                          {disk.espacioInternoEnArchivosGB > 0.01 && (
+                            <span className="text-[10px] text-green-600 dark:text-green-400">
+                              +{disk.espacioInternoEnArchivosGB.toFixed(1)} GB int.
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
                       ✅ No hay discos críticos en Producción
                     </TableCell>
                   </TableRow>

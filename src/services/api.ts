@@ -2576,6 +2576,567 @@ export const indexAnalysisApi = {
   },
 };
 
+// ==================== PATCHING API ====================
+
+export interface ServerPatchStatusDto {
+  serverName: string;
+  instanceName: string;
+  ambiente: string;
+  hostingSite: string;
+  majorVersion: string;
+  currentBuild: string;
+  currentCU: string;
+  currentSP: string;
+  kbReference: string;
+  requiredBuild: string;
+  requiredCU: string;
+  latestBuild: string;
+  latestCU: string;
+  latestKBReference: string;
+  pendingCUsForCompliance: number;
+  pendingCUsForLatest: number;
+  patchStatus: 'Updated' | 'Compliant' | 'NonCompliant' | 'Outdated' | 'Critical' | 'Error' | 'Unknown';
+  connectionSuccess: boolean;
+  isDmzServer: boolean;
+  errorMessage?: string;
+  lastChecked?: string;
+}
+
+export interface PatchComplianceConfigDto {
+  id: number;
+  complianceYear: number;
+  sqlVersion: string;
+  requiredBuild: string;
+  requiredCU?: string;
+  requiredKB?: string;
+  description?: string;
+  isActive: boolean;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface BuildReferenceDto {
+  version: string;
+  cu?: string;
+  sp?: string;
+  kb?: string;
+  displayName: string;
+}
+
+export interface PatchingSummaryDto {
+  totalServers: number;
+  updatedCount: number;
+  compliantCount: number;
+  nonCompliantCount: number;
+  outdatedCount: number;
+  criticalCount: number;
+  errorCount: number;
+  unknownCount: number;
+  totalPendingCUs: number;
+  complianceRate: number;
+  lastChecked: string;
+}
+
+export const patchingApi = {
+  // Estado de parcheo
+  async getStatus(forceRefresh = false, year?: number): Promise<ServerPatchStatusDto[]> {
+    const params = new URLSearchParams();
+    if (forceRefresh) params.append('forceRefresh', 'true');
+    if (year) params.append('year', year.toString());
+    const url = `${API_URL}/api/patching/status${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ServerPatchStatusDto[]>(response);
+  },
+
+  async getServerStatus(instanceName: string): Promise<ServerPatchStatusDto> {
+    const response = await fetch(
+      `${API_URL}/api/patching/status/${encodeURIComponent(instanceName)}`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<ServerPatchStatusDto>(response);
+  },
+
+  async refreshCache(): Promise<void> {
+    const response = await fetch(`${API_URL}/api/patching/refresh`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  async getSummary(): Promise<PatchingSummaryDto> {
+    const response = await fetch(`${API_URL}/api/patching/summary`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchingSummaryDto>(response);
+  },
+
+  // Años de compliance disponibles
+  async getComplianceYears(): Promise<number[]> {
+    const response = await fetch(`${API_URL}/api/patching/compliance/years`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<number[]>(response);
+  },
+
+  // Configuración de compliance
+  async getComplianceConfigs(year?: number): Promise<PatchComplianceConfigDto[]> {
+    const url = year 
+      ? `${API_URL}/api/patching/compliance?year=${year}`
+      : `${API_URL}/api/patching/compliance`;
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchComplianceConfigDto[]>(response);
+  },
+
+  async saveComplianceConfig(config: PatchComplianceConfigDto): Promise<PatchComplianceConfigDto> {
+    const response = await fetch(`${API_URL}/api/patching/compliance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(config),
+    });
+    return handleResponse<PatchComplianceConfigDto>(response);
+  },
+
+  async deleteComplianceConfig(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/patching/compliance/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  // Referencias de builds
+  async getAvailableBuilds(sqlVersion: string): Promise<BuildReferenceDto[]> {
+    const response = await fetch(
+      `${API_URL}/api/patching/builds/${encodeURIComponent(sqlVersion)}`,
+      { headers: { ...getAuthHeader() } }
+    );
+    return handleResponse<BuildReferenceDto[]>(response);
+  },
+
+  async getSupportedVersions(): Promise<string[]> {
+    const response = await fetch(`${API_URL}/api/patching/versions`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<string[]>(response);
+  },
+};
+
+// ==================== VAULT API ====================
+
+// Tipos del Vault
+export interface CredentialDto {
+  id: number;
+  name: string;
+  credentialType: string;
+  username: string;
+  domain?: string;
+  description?: string;
+  notes?: string;
+  expiresAt?: string;
+  isPrivate: boolean;
+  groupId?: number;
+  groupName?: string;
+  groupColor?: string;
+  ownerUserId: string;
+  ownerDisplayName?: string;
+  createdAt: string;
+  updatedAt?: string;
+  createdByDisplayName?: string;
+  updatedByDisplayName?: string;
+  isExpired: boolean;
+  isExpiringSoon: boolean;
+  servers: CredentialServerDto[];
+}
+
+export interface CredentialServerDto {
+  id: number;
+  serverName: string;
+  instanceName?: string;
+  connectionPurpose?: string;
+  createdAt: string;
+  fullServerName: string;
+}
+
+export interface CreateCredentialRequest {
+  name: string;
+  credentialType: string;
+  username: string;
+  password: string;
+  domain?: string;
+  description?: string;
+  notes?: string;
+  expiresAt?: string;
+  isPrivate: boolean;
+  groupId?: number;
+  servers?: CreateCredentialServerRequest[];
+}
+
+export interface CreateCredentialServerRequest {
+  serverName: string;
+  instanceName?: string;
+  connectionPurpose?: string;
+}
+
+export interface UpdateCredentialRequest {
+  name: string;
+  credentialType: string;
+  username: string;
+  newPassword?: string;
+  domain?: string;
+  description?: string;
+  notes?: string;
+  expiresAt?: string;
+  isPrivate: boolean;
+  groupId?: number;
+}
+
+export interface RevealPasswordResponse {
+  password: string;
+  expiresInSeconds: number;
+}
+
+export interface VaultStatsDto {
+  totalCredentials: number;
+  sharedCredentials: number;
+  privateCredentials: number;
+  expiringCredentials: number;
+  expiredCredentials: number;
+  sqlAuthCount: number;
+  windowsAdCount: number;
+  otherTypeCount: number;
+  totalServersLinked: number;
+  lastActivity?: string;
+}
+
+export interface CredentialAuditLogDto {
+  id: number;
+  credentialId: number;
+  credentialName: string;
+  action: string;
+  changedFields?: string;
+  performedByUserId: string;
+  performedByUserName?: string;
+  performedAt: string;
+  ipAddress?: string;
+}
+
+export interface AvailableServerDto {
+  serverName: string;
+  instanceName?: string;
+  environment?: string;
+  hostingSite?: string;
+  fullServerName: string;
+  isAws: boolean;
+  isDmz: boolean;
+}
+
+// Tipos de grupos
+export interface CredentialGroupDto {
+  id: number;
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  ownerUserId: string;
+  ownerUserName: string;
+  createdAt: string;
+  updatedAt?: string;
+  credentialsCount: number;
+  membersCount: number;
+  members: CredentialGroupMemberDto[];
+  userRole: string;
+}
+
+export interface CredentialGroupMemberDto {
+  id: number;
+  userId: string;
+  userName: string;
+  displayName?: string;
+  email?: string;
+  role: string;
+  receiveNotifications: boolean;
+  addedAt: string;
+  addedByUserName?: string;
+}
+
+export interface CreateCredentialGroupRequest {
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  initialMembers?: AddGroupMemberRequest[];
+}
+
+export interface UpdateCredentialGroupRequest {
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+}
+
+export interface AddGroupMemberRequest {
+  userId: string;
+  role: string;
+  receiveNotifications: boolean;
+}
+
+export interface UpdateGroupMemberRequest {
+  role: string;
+  receiveNotifications?: boolean;
+}
+
+export interface VaultUserDto {
+  id: string;
+  userName: string;
+  displayName?: string;
+  email?: string;
+}
+
+export interface CredentialFilterRequest {
+  searchTerm?: string;
+  credentialType?: string;
+  serverName?: string;
+  isExpired?: boolean;
+  isExpiringSoon?: boolean;
+  isPrivate?: boolean;
+  groupId?: number;
+  includeDeleted?: boolean;
+}
+
+// API del Vault
+export const vaultApi = {
+  // Credenciales
+  async getCredentials(filter?: CredentialFilterRequest): Promise<CredentialDto[]> {
+    const params = new URLSearchParams();
+    if (filter?.searchTerm) params.append('searchTerm', filter.searchTerm);
+    if (filter?.credentialType) params.append('credentialType', filter.credentialType);
+    if (filter?.serverName) params.append('serverName', filter.serverName);
+    if (filter?.isExpired !== undefined) params.append('isExpired', String(filter.isExpired));
+    if (filter?.isExpiringSoon !== undefined) params.append('isExpiringSoon', String(filter.isExpiringSoon));
+    if (filter?.isPrivate !== undefined) params.append('isPrivate', String(filter.isPrivate));
+    if (filter?.groupId !== undefined) params.append('groupId', String(filter.groupId));
+    if (filter?.includeDeleted) params.append('includeDeleted', 'true');
+
+    const url = params.toString() 
+      ? `${API_URL}/api/vault/credentials?${params.toString()}`
+      : `${API_URL}/api/vault/credentials`;
+    
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<CredentialDto[]>(response);
+  },
+
+  async getCredentialById(id: number): Promise<CredentialDto> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<CredentialDto>(response);
+  },
+
+  async createCredential(request: CreateCredentialRequest): Promise<CredentialDto> {
+    const response = await fetch(`${API_URL}/api/vault/credentials`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<CredentialDto>(response);
+  },
+
+  async updateCredential(id: number, request: UpdateCredentialRequest): Promise<CredentialDto> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<CredentialDto>(response);
+  },
+
+  async deleteCredential(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  async revealPassword(id: number): Promise<RevealPasswordResponse> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${id}/reveal`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<RevealPasswordResponse>(response);
+  },
+
+  async registerPasswordCopy(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${id}/copied`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  // Servidores
+  async addServer(credentialId: number, request: CreateCredentialServerRequest): Promise<CredentialServerDto> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${credentialId}/servers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<CredentialServerDto>(response);
+  },
+
+  async removeServer(credentialId: number, serverId: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${credentialId}/servers/${serverId}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  async getAvailableServers(): Promise<AvailableServerDto[]> {
+    const response = await fetch(`${API_URL}/api/vault/servers`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<AvailableServerDto[]>(response);
+  },
+
+  // Estadísticas
+  async getStats(): Promise<VaultStatsDto> {
+    const response = await fetch(`${API_URL}/api/vault/stats`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<VaultStatsDto>(response);
+  },
+
+  async getExpiringCredentials(daysAhead: number = 30): Promise<CredentialDto[]> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/expiring?daysAhead=${daysAhead}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<CredentialDto[]>(response);
+  },
+
+  // Auditoría
+  async getCredentialAudit(credentialId: number): Promise<CredentialAuditLogDto[]> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${credentialId}/audit`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<CredentialAuditLogDto[]>(response);
+  },
+
+  async getFullAudit(limit: number = 100): Promise<CredentialAuditLogDto[]> {
+    const response = await fetch(`${API_URL}/api/vault/audit?limit=${limit}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<CredentialAuditLogDto[]>(response);
+  },
+
+  // Grupos
+  async getGroups(): Promise<CredentialGroupDto[]> {
+    const response = await fetch(`${API_URL}/api/vault/groups`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<CredentialGroupDto[]>(response);
+  },
+
+  async getGroupById(id: number): Promise<CredentialGroupDto> {
+    const response = await fetch(`${API_URL}/api/vault/groups/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<CredentialGroupDto>(response);
+  },
+
+  async createGroup(request: CreateCredentialGroupRequest): Promise<CredentialGroupDto> {
+    const response = await fetch(`${API_URL}/api/vault/groups`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<CredentialGroupDto>(response);
+  },
+
+  async updateGroup(id: number, request: UpdateCredentialGroupRequest): Promise<CredentialGroupDto> {
+    const response = await fetch(`${API_URL}/api/vault/groups/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<CredentialGroupDto>(response);
+  },
+
+  async deleteGroup(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/groups/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  // Miembros de grupos
+  async addGroupMember(groupId: number, request: AddGroupMemberRequest): Promise<CredentialGroupMemberDto> {
+    const response = await fetch(`${API_URL}/api/vault/groups/${groupId}/members`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<CredentialGroupMemberDto>(response);
+  },
+
+  async updateGroupMember(groupId: number, memberId: number, request: UpdateGroupMemberRequest): Promise<CredentialGroupMemberDto> {
+    const response = await fetch(`${API_URL}/api/vault/groups/${groupId}/members/${memberId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<CredentialGroupMemberDto>(response);
+  },
+
+  async removeGroupMember(groupId: number, memberId: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/groups/${groupId}/members/${memberId}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  // Usuarios disponibles
+  async getAvailableUsers(): Promise<VaultUserDto[]> {
+    const response = await fetch(`${API_URL}/api/vault/users`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<VaultUserDto[]>(response);
+  },
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 export function isAuthenticated(): boolean {

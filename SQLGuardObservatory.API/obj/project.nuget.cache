@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "HQwNxrQZDxXZ78IhXFUUkfvHjDynkoPwlmwDHQirCilmgGoQTOd9MbUO2tusGvfsk72yqg4xwiqeqEF9DX/Q+g==",
+  "dgSpecHash": "X37Pm8m3xBKPlq/KJR+lIe+Cw6qMJAU3bOYV1iyvMInhZ6BRF2lnx/NT+waj9HQEJ6uVRgrj50nmdi2yRUq/UQ==",
   "success": true,
   "projectFilePath": "C:\\Users\\tobia\\OneDrive\\Desktop\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj",
   "expectedPackageFiles": [
@@ -115,7 +115,7 @@
     "C:\\Users\\tobia\\.nuget\\packages\\swashbuckle.aspnetcore.swaggergen\\6.5.0\\swashbuckle.aspnetcore.swaggergen.6.5.0.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\swashbuckle.aspnetcore.swaggerui\\6.5.0\\swashbuckle.aspnetcore.swaggerui.6.5.0.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\system.buffers\\4.6.0\\system.buffers.4.6.0.nupkg.sha512",
-    "C:\\Users\\tobia\\.nuget\\packages\\system.codedom\\4.4.0\\system.codedom.4.4.0.nupkg.sha512",
+    "C:\\Users\\tobia\\.nuget\\packages\\system.codedom\\10.0.1\\system.codedom.10.0.1.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\system.collections.immutable\\6.0.0\\system.collections.immutable.6.0.0.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\system.composition\\6.0.0\\system.composition.6.0.0.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\system.composition.attributedmodel\\6.0.0\\system.composition.attributedmodel.6.0.0.nupkg.sha512",
@@ -134,6 +134,7 @@
     "C:\\Users\\tobia\\.nuget\\packages\\system.identitymodel.tokens.jwt\\7.1.2\\system.identitymodel.tokens.jwt.7.1.2.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\system.io.filesystem.accesscontrol\\5.0.0\\system.io.filesystem.accesscontrol.5.0.0.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\system.io.pipelines\\8.0.0\\system.io.pipelines.8.0.0.nupkg.sha512",
+    "C:\\Users\\tobia\\.nuget\\packages\\system.management\\10.0.1\\system.management.10.0.1.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\system.memory\\4.5.4\\system.memory.4.5.4.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\system.memory.data\\1.0.2\\system.memory.data.1.0.2.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\system.net.websockets.websocketprotocol\\5.1.0\\system.net.websockets.websocketprotocol.5.1.0.nupkg.sha512",

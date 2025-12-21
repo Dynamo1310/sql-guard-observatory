@@ -78,6 +78,107 @@ public static class PermissionInitializer
             context.RolePermissions.AddRange(permissions);
             await context.SaveChangesAsync();
         }
+
+        // Agregar permisos adicionales que puedan faltar (para nuevas vistas)
+        await AddMissingPermissionsAsync(context);
+    }
+
+    private static async Task AddMissingPermissionsAsync(ApplicationDbContext context)
+    {
+        // Permisos adicionales solo para SuperAdmin
+        var superAdminOnlyViews = new[]
+        {
+            "ConfigSMTP",
+            "AlertaServidoresCaidos",
+            "ServerRestart",
+            "OperationsConfig",
+            "HealthScore",
+            "Patching",
+            "PatchingConfig",
+            // Vault - permisos de administración
+            "VaultAdmin",
+            "VaultAudit"
+        };
+
+        foreach (var view in superAdminOnlyViews)
+        {
+            var exists = await context.RolePermissions
+                .AnyAsync(p => p.Role == "SuperAdmin" && p.ViewName == view);
+
+            if (!exists)
+            {
+                context.RolePermissions.Add(new RolePermission
+                {
+                    Role = "SuperAdmin",
+                    ViewName = view,
+                    Enabled = true
+                });
+            }
+        }
+
+        // Permisos del Vault para Admin
+        var vaultAdminViews = new[]
+        {
+            "VaultDashboard",
+            "VaultCredentials",
+            "VaultMyCredentials",
+            "VaultAudit"
+        };
+
+        foreach (var view in vaultAdminViews)
+        {
+            // SuperAdmin
+            var existsSuperAdmin = await context.RolePermissions
+                .AnyAsync(p => p.Role == "SuperAdmin" && p.ViewName == view);
+
+            if (!existsSuperAdmin)
+            {
+                context.RolePermissions.Add(new RolePermission
+                {
+                    Role = "SuperAdmin",
+                    ViewName = view,
+                    Enabled = true
+                });
+            }
+
+            // Admin (excepto VaultAdmin)
+            if (view != "VaultAdmin")
+            {
+                var existsAdmin = await context.RolePermissions
+                    .AnyAsync(p => p.Role == "Admin" && p.ViewName == view);
+
+                if (!existsAdmin)
+                {
+                    context.RolePermissions.Add(new RolePermission
+                    {
+                        Role = "Admin",
+                        ViewName = view,
+                        Enabled = true
+                    });
+                }
+            }
+        }
+
+        // Permisos del Vault para Reader (solo VaultDashboard y VaultMyCredentials)
+        var vaultReaderViews = new[] { "VaultDashboard", "VaultMyCredentials" };
+
+        foreach (var view in vaultReaderViews)
+        {
+            var existsReader = await context.RolePermissions
+                .AnyAsync(p => p.Role == "Reader" && p.ViewName == view);
+
+            if (!existsReader)
+            {
+                context.RolePermissions.Add(new RolePermission
+                {
+                    Role = "Reader",
+                    ViewName = view,
+                    Enabled = true
+                });
+            }
+        }
+
+        await context.SaveChangesAsync();
     }
 }
 

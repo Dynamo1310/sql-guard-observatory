@@ -260,3 +260,6 @@ public class IndexAnalysisRequest
     public bool GenerateScripts { get; set; } = true;
 }
 
+
+
+

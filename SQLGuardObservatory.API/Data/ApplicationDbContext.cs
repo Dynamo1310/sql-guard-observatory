@@ -28,6 +28,23 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Operational Servers (para operaciones controladas)
     public DbSet<OperationalServer> OperationalServers { get; set; } = null!;
     public DbSet<OperationalServerAudit> OperationalServerAudits { get; set; } = null!;
+    
+    // Patching - Configuración de compliance y cache de estado
+    public DbSet<PatchComplianceConfig> PatchComplianceConfigs { get; set; } = null!;
+    public DbSet<ServerPatchStatusCache> ServerPatchStatusCache { get; set; } = null!;
+    
+    // Vault de Credenciales DBA
+    public DbSet<Credential> Credentials { get; set; } = null!;
+    public DbSet<CredentialServer> CredentialServers { get; set; } = null!;
+    public DbSet<CredentialAuditLog> CredentialAuditLogs { get; set; } = null!;
+    public DbSet<CredentialGroup> CredentialGroups { get; set; } = null!;
+    public DbSet<CredentialGroupMember> CredentialGroupMembers { get; set; } = null!;
+    public DbSet<CredentialGroupShare> CredentialGroupShares { get; set; } = null!;
+    public DbSet<CredentialUserShare> CredentialUserShares { get; set; } = null!;
+    
+    // Vault Enterprise v2.1 - Encryption Keys
+    public DbSet<VaultEncryptionKey> VaultEncryptionKeys { get; set; } = null!;
+    public DbSet<CredentialAccessLog> CredentialAccessLogs { get; set; } = null!;
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -244,6 +261,194 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(a => a.ChangedByUserId)
                 .OnDelete(DeleteBehavior.NoAction);
         });
+
+        // Patch Compliance Config
+        builder.Entity<PatchComplianceConfig>(entity =>
+        {
+            entity.ToTable("PatchComplianceConfig");
+            // Índice único por año + versión de SQL
+            entity.HasIndex(c => new { c.ComplianceYear, c.SqlVersion }).IsUnique();
+            entity.HasIndex(c => c.ComplianceYear);
+            entity.HasIndex(c => c.IsActive);
+        });
+
+        // Server Patch Status Cache
+        builder.Entity<ServerPatchStatusCache>(entity =>
+        {
+            entity.ToTable("ServerPatchStatusCache");
+            entity.HasIndex(s => s.InstanceName).IsUnique();
+            entity.HasIndex(s => s.PatchStatus);
+            entity.HasIndex(s => s.LastChecked);
+        });
+
+        // =============================================
+        // Vault de Credenciales DBA
+        // =============================================
+        
+        builder.Entity<Credential>(entity =>
+        {
+            entity.ToTable("Credentials");
+            entity.HasIndex(c => c.OwnerUserId);
+            entity.HasIndex(c => c.IsPrivate);
+            entity.HasIndex(c => c.IsDeleted);
+            entity.HasIndex(c => c.IsTeamShared);
+            entity.HasIndex(c => c.ExpiresAt);
+            entity.HasIndex(c => c.CredentialType);
+            entity.HasIndex(c => c.Name);
+            entity.HasIndex(c => c.GroupId);
+
+            entity.HasOne(c => c.Owner)
+                .WithMany()
+                .HasForeignKey(c => c.OwnerUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(c => c.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(c => c.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(c => c.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(c => c.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(c => c.Group)
+                .WithMany(g => g.Credentials)
+                .HasForeignKey(c => c.GroupId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(c => c.Servers)
+                .WithOne(s => s.Credential)
+                .HasForeignKey(s => s.CredentialId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<CredentialServer>(entity =>
+        {
+            entity.ToTable("CredentialServers");
+            entity.HasIndex(cs => cs.CredentialId);
+            entity.HasIndex(cs => cs.ServerName);
+        });
+
+        builder.Entity<CredentialAuditLog>(entity =>
+        {
+            entity.ToTable("CredentialAuditLog");
+            entity.HasIndex(a => a.CredentialId);
+            entity.HasIndex(a => a.PerformedByUserId);
+            entity.HasIndex(a => a.PerformedAt);
+            entity.HasIndex(a => a.Action);
+        });
+
+        // Grupos de credenciales
+        builder.Entity<CredentialGroup>(entity =>
+        {
+            entity.ToTable("CredentialGroups");
+            entity.HasIndex(g => g.OwnerUserId);
+            entity.HasIndex(g => g.IsDeleted);
+            entity.HasIndex(g => g.Name);
+
+            entity.HasOne(g => g.Owner)
+                .WithMany()
+                .HasForeignKey(g => g.OwnerUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(g => g.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(g => g.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasMany(g => g.Members)
+                .WithOne(m => m.Group)
+                .HasForeignKey(m => m.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<CredentialGroupMember>(entity =>
+        {
+            entity.ToTable("CredentialGroupMembers");
+            entity.HasIndex(m => m.GroupId);
+            entity.HasIndex(m => m.UserId);
+            entity.HasIndex(m => new { m.GroupId, m.UserId }).IsUnique();
+
+            entity.HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(m => m.AddedByUser)
+                .WithMany()
+                .HasForeignKey(m => m.AddedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // Compartición de credenciales con grupos (muchos a muchos)
+        builder.Entity<CredentialGroupShare>(entity =>
+        {
+            entity.ToTable("CredentialGroupShares");
+            entity.HasIndex(s => s.CredentialId);
+            entity.HasIndex(s => s.GroupId);
+            entity.HasIndex(s => new { s.CredentialId, s.GroupId }).IsUnique();
+
+            entity.HasOne(s => s.Credential)
+                .WithMany(c => c.GroupShares)
+                .HasForeignKey(s => s.CredentialId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(s => s.Group)
+                .WithMany()
+                .HasForeignKey(s => s.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(s => s.SharedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.SharedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // Compartición de credenciales con usuarios individuales
+        builder.Entity<CredentialUserShare>(entity =>
+        {
+            entity.ToTable("CredentialUserShares");
+            entity.HasIndex(s => s.CredentialId);
+            entity.HasIndex(s => s.UserId);
+            entity.HasIndex(s => new { s.CredentialId, s.UserId }).IsUnique();
+
+            entity.HasOne(s => s.Credential)
+                .WithMany(c => c.UserShares)
+                .HasForeignKey(s => s.CredentialId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(s => s.SharedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.SharedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // =============================================
+        // Vault Enterprise v2.1 - Encryption Keys & Access Log
+        // =============================================
+        
+        builder.Entity<VaultEncryptionKey>(entity =>
+        {
+            entity.ToTable("VaultEncryptionKeys");
+            entity.HasIndex(k => new { k.KeyId, k.KeyVersion }).IsUnique();
+            entity.HasIndex(k => new { k.KeyPurpose, k.KeyId }).IsUnique();
+            entity.HasIndex(k => k.KeyPurpose).HasFilter("[IsActive] = 1").IsUnique();
+        });
+
+        builder.Entity<CredentialAccessLog>(entity =>
+        {
+            entity.ToTable("CredentialAccessLog");
+            entity.HasIndex(a => new { a.CredentialId, a.AccessedAt });
+            entity.HasIndex(a => new { a.UserId, a.AccessedAt });
+            entity.HasIndex(a => a.AccessedAt).HasFilter("[AccessResult] = 'Denied'");
+        });
+
     }
 }
 

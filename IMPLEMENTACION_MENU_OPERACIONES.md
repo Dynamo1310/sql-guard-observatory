@@ -172,3 +172,6 @@ Copy-Item -Path .\dist\* -Destination C:\inetpub\wwwroot\SQLNova -Recurse -Force
 - El permiso `OperationsConfig` se verifica tanto en frontend (sidebar) como en backend (controller)
 - Se mantiene auditoría de todos los cambios para trazabilidad
 
+
+
+

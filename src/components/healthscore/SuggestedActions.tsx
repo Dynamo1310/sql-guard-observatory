@@ -350,3 +350,6 @@ function generateSuggestions(details: HealthScoreV3DetailDto): SuggestedAction[]
   return suggestions.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 }
 
+
+
+

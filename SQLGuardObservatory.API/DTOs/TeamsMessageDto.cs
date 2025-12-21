@@ -378,3 +378,6 @@ public static class AdaptiveCardBuilder
 
 
 
+
+
+
