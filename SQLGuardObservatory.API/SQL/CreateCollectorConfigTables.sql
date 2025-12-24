@@ -7,6 +7,40 @@
 USE [SQLGuardObservatoryAuth]
 GO
 
+-- =====================================================
+-- DROP TABLES (para recrear con nuevo esquema)
+-- =====================================================
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'CollectorExecutionLog' AND schema_id = SCHEMA_ID('dbo'))
+BEGIN
+    DROP TABLE dbo.CollectorExecutionLog;
+    PRINT 'Tabla CollectorExecutionLog eliminada';
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'SqlVersionQueries' AND schema_id = SCHEMA_ID('dbo'))
+BEGIN
+    DROP TABLE dbo.SqlVersionQueries;
+    PRINT 'Tabla SqlVersionQueries eliminada';
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'CollectorThresholds' AND schema_id = SCHEMA_ID('dbo'))
+BEGIN
+    DROP TABLE dbo.CollectorThresholds;
+    PRINT 'Tabla CollectorThresholds eliminada';
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'CollectorConfig' AND schema_id = SCHEMA_ID('dbo'))
+BEGIN
+    DROP TABLE dbo.CollectorConfig;
+    PRINT 'Tabla CollectorConfig eliminada';
+END
+GO
+
+PRINT 'Tablas antiguas eliminadas. Creando nuevas...';
+GO
+
 -- Tabla principal de configuración de collectors
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'CollectorConfig' AND schema_id = SCHEMA_ID('dbo'))
 BEGIN

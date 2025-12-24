@@ -11,10 +11,10 @@ namespace SQLGuardObservatory.API.Controllers
     [Route("api/v3/healthscore")]
     public class HealthScoreV3Controller : ControllerBase
     {
-        private readonly SQLNovaDbContext _context;
+        private readonly ApplicationDbContext _context;
         private readonly ILogger<HealthScoreV3Controller> _logger;
 
-        public HealthScoreV3Controller(SQLNovaDbContext context, ILogger<HealthScoreV3Controller> logger)
+        public HealthScoreV3Controller(ApplicationDbContext context, ILogger<HealthScoreV3Controller> logger)
         {
             _context = context;
             _logger = logger;

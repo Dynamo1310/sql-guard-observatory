@@ -31,7 +31,7 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                var connectionString = _configuration.GetConnectionString("DefaultConnection");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -127,7 +127,7 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                var connectionString = _configuration.GetConnectionString("DefaultConnection");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -238,7 +238,7 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                var connectionString = _configuration.GetConnectionString("DefaultConnection");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -300,7 +300,7 @@ namespace SQLGuardObservatory.API.Controllers
         // Método auxiliar para obtener datos (usado por SSE)
         private async Task<object> GetHealthScoresData()
         {
-            var connectionString = _configuration.GetConnectionString("SQLNova");
+            var connectionString = _configuration.GetConnectionString("DefaultConnection");
             using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync();
 
