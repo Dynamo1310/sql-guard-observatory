@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, Plus, X, Server, Eye, EyeOff, Lock, CalendarIcon, FolderLock, Check } from 'lucide-react';
+import { Loader2, Plus, X, Server, Lock, CalendarIcon, FolderLock, Check, UserPlus, Users } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -53,8 +53,9 @@ import {
   AvailableServerDto,
   CredentialGroupDto
 } from '@/services/vaultApi';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { ServerSelector } from './ServerSelector';
+import { PasswordInput } from '@/components/ui/password-input';
 
 const formSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido').max(256),
@@ -76,6 +77,8 @@ interface CredentialDialogProps {
   credential?: CredentialDto;
   onSuccess?: () => void;
   defaultGroupId?: number;
+  /** Si es true, la credencial será siempre privada y no se mostrará el switch */
+  forcePrivate?: boolean;
 }
 
 export function CredentialDialog({
@@ -83,15 +86,16 @@ export function CredentialDialog({
   onOpenChange,
   credential,
   onSuccess,
-  defaultGroupId
+  defaultGroupId,
+  forcePrivate = false
 }: CredentialDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [availableServers, setAvailableServers] = useState<AvailableServerDto[]>([]);
   const [selectedServers, setSelectedServers] = useState<{serverName: string; instanceName?: string; connectionPurpose?: string}[]>([]);
   const [availableGroups, setAvailableGroups] = useState<CredentialGroupDto[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
-  const { toast } = useToast();
+  const [availableUsers, setAvailableUsers] = useState<{id: string; userName: string; displayName?: string; email?: string}[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   const isEditing = !!credential;
 
@@ -109,7 +113,7 @@ export function CredentialDialog({
     }
   });
 
-  // Cargar servidores y grupos disponibles
+  // Cargar servidores, grupos y usuarios disponibles
   useEffect(() => {
     if (open) {
       vaultApi.getAvailableServers()
@@ -118,6 +122,11 @@ export function CredentialDialog({
       
       vaultApi.getGroups()
         .then(setAvailableGroups)
+        .catch(console.error);
+
+      // Cargar usuarios disponibles para compartir
+      vaultApi.getAvailableUsers()
+        .then(setAvailableUsers)
         .catch(console.error);
     }
   }, [open]);
@@ -144,6 +153,8 @@ export function CredentialDialog({
         })));
         // Cargar grupos actuales de la credencial
         setSelectedGroupIds(credential.groupShares?.map(gs => gs.groupId) || []);
+        // Cargar usuarios actuales
+        setSelectedUserIds(credential.userShares?.map(us => us.userId) || []);
       } else {
         form.reset({
           name: '',
@@ -153,19 +164,23 @@ export function CredentialDialog({
           domain: '',
           description: '',
           notes: '',
-          isPrivate: false
+          // Si forcePrivate, siempre privada; sino, por defecto true (las credenciales siempre son privadas)
+          isPrivate: true
         });
         setSelectedServers([]);
         // Si hay un grupo por defecto (al crear desde grupo), seleccionarlo
         setSelectedGroupIds(defaultGroupId ? [defaultGroupId] : []);
+        setSelectedUserIds([]);
       }
-      setShowPassword(false);
     }
-  }, [open, credential, form, defaultGroupId]);
+  }, [open, credential, form, defaultGroupId, forcePrivate]);
 
   const onSubmit = async (data: FormData) => {
     setIsLoading(true);
     try {
+      // Las credenciales siempre son privadas (isPrivate = true)
+      const finalIsPrivate = true;
+      
       if (isEditing) {
         const updateRequest: UpdateCredentialRequest = {
           name: data.name,
@@ -176,11 +191,10 @@ export function CredentialDialog({
           description: data.description || undefined,
           notes: data.notes || undefined,
           expiresAt: data.expiresAt?.toISOString(),
-          isPrivate: data.isPrivate
+          isPrivate: finalIsPrivate
         };
         await vaultApi.updateCredential(credential!.id, updateRequest);
-        toast({
-          title: 'Credencial actualizada',
+        toast.success('Credencial actualizada', {
           description: 'Los cambios se guardaron correctamente.'
         });
       } else {
@@ -198,23 +212,21 @@ export function CredentialDialog({
           description: data.description || undefined,
           notes: data.notes || undefined,
           expiresAt: data.expiresAt?.toISOString(),
-          isPrivate: data.isPrivate,
+          isPrivate: finalIsPrivate,
           shareWithGroupIds: selectedGroupIds.length > 0 ? selectedGroupIds : undefined,
+          shareWithUserIds: selectedUserIds.length > 0 ? selectedUserIds : undefined,
           servers: selectedServers.length > 0 ? selectedServers : undefined
         };
         await vaultApi.createCredential(createRequest);
-        toast({
-          title: 'Credencial creada',
+        toast.success('Credencial creada', {
           description: 'La credencial se creó correctamente.'
         });
       }
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'No se pudo guardar la credencial',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: error instanceof Error ? error.message : 'No se pudo guardar la credencial'
       });
     } finally {
       setIsLoading(false);
@@ -223,7 +235,7 @@ export function CredentialDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 'Editar Credencial' : 'Nueva Credencial'}
@@ -317,22 +329,12 @@ export function CredentialDialog({
                 <FormItem>
                   <FormLabel>{isEditing ? 'Nueva Contraseña' : 'Contraseña *'}</FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <Input 
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder={isEditing ? 'Dejar vacío para mantener la actual' : 'Ingresa la contraseña'}
-                        {...field} 
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
+                    <PasswordInput
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      placeholder={isEditing ? 'Dejar vacío para mantener la actual' : 'Ingresa la contraseña'}
+                      showStrengthIndicator={!isEditing || !!field.value}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -429,73 +431,97 @@ export function CredentialDialog({
               )}
             />
 
-            {/* Privacidad */}
-            <FormField
-              control={form.control}
-              name="isPrivate"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <Lock className="h-4 w-4 text-amber-500" />
-                      <FormLabel className="text-sm">Credencial privada</FormLabel>
-                    </div>
-                    <FormDescription className="text-xs">
-                      Solo tú podrás ver esta credencial. No se podrá compartir con grupos.
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={(checked) => {
-                        field.onChange(checked);
-                        // Si es privada, limpiar grupos seleccionados
-                        if (checked) {
-                          setSelectedGroupIds([]);
-                        }
-                      }}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+            {/* Info: Las credenciales siempre son privadas */}
+            <div className="flex flex-row items-center gap-3 rounded-lg border p-4 bg-amber-50/50 dark:bg-amber-950/20 border-amber-200">
+              <Lock className="h-5 w-5 text-amber-500 flex-shrink-0" />
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">Credencial privada</p>
+                <p className="text-xs text-muted-foreground">
+                  Solo tú y las personas/grupos con quienes compartas podrán ver esta credencial.
+                </p>
+              </div>
+            </div>
 
-            {/* Compartir con grupos (solo si no es privada y no es edición) */}
-            {!form.watch('isPrivate') && !isEditing && availableGroups.length > 0 && (
-              <div className="space-y-3 rounded-lg border p-4">
+            {/* Compartir con grupos y/o usuarios (solo en creación) */}
+            {!isEditing && (availableGroups.length > 0 || availableUsers.length > 0) && (
+              <div className="space-y-4 rounded-lg border p-4">
                 <div className="flex items-center gap-2">
-                  <FolderLock className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm font-medium">Compartir con grupos</span>
+                  <Users className="h-4 w-4 text-blue-500" />
+                  <span className="text-sm font-medium">Compartir credencial (opcional)</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Selecciona los grupos que podrán ver esta credencial.
+                  Selecciona grupos y/o usuarios que podrán acceder a esta credencial.
                 </p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {availableGroups.map(group => {
-                    const isSelected = selectedGroupIds.includes(group.id);
-                    return (
-                      <Badge
-                        key={group.id}
-                        variant={isSelected ? 'default' : 'outline'}
-                        className="cursor-pointer hover:bg-primary/20 transition-colors"
-                        style={isSelected ? { backgroundColor: group.color || undefined } : undefined}
-                        onClick={() => {
-                          setSelectedGroupIds(prev => 
-                            isSelected 
-                              ? prev.filter(id => id !== group.id)
-                              : [...prev, group.id]
-                          );
-                        }}
-                      >
-                        {isSelected && <Check className="h-3 w-3 mr-1" />}
-                        {group.name}
-                      </Badge>
-                    );
-                  })}
-                </div>
-                {selectedGroupIds.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {selectedGroupIds.length} grupo(s) seleccionado(s)
+                
+                {/* Compartir con grupos */}
+                {availableGroups.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <FolderLock className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Grupos</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {availableGroups.map(group => {
+                        const isSelected = selectedGroupIds.includes(group.id);
+                        return (
+                          <Badge
+                            key={group.id}
+                            variant={isSelected ? 'default' : 'outline'}
+                            className="cursor-pointer hover:bg-primary/20 transition-colors"
+                            style={isSelected ? { backgroundColor: group.color || undefined } : undefined}
+                            onClick={() => {
+                              setSelectedGroupIds(prev => 
+                                isSelected 
+                                  ? prev.filter(id => id !== group.id)
+                                  : [...prev, group.id]
+                              );
+                            }}
+                          >
+                            {isSelected && <Check className="h-3 w-3 mr-1" />}
+                            {group.name}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Compartir con usuarios */}
+                {availableUsers.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <UserPlus className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Usuarios</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 max-h-[120px] overflow-y-auto">
+                      {availableUsers.map(user => {
+                        const isSelected = selectedUserIds.includes(user.id);
+                        return (
+                          <Badge
+                            key={user.id}
+                            variant={isSelected ? 'default' : 'outline'}
+                            className="cursor-pointer hover:bg-primary/20 transition-colors"
+                            onClick={() => {
+                              setSelectedUserIds(prev => 
+                                isSelected 
+                                  ? prev.filter(id => id !== user.id)
+                                  : [...prev, user.id]
+                              );
+                            }}
+                          >
+                            {isSelected && <Check className="h-3 w-3 mr-1" />}
+                            {user.displayName || user.userName}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Resumen de selección */}
+                {(selectedGroupIds.length > 0 || selectedUserIds.length > 0) && (
+                  <p className="text-xs text-muted-foreground pt-2 border-t">
+                    Compartiendo con: {selectedGroupIds.length} grupo(s), {selectedUserIds.length} usuario(s)
                   </p>
                 )}
               </div>

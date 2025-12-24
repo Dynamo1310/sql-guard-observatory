@@ -461,6 +461,7 @@ export interface ViewInfo {
   viewName: string;
   displayName: string;
   description: string;
+  category: string;
 }
 
 export const permissionsApi = {
@@ -510,6 +511,59 @@ export const permissionsApi = {
       },
     });
     return handleResponse<{ permissions: string[] }>(response);
+  },
+};
+
+// ==================== MENU BADGES API ====================
+
+export interface MenuBadgeDto {
+  menuKey: string;
+  displayName: string;
+  isNew: boolean;
+  badgeText: string;
+  badgeColor: string;
+  category: string;
+}
+
+export interface UpdateMenuBadgeRequest {
+  menuKey: string;
+  isNew: boolean;
+  badgeText?: string;
+  badgeColor?: string;
+}
+
+export const menuBadgesApi = {
+  async getAllBadges(): Promise<MenuBadgeDto[]> {
+    const response = await fetch(`${API_URL}/api/menubadges`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<MenuBadgeDto[]>(response);
+  },
+
+  async updateBadge(menuKey: string, request: UpdateMenuBadgeRequest): Promise<void> {
+    const response = await fetch(`${API_URL}/api/menubadges/${menuKey}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<void>(response);
+  },
+
+  async updateAllBadges(requests: UpdateMenuBadgeRequest[]): Promise<void> {
+    const response = await fetch(`${API_URL}/api/menubadges`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(requests),
+    });
+    return handleResponse<void>(response);
   },
 };
 
@@ -1956,6 +2010,186 @@ export const productionAlertsApi = {
   },
 };
 
+// ==================== OVERVIEW SUMMARY ALERTS API ====================
+
+export interface OverviewSummaryAlertConfigDto {
+  id: number;
+  name: string;
+  description?: string;
+  isEnabled: boolean;
+  recipients: string[];
+  includeOnlyProduction: boolean;
+  schedules: OverviewSummaryAlertScheduleDto[];
+  createdAt: string;
+  updatedAt?: string;
+  updatedByDisplayName?: string;
+}
+
+export interface OverviewSummaryAlertScheduleDto {
+  id: number;
+  configId: number;
+  timeOfDay: string; // formato "HH:mm"
+  isEnabled: boolean;
+  daysOfWeek: number[]; // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  lastSentAt?: string;
+  createdAt: string;
+}
+
+export interface UpdateOverviewSummaryAlertConfigRequest {
+  name?: string;
+  description?: string;
+  isEnabled?: boolean;
+  recipients?: string[];
+  includeOnlyProduction?: boolean;
+}
+
+export interface CreateOverviewSummaryAlertScheduleRequest {
+  timeOfDay: string;
+  isEnabled?: boolean;
+  daysOfWeek: number[];
+}
+
+export interface UpdateOverviewSummaryAlertScheduleRequest {
+  timeOfDay?: string;
+  isEnabled?: boolean;
+  daysOfWeek?: number[];
+}
+
+export interface OverviewSummaryAlertHistoryDto {
+  id: number;
+  configId: number;
+  scheduleId?: number;
+  scheduleTime?: string;
+  sentAt: string;
+  recipientCount: number;
+  success: boolean;
+  errorMessage?: string;
+  triggerType: string; // Scheduled, Manual, Test
+  summaryData?: OverviewSummaryDataDto;
+}
+
+export interface OverviewSummaryDataDto {
+  totalInstances: number;
+  healthyCount: number;
+  warningCount: number;
+  riskCount: number;
+  criticalCount: number;
+  averageHealthScore: number;
+  backupsOverdue: number;
+  criticalDisks: number;
+  maintenanceOverdue: number;
+  criticalInstances: CriticalInstanceSummary[];
+  backupIssues: BackupIssueSummary[];
+  criticalDisksList: CriticalDiskSummary[];
+  maintenanceOverdueList: MaintenanceOverdueSummary[];
+  generatedAt: string;
+}
+
+export interface CriticalInstanceSummary {
+  instanceName: string;
+  healthScore: number;
+  issues: string[];
+}
+
+export interface BackupIssueSummary {
+  instanceName: string;
+  score: number;
+  issues: string[];
+}
+
+export interface CriticalDiskSummary {
+  instanceName: string;
+  drive: string;
+  realPorcentajeLibre: number;
+  realLibreGB: number;
+}
+
+export interface MaintenanceOverdueSummary {
+  instanceName: string;
+  displayName: string;
+  tipo: string;
+  agName?: string;
+}
+
+export interface OverviewSummaryAlertResult {
+  success: boolean;
+  message: string;
+}
+
+export const overviewSummaryAlertsApi = {
+  async getConfig(): Promise<OverviewSummaryAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/overview-alerts/config`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OverviewSummaryAlertConfigDto>(response);
+  },
+
+  async updateConfig(data: UpdateOverviewSummaryAlertConfigRequest): Promise<OverviewSummaryAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/overview-alerts/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OverviewSummaryAlertConfigDto>(response);
+  },
+
+  async addSchedule(data: CreateOverviewSummaryAlertScheduleRequest): Promise<OverviewSummaryAlertScheduleDto> {
+    const response = await fetch(`${API_URL}/api/overview-alerts/schedules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OverviewSummaryAlertScheduleDto>(response);
+  },
+
+  async updateSchedule(id: number, data: UpdateOverviewSummaryAlertScheduleRequest): Promise<OverviewSummaryAlertScheduleDto> {
+    const response = await fetch(`${API_URL}/api/overview-alerts/schedules/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OverviewSummaryAlertScheduleDto>(response);
+  },
+
+  async deleteSchedule(id: number): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/overview-alerts/schedules/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ success: boolean; message: string }>(response);
+  },
+
+  async getHistory(limit: number = 20): Promise<OverviewSummaryAlertHistoryDto[]> {
+    const response = await fetch(`${API_URL}/api/overview-alerts/history?limit=${limit}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OverviewSummaryAlertHistoryDto[]>(response);
+  },
+
+  async getPreview(): Promise<OverviewSummaryDataDto> {
+    const response = await fetch(`${API_URL}/api/overview-alerts/preview`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OverviewSummaryDataDto>(response);
+  },
+
+  async sendTestEmail(): Promise<OverviewSummaryAlertResult> {
+    const response = await fetch(`${API_URL}/api/overview-alerts/test`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OverviewSummaryAlertResult>(response);
+  },
+
+  async runNow(): Promise<OverviewSummaryAlertResult> {
+    const response = await fetch(`${API_URL}/api/overview-alerts/run`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OverviewSummaryAlertResult>(response);
+  },
+};
+
 // ==================== SERVER RESTART API ====================
 
 export interface RestartableServerDto {
@@ -2909,6 +3143,8 @@ export interface CredentialFilterRequest {
   isPrivate?: boolean;
   groupId?: number;
   includeDeleted?: boolean;
+  /** Si es true, solo devuelve credenciales donde el usuario es propietario */
+  ownerOnly?: boolean;
 }
 
 // API del Vault
@@ -3134,6 +3370,187 @@ export const vaultApi = {
       headers: { ...getAuthHeader() },
     });
     return handleResponse<VaultUserDto[]>(response);
+  },
+};
+
+// ==================== SECURITY GROUPS API ====================
+
+import type {
+  SecurityGroup,
+  SecurityGroupDetail,
+  GroupMember,
+  CreateGroupRequest,
+  UpdateGroupRequest,
+  GroupPermission,
+  ADSyncConfig,
+  UpdateADSyncConfigRequest,
+  ADSyncResult,
+  UserGroupMembership,
+  AvailableUser,
+  UserWithGroups,
+} from '@/types';
+
+export const groupsApi = {
+  // CRUD de grupos
+  async getGroups(): Promise<SecurityGroup[]> {
+    const response = await fetch(`${API_URL}/api/groups`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<SecurityGroup[]>(response);
+  },
+
+  async getGroup(id: number): Promise<SecurityGroupDetail> {
+    const response = await fetch(`${API_URL}/api/groups/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<SecurityGroupDetail>(response);
+  },
+
+  async createGroup(request: CreateGroupRequest): Promise<SecurityGroup> {
+    const response = await fetch(`${API_URL}/api/groups`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<SecurityGroup>(response);
+  },
+
+  async updateGroup(id: number, request: UpdateGroupRequest): Promise<SecurityGroup> {
+    const response = await fetch(`${API_URL}/api/groups/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<SecurityGroup>(response);
+  },
+
+  async deleteGroup(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/groups/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Error al eliminar grupo' }));
+      throw new Error(error.message);
+    }
+  },
+
+  // Miembros del grupo
+  async getMembers(groupId: number): Promise<GroupMember[]> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/members`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<GroupMember[]>(response);
+  },
+
+  async addMembers(groupId: number, userIds: string[]): Promise<void> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/members`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ userIds }),
+    });
+    return handleResponse<void>(response);
+  },
+
+  async removeMember(groupId: number, userId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/members/${userId}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Error al remover miembro' }));
+      throw new Error(error.message);
+    }
+  },
+
+  async getAvailableUsersForGroup(groupId: number): Promise<AvailableUser[]> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/available-users`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<AvailableUser[]>(response);
+  },
+
+  // Permisos del grupo
+  async getPermissions(groupId: number): Promise<GroupPermission> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/permissions`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<GroupPermission>(response);
+  },
+
+  async updatePermissions(groupId: number, permissions: Record<string, boolean>): Promise<void> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/permissions`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ permissions }),
+    });
+    return handleResponse<void>(response);
+  },
+
+  // Sincronización con AD
+  async getADSyncConfig(groupId: number): Promise<{ configured: boolean; config?: ADSyncConfig }> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/ad-sync`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ configured: boolean; config?: ADSyncConfig }>(response);
+  },
+
+  async updateADSyncConfig(groupId: number, request: UpdateADSyncConfigRequest): Promise<void> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/ad-sync`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<void>(response);
+  },
+
+  async executeADSync(groupId: number): Promise<ADSyncResult> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/ad-sync/execute`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ADSyncResult>(response);
+  },
+
+  async removeADSyncConfig(groupId: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/groups/${groupId}/ad-sync`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Error al remover configuración' }));
+      throw new Error(error.message);
+    }
+  },
+
+  // Utilidades
+  async getUsersWithGroups(): Promise<UserWithGroups[]> {
+    const response = await fetch(`${API_URL}/api/groups/users-with-groups`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<UserWithGroups[]>(response);
+  },
+
+  async getMyGroups(): Promise<UserGroupMembership[]> {
+    const response = await fetch(`${API_URL}/api/groups/my-groups`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<UserGroupMembership[]>(response);
   },
 };
 

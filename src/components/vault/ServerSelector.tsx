@@ -319,39 +319,41 @@ export function ServerSelector({
                   <CollapsibleContent>
                     <div className="ml-6 space-y-0.5">
                       {group.servers.map(server => (
-                        <div
-                          key={server.fullServerName}
-                          className={cn(
-                            "flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
-                            isSelected(server) && "bg-primary/5"
-                          )}
-                          onClick={() => toggleServer(server)}
-                        >
-                          <Checkbox
-                            checked={isSelected(server)}
-                            onCheckedChange={() => toggleServer(server)}
-                            disabled={disabled}
-                          />
-                          <Server className="h-4 w-4 text-muted-foreground" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {server.fullServerName}
-                            </p>
-                            {server.hostingSite && (
-                              <p className="text-xs text-muted-foreground truncate">
-                                {server.hostingSite}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {server.isAws && (
-                              <Cloud className="h-3.5 w-3.5 text-orange-500" title="AWS" />
-                            )}
-                            {server.isDmz && (
-                              <Shield className="h-3.5 w-3.5 text-red-500" title="DMZ" />
-                            )}
-                          </div>
-                        </div>
+                                        <div
+                                          key={server.fullServerName}
+                                          className={cn(
+                                            "flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
+                                            isSelected(server) && "bg-primary/5"
+                                          )}
+                                          onClick={() => toggleServer(server)}
+                                          title={server.fullServerName}
+                                        >
+                                          <Checkbox
+                                            checked={isSelected(server)}
+                                            onCheckedChange={() => toggleServer(server)}
+                                            disabled={disabled}
+                                            className="flex-shrink-0"
+                                          />
+                                          <Server className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                          <div className="flex-1 min-w-0 overflow-hidden">
+                                            <p className="text-sm font-medium truncate" title={server.fullServerName}>
+                                              {server.fullServerName}
+                                            </p>
+                                            {server.hostingSite && (
+                                              <p className="text-xs text-muted-foreground truncate">
+                                                {server.hostingSite}
+                                              </p>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-1 flex-shrink-0">
+                                            {server.isAws && (
+                                              <Cloud className="h-3.5 w-3.5 text-orange-500" title="AWS" />
+                                            )}
+                                            {server.isDmz && (
+                                              <Shield className="h-3.5 w-3.5 text-red-500" title="DMZ" />
+                                            )}
+                                          </div>
+                                        </div>
                       ))}
                     </div>
                   </CollapsibleContent>

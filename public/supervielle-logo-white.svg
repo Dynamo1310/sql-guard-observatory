@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <!-- Logo Symbol - Triangle shapes -->
+  <defs>
+    <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e53935"/>
+      <stop offset="100%" style="stop-color:#c62828"/>
+    </linearGradient>
+    <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8e24aa"/>
+      <stop offset="100%" style="stop-color:#6a1b9a"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Red triangle (top) -->
+  <polygon points="320,5 380,45 340,45" fill="url(#redGradient)"/>
+  
+  <!-- Purple/Magenta triangle (bottom) -->
+  <polygon points="340,45 380,45 360,85" fill="url(#purpleGradient)"/>
+  
+  <!-- Text "SUPERVIELLE" in white -->
+  <text x="10" y="100" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="600" letter-spacing="3" fill="#FFFFFF">
+    SUPERVIELLE
+  </text>
+</svg>
+

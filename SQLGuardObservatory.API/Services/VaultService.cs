@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
+using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Models;
 using System.Text.Json;
 
@@ -26,6 +27,7 @@ public class VaultService : IVaultService
     private readonly SQLNovaDbContext _sqlNovaContext;
     private readonly ICryptoService _cryptoService;
     private readonly IDualReadCryptoService? _dualReadCryptoService;
+    private readonly IPermissionBitMaskService _permissionBitMaskService;
     private readonly IVaultNotificationService _notificationService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<VaultService> _logger;
@@ -39,12 +41,14 @@ public class VaultService : IVaultService
         IVaultNotificationService notificationService,
         IHttpClientFactory httpClientFactory,
         ILogger<VaultService> logger,
+        IPermissionBitMaskService permissionBitMaskService,
         IDualReadCryptoService? dualReadCryptoService = null)
     {
         _context = context;
         _sqlNovaContext = sqlNovaContext;
         _cryptoService = cryptoService;
         _dualReadCryptoService = dualReadCryptoService;
+        _permissionBitMaskService = permissionBitMaskService;
         _notificationService = notificationService;
         _httpClient = httpClientFactory.CreateClient();
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
@@ -118,13 +122,13 @@ public class VaultService : IVaultService
 
             if (filter.IsExpired == true)
             {
-                query = query.Where(c => c.ExpiresAt != null && c.ExpiresAt < DateTime.UtcNow);
+                query = query.Where(c => c.ExpiresAt != null && c.ExpiresAt < LocalClockAR.Now);
             }
 
             if (filter.IsExpiringSoon == true)
             {
-                var thirtyDaysAhead = DateTime.UtcNow.AddDays(30);
-                query = query.Where(c => c.ExpiresAt != null && c.ExpiresAt >= DateTime.UtcNow && c.ExpiresAt <= thirtyDaysAhead);
+                var thirtyDaysAhead = LocalClockAR.Now.AddDays(30);
+                query = query.Where(c => c.ExpiresAt != null && c.ExpiresAt >= LocalClockAR.Now && c.ExpiresAt <= thirtyDaysAhead);
             }
 
             if (filter.IsPrivate.HasValue)
@@ -136,13 +140,20 @@ public class VaultService : IVaultService
             {
                 query = query.Where(c => c.GroupId == filter.GroupId.Value);
             }
+
+            // Filtro para "Mis Credenciales" - solo las que el usuario creó/posee
+            if (filter.OwnerOnly)
+            {
+                query = query.Where(c => c.OwnerUserId == userId);
+            }
         }
 
         var credentials = await query
             .OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
             .ToListAsync();
 
-        return credentials.Select(c => MapToDto(c, userId)).ToList();
+        var dtos = credentials.Select(c => MapToDto(c, userId)).ToList();
+        return await EnrichListWithPermissionsAsync(dtos, userId);
     }
 
     public async Task<CredentialDto?> GetCredentialByIdAsync(int id, string userId)
@@ -166,7 +177,8 @@ public class VaultService : IVaultService
         if (!await CanUserAccessCredentialAsync(credential, userId))
             return null;
 
-        return MapToDto(credential, userId);
+        var dto = MapToDto(credential, userId);
+        return await EnrichWithPermissionsAsync(dto, userId);
     }
     
     private async Task<bool> CanUserAccessCredentialAsync(Credential credential, string userId)
@@ -226,37 +238,18 @@ public class VaultService : IVaultService
                 IsPrivate = request.IsPrivate,
                 OwnerUserId = userId,
                 CreatedByUserId = userId,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = LocalClockAR.Now
             };
 
-            if (_dualReadCryptoService != null)
-            {
-                // Usar formato enterprise
-                var encryptedData = _dualReadCryptoService.EncryptWithEnterprise(request.Password);
-                
-                // También guardar en formato legacy para compatibilidad dual-read
-                var (cipherText, salt, iv) = _cryptoService.Encrypt(request.Password);
-                credential.EncryptedPassword = cipherText;
-                credential.Salt = salt;
-                credential.IV = iv;
-                
-                // Guardar en formato enterprise
-                credential.EncryptedPasswordBin = encryptedData.CipherText;
-                credential.SaltBin = encryptedData.Salt;
-                credential.IVBin = encryptedData.IV;
-                credential.AuthTagBin = encryptedData.AuthTag;
-                credential.KeyId = encryptedData.KeyId;
-                credential.KeyVersion = encryptedData.KeyVersion;
-                credential.IsMigratedToV2 = true;
-            }
-            else
-            {
-                // Solo formato legacy
-                var (cipherText, salt, iv) = _cryptoService.Encrypt(request.Password);
-                credential.EncryptedPassword = cipherText;
-                credential.Salt = salt;
-                credential.IV = iv;
-            }
+            // Cifrar con formato enterprise (post Phase 8 - solo VARBINARY)
+            var encryptedData = _dualReadCryptoService.EncryptWithEnterprise(request.Password);
+            credential.EncryptedPassword = encryptedData.CipherText;
+            credential.Salt = encryptedData.Salt;
+            credential.IV = encryptedData.IV;
+            credential.AuthTag = encryptedData.AuthTag;
+            credential.KeyId = encryptedData.KeyId;
+            credential.KeyVersion = encryptedData.KeyVersion;
+            credential.IsMigratedToV2 = true;
 
             _context.Credentials.Add(credential);
             await _context.SaveChangesAsync();
@@ -272,7 +265,7 @@ public class VaultService : IVaultService
                         ServerName = server.ServerName,
                         InstanceName = server.InstanceName,
                         ConnectionPurpose = server.ConnectionPurpose,
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = LocalClockAR.Now
                     };
                     _context.CredentialServers.Add(credentialServer);
                 }
@@ -292,8 +285,8 @@ public class VaultService : IVaultService
                             CredentialId = credential.Id,
                             GroupId = groupId,
                             SharedByUserId = userId,
-                            Permission = SharePermissions.View,
-                            SharedAt = DateTime.UtcNow
+                            PermissionBitMask = 3, // ViewMetadata (1) + RevealSecret (2) = View
+                            SharedAt = LocalClockAR.Now
                         });
                     }
                 }
@@ -314,8 +307,8 @@ public class VaultService : IVaultService
                             CredentialId = credential.Id,
                             UserId = targetUserId,
                             SharedByUserId = userId,
-                            Permission = SharePermissions.View,
-                            SharedAt = DateTime.UtcNow
+                            PermissionBitMask = 3, // ViewMetadata (1) + RevealSecret (2) = View
+                            SharedAt = LocalClockAR.Now
                         });
                     }
                 }
@@ -326,32 +319,55 @@ public class VaultService : IVaultService
             await LogAuditAsync(credential.Id, credential.Name, CredentialAuditActions.Created,
                 null, userId, userName, ipAddress, userAgent);
 
-            // Enviar notificaciones (en background para no bloquear)
-            _ = Task.Run(async () =>
+            // Recargar con relaciones para retornar
+            var result = await GetCredentialByIdAsync(credential.Id, userId);
+
+            // Enviar notificaciones de "credencial compartida" a los usuarios con los que se compartió
+            try
             {
-                try
+                var credForNotify = await _context.Credentials
+                    .Include(c => c.Owner)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.Id == credential.Id);
+
+                if (credForNotify != null)
                 {
-                    // Recargar la credencial con las relaciones necesarias para notificaciones
-                    var credForNotify = await _context.Credentials
-                        .Include(c => c.Owner)
-                        .Include(c => c.Group)
-                        .ThenInclude(g => g!.Members)
-                        .ThenInclude(m => m.User)
-                        .FirstOrDefaultAsync(c => c.Id == credential.Id);
-                    
-                    if (credForNotify != null)
+                    var sharerName = userName ?? "Usuario";
+
+                    // Notificar a usuarios compartidos directamente
+                    if (request.ShareWithUserIds?.Any() == true)
                     {
-                        await _notificationService.NotifyCredentialCreatedAsync(credForNotify, userName ?? "Usuario");
+                        foreach (var targetUserId in request.ShareWithUserIds)
+                        {
+                            if (targetUserId == userId) continue;
+                            await _notificationService.NotifyCredentialSharedAsync(credForNotify, sharerName, targetUserId);
+                        }
+                    }
+
+                    // Notificar a miembros de grupos compartidos
+                    if (request.ShareWithGroupIds?.Any() == true)
+                    {
+                        foreach (var groupId in request.ShareWithGroupIds)
+                        {
+                            var groupMembers = await _context.Set<CredentialGroupMember>()
+                                .Where(m => m.GroupId == groupId && m.UserId != userId)
+                                .Select(m => m.UserId)
+                                .ToListAsync();
+
+                            foreach (var memberId in groupMembers)
+                            {
+                                await _notificationService.NotifyCredentialSharedAsync(credForNotify, sharerName, memberId);
+                            }
+                        }
                     }
                 }
-                catch (Exception notifyEx)
-                {
-                    _logger.LogWarning(notifyEx, "Error al enviar notificación de credencial creada {CredentialId}", credential.Id);
-                }
-            });
+            }
+            catch (Exception notifyEx)
+            {
+                _logger.LogWarning(notifyEx, "Error al enviar notificación de credencial compartida {CredentialId}", credential.Id);
+            }
 
-            // Recargar con relaciones
-            return await GetCredentialByIdAsync(credential.Id, userId);
+            return result;
         }
         catch (Exception ex)
         {
@@ -432,37 +448,19 @@ public class VaultService : IVaultService
         // Actualizar password si se proporcionó uno nuevo
         if (!string.IsNullOrEmpty(request.NewPassword))
         {
-            if (_dualReadCryptoService != null)
-            {
-                // Usar formato enterprise
-                var encryptedData = _dualReadCryptoService.EncryptWithEnterprise(request.NewPassword);
-                
-                // También actualizar formato legacy para compatibilidad
-                var (cipherText, salt, iv) = _cryptoService.Encrypt(request.NewPassword);
-                credential.EncryptedPassword = cipherText;
-                credential.Salt = salt;
-                credential.IV = iv;
-                
-                // Actualizar formato enterprise
-                credential.EncryptedPasswordBin = encryptedData.CipherText;
-                credential.SaltBin = encryptedData.Salt;
-                credential.IVBin = encryptedData.IV;
-                credential.AuthTagBin = encryptedData.AuthTag;
-                credential.KeyId = encryptedData.KeyId;
-                credential.KeyVersion = encryptedData.KeyVersion;
-                credential.IsMigratedToV2 = true;
-            }
-            else
-            {
-                var (cipherText, salt, iv) = _cryptoService.Encrypt(request.NewPassword);
-                credential.EncryptedPassword = cipherText;
-                credential.Salt = salt;
-                credential.IV = iv;
-            }
+            // Cifrar con formato enterprise (post Phase 8 - solo VARBINARY)
+            var encryptedData = _dualReadCryptoService.EncryptWithEnterprise(request.NewPassword);
+            credential.EncryptedPassword = encryptedData.CipherText;
+            credential.Salt = encryptedData.Salt;
+            credential.IV = encryptedData.IV;
+            credential.AuthTag = encryptedData.AuthTag;
+            credential.KeyId = encryptedData.KeyId;
+            credential.KeyVersion = encryptedData.KeyVersion;
+            credential.IsMigratedToV2 = true;
             changedFields["Password"] = "Changed";
         }
 
-        credential.UpdatedAt = DateTime.UtcNow;
+        credential.UpdatedAt = LocalClockAR.Now;
         credential.UpdatedByUserId = userId;
 
         var passwordChanged = changedFields.ContainsKey("Password");
@@ -473,31 +471,31 @@ public class VaultService : IVaultService
         await LogAuditAsync(credential.Id, credential.Name, CredentialAuditActions.Updated,
             JsonSerializer.Serialize(changedFields), userId, userName, ipAddress, userAgent);
 
-        // Enviar notificaciones (en background para no bloquear)
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                // Recargar la credencial con las relaciones necesarias para notificaciones
-                var credForNotify = await _context.Credentials
-                    .Include(c => c.Owner)
-                    .Include(c => c.Group)
-                    .ThenInclude(g => g!.Members)
-                    .ThenInclude(m => m.User)
-                    .FirstOrDefaultAsync(c => c.Id == credential.Id);
-                
-                if (credForNotify != null)
-                {
-                    await _notificationService.NotifyCredentialUpdatedAsync(credForNotify, userName ?? "Usuario", passwordChanged);
-                }
-            }
-            catch (Exception notifyEx)
-            {
-                _logger.LogWarning(notifyEx, "Error al enviar notificación de credencial actualizada {CredentialId}", credential.Id);
-            }
-        });
+        // Obtener el resultado para retornar
+        var result = await GetCredentialByIdAsync(credential.Id, userId);
 
-        return await GetCredentialByIdAsync(credential.Id, userId);
+        // Enviar notificaciones de forma síncrona para evitar problemas de concurrencia con DbContext
+        try
+        {
+            var credForNotify = await _context.Credentials
+                .Include(c => c.Owner)
+                .Include(c => c.Group)
+                .ThenInclude(g => g!.Members)
+                .ThenInclude(m => m.User)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == credential.Id);
+
+            if (credForNotify != null)
+            {
+                await _notificationService.NotifyCredentialUpdatedAsync(credForNotify, userName ?? "Usuario", passwordChanged);
+            }
+        }
+        catch (Exception notifyEx)
+        {
+            _logger.LogWarning(notifyEx, "Error al enviar notificación de credencial actualizada {CredentialId}", credential.Id);
+        }
+
+        return result;
     }
 
     public async Task<bool> DeleteCredentialAsync(
@@ -555,7 +553,7 @@ public class VaultService : IVaultService
 
         // Soft delete
         credential.IsDeleted = true;
-        credential.UpdatedAt = DateTime.UtcNow;
+        credential.UpdatedAt = LocalClockAR.Now;
         credential.UpdatedByUserId = userId;
 
         await _context.SaveChangesAsync();
@@ -564,18 +562,15 @@ public class VaultService : IVaultService
         await LogAuditAsync(credential.Id, credential.Name, CredentialAuditActions.Deleted,
             null, userId, userName, ipAddress, userAgent);
 
-        // Enviar notificaciones (en background para no bloquear)
-        _ = Task.Run(async () =>
+        // Enviar notificaciones de forma síncrona para evitar problemas de concurrencia con DbContext
+        try
         {
-            try
-            {
-                await _notificationService.NotifyCredentialDeletedAsync(credentialCopy, userName ?? "Usuario");
-            }
-            catch (Exception notifyEx)
-            {
-                _logger.LogWarning(notifyEx, "Error al enviar notificación de credencial eliminada {CredentialId}", credential.Id);
-            }
-        });
+            await _notificationService.NotifyCredentialDeletedAsync(credentialCopy, userName ?? "Usuario");
+        }
+        catch (Exception notifyEx)
+        {
+            _logger.LogWarning(notifyEx, "Error al enviar notificación de credencial eliminada {CredentialId}", credential.Id);
+        }
 
         return true;
     }
@@ -588,48 +583,51 @@ public class VaultService : IVaultService
         string? userAgent)
     {
         var credential = await _context.Credentials
+            .Include(c => c.Owner)
             .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
 
         if (credential == null)
             return null;
 
-        // Verificar acceso
-        if (credential.IsPrivate && credential.OwnerUserId != userId)
+        // Verificar permisos de revelación (incluye owner, shares directos, shares de grupo, etc.)
+        var canReveal = await _permissionBitMaskService.CanRevealAsync(userId, id);
+        if (!canReveal)
+        {
+            _logger.LogWarning("Usuario {UserId} no tiene permisos para revelar credencial {CredentialId}", userId, id);
             return null;
+        }
 
         try
         {
-            string password;
-
-            // DUAL-READ: Usar el formato apropiado según el estado de migración
-            if (_dualReadCryptoService != null)
-            {
-                password = _dualReadCryptoService.DecryptCredentialPassword(
-                    credential.IsMigratedToV2,
-                    // Legacy format
-                    credential.EncryptedPassword,
-                    credential.Salt,
-                    credential.IV,
-                    // Enterprise format
-                    credential.EncryptedPasswordBin,
-                    credential.SaltBin,
-                    credential.IVBin,
-                    credential.AuthTagBin,
-                    credential.KeyId,
-                    credential.KeyVersion);
-            }
-            else
-            {
-                // Fallback a legacy si dual-read no está disponible
-                password = _cryptoService.Decrypt(
-                    credential.EncryptedPassword,
-                    credential.Salt,
-                    credential.IV);
-            }
+            // Post Phase 8: solo formato enterprise (VARBINARY)
+            var password = _dualReadCryptoService.DecryptCredentialPassword(
+                isMigratedToV2: true, // Post Phase 8, todo está migrado
+                encryptedPasswordBase64: null,
+                saltBase64: null,
+                ivBase64: null,
+                encryptedPasswordBin: credential.EncryptedPassword,
+                saltBin: credential.Salt,
+                ivBin: credential.IV,
+                authTagBin: credential.AuthTag,
+                keyId: credential.KeyId,
+                keyVersion: credential.KeyVersion);
 
             // Registrar auditoría
             await LogAuditAsync(credential.Id, credential.Name, CredentialAuditActions.PasswordRevealed,
                 null, userId, userName, ipAddress, userAgent);
+
+            // Enviar notificación de contraseña revelada (solo si no es el propietario quien revela)
+            if (credential.OwnerUserId != userId)
+            {
+                try
+                {
+                    await _notificationService.NotifyPasswordRevealedAsync(credential, userName ?? "Usuario", userId);
+                }
+                catch (Exception notifyEx)
+                {
+                    _logger.LogWarning(notifyEx, "Error al enviar notificación de contraseña revelada {CredentialId}", credential.Id);
+                }
+            }
 
             return new RevealPasswordResponse
             {
@@ -641,6 +639,54 @@ public class VaultService : IVaultService
         {
             _logger.LogError(ex, "Error al descifrar password de credencial {Id}", id);
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Actualiza el password de una credencial (MANUAL) - Enterprise v2.1.1
+    /// IMPORTANTE: NO cambia la password en el servidor destino
+    /// </summary>
+    public async Task<bool> UpdateCredentialPasswordAsync(
+        int id,
+        string newPassword,
+        string userId,
+        string? userName,
+        string? ipAddress,
+        string? userAgent)
+    {
+        var credential = await _context.Credentials
+            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
+
+        if (credential == null)
+            return false;
+
+        try
+        {
+            // Cifrar con formato enterprise (post Phase 8 - solo VARBINARY)
+            var encryptedData = _dualReadCryptoService.EncryptWithEnterprise(newPassword);
+            credential.EncryptedPassword = encryptedData.CipherText;
+            credential.Salt = encryptedData.Salt;
+            credential.IV = encryptedData.IV;
+            credential.AuthTag = encryptedData.AuthTag;
+            credential.KeyId = encryptedData.KeyId;
+            credential.KeyVersion = encryptedData.KeyVersion;
+            credential.IsMigratedToV2 = true;
+
+            credential.UpdatedAt = LocalClockAR.Now;
+            credential.UpdatedByUserId = userId;
+
+            await _context.SaveChangesAsync();
+
+            // Registrar auditoría
+            await LogAuditAsync(credential.Id, credential.Name, "SecretUpdated",
+                "Password actualizado manualmente", userId, userName, ipAddress, userAgent);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar password de credencial {Id}", id);
+            return false;
         }
     }
 
@@ -659,7 +705,12 @@ public class VaultService : IVaultService
         var credential = await _context.Credentials
             .FirstOrDefaultAsync(c => c.Id == credentialId && !c.IsDeleted);
 
-        if (credential == null || (credential.IsPrivate && credential.OwnerUserId != userId))
+        if (credential == null)
+            return null;
+
+        // Verificar permisos de edición (incluye owner, shares con permiso de edición, etc.)
+        var canEdit = await _permissionBitMaskService.CanEditAsync(userId, credentialId);
+        if (!canEdit)
             return null;
 
         // Verificar si ya existe
@@ -677,7 +728,7 @@ public class VaultService : IVaultService
             ServerName = request.ServerName,
             InstanceName = request.InstanceName,
             ConnectionPurpose = request.ConnectionPurpose,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = LocalClockAR.Now
         };
 
         _context.CredentialServers.Add(server);
@@ -709,7 +760,12 @@ public class VaultService : IVaultService
         var credential = await _context.Credentials
             .FirstOrDefaultAsync(c => c.Id == credentialId && !c.IsDeleted);
 
-        if (credential == null || (credential.IsPrivate && credential.OwnerUserId != userId))
+        if (credential == null)
+            return false;
+
+        // Verificar permisos de edición (incluye owner, shares con permiso de edición, etc.)
+        var canEdit = await _permissionBitMaskService.CanEditAsync(userId, credentialId);
+        if (!canEdit)
             return false;
 
         var server = await _context.CredentialServers
@@ -803,7 +859,7 @@ public class VaultService : IVaultService
             .Where(c => !c.IsDeleted)
             .Where(c => !c.IsPrivate || c.OwnerUserId == userId);
 
-        var now = DateTime.UtcNow;
+        var now = LocalClockAR.Now;
         var thirtyDaysAhead = now.AddDays(30);
 
         var total = await query.CountAsync();
@@ -840,7 +896,7 @@ public class VaultService : IVaultService
 
     public async Task<List<CredentialDto>> GetExpiringCredentialsAsync(string userId, int daysAhead = 30)
     {
-        var deadline = DateTime.UtcNow.AddDays(daysAhead);
+        var deadline = LocalClockAR.Now.AddDays(daysAhead);
 
         // Obtener IDs de grupos del usuario
         var userGroupIds = await _context.CredentialGroupMembers
@@ -866,7 +922,8 @@ public class VaultService : IVaultService
             .OrderBy(c => c.ExpiresAt)
             .ToListAsync();
 
-        return credentials.Select(c => MapToDto(c, userId)).ToList();
+        var dtos = credentials.Select(c => MapToDto(c, userId)).ToList();
+        return await EnrichListWithPermissionsAsync(dtos, userId);
     }
 
     // =============================================
@@ -881,8 +938,9 @@ public class VaultService : IVaultService
         if (credential == null)
             return new List<CredentialAuditLogDto>();
 
-        // Verificar acceso
-        if (credential.IsPrivate && credential.OwnerUserId != userId)
+        // Verificar permisos para ver auditoría (incluye owner, shares con permiso de audit, etc.)
+        var canViewAudit = await _permissionBitMaskService.CanViewAuditAsync(userId, credentialId);
+        if (!canViewAudit)
             return new List<CredentialAuditLogDto>();
 
         var logs = await _context.CredentialAuditLogs
@@ -942,7 +1000,7 @@ public class VaultService : IVaultService
             ChangedFields = changedFields,
             PerformedByUserId = userId,
             PerformedByUserName = userName,
-            PerformedAt = DateTime.UtcNow,
+            PerformedAt = LocalClockAR.Now,
             IpAddress = ipAddress,
             UserAgent = userAgent
         };
@@ -988,7 +1046,8 @@ public class VaultService : IVaultService
                 GroupId = gs.GroupId,
                 GroupName = gs.Group?.Name ?? "",
                 GroupColor = gs.Group?.Color,
-                Permission = gs.Permission,
+                PermissionBitMask = gs.PermissionBitMask,
+                Permission = BitmaskToPermissionString(gs.PermissionBitMask),
                 SharedByUserId = gs.SharedByUserId,
                 SharedByUserName = gs.SharedByUser?.DisplayName ?? gs.SharedByUser?.UserName,
                 SharedAt = gs.SharedAt
@@ -1000,7 +1059,8 @@ public class VaultService : IVaultService
                 UserName = us.User?.UserName ?? "",
                 DisplayName = us.User?.DisplayName,
                 Email = us.User?.Email,
-                Permission = us.Permission,
+                PermissionBitMask = us.PermissionBitMask,
+                Permission = BitmaskToPermissionString(us.PermissionBitMask),
                 SharedByUserId = us.SharedByUserId,
                 SharedByUserName = us.SharedByUser?.DisplayName ?? us.SharedByUser?.UserName,
                 SharedAt = us.SharedAt
@@ -1016,12 +1076,72 @@ public class VaultService : IVaultService
         
         // Verificar shares directos
         var userShare = c.UserShares.FirstOrDefault(us => us.UserId == userId);
-        if (userShare != null) return userShare.Permission;
+        if (userShare != null) return BitmaskToPermissionString(userShare.PermissionBitMask);
         
         // Si es team shared, todos tienen View
         if (c.IsTeamShared) return SharePermissions.View;
         
         return null;
+    }
+
+    /// <summary>
+    /// Convierte un bitmask de permisos a string legible para UI
+    /// </summary>
+    private static string BitmaskToPermissionString(long bitmask)
+    {
+        // Determinar el nivel más alto
+        if ((bitmask & 128) != 0) return SharePermissions.Admin; // DeleteCredential = Admin
+        if ((bitmask & 64) != 0) return SharePermissions.Admin;  // ShareCredential = Admin  
+        if ((bitmask & 16) != 0) return SharePermissions.Admin;  // UpdateSecret = Admin
+        if ((bitmask & 8) != 0) return SharePermissions.Edit;    // EditMetadata = Edit
+        if ((bitmask & 2) != 0) return SharePermissions.View;    // RevealSecret = View
+        if ((bitmask & 1) != 0) return SharePermissions.View;    // ViewMetadata = View
+        return SharePermissions.View;
+    }
+
+    /// <summary>
+    /// Convierte un string de permiso a bitmask
+    /// </summary>
+    private static long PermissionStringToBitmask(string permission)
+    {
+        return permission?.ToLower() switch
+        {
+            "view" => 3,    // ViewMetadata (1) + RevealSecret (2)
+            "edit" => 11,   // ViewMetadata (1) + RevealSecret (2) + EditMetadata (8)
+            "admin" => 223, // ViewMetadata + RevealSecret + UseWithoutReveal + EditMetadata + UpdateSecret + ShareCredential + DeleteCredential
+            _ => 3          // Default: View
+        };
+    }
+
+    /// <summary>
+    /// Enriquece un DTO con permisos bitmask calculados (Enterprise v2.1.1)
+    /// </summary>
+    private async Task<CredentialDto> EnrichWithPermissionsAsync(CredentialDto dto, string userId)
+    {
+        var permissions = await _permissionBitMaskService.GetEffectivePermissionsAsync(userId, dto.Id);
+        
+        dto.PermissionBitMask = permissions;
+        dto.CanReveal = _permissionBitMaskService.HasPermission(permissions, IPermissionBitMaskService.RevealSecret);
+        dto.CanUse = _permissionBitMaskService.HasPermission(permissions, IPermissionBitMaskService.UseWithoutReveal);
+        dto.CanEdit = _permissionBitMaskService.HasPermission(permissions, IPermissionBitMaskService.EditMetadata);
+        dto.CanUpdateSecret = _permissionBitMaskService.HasPermission(permissions, IPermissionBitMaskService.UpdateSecret);
+        dto.CanShare = _permissionBitMaskService.HasPermission(permissions, IPermissionBitMaskService.ShareCredential);
+        dto.CanDelete = _permissionBitMaskService.HasPermission(permissions, IPermissionBitMaskService.DeleteCredential);
+        dto.CanViewAudit = await _permissionBitMaskService.CanViewAuditAsync(userId, dto.Id);
+        
+        return dto;
+    }
+
+    /// <summary>
+    /// Enriquece una lista de DTOs con permisos bitmask
+    /// </summary>
+    private async Task<List<CredentialDto>> EnrichListWithPermissionsAsync(List<CredentialDto> dtos, string userId)
+    {
+        foreach (var dto in dtos)
+        {
+            await EnrichWithPermissionsAsync(dto, userId);
+        }
+        return dtos;
     }
 
     private static CredentialAuditLogDto MapAuditToDto(CredentialAuditLog a)
@@ -1089,7 +1209,7 @@ public class VaultService : IVaultService
             Color = request.Color,
             Icon = request.Icon,
             OwnerUserId = userId,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = LocalClockAR.Now
         };
 
         // Agregar al creador como Owner del grupo
@@ -1098,7 +1218,7 @@ public class VaultService : IVaultService
             UserId = userId,
             Role = CredentialGroupRoles.Owner,
             ReceiveNotifications = true,
-            AddedAt = DateTime.UtcNow
+            AddedAt = LocalClockAR.Now
         });
 
         // Agregar miembros iniciales
@@ -1112,7 +1232,7 @@ public class VaultService : IVaultService
                     Role = memberReq.Role,
                     ReceiveNotifications = memberReq.ReceiveNotifications,
                     AddedByUserId = userId,
-                    AddedAt = DateTime.UtcNow
+                    AddedAt = LocalClockAR.Now
                 });
             }
         }
@@ -1161,7 +1281,7 @@ public class VaultService : IVaultService
         group.Description = request.Description;
         group.Color = request.Color;
         group.Icon = request.Icon;
-        group.UpdatedAt = DateTime.UtcNow;
+        group.UpdatedAt = LocalClockAR.Now;
         group.UpdatedByUserId = userId;
 
         await _context.SaveChangesAsync();
@@ -1197,7 +1317,7 @@ public class VaultService : IVaultService
         }
 
         group.IsDeleted = true;
-        group.UpdatedAt = DateTime.UtcNow;
+        group.UpdatedAt = LocalClockAR.Now;
         group.UpdatedByUserId = userId;
 
         await _context.SaveChangesAsync();
@@ -1229,7 +1349,7 @@ public class VaultService : IVaultService
             Role = request.Role,
             ReceiveNotifications = request.ReceiveNotifications,
             AddedByUserId = userId,
-            AddedAt = DateTime.UtcNow
+            AddedAt = LocalClockAR.Now
         };
 
         _context.CredentialGroupMembers.Add(newMember);
@@ -1367,7 +1487,8 @@ public class VaultService : IVaultService
             .Distinct()
             .ToListAsync();
 
-        return credentials.Select(c => MapToDto(c, userId)).ToList();
+        var dtos = credentials.Select(c => MapToDto(c, userId)).ToList();
+        return await EnrichListWithPermissionsAsync(dtos, userId);
     }
 
     public async Task<bool> AddCredentialToGroupAsync(int groupId, int credentialId, string permission, string userId, string? userName, string? ipAddress, string? userAgent)
@@ -1408,8 +1529,8 @@ public class VaultService : IVaultService
             CredentialId = credentialId,
             GroupId = groupId,
             SharedByUserId = userId,
-            Permission = permission,
-            SharedAt = DateTime.UtcNow
+            PermissionBitMask = PermissionStringToBitmask(permission),
+            SharedAt = LocalClockAR.Now
         };
 
         _context.CredentialGroupShares.Add(share);
@@ -1475,7 +1596,8 @@ public class VaultService : IVaultService
             .OrderBy(c => c.Name)
             .ToListAsync();
 
-        return credentials.Select(c => MapToDto(c, userId)).ToList();
+        var dtos = credentials.Select(c => MapToDto(c, userId)).ToList();
+        return await EnrichListWithPermissionsAsync(dtos, userId);
     }
 
     public async Task<List<VaultUserDto>> GetAvailableUsersAsync()
@@ -1576,13 +1698,14 @@ public class VaultService : IVaultService
                 if (!groupExists) continue;
 
                 // Verificar que no esté ya compartida con este grupo
+                var newBitmask = PermissionStringToBitmask(request.Permission);
                 var existingShare = credential.GroupShares.FirstOrDefault(gs => gs.GroupId == groupId);
                 if (existingShare != null)
                 {
                     // Actualizar permiso si es diferente
-                    if (existingShare.Permission != request.Permission)
+                    if (existingShare.PermissionBitMask != newBitmask)
                     {
-                        existingShare.Permission = request.Permission;
+                        existingShare.PermissionBitMask = newBitmask;
                         changes.Add($"Grupo {groupId} permiso actualizado a {request.Permission}");
                     }
                 }
@@ -1594,8 +1717,8 @@ public class VaultService : IVaultService
                         CredentialId = credentialId,
                         GroupId = groupId,
                         SharedByUserId = userId,
-                        Permission = request.Permission,
-                        SharedAt = DateTime.UtcNow
+                        PermissionBitMask = newBitmask,
+                        SharedAt = LocalClockAR.Now
                     };
                     _context.CredentialGroupShares.Add(share);
                     changes.Add($"Compartida con grupo {groupId}");
@@ -1616,13 +1739,14 @@ public class VaultService : IVaultService
                 if (!userExists) continue;
 
                 // Verificar que no esté ya compartida con este usuario
+                var userNewBitmask = PermissionStringToBitmask(request.Permission);
                 var existingShare = credential.UserShares.FirstOrDefault(us => us.UserId == targetUserId);
                 if (existingShare != null)
                 {
                     // Actualizar permiso si es diferente
-                    if (existingShare.Permission != request.Permission)
+                    if (existingShare.PermissionBitMask != userNewBitmask)
                     {
-                        existingShare.Permission = request.Permission;
+                        existingShare.PermissionBitMask = userNewBitmask;
                         changes.Add($"Usuario {targetUserId} permiso actualizado a {request.Permission}");
                     }
                 }
@@ -1634,8 +1758,8 @@ public class VaultService : IVaultService
                         CredentialId = credentialId,
                         UserId = targetUserId,
                         SharedByUserId = userId,
-                        Permission = request.Permission,
-                        SharedAt = DateTime.UtcNow
+                        PermissionBitMask = userNewBitmask,
+                        SharedAt = LocalClockAR.Now
                     };
                     _context.CredentialUserShares.Add(share);
                     changes.Add($"Compartida con usuario {targetUserId}");
@@ -1643,7 +1767,7 @@ public class VaultService : IVaultService
             }
         }
 
-        credential.UpdatedAt = DateTime.UtcNow;
+        credential.UpdatedAt = LocalClockAR.Now;
         credential.UpdatedByUserId = userId;
 
         await _context.SaveChangesAsync();
@@ -1652,6 +1776,51 @@ public class VaultService : IVaultService
         if (changes.Any())
         {
             await LogAuditAsync(credential.Id, credential.Name, "Shared", string.Join("; ", changes), userId, userName, ipAddress, userAgent);
+        }
+
+        // Enviar notificaciones a los usuarios con los que se compartió
+        try
+        {
+            var sharerName = userName ?? "Usuario";
+
+            // Notificar a usuarios compartidos directamente (solo los nuevos)
+            if (request.UserIds != null && request.UserIds.Any())
+            {
+                foreach (var targetUserId in request.UserIds)
+                {
+                    if (targetUserId == userId) continue;
+                    // Solo notificar si es una nueva compartición (no actualización de permisos)
+                    if (changes.Any(c => c.Contains($"Compartida con usuario {targetUserId}")))
+                    {
+                        await _notificationService.NotifyCredentialSharedAsync(credential, sharerName, targetUserId);
+                    }
+                }
+            }
+
+            // Notificar a miembros de grupos compartidos (solo los nuevos)
+            if (request.GroupIds != null && request.GroupIds.Any())
+            {
+                foreach (var groupId in request.GroupIds)
+                {
+                    // Solo notificar si es una nueva compartición con el grupo
+                    if (changes.Any(c => c.Contains($"Compartida con grupo {groupId}")))
+                    {
+                        var groupMembers = await _context.Set<CredentialGroupMember>()
+                            .Where(m => m.GroupId == groupId && m.UserId != userId)
+                            .Select(m => m.UserId)
+                            .ToListAsync();
+
+                        foreach (var memberId in groupMembers)
+                        {
+                            await _notificationService.NotifyCredentialSharedAsync(credential, sharerName, memberId);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception notifyEx)
+        {
+            _logger.LogWarning(notifyEx, "Error al enviar notificación de credencial compartida {CredentialId}", credential.Id);
         }
 
         return true;
@@ -1681,7 +1850,7 @@ public class VaultService : IVaultService
             return false;
 
         _context.CredentialGroupShares.Remove(share);
-        credential.UpdatedAt = DateTime.UtcNow;
+        credential.UpdatedAt = LocalClockAR.Now;
         credential.UpdatedByUserId = userId;
 
         await _context.SaveChangesAsync();
@@ -1715,7 +1884,7 @@ public class VaultService : IVaultService
             return false;
 
         _context.CredentialUserShares.Remove(share);
-        credential.UpdatedAt = DateTime.UtcNow;
+        credential.UpdatedAt = LocalClockAR.Now;
         credential.UpdatedByUserId = userId;
 
         await _context.SaveChangesAsync();
@@ -1743,40 +1912,55 @@ public class VaultService : IVaultService
             .OrderByDescending(c => c.UserShares.Max(us => us.SharedAt))
             .ToListAsync();
 
-        return credentials.Select(c => {
+        var result = new List<SharedWithMeCredentialDto>();
+        foreach (var c in credentials)
+        {
             var userShare = c.UserShares.First(us => us.UserId == userId);
             var dto = MapToDto(c, userId);
-            return new SharedWithMeCredentialDto
+            var enrichedDto = await EnrichWithPermissionsAsync(dto, userId);
+            
+            result.Add(new SharedWithMeCredentialDto
             {
-                Id = dto.Id,
-                Name = dto.Name,
-                CredentialType = dto.CredentialType,
-                Username = dto.Username,
-                Domain = dto.Domain,
-                Description = dto.Description,
-                Notes = dto.Notes,
-                ExpiresAt = dto.ExpiresAt,
-                IsPrivate = dto.IsPrivate,
-                IsTeamShared = dto.IsTeamShared,
-                GroupId = dto.GroupId,
-                GroupName = dto.GroupName,
-                GroupColor = dto.GroupColor,
-                OwnerUserId = dto.OwnerUserId,
-                OwnerDisplayName = dto.OwnerDisplayName,
-                CreatedAt = dto.CreatedAt,
-                UpdatedAt = dto.UpdatedAt,
-                CreatedByDisplayName = dto.CreatedByDisplayName,
-                UpdatedByDisplayName = dto.UpdatedByDisplayName,
-                Servers = dto.Servers,
-                GroupShares = dto.GroupShares,
-                UserShares = dto.UserShares,
-                CurrentUserPermission = dto.CurrentUserPermission,
+                Id = enrichedDto.Id,
+                Name = enrichedDto.Name,
+                CredentialType = enrichedDto.CredentialType,
+                Username = enrichedDto.Username,
+                Domain = enrichedDto.Domain,
+                Description = enrichedDto.Description,
+                Notes = enrichedDto.Notes,
+                ExpiresAt = enrichedDto.ExpiresAt,
+                IsPrivate = enrichedDto.IsPrivate,
+                IsTeamShared = enrichedDto.IsTeamShared,
+                GroupId = enrichedDto.GroupId,
+                GroupName = enrichedDto.GroupName,
+                GroupColor = enrichedDto.GroupColor,
+                OwnerUserId = enrichedDto.OwnerUserId,
+                OwnerDisplayName = enrichedDto.OwnerDisplayName,
+                CreatedAt = enrichedDto.CreatedAt,
+                UpdatedAt = enrichedDto.UpdatedAt,
+                CreatedByDisplayName = enrichedDto.CreatedByDisplayName,
+                UpdatedByDisplayName = enrichedDto.UpdatedByDisplayName,
+                Servers = enrichedDto.Servers,
+                GroupShares = enrichedDto.GroupShares,
+                UserShares = enrichedDto.UserShares,
+                CurrentUserPermission = enrichedDto.CurrentUserPermission,
+                // Campos bitmask
+                PermissionBitMask = enrichedDto.PermissionBitMask,
+                CanReveal = enrichedDto.CanReveal,
+                CanUse = enrichedDto.CanUse,
+                CanEdit = enrichedDto.CanEdit,
+                CanUpdateSecret = enrichedDto.CanUpdateSecret,
+                CanShare = enrichedDto.CanShare,
+                CanDelete = enrichedDto.CanDelete,
+                CanViewAudit = enrichedDto.CanViewAudit,
+                // Campos específicos de SharedWithMe
                 SharedByUserId = userShare.SharedByUserId,
                 SharedByUserName = userShare.SharedByUser?.DisplayName ?? userShare.SharedByUser?.UserName,
                 SharedAt = userShare.SharedAt,
-                MyPermission = userShare.Permission
-            };
-        }).ToList();
+                MyPermission = BitmaskToPermissionString(userShare.PermissionBitMask)
+            });
+        }
+        return result;
     }
 
     private async Task<bool> CanUserShareCredentialAsync(Credential credential, string userId)
@@ -1788,7 +1972,8 @@ public class VaultService : IVaultService
         // Verificar si es admin en algún grupo donde está compartida la credencial
         foreach (var groupShare in credential.GroupShares)
         {
-            if (groupShare.Permission == SharePermissions.Admin)
+            // ShareCredential (64) indica permiso Admin
+            if ((groupShare.PermissionBitMask & 64) != 0)
             {
                 var isGroupAdmin = await _context.CredentialGroupMembers
                     .AnyAsync(m => m.GroupId == groupShare.GroupId && 

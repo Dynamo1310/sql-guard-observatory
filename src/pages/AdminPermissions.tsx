@@ -215,6 +215,39 @@ export default function AdminPermissions() {
       {permissions.filter(rp => canViewRole(rp.role)).map((rolePermission) => {
         const viewsList = availableData?.views || [];
         
+        // Agrupar vistas por categoría
+        const viewsByCategory = viewsList.reduce((acc, view) => {
+          const category = view.category || 'Sin Categoría';
+          if (!acc[category]) {
+            acc[category] = [];
+          }
+          acc[category].push(view);
+          return acc;
+        }, {} as Record<string, typeof viewsList>);
+
+        // Orden de las categorías
+        const categoryOrder = ['Observabilidad', 'Parcheos', 'Guardias DBA', 'Operaciones', 'Seguridad', 'Administración'];
+        const sortedCategories = Object.keys(viewsByCategory).sort((a, b) => {
+          const indexA = categoryOrder.indexOf(a);
+          const indexB = categoryOrder.indexOf(b);
+          if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+          if (indexA === -1) return 1;
+          if (indexB === -1) return -1;
+          return indexA - indexB;
+        });
+
+        const getCategoryColor = (category: string) => {
+          switch (category) {
+            case 'Observabilidad': return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30';
+            case 'Parcheos': return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30';
+            case 'Guardias DBA': return 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/30';
+            case 'Operaciones': return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30';
+            case 'Seguridad': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30';
+            case 'Administración': return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30';
+            default: return 'bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30';
+          }
+        };
+        
         return (
           <Card key={rolePermission.role} className="gradient-card shadow-card">
             <CardHeader>
@@ -246,34 +279,47 @@ export default function AdminPermissions() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {viewsList.map((view) => {
-                    const hasPermission = rolePermission.permissions[view.viewName] || false;
-                    const isModified = changes.get(rolePermission.role)?.has(view.viewName);
-                    const canEdit = canEditRole(rolePermission.role);
-
-                    return (
-                      <TableRow key={view.viewName} className={isModified ? 'bg-yellow-50 dark:bg-yellow-950/20' : ''}>
-                        <TableCell className="font-medium">{view.displayName}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{view.description}</TableCell>
-                        <TableCell className="text-center">
-                          <button
-                            onClick={() => handleTogglePermission(rolePermission.role, view.viewName, hasPermission)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                              hasPermission ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'
-                            } ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            disabled={saving || !canEdit}
-                            title={!canEdit ? 'No tienes permisos para editar este rol' : ''}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                hasPermission ? 'translate-x-6' : 'translate-x-1'
-                              }`}
-                            />
-                          </button>
+                  {sortedCategories.map((category) => (
+                    <>
+                      {/* Encabezado de categoría */}
+                      <TableRow key={`category-${category}`} className="bg-muted/50">
+                        <TableCell colSpan={3} className="py-2">
+                          <Badge variant="outline" className={`${getCategoryColor(category)} font-semibold`}>
+                            {category}
+                          </Badge>
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
+                      {/* Vistas de la categoría */}
+                      {viewsByCategory[category].map((view) => {
+                        const hasPermission = rolePermission.permissions[view.viewName] || false;
+                        const isModified = changes.get(rolePermission.role)?.has(view.viewName);
+                        const canEdit = canEditRole(rolePermission.role);
+
+                        return (
+                          <TableRow key={view.viewName} className={isModified ? 'bg-yellow-50 dark:bg-yellow-950/20' : ''}>
+                            <TableCell className="font-medium pl-6">{view.displayName}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{view.description}</TableCell>
+                            <TableCell className="text-center">
+                              <button
+                                onClick={() => handleTogglePermission(rolePermission.role, view.viewName, hasPermission)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                  hasPermission ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'
+                                } ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                disabled={saving || !canEdit}
+                                title={!canEdit ? 'No tienes permisos para editar este rol' : ''}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    hasPermission ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </>
+                  ))}
                 </TableBody>
               </Table>
             </CardContent>

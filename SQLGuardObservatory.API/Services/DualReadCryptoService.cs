@@ -120,13 +120,13 @@ public class DualReadCryptoService : IDualReadCryptoService
         int? keyVersion)
     {
         if (cipherText == null || cipherText.Length == 0)
-            throw new ArgumentException("EncryptedPasswordBin está vacío");
+            throw new ArgumentException("EncryptedPassword está vacío");
         if (salt == null || salt.Length == 0)
-            throw new ArgumentException("SaltBin está vacío");
+            throw new ArgumentException("Salt está vacío");
         if (iv == null || iv.Length == 0)
-            throw new ArgumentException("IVBin está vacío");
+            throw new ArgumentException("IV está vacío");
         if (authTag == null || authTag.Length == 0)
-            throw new ArgumentException("AuthTagBin está vacío");
+            throw new ArgumentException("AuthTag está vacío");
         if (!keyId.HasValue)
             throw new ArgumentException("KeyId es requerido para formato enterprise");
         if (!keyVersion.HasValue)

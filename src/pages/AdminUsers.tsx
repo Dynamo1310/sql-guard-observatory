@@ -35,13 +35,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { authApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto } from '@/services/api';
+import { authApi, groupsApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
+import type { UserWithGroups, UserGroupMembership } from '@/types';
+
+// Tipo extendido para usuarios con grupos
+interface UserDtoWithGroups extends UserDto {
+  groups?: UserGroupMembership[];
+}
 
 export default function AdminUsers() {
   const { user: currentUser, isSuperAdmin } = useAuth();
-  const [users, setUsers] = useState<UserDto[]>([]);
+  const [users, setUsers] = useState<UserDtoWithGroups[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -73,8 +79,24 @@ export default function AdminUsers() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const data = await authApi.getUsers();
-      setUsers(data);
+      // Intentar obtener usuarios con sus grupos
+      try {
+        const usersWithGroups = await groupsApi.getUsersWithGroups();
+        setUsers(usersWithGroups.map(u => ({
+          id: u.id,
+          domainUser: u.domainUser,
+          displayName: u.displayName,
+          email: u.email,
+          role: u.role,
+          active: u.active,
+          createdAt: u.createdAt,
+          groups: u.groups,
+        })));
+      } catch {
+        // Fallback a endpoint original si el nuevo falla
+        const data = await authApi.getUsers();
+        setUsers(data);
+      }
     } catch (err: any) {
       toast.error('Error al cargar usuarios: ' + err.message);
     } finally {
@@ -433,6 +455,9 @@ export default function AdminUsers() {
                 >
                   Rol {getSortIndicator('role')}
                 </TableHead>
+                <TableHead className="text-xs">
+                  Grupos
+                </TableHead>
                 <TableHead 
                   className="text-xs cursor-pointer hover:bg-accent"
                   onClick={() => requestSort('active')}
@@ -463,6 +488,32 @@ export default function AdminUsers() {
                     >
                       {user.role === 'SuperAdmin' ? 'Super Admin' : user.role}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="py-2">
+                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                      {user.groups && user.groups.length > 0 ? (
+                        user.groups.slice(0, 3).map((group) => (
+                          <Badge 
+                            key={group.groupId} 
+                            variant="secondary"
+                            className="text-xs"
+                            style={{ 
+                              borderColor: group.groupColor || '#6b7280',
+                              borderWidth: '1px'
+                            }}
+                          >
+                            {group.groupName}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                      {user.groups && user.groups.length > 3 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{user.groups.length - 3}
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="py-2">
                     <StatusBadge status={user.active ? 'success' : 'critical'}>

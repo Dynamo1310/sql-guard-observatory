@@ -8,6 +8,8 @@ using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Hubs;
 using SQLGuardObservatory.API.Models;
 using SQLGuardObservatory.API.Services;
+using SQLGuardObservatory.API.Services.Collectors;
+using SQLGuardObservatory.API.Services.Collectors.Implementations;
 using Serilog;
 using Serilog.Events;
 using System.Text;
@@ -165,6 +167,10 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<IProductionAlertService, ProductionAlertService>();
 builder.Services.AddHostedService<ProductionAlertBackgroundService>();
 
+// Overview Summary Alerts - Resumen programado del estado de producción
+builder.Services.AddScoped<IOverviewSummaryAlertService, OverviewSummaryAlertService>();
+builder.Services.AddHostedService<OverviewSummaryBackgroundService>();
+
 // Server Restart Service - Reinicio de servidores SQL
 builder.Services.AddScoped<IServerRestartService, ServerRestartService>();
 
@@ -179,11 +185,54 @@ builder.Services.AddScoped<ICryptoService, CryptoService>();
 builder.Services.AddScoped<IVaultNotificationService, VaultNotificationService>();
 builder.Services.AddScoped<IVaultService, VaultService>();
 
-// Vault Enterprise v2.1 - Servicios de migración
+// Vault Enterprise v2.1.1 - Servicios de permisos y auditoría
+builder.Services.AddScoped<IPermissionBitMaskService, PermissionBitMaskService>();
+builder.Services.AddScoped<ICredentialAccessLogService, CredentialAccessLogService>();
+
+// Vault Enterprise v2.1 - Servicios de cifrado
 builder.Services.AddScoped<ICryptoServiceV2, CryptoServiceV2>();
 builder.Services.AddScoped<IKeyManager, KeyManager>();
 builder.Services.AddScoped<IDualReadCryptoService, DualReadCryptoService>();
-builder.Services.AddScoped<IBackfillService, BackfillService>();
+
+// System Credentials - Credenciales de sistema para conexión a servidores
+builder.Services.AddScoped<ISystemCredentialService, SystemCredentialService>();
+
+// Security Groups - Grupos de seguridad para organizar usuarios
+builder.Services.AddScoped<IGroupService, GroupService>();
+
+// ========== COLLECTORS HEALTHSCORE ==========
+// HttpClient para obtener inventario de instancias
+builder.Services.AddHttpClient("InventoryApi", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Servicios de infraestructura de collectors
+builder.Services.AddScoped<ICollectorConfigService, CollectorConfigService>();
+builder.Services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
+builder.Services.AddScoped<IInstanceProvider, InstanceProvider>();
+
+// Registrar los 13 collectors como ICollector
+builder.Services.AddScoped<ICollector, CPUCollector>();
+builder.Services.AddScoped<ICollector, MemoriaCollector>();
+builder.Services.AddScoped<ICollector, IOCollector>();
+builder.Services.AddScoped<ICollector, DiscosCollector>();
+builder.Services.AddScoped<ICollector, BackupsCollector>();
+builder.Services.AddScoped<ICollector, AlwaysOnCollector>();
+builder.Services.AddScoped<ICollector, LogChainCollector>();
+builder.Services.AddScoped<ICollector, DatabaseStatesCollector>();
+builder.Services.AddScoped<ICollector, ErroresCriticosCollector>();
+builder.Services.AddScoped<ICollector, MaintenanceCollector>();
+builder.Services.AddScoped<ICollector, ConfigTempDBCollector>();
+builder.Services.AddScoped<ICollector, AutogrowthCollector>();
+builder.Services.AddScoped<ICollector, WaitsCollector>();
+
+// Orquestador de collectors (Background Service)
+builder.Services.AddSingleton<CollectorOrchestrator>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<CollectorOrchestrator>());
+
+// Consolidador de HealthScore (Background Service)
+builder.Services.AddHostedService<HealthScoreConsolidator>();
 
 // Configurar CORS
 builder.Services.AddCors(options =>

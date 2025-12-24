@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
@@ -20,13 +21,54 @@ public class DisksService : IDisksService
     {
         try
         {
+            // Construir filtros SQL dinámicos para optimizar la consulta
+            var whereConditions = new List<string>();
+            var parameters = new List<Microsoft.Data.SqlClient.SqlParameter>();
+            
+            if (!string.IsNullOrWhiteSpace(ambiente))
+            {
+                whereConditions.Add("d.Ambiente = @Ambiente");
+                parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Ambiente", ambiente));
+            }
+            if (!string.IsNullOrWhiteSpace(hosting))
+            {
+                whereConditions.Add("d.HostingSite = @Hosting");
+                parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Hosting", hosting));
+            }
+            if (!string.IsNullOrWhiteSpace(instance))
+            {
+                whereConditions.Add("d.InstanceName = @Instance");
+                parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Instance", instance));
+            }
+            
+            var whereClause = whereConditions.Count > 0 
+                ? "WHERE " + string.Join(" AND ", whereConditions) 
+                : "";
+
             // Usar la tabla InstanceHealth_Discos con datos más recientes por instancia
-            var query = @"
-                WITH LatestDiscos AS (
+            // Optimizado: filtros aplicados en SQL y usando subconsulta más eficiente
+            var query = $@"
+                WITH FilteredDiscos AS (
                     SELECT 
-                        d.*,
-                        ROW_NUMBER() OVER (PARTITION BY d.InstanceName ORDER BY d.CollectedAtUtc DESC) AS rn
+                        d.Id,
+                        d.InstanceName,
+                        d.Ambiente,
+                        d.HostingSite,
+                        d.SqlVersion,
+                        d.CollectedAtUtc,
+                        d.WorstFreePct,
+                        d.DataDiskAvgFreePct,
+                        d.LogDiskAvgFreePct,
+                        d.TempDBDiskFreePct,
+                        d.VolumesJson
                     FROM dbo.InstanceHealth_Discos d
+                    {whereClause}
+                ),
+                LatestDiscos AS (
+                    SELECT 
+                        *,
+                        ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
+                    FROM FilteredDiscos
                 )
                 SELECT 
                     Id,
@@ -44,21 +86,17 @@ public class DisksService : IDisksService
                 WHERE rn = 1
                 ORDER BY WorstFreePct ASC";
 
+            // Usar timeout extendido para consultas grandes (120 segundos)
             var rawData = await _context.Database
-                .SqlQueryRaw<InstanceDiskData>(query)
-                .ToListAsync();
+                .SqlQueryRaw<InstanceDiskData>(query, parameters.ToArray())
+                .ToListAsync(new CancellationTokenSource(TimeSpan.FromSeconds(120)).Token);
 
             var disks = new List<DiskDto>();
 
             foreach (var row in rawData)
             {
-                // Aplicar filtros
-                if (!string.IsNullOrWhiteSpace(ambiente) && row.Ambiente != ambiente)
-                    continue;
-                if (!string.IsNullOrWhiteSpace(hosting) && row.HostingSite != hosting)
-                    continue;
-                if (!string.IsNullOrWhiteSpace(instance) && row.InstanceName != instance)
-                    continue;
+                // Los filtros de ambiente, hosting e instance ya se aplican en SQL
+                // Solo el filtro de estado se aplica en memoria (después de parsear JSON)
 
                 // Parsear VolumesJson para obtener volúmenes individuales
                 if (!string.IsNullOrWhiteSpace(row.VolumesJson))

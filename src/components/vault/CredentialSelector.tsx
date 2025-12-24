@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { vaultApi, CredentialDto, CredentialType } from '@/services/vaultApi';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 interface CredentialSelectorProps {
   open: boolean;
@@ -54,7 +54,6 @@ export function CredentialSelector({
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<CredentialType | 'all'>('all');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const { toast } = useToast();
 
   useEffect(() => {
     if (open) {
@@ -72,10 +71,8 @@ export function CredentialSelector({
       const data = await vaultApi.getMyShareableCredentials();
       setCredentials(data);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar las credenciales',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudieron cargar las credenciales'
       });
     } finally {
       setIsLoading(false);
@@ -130,18 +127,15 @@ export function CredentialSelector({
         )
       );
 
-      toast({
-        title: 'Credenciales agregadas',
+      toast.success('Credenciales agregadas', {
         description: `Se agregaron ${selectedIds.length} credencial(es) al grupo.`
       });
 
       onOpenChange(false);
       onCredentialsAdded?.();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron agregar las credenciales',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudieron agregar las credenciales'
       });
     } finally {
       setIsSaving(false);
@@ -150,7 +144,7 @@ export function CredentialSelector({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh]">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Key className="h-5 w-5" />

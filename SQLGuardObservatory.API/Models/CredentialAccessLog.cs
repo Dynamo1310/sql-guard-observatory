@@ -32,9 +32,14 @@ public class CredentialAccessLog
     public long Id { get; set; }
     
     /// <summary>
-    /// ID de la credencial accedida
+    /// ID de la credencial del Vault (null si es SystemCredential)
     /// </summary>
-    public int CredentialId { get; set; }
+    public int? CredentialId { get; set; }
+    
+    /// <summary>
+    /// ID de la credencial de sistema (null si es Vault)
+    /// </summary>
+    public int? SystemCredentialId { get; set; }
     
     /// <summary>
     /// Tipo de acceso: Reveal, UseForConnection, CopyToClipboard

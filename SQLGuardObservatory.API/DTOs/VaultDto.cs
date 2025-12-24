@@ -76,9 +76,54 @@ public class CredentialDto
     public List<CredentialUserShareDto> UserShares { get; set; } = new();
     
     /// <summary>
-    /// Permiso del usuario actual sobre esta credencial
+    /// Permiso del usuario actual sobre esta credencial (legacy)
     /// </summary>
     public string? CurrentUserPermission { get; set; }
+    
+    // =============================================
+    // Campos de Permisos Enterprise v2.1.1
+    // =============================================
+    
+    /// <summary>
+    /// Bitmask de permisos del usuario actual
+    /// </summary>
+    public long PermissionBitMask { get; set; }
+    
+    /// <summary>
+    /// Indica si el usuario puede revelar el secreto (calculado por backend)
+    /// </summary>
+    public bool CanReveal { get; set; }
+    
+    /// <summary>
+    /// Indica si el usuario puede usar sin revelar (calculado por backend)
+    /// </summary>
+    public bool CanUse { get; set; }
+    
+    /// <summary>
+    /// Indica si el usuario puede editar metadata (calculado por backend)
+    /// </summary>
+    public bool CanEdit { get; set; }
+    
+    /// <summary>
+    /// Indica si el usuario puede actualizar el secreto guardado (calculado por backend)
+    /// NO "CanRotate" - la app no cambia passwords en sistemas destino
+    /// </summary>
+    public bool CanUpdateSecret { get; set; }
+    
+    /// <summary>
+    /// Indica si el usuario puede compartir la credencial (calculado por backend)
+    /// </summary>
+    public bool CanShare { get; set; }
+    
+    /// <summary>
+    /// Indica si el usuario puede eliminar la credencial (calculado por backend)
+    /// </summary>
+    public bool CanDelete { get; set; }
+    
+    /// <summary>
+    /// Indica si el usuario puede ver audit logs (calculado por backend)
+    /// </summary>
+    public bool CanViewAudit { get; set; }
 }
 
 /// <summary>
@@ -317,6 +362,10 @@ public class CredentialFilterRequest
     public bool? IsPrivate { get; set; }
     public int? GroupId { get; set; }
     public bool IncludeDeleted { get; set; } = false;
+    /// <summary>
+    /// Si es true, solo devuelve credenciales donde el usuario es propietario (OwnerUserId == userId)
+    /// </summary>
+    public bool OwnerOnly { get; set; } = false;
 }
 
 // =============================================
@@ -442,7 +491,8 @@ public class CredentialGroupShareDto
     public int GroupId { get; set; }
     public string GroupName { get; set; } = string.Empty;
     public string? GroupColor { get; set; }
-    public string Permission { get; set; } = string.Empty;
+    public long PermissionBitMask { get; set; }
+    public string Permission { get; set; } = string.Empty; // Legible para UI
     public string SharedByUserId { get; set; } = string.Empty;
     public string? SharedByUserName { get; set; }
     public DateTime SharedAt { get; set; }
@@ -458,7 +508,8 @@ public class CredentialUserShareDto
     public string UserName { get; set; } = string.Empty;
     public string? DisplayName { get; set; }
     public string? Email { get; set; }
-    public string Permission { get; set; } = string.Empty;
+    public long PermissionBitMask { get; set; }
+    public string Permission { get; set; } = string.Empty; // Legible para UI
     public string SharedByUserId { get; set; } = string.Empty;
     public string? SharedByUserName { get; set; }
     public DateTime SharedAt { get; set; }
@@ -537,5 +588,61 @@ public class SharedWithMeCredentialDto : CredentialDto
     /// Permiso que tengo sobre la credencial
     /// </summary>
     public string MyPermission { get; set; } = "View";
+}
+
+// =============================================
+// DTOs Enterprise v2.1.1 - Update Secret
+// =============================================
+
+/// <summary>
+/// Request para actualizar el secreto guardado (MANUAL)
+/// IMPORTANTE: NO cambia la password en el servidor destino
+/// </summary>
+public class UpdateSecretRequest
+{
+    [Required]
+    [MinLength(1)]
+    public string NewPassword { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Response de update-secret (NO devuelve CredentialDto)
+/// </summary>
+public class UpdateSecretResponse
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public DateTime UpdatedAt { get; set; }
+    public string? Reason { get; set; }  // Solo en errores
+}
+
+// =============================================
+// DTOs Enterprise v2.1.1 - Use Without Reveal
+// =============================================
+
+/// <summary>
+/// Request para usar credencial sin revelar
+/// </summary>
+public class UseCredentialRequest
+{
+    [Required]
+    [MaxLength(256)]
+    public string TargetServer { get; set; } = string.Empty;
+    
+    [MaxLength(256)]
+    public string? TargetInstance { get; set; }
+    
+    [MaxLength(500)]
+    public string? Purpose { get; set; }
+}
+
+/// <summary>
+/// Response de use-credential
+/// </summary>
+public class UseCredentialResponse
+{
+    public bool Success { get; set; }
+    public Guid UsageId { get; set; }
+    public string? Message { get; set; }
 }
 

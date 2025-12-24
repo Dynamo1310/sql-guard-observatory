@@ -65,6 +65,16 @@ export interface CredentialDto {
   groupShares: CredentialGroupShareDto[];
   userShares: CredentialUserShareDto[];
   currentUserPermission?: string;
+  
+  // Enterprise v2.1.1 - Permisos bitmask
+  permissionBitMask: number;
+  canReveal: boolean;
+  canUse: boolean;
+  canEdit: boolean;
+  canUpdateSecret: boolean;  // NO "canRotate"
+  canShare: boolean;
+  canDelete: boolean;
+  canViewAudit: boolean;
 }
 
 export interface SharedWithMeCredentialDto extends CredentialDto {
@@ -72,6 +82,7 @@ export interface SharedWithMeCredentialDto extends CredentialDto {
   sharedByUserName?: string;
   sharedAt?: string;
   myPermission: string;
+  // Los campos de permisos bitmask se heredan de CredentialDto
 }
 
 export interface CreateCredentialRequest {
@@ -112,6 +123,31 @@ export interface RevealPasswordResponse {
   expiresInSeconds: number;
 }
 
+// Enterprise v2.1.1 - Update Secret (MANUAL)
+export interface UpdateSecretRequest {
+  newPassword: string;
+}
+
+export interface UpdateSecretResponse {
+  success: boolean;
+  message: string;
+  updatedAt: string;
+  reason?: string;  // Solo en errores
+}
+
+// Enterprise v2.1.1 - Use Without Reveal
+export interface UseCredentialRequest {
+  targetServer: string;
+  targetInstance?: string;
+  purpose?: string;
+}
+
+export interface UseCredentialResponse {
+  success: boolean;
+  usageId: string;
+  message?: string;
+}
+
 export interface CredentialAuditLogDto {
   id: number;
   credentialId: number;
@@ -123,6 +159,27 @@ export interface CredentialAuditLogDto {
   performedAt: string;
   ipAddress?: string;
   actionDescription: string;
+}
+
+/** DTO para logs de acceso (Reveal, Copy, Use) - incluye Vault y Sistema */
+export interface CredentialAccessLogDto {
+  id: number;
+  /** ID de credencial del Vault (null si es Sistema) */
+  credentialId?: number;
+  /** ID de credencial de Sistema (null si es Vault) */
+  systemCredentialId?: number;
+  /** Nombre de la credencial */
+  credentialName?: string;
+  /** Fuente: "Vault" o "System" */
+  credentialSource: string;
+  accessType: string;
+  accessResult: string;
+  denialReason?: string;
+  targetServerName?: string;
+  userId: string;
+  userName?: string;
+  accessedAt: string;
+  ipAddress?: string;
 }
 
 export interface VaultStatsDto {
@@ -154,6 +211,38 @@ export interface AddServerToCredentialRequest {
   connectionPurpose?: string;
 }
 
+// =============================================
+// Tipos para Notificaciones del Vault
+// =============================================
+
+export interface VaultNotificationTypeDto {
+  code: string;
+  displayName: string;
+  description: string;
+  defaultEnabled: boolean;
+  category: string;
+  displayOrder: number;
+}
+
+export interface VaultNotificationPreferenceDto {
+  id: number;
+  notificationType: string;
+  isEnabled: boolean;
+  displayName: string;
+  description: string;
+  category: string;
+  displayOrder: number;
+}
+
+export interface NotificationPreferenceUpdateDto {
+  notificationType: string;
+  isEnabled: boolean;
+}
+
+// =============================================
+// Tipos para Filtros
+// =============================================
+
 export interface CredentialFilterRequest {
   searchTerm?: string;
   credentialType?: CredentialType;
@@ -163,6 +252,8 @@ export interface CredentialFilterRequest {
   isPrivate?: boolean;
   groupId?: number;
   includeDeleted?: boolean;
+  /** Si es true, solo devuelve credenciales donde el usuario es propietario */
+  ownerOnly?: boolean;
 }
 
 // =============================================
@@ -253,57 +344,6 @@ export interface ShareCredentialRequest {
   groupIds?: number[];
   userIds?: string[];
   permission: SharePermission;
-}
-
-// =============================================
-// Tipos de Migración Enterprise (Solo SuperAdmin)
-// =============================================
-
-export interface BackfillStatus {
-  totalCredentials: number;
-  migratedCredentials: number;
-  pendingCredentials: number;
-  percentComplete: number;
-  lastBackfillAt?: string;
-}
-
-export interface BackfillError {
-  credentialId: number;
-  credentialName: string;
-  errorMessage: string;
-  occurredAt: string;
-}
-
-export interface BackfillResult {
-  totalProcessed: number;
-  successful: number;
-  failed: number;
-  errors: BackfillError[];
-  duration: string;
-  isComplete: boolean;
-}
-
-export interface ValidationError {
-  credentialId: number;
-  credentialName: string;
-  validationError_: string;
-  canDecryptLegacy: boolean;
-  canDecryptEnterprise: boolean;
-}
-
-export interface ValidationResult {
-  totalValidated: number;
-  validCount: number;
-  invalidCount: number;
-  errors: ValidationError[];
-  allValid: boolean;
-}
-
-export interface CleanupReadinessResult {
-  canProceed: boolean;
-  migrationStatus: BackfillStatus;
-  validationResult: ValidationResult;
-  blockers: string[];
 }
 
 // =============================================
@@ -459,6 +499,38 @@ export const vaultApi = {
     await handleResponse<void>(response);
   },
 
+  /**
+   * Actualiza el secreto guardado (MANUAL) - Enterprise v2.1.1
+   * IMPORTANTE: NO cambia la password en el servidor destino
+   */
+  async updateSecret(id: number, newPassword: string): Promise<UpdateSecretResponse> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${id}/update-secret`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      },
+      body: JSON.stringify({ newPassword })
+    });
+    return handleResponse<UpdateSecretResponse>(response);
+  },
+
+  /**
+   * Usa una credencial sin revelar el password - Enterprise v2.1.1
+   * El secreto nunca sale del backend
+   */
+  async useCredential(id: number, request: UseCredentialRequest): Promise<UseCredentialResponse> {
+    const response = await fetch(`${API_URL}/api/vault/credentials/${id}/use`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      },
+      body: JSON.stringify(request)
+    });
+    return handleResponse<UseCredentialResponse>(response);
+  },
+
   // ==================== Servidores ====================
 
   /**
@@ -556,6 +628,20 @@ export const vaultApi = {
       }
     });
     return handleResponse<CredentialAuditLogDto[]>(response);
+  },
+
+  /**
+   * Obtiene el historial de accesos completo - Vault + Sistema (solo admin)
+   * Incluye: Reveal, Copy, Use para todas las credenciales
+   */
+  async getAllAccessLogs(limit: number = 100): Promise<CredentialAccessLogDto[]> {
+    const response = await fetch(`${API_URL}/api/vault/access-logs?limit=${limit}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<CredentialAccessLogDto[]>(response);
   },
 
   // ==================== Grupos ====================
@@ -795,66 +881,99 @@ export const vaultApi = {
     return handleResponse<SharedWithMeCredentialDto[]>(response);
   },
 
-  // ==================== Migración Enterprise (Solo SuperAdmin) ====================
+  // =============================================
+  // Notificaciones del Vault
+  // =============================================
 
   /**
-   * Obtiene el estado actual de la migración del vault
+   * Obtiene los tipos de notificación disponibles
    */
-  async getMigrationStatus(): Promise<BackfillStatus> {
-    const response = await fetch(`${API_URL}/api/VaultMigration/status`, {
+  async getNotificationTypes(): Promise<VaultNotificationTypeDto[]> {
+    const response = await fetch(`${API_URL}/api/vault/notifications/types`, {
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeader()
       }
     });
-    return handleResponse<BackfillStatus>(response);
+    return handleResponse<VaultNotificationTypeDto[]>(response);
   },
 
   /**
-   * Ejecuta el backfill de credenciales pendientes
+   * Obtiene las preferencias de notificación del usuario actual
    */
-  async executeBackfill(batchSize: number = 100): Promise<BackfillResult> {
-    const response = await fetch(`${API_URL}/api/VaultMigration/backfill?batchSize=${batchSize}`, {
+  async getNotificationPreferences(): Promise<VaultNotificationPreferenceDto[]> {
+    const response = await fetch(`${API_URL}/api/vault/notifications/preferences`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<VaultNotificationPreferenceDto[]>(response);
+  },
+
+  /**
+   * Actualiza las preferencias de notificación del usuario
+   */
+  async updateNotificationPreferences(preferences: NotificationPreferenceUpdateDto[]): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/notifications/preferences`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      },
+      body: JSON.stringify(preferences)
+    });
+    await handleResponse<void>(response);
+  },
+
+  /**
+   * Actualiza una preferencia de notificación individual
+   */
+  async updateSingleNotificationPreference(notificationType: string, isEnabled: boolean): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/notifications/preferences/${notificationType}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      },
+      body: JSON.stringify({ isEnabled })
+    });
+    await handleResponse<void>(response);
+  },
+
+  /**
+   * Habilita todas las notificaciones
+   */
+  async enableAllNotifications(): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/notifications/preferences/enable-all`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeader()
       }
     });
-    return handleResponse<BackfillResult>(response);
+    await handleResponse<void>(response);
   },
 
   /**
-   * Valida que todas las credenciales migradas pueden ser descifradas
+   * Deshabilita todas las notificaciones
    */
-  async validateMigration(): Promise<ValidationResult> {
-    const response = await fetch(`${API_URL}/api/VaultMigration/validate`, {
+  async disableAllNotifications(): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/notifications/preferences/disable-all`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeader()
       }
     });
-    return handleResponse<ValidationResult>(response);
+    await handleResponse<void>(response);
   },
 
   /**
-   * Verifica si se puede proceder con Phase 8 (cleanup)
+   * Restablece las preferencias a los valores por defecto
    */
-  async canProceedWithCleanup(): Promise<CleanupReadinessResult> {
-    const response = await fetch(`${API_URL}/api/VaultMigration/can-cleanup`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeader()
-      }
-    });
-    return handleResponse<CleanupReadinessResult>(response);
-  },
-
-  /**
-   * Revierte una credencial específica al formato legacy
-   */
-  async revertCredential(credentialId: number): Promise<void> {
-    const response = await fetch(`${API_URL}/api/VaultMigration/revert/${credentialId}`, {
+  async resetNotificationPreferences(): Promise<void> {
+    const response = await fetch(`${API_URL}/api/vault/notifications/preferences/reset`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -869,54 +988,358 @@ export const vaultApi = {
 // Utilidades para el Portapapeles
 // =============================================
 
+// Variable global para trackear el último texto copiado y su timestamp
+let lastCopiedText: string | null = null;
+let lastCopiedTime: number = 0;
+
+/**
+ * Limpia el portapapeles usando múltiples métodos
+ */
+async function clearClipboard(): Promise<boolean> {
+  // Método 1: API moderna
+  try {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText('');
+      return true;
+    }
+  } catch {
+    // Continuar con otros métodos
+  }
+
+  // Método 2: Textarea + execCommand
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = '';
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    textArea.style.opacity = '0';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Copia texto al portapapeles con limpieza automática
  * @param text Texto a copiar
- * @param clearAfterSeconds Segundos antes de limpiar el portapapeles (default: 60)
+ * @param clearAfterSeconds Segundos antes de limpiar el portapapeles (default: 15)
  * @returns Promise<boolean> true si se copió correctamente
  */
 export async function copyToClipboardWithAutoClear(
   text: string, 
-  clearAfterSeconds: number = 60
+  clearAfterSeconds: number = 15
 ): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
+  
+  // Guardar referencia al texto copiado
+  lastCopiedText = text;
+  lastCopiedTime = Date.now();
+  const copyTime = lastCopiedTime;
+  
+  // Función para intentar limpiar el portapapeles
+  const attemptClear = async (attempt: number = 1): Promise<void> => {
+    // Verificar si este es aún el último copiado
+    if (lastCopiedTime !== copyTime) {
+      console.log('[Vault] Se copió algo nuevo, cancelando limpieza anterior');
+      return;
+    }
+
+    const cleared = await clearClipboard();
     
-    // Programar limpieza del portapapeles
-    setTimeout(async () => {
-      try {
-        // Verificar si el contenido actual es el mismo que copiamos
-        const currentText = await navigator.clipboard.readText();
-        if (currentText === text) {
-          await navigator.clipboard.writeText('');
-        }
-      } catch {
-        // Ignorar errores al intentar limpiar (puede que no tengamos permiso de lectura)
-      }
-    }, clearAfterSeconds * 1000);
-    
-    return true;
-  } catch {
-    // Fallback para navegadores más antiguos
-    const textArea = document.createElement('textarea');
-    textArea.value = text;
-    textArea.style.position = 'fixed';
-    textArea.style.left = '-999999px';
-    textArea.style.top = '-999999px';
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    
+    if (cleared) {
+      console.log(`[Vault] ✅ Portapapeles limpiado (intento ${attempt})`);
+      lastCopiedText = null;
+    } else if (attempt < 3) {
+      // Reintentar después de 2 segundos
+      console.log(`[Vault] ⏳ Reintentando limpiar portapapeles (intento ${attempt + 1})...`);
+      setTimeout(() => attemptClear(attempt + 1), 2000);
+    } else {
+      console.log('[Vault] ⚠️ No se pudo limpiar el portapapeles después de 3 intentos');
+    }
+  };
+
+  // Programar limpieza
+  const scheduleClear = () => {
+    console.log(`[Vault] 🔐 Contraseña copiada. Se limpiará en ${clearAfterSeconds} segundos...`);
+    setTimeout(() => attemptClear(), clearAfterSeconds * 1000);
+  };
+
+  // Intentar copiar con la API moderna
+  if (navigator.clipboard) {
     try {
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
+      await navigator.clipboard.writeText(text);
+      scheduleClear();
       return true;
     } catch {
-      document.body.removeChild(textArea);
-      return false;
+      // Continuar con fallback
     }
   }
+  
+  // Fallback para contextos no seguros (HTTP) o navegadores antiguos
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-999999px';
+  textArea.style.top = '-999999px';
+  textArea.style.opacity = '0';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  
+  try {
+    const success = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    if (success) {
+      scheduleClear();
+    }
+    return success;
+  } catch {
+    document.body.removeChild(textArea);
+    return false;
+  }
 }
+
+// =============================================
+// System Credentials API
+// =============================================
+
+export interface SystemCredentialAssignmentDto {
+  id: number;
+  systemCredentialId: number;
+  assignmentType: string;
+  assignmentValue: string;
+  priority: number;
+  createdAt: string;
+  createdByUserName?: string;
+}
+
+export interface SystemCredentialDto {
+  id: number;
+  name: string;
+  description?: string;
+  username: string;
+  domain?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  createdByUserName?: string;
+  updatedByUserName?: string;
+  assignments: SystemCredentialAssignmentDto[];
+}
+
+export interface CreateSystemCredentialRequest {
+  name: string;
+  description?: string;
+  username: string;
+  domain?: string;
+  password: string;
+}
+
+export interface UpdateSystemCredentialRequest {
+  name?: string;
+  description?: string;
+  username?: string;
+  domain?: string;
+  password?: string;
+  isActive?: boolean;
+}
+
+export interface AddSystemCredentialAssignmentRequest {
+  assignmentType: string;
+  assignmentValue: string;
+  priority?: number;
+}
+
+export interface AssignmentTypeInfo {
+  type: string;
+  displayName: string;
+  description: string;
+}
+
+export interface TestConnectionRequest {
+  serverName: string;
+  instanceName?: string;
+  /** Puerto TCP (opcional). Requerido para RDS/Azure SQL. */
+  port?: number;
+}
+
+export interface RevealSystemCredentialPasswordResponse {
+  password: string;
+  username: string;
+  domain?: string;
+  credentialName: string;
+}
+
+// SystemCredentialAuditLogDto movido a CredentialAccessLogDto centralizado
+
+export interface TestConnectionResponse {
+  success: boolean;
+  errorMessage?: string;
+  sqlVersion?: string;
+  credentialUsed?: string;
+  matchedAssignment?: string;
+}
+
+export const systemCredentialsApi = {
+  /**
+   * Obtiene todas las credenciales de sistema
+   */
+  async getAll(): Promise<SystemCredentialDto[]> {
+    const response = await fetch(`${API_URL}/api/system-credentials`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<SystemCredentialDto[]>(response);
+  },
+
+  /**
+   * Obtiene una credencial de sistema por ID
+   */
+  async getById(id: number): Promise<SystemCredentialDto> {
+    const response = await fetch(`${API_URL}/api/system-credentials/${id}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<SystemCredentialDto>(response);
+  },
+
+  /**
+   * Crea una nueva credencial de sistema
+   */
+  async create(request: CreateSystemCredentialRequest): Promise<SystemCredentialDto> {
+    const response = await fetch(`${API_URL}/api/system-credentials`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      },
+      body: JSON.stringify(request)
+    });
+    return handleResponse<SystemCredentialDto>(response);
+  },
+
+  /**
+   * Actualiza una credencial de sistema
+   */
+  async update(id: number, request: UpdateSystemCredentialRequest): Promise<void> {
+    const response = await fetch(`${API_URL}/api/system-credentials/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      },
+      body: JSON.stringify(request)
+    });
+    await handleResponse<void>(response);
+  },
+
+  /**
+   * Elimina una credencial de sistema
+   */
+  async delete(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/system-credentials/${id}`, {
+      method: 'DELETE',
+      headers: {
+        ...getAuthHeader()
+      }
+    });
+    await handleResponse<void>(response);
+  },
+
+  /**
+   * Agrega una asignación a una credencial
+   */
+  async addAssignment(credentialId: number, request: AddSystemCredentialAssignmentRequest): Promise<SystemCredentialAssignmentDto> {
+    const response = await fetch(`${API_URL}/api/system-credentials/${credentialId}/assignments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      },
+      body: JSON.stringify(request)
+    });
+    return handleResponse<SystemCredentialAssignmentDto>(response);
+  },
+
+  /**
+   * Elimina una asignación
+   */
+  async removeAssignment(credentialId: number, assignmentId: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/system-credentials/${credentialId}/assignments/${assignmentId}`, {
+      method: 'DELETE',
+      headers: {
+        ...getAuthHeader()
+      }
+    });
+    await handleResponse<void>(response);
+  },
+
+  /**
+   * Prueba la conexión con una credencial
+   */
+  async testConnection(credentialId: number, request: TestConnectionRequest): Promise<TestConnectionResponse> {
+    const response = await fetch(`${API_URL}/api/system-credentials/${credentialId}/test-connection`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      },
+      body: JSON.stringify(request)
+    });
+    return handleResponse<TestConnectionResponse>(response);
+  },
+
+  /**
+   * Revela el password de una credencial de sistema
+   * Esta acción queda registrada en la auditoría
+   */
+  async revealPassword(credentialId: number): Promise<RevealSystemCredentialPasswordResponse> {
+    const response = await fetch(`${API_URL}/api/system-credentials/${credentialId}/reveal`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<RevealSystemCredentialPasswordResponse>(response);
+  },
+
+  /**
+   * Registra que el password fue copiado al portapapeles
+   * Esta acción queda registrada en la auditoría
+   */
+  async registerPasswordCopy(credentialId: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/system-credentials/${credentialId}/copied`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeader()
+      }
+    });
+    await handleResponse<void>(response);
+  },
+
+  /**
+   * Obtiene los tipos de asignación disponibles
+   */
+  async getAssignmentTypes(): Promise<AssignmentTypeInfo[]> {
+    const response = await fetch(`${API_URL}/api/system-credentials/assignment-types`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      }
+    });
+    return handleResponse<AssignmentTypeInfo[]>(response);
+  }
+};
 
 export default vaultApi;
 

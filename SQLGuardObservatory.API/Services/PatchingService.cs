@@ -38,9 +38,11 @@ public class PatchingService : IPatchingService
     private readonly HttpClient _httpClient;
     private readonly IWebHostEnvironment _environment;
     private readonly ApplicationDbContext _context;
+    private readonly ISystemCredentialService _systemCredentialService;
     
     private const string InventoryApiUrl = "http://asprbm-nov-01/InventoryDBA/inventario/";
-    private const int ConnectionTimeoutSeconds = 10;
+    private const int ConnectionTimeoutSeconds = 5; // Reducido para fallar rápido en servidores no accesibles
+    private const int MaxParallelConnections = 200; // Todos los servidores en paralelo (I/O bound, no CPU bound)
     private const int CacheExpirationMinutes = 30; // Cache válido por 30 minutos
     
     // Cache del índice de builds (se carga una vez)
@@ -68,7 +70,8 @@ public class PatchingService : IPatchingService
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
         IWebHostEnvironment environment,
-        ApplicationDbContext context)
+        ApplicationDbContext context,
+        ISystemCredentialService systemCredentialService)
     {
         _logger = logger;
         _configuration = configuration;
@@ -76,6 +79,7 @@ public class PatchingService : IPatchingService
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         _environment = environment;
         _context = context;
+        _systemCredentialService = systemCredentialService;
         
         LoadBuildIndex();
     }
@@ -127,32 +131,47 @@ public class PatchingService : IPatchingService
     #region Patch Status
 
     /// <summary>
-    /// Obtiene el estado de parcheo desde cache o refresca si es necesario
+    /// Obtiene el estado de parcheo desde cache.
+    /// Solo actualiza la caché si forceRefresh=true (cuando el usuario presiona el botón Actualizar).
     /// </summary>
     public async Task<List<ServerPatchStatusDto>> GetPatchStatusAsync(bool forceRefresh = false, int? complianceYear = null)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var targetYear = complianceYear ?? DateTime.Now.Year;
+        _logger.LogInformation("🔍 GetPatchStatusAsync iniciado, forceRefresh={ForceRefresh}, year={Year}", forceRefresh, targetYear);
         
-        // Verificar si hay cache válido
-        var cacheExpiration = DateTime.Now.AddMinutes(-CacheExpirationMinutes);
+        // Si forceRefresh, actualizar el cache primero
+        if (forceRefresh)
+        {
+            _logger.LogInformation("ForceRefresh solicitado, actualizando cache de parcheo para compliance {Year}", targetYear);
+            await RefreshPatchStatusCacheAsync(targetYear);
+            _logger.LogInformation("⏱️ [{ElapsedMs}ms] RefreshPatchStatusCacheAsync completado", stopwatch.ElapsedMilliseconds);
+        }
+        
+        // Siempre devolver datos del cache (aunque estén "viejos")
+        // La actualización solo se hace cuando el usuario presiona el botón Actualizar
         var cachedData = await _context.ServerPatchStatusCache
-            .Where(s => s.LastChecked > cacheExpiration)
             .Where(s => s.ConnectionSuccess) // Solo servidores con conexión exitosa
             .ToListAsync();
+        _logger.LogInformation("⏱️ [{ElapsedMs}ms] Datos de cache obtenidos ({Count} registros)", stopwatch.ElapsedMilliseconds, cachedData.Count);
         
-        if (!forceRefresh && cachedData.Any())
+        if (cachedData.Any())
         {
-            _logger.LogInformation("Devolviendo {Count} servidores desde cache para compliance {Year}", cachedData.Count, targetYear);
-            // Recalcular el estado de compliance basado en el año seleccionado
             var complianceConfigs = await GetComplianceConfigsDictionary(targetYear);
-            return cachedData.Select(c => {
+            _logger.LogInformation("⏱️ [{ElapsedMs}ms] Compliance configs obtenidas", stopwatch.ElapsedMilliseconds);
+            
+            var result = cachedData.Select(c => {
                 var dto = MapCacheToDto(c);
                 RecalculateComplianceStatus(dto, complianceConfigs);
                 return dto;
             }).OrderByStatus().ToList();
+            
+            _logger.LogInformation("🏁 [{ElapsedMs}ms] GetPatchStatusAsync completado, devolviendo {Count} servidores", stopwatch.ElapsedMilliseconds, result.Count);
+            return result;
         }
         
-        // Refrescar cache
+        // Si no hay datos en cache, hacer refresh inicial (solo la primera vez)
+        _logger.LogInformation("No hay datos en cache, realizando carga inicial para compliance {Year}", targetYear);
         await RefreshPatchStatusCacheAsync(targetYear);
         
         // Devolver datos actualizados (solo los que tienen conexión exitosa)
@@ -161,11 +180,14 @@ public class PatchingService : IPatchingService
             .ToListAsync();
         
         var configs = await GetComplianceConfigsDictionary(targetYear);
-        return freshData.Select(c => {
+        var finalResult = freshData.Select(c => {
             var dto = MapCacheToDto(c);
             RecalculateComplianceStatus(dto, configs);
             return dto;
         }).OrderByStatus().ToList();
+        
+        _logger.LogInformation("🏁 [{ElapsedMs}ms] GetPatchStatusAsync completado (fresh), devolviendo {Count} servidores", stopwatch.ElapsedMilliseconds, finalResult.Count);
+        return finalResult;
     }
     
     private async Task<Dictionary<string, PatchComplianceConfig>> GetComplianceConfigsDictionary(int year)
@@ -242,7 +264,8 @@ public class PatchingService : IPatchingService
     public async Task RefreshPatchStatusCacheAsync(int? complianceYear = null)
     {
         var targetYear = complianceYear ?? DateTime.Now.Year;
-        _logger.LogInformation("Iniciando refresh del cache de estado de parcheo para año {Year}", targetYear);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        _logger.LogInformation("🚀 Iniciando refresh del cache de estado de parcheo para año {Year}", targetYear);
         
         try
         {
@@ -250,9 +273,18 @@ public class PatchingService : IPatchingService
             var complianceConfigs = await _context.PatchComplianceConfigs
                 .Where(c => c.IsActive && c.ComplianceYear == targetYear)
                 .ToDictionaryAsync(c => c.SqlVersion, c => c);
+            _logger.LogInformation("⏱️ [{ElapsedMs}ms] Compliance configs cargadas", stopwatch.ElapsedMilliseconds);
+            
+            // Pre-cargar credenciales de sistema ANTES del procesamiento paralelo
+            // Esto evita problemas de concurrencia con DbContext
+            var preloadedCredentials = await _systemCredentialService.PreloadAssignmentsAsync();
+            _logger.LogInformation("⏱️ [{ElapsedMs}ms] Pre-cargadas {Count} asignaciones de credenciales", 
+                stopwatch.ElapsedMilliseconds, preloadedCredentials.Assignments.Count);
             
             // Obtener servidores del inventario
             var servers = await GetFilteredServersFromInventoryAsync();
+            _logger.LogInformation("⏱️ [{ElapsedMs}ms] Obtenidos {Count} servidores del inventario", 
+                stopwatch.ElapsedMilliseconds, servers.Count);
             
             // Contar tipos de servidores
             var dmzServers = servers.Where(s => IsDmzServer(s)).ToList();
@@ -266,14 +298,15 @@ public class PatchingService : IPatchingService
                 _logger.LogDebug("DMZ encontrado: {Instance}", dmz.NombreInstancia);
             }
             
-            // Procesar en paralelo
-            var semaphore = new SemaphoreSlim(10);
+            // Procesar en paralelo usando credenciales pre-cargadas (thread-safe)
+            // Usamos más conexiones paralelas para reducir el tiempo total
+            var semaphore = new SemaphoreSlim(MaxParallelConnections);
             var tasks = servers.Select(async server =>
             {
                 await semaphore.WaitAsync();
                 try
                 {
-                    return await ProcessServerPatchStatusAsync(server, complianceConfigs);
+                    return await ProcessServerPatchStatusAsync(server, complianceConfigs, preloadedCredentials);
                 }
                 catch (Exception ex)
                 {
@@ -298,9 +331,12 @@ public class PatchingService : IPatchingService
             
             var results = await Task.WhenAll(tasks);
             
-            // Actualizar cache en base de datos - uno por uno con manejo de errores
-            int savedCount = 0;
-            int errorCount = 0;
+            _logger.LogInformation("⏱️ [{ElapsedMs}ms] ✅ Conexiones a {Count} servidores completadas", 
+                stopwatch.ElapsedMilliseconds, results.Length);
+            
+            var successCount = results.Count(r => r.ConnectionSuccess);
+            var failedCount = results.Count(r => !r.ConnectionSuccess);
+            _logger.LogInformation("📊 Resultados: {Success} exitosos, {Failed} fallidos", successCount, failedCount);
             
             // Procesar resultados únicos (por si acaso)
             var uniqueResults = results
@@ -308,42 +344,48 @@ public class PatchingService : IPatchingService
                 .Select(g => g.First())
                 .ToList();
             
+            // Cargar todos los registros existentes de una vez (1 query en lugar de 189)
+            var existingCache = await _context.ServerPatchStatusCache.ToListAsync();
+            var existingDict = existingCache.ToDictionary(x => x.InstanceName, StringComparer.OrdinalIgnoreCase);
+            _logger.LogInformation("⏱️ [{ElapsedMs}ms] Cache existente cargado ({Count} registros)", 
+                stopwatch.ElapsedMilliseconds, existingCache.Count);
+            
+            int updatedCount = 0;
+            int insertedCount = 0;
+            
             foreach (var result in uniqueResults)
             {
-                try
+                if (existingDict.TryGetValue(result.InstanceName, out var existing))
                 {
-                    var existing = await _context.ServerPatchStatusCache
-                        .FirstOrDefaultAsync(s => s.InstanceName == result.InstanceName);
-                    
-                    if (existing != null)
-                    {
-                        // Actualizar existente
-                        UpdateCacheEntity(existing, result);
-                    }
-                    else
-                    {
-                        // Crear nuevo
-                        _context.ServerPatchStatusCache.Add(MapDtoToCache(result));
-                    }
-                    
-                    await _context.SaveChangesAsync();
-                    savedCount++;
-                    
-                    // Limpiar tracking para evitar conflictos
-                    _context.ChangeTracker.Clear();
+                    // Actualizar existente
+                    UpdateCacheEntity(existing, result);
+                    updatedCount++;
                 }
-                catch (Exception ex)
+                else
                 {
-                    errorCount++;
-                    _logger.LogWarning(ex, "Error guardando cache para {Instance}: {Message}", 
-                        result.InstanceName, ex.InnerException?.Message ?? ex.Message);
-                    
-                    // Limpiar tracking en caso de error también
-                    _context.ChangeTracker.Clear();
+                    // Crear nuevo
+                    _context.ServerPatchStatusCache.Add(MapDtoToCache(result));
+                    insertedCount++;
                 }
             }
             
-            _logger.LogInformation("Cache actualizado: {SavedCount} guardados, {ErrorCount} errores", savedCount, errorCount);
+            // Guardar todos los cambios de una vez (1 transacción en lugar de 189)
+            try
+            {
+                _logger.LogInformation("⏱️ [{ElapsedMs}ms] Iniciando SaveChangesAsync...", stopwatch.ElapsedMilliseconds);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("⏱️ [{ElapsedMs}ms] ✅ Cache guardado: {UpdatedCount} actualizados, {InsertedCount} insertados", 
+                    stopwatch.ElapsedMilliseconds, updatedCount, insertedCount);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error guardando cache de parcheo");
+                throw;
+            }
+            
+            // Limpiar el ChangeTracker para liberar memoria
+            _context.ChangeTracker.Clear();
+            _logger.LogInformation("🏁 [{ElapsedMs}ms] RefreshPatchStatusCacheAsync completado", stopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -354,7 +396,8 @@ public class PatchingService : IPatchingService
 
     private async Task<ServerPatchStatusDto> ProcessServerPatchStatusAsync(
         InventoryServerForPatchingDto server, 
-        Dictionary<string, PatchComplianceConfig> complianceConfigs)
+        Dictionary<string, PatchComplianceConfig> complianceConfigs,
+        PreloadedCredentialAssignments preloadedCredentials)
     {
         var result = new ServerPatchStatusDto
         {
@@ -373,7 +416,8 @@ public class PatchingService : IPatchingService
         else
         {
             // Intentar conectarse al servidor (para servidores no-DMZ)
-            await ConnectAndGetServerInfoAsync(server, result);
+            // Usa credenciales pre-cargadas para evitar problemas de concurrencia
+            await ConnectAndGetServerInfoAsync(server, result, preloadedCredentials);
         }
         
         // Comparar con compliance y último disponible
@@ -382,13 +426,25 @@ public class PatchingService : IPatchingService
         return result;
     }
     
-    private async Task ConnectAndGetServerInfoAsync(InventoryServerForPatchingDto server, ServerPatchStatusDto result)
+    private async Task ConnectAndGetServerInfoAsync(
+        InventoryServerForPatchingDto server, 
+        ServerPatchStatusDto result,
+        PreloadedCredentialAssignments preloadedCredentials)
     {
         try
         {
-            // Conectarse al servidor (usar credenciales SQL para AWS)
-            var isAws = IsAwsServer(server);
-            var connectionString = BuildConnectionString(server.NombreInstancia, isAws);
+            // TEMPORAL: Usar Windows Auth para probar sin credenciales de sistema
+            var connectionString = $"Server={server.NombreInstancia};Database=master;Integrated Security=True;TrustServerCertificate=True;Connect Timeout={ConnectionTimeoutSeconds};Application Name=SQLGuardObservatory-Patching";
+            
+            // TODO: Restaurar cuando se confirme que funciona
+            // var connectionString = _systemCredentialService.BuildConnectionStringFromPreloaded(
+            //     preloadedCredentials,
+            //     server.NombreInstancia, 
+            //     server.hostingSite, 
+            //     server.ambiente,
+            //     "master",
+            //     ConnectionTimeoutSeconds,
+            //     "SQLGuardObservatory-Patching");
             
             using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync();
@@ -985,15 +1041,24 @@ public class PatchingService : IPatchingService
         return string.Empty;
     }
 
+    private async Task<string> BuildConnectionStringAsync(string instanceName, string? hostingSite = null, string? ambiente = null)
+    {
+        // Usar el servicio de credenciales de sistema para obtener la conexión apropiada
+        // Si no hay credencial asignada, usa Windows Authentication como fallback
+        return await _systemCredentialService.BuildConnectionStringAsync(
+            instanceName,
+            hostingSite,
+            ambiente,
+            "master",
+            ConnectionTimeoutSeconds,
+            "SQLGuardObservatory-Patching");
+    }
+    
+    // Mantener el método síncrono para compatibilidad (deprecated - usar BuildConnectionStringAsync)
+    [Obsolete("Use BuildConnectionStringAsync instead")]
     private string BuildConnectionString(string instanceName, bool isAws = false)
     {
-        if (isAws)
-        {
-            // Para servidores AWS usar autenticación SQL
-            return $"Server={instanceName};Database=master;User Id=ScriptExec;Password=M1gr4rD5DB%!;TrustServerCertificate=True;Connect Timeout={ConnectionTimeoutSeconds};Application Name=SQLGuardObservatory-Patching";
-        }
-        
-        // Para servidores on-premise usar autenticación Windows
+        // Fallback síncrono: Windows Auth por defecto
         return $"Server={instanceName};Database=master;Integrated Security=True;TrustServerCertificate=True;Connect Timeout={ConnectionTimeoutSeconds};Application Name=SQLGuardObservatory-Patching";
     }
     

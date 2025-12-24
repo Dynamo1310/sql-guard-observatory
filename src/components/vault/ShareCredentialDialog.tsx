@@ -37,7 +37,7 @@ import {
   SHARE_PERMISSIONS,
   SharePermission
 } from '@/services/vaultApi';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 interface ShareCredentialDialogProps {
   open: boolean;
@@ -78,7 +78,6 @@ export function ShareCredentialDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [groups, setGroups] = useState<CredentialGroupDto[]>([]);
   const [users, setUsers] = useState<VaultUserDto[]>([]);
-  const { toast } = useToast();
 
   // Estado del formulario
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
@@ -107,10 +106,8 @@ export function ShareCredentialDialog({
       // Filtrar el propietario de la lista de usuarios
       setUsers(usersData.filter(u => u.id !== credential?.ownerUserId));
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los datos',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudieron cargar los datos'
       });
     } finally {
       setIsLoading(false);
@@ -130,18 +127,15 @@ export function ShareCredentialDialog({
 
       await vaultApi.shareCredential(credential.id, request);
 
-      toast({
-        title: 'Compartido',
+      toast.success('Compartido', {
         description: 'La credencial se compartió exitosamente'
       });
 
       onOpenChange(false);
       onShared?.();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo compartir la credencial',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo compartir la credencial'
       });
     } finally {
       setIsSaving(false);
@@ -181,7 +175,7 @@ export function ShareCredentialDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh]">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Share2 className="h-5 w-5" />

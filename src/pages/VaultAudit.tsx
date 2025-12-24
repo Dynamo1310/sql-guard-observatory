@@ -1,9 +1,10 @@
 /**
  * Página de auditoría del Vault (solo admin)
+ * Incluye auditoría de cambios y accesos (Vault + Sistema)
  */
 import { useState, useEffect } from 'react';
 import { 
-  History, RefreshCw, Filter, Calendar, User, Key
+  History, RefreshCw, Filter, Calendar, Eye, Copy, Shield, Server
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,35 +17,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { AuditLogTable } from '@/components/vault';
-import { vaultApi, CredentialAuditLogDto } from '@/services/vaultApi';
-import { useToast } from '@/hooks/use-toast';
-import { format, subDays, subHours } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { vaultApi, CredentialAuditLogDto, CredentialAccessLogDto } from '@/services/vaultApi';
+import { toast } from 'sonner';
+import { subDays, subHours } from 'date-fns';
 
 type TimeFilter = '1h' | '24h' | '7d' | '30d' | 'all';
+type TabType = 'changes' | 'access';
 
 export default function VaultAudit() {
   const [logs, setLogs] = useState<CredentialAuditLogDto[]>([]);
+  const [accessLogs, setAccessLogs] = useState<CredentialAccessLogDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('24h');
   const [actionFilter, setActionFilter] = useState<string>('all');
-  const { toast } = useToast();
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<TabType>('access');
 
   const loadLogs = async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     setIsRefreshing(true);
 
     try {
-      // Cargar más registros para filtrar localmente
-      const data = await vaultApi.getFullAuditLog(500);
-      setLogs(data);
+      // Cargar ambos tipos de logs en paralelo
+      const [auditData, accessData] = await Promise.all([
+        vaultApi.getFullAuditLog(500),
+        vaultApi.getAllAccessLogs(500)
+      ]);
+      setLogs(auditData);
+      setAccessLogs(accessData);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo cargar el historial de auditoría',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo cargar el historial de auditoría'
       });
     } finally {
       setIsLoading(false);
@@ -56,9 +75,13 @@ export default function VaultAudit() {
     loadLogs();
   }, []);
 
-  // Filtrar logs
+  // Filtrar logs de cambios (excluir eventos de acceso que ahora están en la otra pestaña)
+  const accessActions = ['PasswordRevealed', 'PasswordCopied'];
+  
   const filteredLogs = logs.filter(log => {
-    // Filtro de tiempo
+    // Excluir eventos de acceso (esos van en la pestaña Accesos)
+    if (accessActions.includes(log.action)) return false;
+    
     const logDate = new Date(log.performedAt);
     const now = new Date();
     
@@ -77,7 +100,6 @@ export default function VaultAudit() {
         break;
     }
 
-    // Filtro de acción
     if (actionFilter !== 'all' && log.action !== actionFilter) {
       return false;
     }
@@ -85,14 +107,46 @@ export default function VaultAudit() {
     return true;
   });
 
-  // Estadísticas
+  // Filtrar access logs
+  const filteredAccessLogs = accessLogs.filter(log => {
+    const logDate = new Date(log.accessedAt);
+    const now = new Date();
+    
+    switch (timeFilter) {
+      case '1h':
+        if (logDate < subHours(now, 1)) return false;
+        break;
+      case '24h':
+        if (logDate < subHours(now, 24)) return false;
+        break;
+      case '7d':
+        if (logDate < subDays(now, 7)) return false;
+        break;
+      case '30d':
+        if (logDate < subDays(now, 30)) return false;
+        break;
+    }
+
+    // Filtro por fuente (Vault/System)
+    if (sourceFilter !== 'all' && log.credentialSource !== sourceFilter) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // Estadísticas combinadas
   const stats = {
-    total: filteredLogs.length,
-    passwordReveals: filteredLogs.filter(l => l.action === 'PasswordRevealed').length,
-    passwordCopies: filteredLogs.filter(l => l.action === 'PasswordCopied').length,
+    total: filteredLogs.length + filteredAccessLogs.length,
+    passwordReveals: filteredAccessLogs.filter(l => l.accessType === 'Reveal').length,
+    passwordCopies: filteredAccessLogs.filter(l => l.accessType === 'Copy').length,
     changes: filteredLogs.filter(l => ['Created', 'Updated', 'Deleted'].includes(l.action)).length,
-    uniqueUsers: new Set(filteredLogs.map(l => l.performedByUserId)).size,
-    uniqueCredentials: new Set(filteredLogs.map(l => l.credentialId)).size
+    uniqueUsers: new Set([
+      ...filteredLogs.map(l => l.performedByUserId),
+      ...filteredAccessLogs.map(l => l.userId)
+    ]).size,
+    vaultAccess: filteredAccessLogs.filter(l => l.credentialSource === 'Vault').length,
+    systemAccess: filteredAccessLogs.filter(l => l.credentialSource === 'System').length
   };
 
   if (isLoading) {
@@ -145,10 +199,10 @@ export default function VaultAudit() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-amber-200 dark:border-amber-800">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Passwords revelados
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <Eye className="h-3 w-3" /> Revelados
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -156,10 +210,10 @@ export default function VaultAudit() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-purple-200 dark:border-purple-800">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Passwords copiados
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <Copy className="h-3 w-3" /> Copiados
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -169,12 +223,23 @@ export default function VaultAudit() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Cambios
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <Shield className="h-3 w-3" /> Vault
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.changes}</div>
+            <div className="text-2xl font-bold text-blue-600">{stats.vaultAccess}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <Server className="h-3 w-3" /> Sistema
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.systemAccess}</div>
           </CardContent>
         </Card>
 
@@ -188,27 +253,30 @@ export default function VaultAudit() {
             <div className="text-2xl font-bold">{stats.uniqueUsers}</div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Credenciales
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.uniqueCredentials}</div>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Filtros */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap items-center gap-4">
+      {/* Tabs de contenido */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabType)}>
+        <div className="flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="access" className="gap-2">
+              <Eye className="h-4 w-4" />
+              Accesos
+              <Badge variant="secondary" className="ml-1">{filteredAccessLogs.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="changes" className="gap-2">
+              <History className="h-4 w-4" />
+              Cambios
+              <Badge variant="secondary" className="ml-1">{filteredLogs.length}</Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Filtros */}
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <Select value={timeFilter} onValueChange={(v) => setTimeFilter(v as TimeFilter)}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[160px]">
                   <SelectValue placeholder="Período" />
                 </SelectTrigger>
                 <SelectContent>
@@ -221,60 +289,157 @@ export default function VaultAudit() {
               </Select>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <Select value={actionFilter} onValueChange={setActionFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Tipo de acción" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las acciones</SelectItem>
-                  <SelectItem value="Created">Creación</SelectItem>
-                  <SelectItem value="Updated">Actualización</SelectItem>
-                  <SelectItem value="Deleted">Eliminación</SelectItem>
-                  <SelectItem value="PasswordRevealed">Password revelado</SelectItem>
-                  <SelectItem value="PasswordCopied">Password copiado</SelectItem>
-                  <SelectItem value="ServerAdded">Servidor asociado</SelectItem>
-                  <SelectItem value="ServerRemoved">Servidor desasociado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {activeTab === 'access' && (
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Fuente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="Vault">Vault</SelectItem>
+                    <SelectItem value="System">Sistema</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-            <div className="flex-1" />
-
-            <Badge variant="outline">
-              {filteredLogs.length} registros
-            </Badge>
+            {activeTab === 'changes' && (
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Select value={actionFilter} onValueChange={setActionFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Tipo de acción" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las acciones</SelectItem>
+                    <SelectItem value="Created">Creación</SelectItem>
+                    <SelectItem value="Updated">Actualización</SelectItem>
+                    <SelectItem value="Deleted">Eliminación</SelectItem>
+                    <SelectItem value="ServerAdded">Servidor asociado</SelectItem>
+                    <SelectItem value="ServerRemoved">Servidor desasociado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Tabla de auditoría */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Historial de Actividad</CardTitle>
-          <CardDescription>
-            Todas las acciones realizadas sobre las credenciales del Vault
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {filteredLogs.length === 0 ? (
-            <div className="text-center py-12">
-              <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No hay registros</h3>
-              <p className="text-muted-foreground">
-                No se encontraron eventos de auditoría con los filtros seleccionados.
-              </p>
-            </div>
-          ) : (
-            <AuditLogTable 
-              logs={filteredLogs} 
-              showCredentialName={true} 
-              maxHeight="600px"
-            />
-          )}
-        </CardContent>
-      </Card>
+        {/* Tab de Accesos (Reveal/Copy) */}
+        <TabsContent value="access">
+          <Card>
+            <CardHeader>
+              <CardTitle>Accesos a Contraseñas</CardTitle>
+              <CardDescription>
+                Registro de acciones de revelar y copiar contraseñas (Vault + Credenciales de Sistema)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {filteredAccessLogs.length === 0 ? (
+                <div className="text-center py-12">
+                  <Eye className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No hay registros de acceso</h3>
+                  <p className="text-muted-foreground">
+                    No se encontraron accesos con los filtros seleccionados.
+                  </p>
+                </div>
+              ) : (
+                <div className="max-h-[600px] overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha/Hora</TableHead>
+                        <TableHead>Fuente</TableHead>
+                        <TableHead>Credencial</TableHead>
+                        <TableHead>Acción</TableHead>
+                        <TableHead>Usuario</TableHead>
+                        <TableHead>IP</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAccessLogs.map(log => (
+                        <TableRow key={log.id}>
+                          <TableCell className="whitespace-nowrap text-sm">
+                            {new Date(log.accessedAt).toLocaleString('es-AR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={log.credentialSource === 'Vault' ? 'default' : 'secondary'}>
+                              {log.credentialSource === 'Vault' ? (
+                                <><Shield className="h-3 w-3 mr-1" /> Vault</>
+                              ) : (
+                                <><Server className="h-3 w-3 mr-1" /> Sistema</>
+                              )}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {log.credentialName || `ID: ${log.credentialId || log.systemCredentialId}`}
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={log.accessType === 'Reveal' ? 'destructive' : 'outline'}
+                              className={log.accessType === 'Copy' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' : ''}
+                            >
+                              {log.accessType === 'Reveal' ? (
+                                <><Eye className="h-3 w-3 mr-1" /> Revelado</>
+                              ) : log.accessType === 'Copy' ? (
+                                <><Copy className="h-3 w-3 mr-1" /> Copiado</>
+                              ) : (
+                                log.accessType
+                              )}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {log.userName || log.userId}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {log.ipAddress || '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab de Cambios */}
+        <TabsContent value="changes">
+          <Card>
+            <CardHeader>
+              <CardTitle>Historial de Cambios</CardTitle>
+              <CardDescription>
+                Todas las modificaciones realizadas sobre las credenciales del Vault
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {filteredLogs.length === 0 ? (
+                <div className="text-center py-12">
+                  <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No hay registros</h3>
+                  <p className="text-muted-foreground">
+                    No se encontraron eventos de auditoría con los filtros seleccionados.
+                  </p>
+                </div>
+              ) : (
+                <AuditLogTable 
+                  logs={filteredLogs} 
+                  showCredentialName={true} 
+                  maxHeight="600px"
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

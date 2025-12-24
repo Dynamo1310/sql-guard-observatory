@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { authApi } from '@/services/api';
 import sqlNovaAnimation from '/SQLNovaAnimation.mp4';
 import windows11Logo from '/Windows11.png';
+import logoSupervielleBlanco from '/LogoSupervielleBlancoLetras.svg';
+import logoSupervielleNegro from '/LogoSupervielleNegroLetras.svg';
 import { Loader2 } from 'lucide-react';
 
 export default function Login() {
@@ -40,6 +42,19 @@ export default function Login() {
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
       <Card className="w-full max-w-md shadow-2xl">
         <CardHeader className="space-y-1">
+          {/* Logo Supervielle */}
+          <div className="flex items-center justify-center mb-2">
+            <img 
+              src={logoSupervielleNegro} 
+              alt="Supervielle" 
+              className="logo-light h-10 w-auto"
+            />
+            <img 
+              src={logoSupervielleBlanco} 
+              alt="Supervielle" 
+              className="logo-dark h-10 w-auto"
+            />
+          </div>
           <div className="flex items-center justify-center mb-4 overflow-hidden">
             <video 
               src={sqlNovaAnimation} 

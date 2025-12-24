@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Models;
+using SQLGuardObservatory.API.Models.Collectors;
+using SQLGuardObservatory.API.Models.HealthScoreV3;
 
 namespace SQLGuardObservatory.API.Data;
 
@@ -20,6 +22,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ProductionAlertConfig> ProductionAlertConfigs { get; set; } = null!;
     public DbSet<ProductionAlertHistory> ProductionAlertHistories { get; set; } = null!;
     public DbSet<ProductionInstanceStatus> ProductionInstanceStatuses { get; set; } = null!;
+    
+    // Overview Summary Alerts - Resumen programado del estado de producción
+    public DbSet<OverviewSummaryAlertConfig> OverviewSummaryAlertConfigs { get; set; } = null!;
+    public DbSet<OverviewSummaryAlertSchedule> OverviewSummaryAlertSchedules { get; set; } = null!;
+    public DbSet<OverviewSummaryAlertHistory> OverviewSummaryAlertHistories { get; set; } = null!;
     
     // Server Restart Tasks
     public DbSet<ServerRestartTask> ServerRestartTasks { get; set; } = null!;
@@ -45,6 +52,45 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Vault Enterprise v2.1 - Encryption Keys
     public DbSet<VaultEncryptionKey> VaultEncryptionKeys { get; set; } = null!;
     public DbSet<CredentialAccessLog> CredentialAccessLogs { get; set; } = null!;
+    
+    // Vault - Notification Preferences
+    public DbSet<VaultNotificationPreference> VaultNotificationPreferences { get; set; } = null!;
+    public DbSet<VaultNotificationType> VaultNotificationTypes { get; set; } = null!;
+    
+    // System Credentials - Credenciales de sistema para conexión a servidores
+    public DbSet<SystemCredential> SystemCredentials { get; set; } = null!;
+    public DbSet<SystemCredentialAssignment> SystemCredentialAssignments { get; set; } = null!;
+    
+    // Security Groups - Grupos de seguridad para organizar usuarios
+    public DbSet<SecurityGroup> SecurityGroups { get; set; } = null!;
+    public DbSet<UserGroup> UserGroups { get; set; } = null!;
+    public DbSet<GroupPermission> GroupPermissions { get; set; } = null!;
+    public DbSet<ADGroupSync> ADGroupSyncs { get; set; } = null!;
+    
+    // Menu Badges - Indicadores de menús nuevos
+    public DbSet<MenuBadge> MenuBadges { get; set; } = null!;
+
+    // Collector Configuration - HealthScore Collectors
+    public DbSet<CollectorConfig> CollectorConfigs { get; set; } = null!;
+    public DbSet<CollectorThreshold> CollectorThresholds { get; set; } = null!;
+    public DbSet<SqlVersionQuery> SqlVersionQueries { get; set; } = null!;
+    public DbSet<CollectorExecutionLog> CollectorExecutionLogs { get; set; } = null!;
+
+    // Health Score v3.0 FINAL - 12 Categorías (métricas de instancias)
+    public DbSet<InstanceHealthScore> InstanceHealthScores { get; set; } = null!;
+    public DbSet<InstanceHealthBackups> InstanceHealthBackups { get; set; } = null!;
+    public DbSet<InstanceHealthMaintenance> InstanceHealthMaintenance { get; set; } = null!;
+    public DbSet<InstanceHealthAlwaysOn> InstanceHealthAlwaysOn { get; set; } = null!;
+    public DbSet<InstanceHealthLogChain> InstanceHealthLogChain { get; set; } = null!;
+    public DbSet<InstanceHealthDatabaseStates> InstanceHealthDatabaseStates { get; set; } = null!;
+    public DbSet<InstanceHealthErroresCriticos> InstanceHealthErroresCriticos { get; set; } = null!;
+    public DbSet<InstanceHealthCPU> InstanceHealthCPU { get; set; } = null!;
+    public DbSet<InstanceHealthMemoria> InstanceHealthMemoria { get; set; } = null!;
+    public DbSet<InstanceHealthIO> InstanceHealthIO { get; set; } = null!;
+    public DbSet<InstanceHealthDiscos> InstanceHealthDiscos { get; set; } = null!;
+    public DbSet<InstanceHealthConfiguracionTempdb> InstanceHealthConfiguracionTempdb { get; set; } = null!;
+    public DbSet<InstanceHealthAutogrowth> InstanceHealthAutogrowth { get; set; } = null!;
+    public DbSet<InstanceHealthWaits> InstanceHealthWaits { get; set; } = null!;
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -447,6 +493,316 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(a => new { a.CredentialId, a.AccessedAt });
             entity.HasIndex(a => new { a.UserId, a.AccessedAt });
             entity.HasIndex(a => a.AccessedAt).HasFilter("[AccessResult] = 'Denied'");
+        });
+
+        // =============================================
+        // Vault - Notification Preferences
+        // =============================================
+        
+        builder.Entity<VaultNotificationPreference>(entity =>
+        {
+            entity.ToTable("VaultNotificationPreferences");
+            entity.HasIndex(p => p.UserId);
+            entity.HasIndex(p => p.NotificationType);
+            entity.HasIndex(p => new { p.UserId, p.NotificationType }).IsUnique();
+
+            entity.HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<VaultNotificationType>(entity =>
+        {
+            entity.ToTable("VaultNotificationTypes");
+            entity.HasIndex(t => t.Code).IsUnique();
+            entity.HasIndex(t => t.IsActive);
+            entity.HasIndex(t => t.DisplayOrder);
+        });
+
+        // =============================================
+        // System Credentials - Credenciales de sistema
+        // =============================================
+        
+        builder.Entity<SystemCredential>(entity =>
+        {
+            entity.ToTable("SystemCredentials");
+            entity.HasIndex(c => c.Name).IsUnique();
+            entity.HasIndex(c => c.IsActive);
+
+            entity.HasOne(c => c.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(c => c.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(c => c.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(c => c.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasMany(c => c.Assignments)
+                .WithOne(a => a.SystemCredential)
+                .HasForeignKey(a => a.SystemCredentialId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SystemCredentialAssignment>(entity =>
+        {
+            entity.ToTable("SystemCredentialAssignments");
+            entity.HasIndex(a => a.SystemCredentialId);
+            entity.HasIndex(a => new { a.AssignmentType, a.AssignmentValue });
+            entity.HasIndex(a => a.Priority);
+
+            entity.HasOne(a => a.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(a => a.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // =============================================
+        // Security Groups - Grupos de seguridad
+        // =============================================
+        
+        builder.Entity<SecurityGroup>(entity =>
+        {
+            entity.ToTable("SecurityGroups");
+            entity.HasIndex(g => g.Name).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(g => new { g.IsActive, g.IsDeleted });
+
+            entity.Property(g => g.Name).HasMaxLength(100).IsRequired();
+            entity.Property(g => g.Description).HasMaxLength(500);
+            entity.Property(g => g.Color).HasMaxLength(20);
+            entity.Property(g => g.Icon).HasMaxLength(50);
+
+            entity.HasOne(g => g.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(g => g.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(g => g.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(g => g.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasMany(g => g.Members)
+                .WithOne(m => m.Group)
+                .HasForeignKey(m => m.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(g => g.Permissions)
+                .WithOne(p => p.Group)
+                .HasForeignKey(p => p.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(g => g.ADSync)
+                .WithOne(s => s.Group)
+                .HasForeignKey<ADGroupSync>(s => s.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<UserGroup>(entity =>
+        {
+            entity.ToTable("UserGroups");
+            entity.HasIndex(ug => new { ug.UserId, ug.GroupId }).IsUnique();
+            entity.HasIndex(ug => ug.UserId);
+            entity.HasIndex(ug => ug.GroupId);
+
+            entity.HasOne(ug => ug.User)
+                .WithMany()
+                .HasForeignKey(ug => ug.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(ug => ug.AddedByUser)
+                .WithMany()
+                .HasForeignKey(ug => ug.AddedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        builder.Entity<GroupPermission>(entity =>
+        {
+            entity.ToTable("GroupPermissions");
+            entity.HasIndex(gp => new { gp.GroupId, gp.ViewName }).IsUnique();
+            entity.HasIndex(gp => gp.GroupId);
+
+            entity.Property(gp => gp.ViewName).HasMaxLength(50).IsRequired();
+        });
+
+        builder.Entity<ADGroupSync>(entity =>
+        {
+            entity.ToTable("ADGroupSync");
+            entity.HasIndex(s => s.GroupId).IsUnique();
+
+            entity.Property(s => s.ADGroupName).HasMaxLength(200).IsRequired();
+            entity.Property(s => s.LastSyncResult).HasMaxLength(500);
+
+            entity.HasOne(s => s.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(s => s.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // =============================================
+        // Menu Badges - Indicadores de menús nuevos
+        // =============================================
+        
+        builder.Entity<MenuBadge>(entity =>
+        {
+            entity.ToTable("MenuBadges");
+            entity.HasIndex(m => m.MenuKey).IsUnique();
+            
+            entity.Property(m => m.MenuKey).HasMaxLength(100).IsRequired();
+            entity.Property(m => m.DisplayName).HasMaxLength(100).IsRequired();
+            entity.Property(m => m.BadgeText).HasMaxLength(50);
+            entity.Property(m => m.BadgeColor).HasMaxLength(50);
+            entity.Property(m => m.UpdatedBy).HasMaxLength(100);
+        });
+
+        // =============================================
+        // Collector Configuration - HealthScore Collectors
+        // =============================================
+        
+        builder.Entity<CollectorConfig>(entity =>
+        {
+            entity.ToTable("CollectorConfig");
+            entity.HasKey(e => e.CollectorName);
+            
+            entity.HasMany(e => e.Thresholds)
+                .WithOne(t => t.Collector)
+                .HasForeignKey(t => t.CollectorName)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasMany(e => e.VersionQueries)
+                .WithOne(q => q.Collector)
+                .HasForeignKey(q => q.CollectorName)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<CollectorThreshold>(entity =>
+        {
+            entity.ToTable("CollectorThresholds");
+            entity.HasIndex(e => e.CollectorName);
+            entity.HasIndex(e => new { e.CollectorName, e.ThresholdName }).IsUnique();
+        });
+
+        builder.Entity<SqlVersionQuery>(entity =>
+        {
+            entity.ToTable("SqlVersionQueries");
+            entity.HasIndex(e => e.CollectorName);
+            entity.HasIndex(e => new { e.MinSqlVersion, e.MaxSqlVersion });
+        });
+
+        builder.Entity<CollectorExecutionLog>(entity =>
+        {
+            entity.ToTable("CollectorExecutionLog");
+            entity.HasIndex(e => new { e.CollectorName, e.StartedAtUtc });
+            entity.HasIndex(e => new { e.Status, e.StartedAtUtc });
+        });
+
+        // =============================================
+        // Health Score v3.0 FINAL - 12 Categorías (métricas)
+        // =============================================
+        
+        builder.Entity<InstanceHealthScore>(entity =>
+        {
+            entity.ToTable("InstanceHealth_Score");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthBackups>(entity =>
+        {
+            entity.ToTable("InstanceHealth_Backups");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthMaintenance>(entity =>
+        {
+            entity.ToTable("InstanceHealth_Maintenance");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthAlwaysOn>(entity =>
+        {
+            entity.ToTable("InstanceHealth_AlwaysOn");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthLogChain>(entity =>
+        {
+            entity.ToTable("InstanceHealth_LogChain");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthDatabaseStates>(entity =>
+        {
+            entity.ToTable("InstanceHealth_DatabaseStates");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthErroresCriticos>(entity =>
+        {
+            entity.ToTable("InstanceHealth_ErroresCriticos");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthCPU>(entity =>
+        {
+            entity.ToTable("InstanceHealth_CPU");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthMemoria>(entity =>
+        {
+            entity.ToTable("InstanceHealth_Memoria");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthIO>(entity =>
+        {
+            entity.ToTable("InstanceHealth_IO");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthDiscos>(entity =>
+        {
+            entity.ToTable("InstanceHealth_Discos");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthConfiguracionTempdb>(entity =>
+        {
+            entity.ToTable("InstanceHealth_ConfiguracionTempdb");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthAutogrowth>(entity =>
+        {
+            entity.ToTable("InstanceHealth_Autogrowth");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        builder.Entity<InstanceHealthWaits>(entity =>
+        {
+            entity.ToTable("InstanceHealth_Waits");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
         });
 
     }

@@ -43,14 +43,13 @@ import {
   CredentialAuditLogDto,
   CredentialType 
 } from '@/services/vaultApi';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 export default function VaultCredentials() {
   const [credentials, setCredentials] = useState<CredentialDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const { toast } = useToast();
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,10 +76,8 @@ export default function VaultCredentials() {
       const data = await vaultApi.getCredentials(filter);
       setCredentials(data);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar las credenciales',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudieron cargar las credenciales'
       });
     } finally {
       setIsLoading(false);
@@ -134,16 +131,13 @@ export default function VaultCredentials() {
 
     try {
       await vaultApi.deleteCredential(credentialToDelete.id);
-      toast({
-        title: 'Credencial eliminada',
+      toast.success('Credencial eliminada', {
         description: `"${credentialToDelete.name}" ha sido eliminada.`
       });
       loadCredentials(false);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo eliminar la credencial',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo eliminar la credencial'
       });
     } finally {
       setDeleteDialogOpen(false);
@@ -159,10 +153,8 @@ export default function VaultCredentials() {
       const logs = await vaultApi.getCredentialAuditLog(credential.id);
       setAuditLogs(logs);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo cargar el historial',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo cargar el historial'
       });
     }
   };

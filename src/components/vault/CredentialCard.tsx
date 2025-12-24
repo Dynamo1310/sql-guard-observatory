@@ -1,10 +1,12 @@
 /**
  * Tarjeta de credencial para mostrar en listas
+ * Enterprise v2.1.1 - Usa permisos bitmask del backend
  */
 import { useState } from 'react';
 import { 
   Key, Server, Calendar, User, Lock, Unlock, MoreVertical,
-  Edit, Trash2, History, AlertTriangle, Database, Monitor, Share2, Users
+  Edit, Trash2, History, AlertTriangle, Database, Monitor, Share2, Users,
+  Plug, KeyRound, ShieldAlert
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +34,8 @@ interface CredentialCardProps {
   onDelete?: (credential: CredentialDto) => void;
   onViewAudit?: (credential: CredentialDto) => void;
   onShare?: (credential: CredentialDto) => void;
+  onUse?: (credential: CredentialDto) => void;
+  onUpdateSecret?: (credential: CredentialDto) => void;
   showActions?: boolean;
   variant?: 'default' | 'compact';
 }
@@ -60,9 +64,14 @@ export function CredentialCard({
   onDelete,
   onViewAudit,
   onShare,
+  onUse,
+  onUpdateSecret,
   showActions = true,
   variant = 'default'
 }: CredentialCardProps) {
+  // Usar permisos del backend (Enterprise v2.1.1)
+  // El backend es la fuente de verdad para autorización
+  const { canReveal, canUse, canEdit, canShare, canDelete, canViewAudit, canUpdateSecret } = credential;
   const typeConfig = credentialTypeConfig[credential.credentialType] || credentialTypeConfig.Other;
   const TypeIcon = typeConfig.icon;
 
@@ -156,25 +165,48 @@ export function CredentialCard({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {onShare && (
+                  {/* Usar sin revelar - Enterprise v2.1.1 */}
+                  {onUse && canUse && (
+                    <DropdownMenuItem onClick={() => onUse(credential)}>
+                      <Plug className="h-4 w-4 mr-2" />
+                      Usar sin revelar
+                    </DropdownMenuItem>
+                  )}
+                  
+                  {/* Actualizar password - Enterprise v2.1.1 */}
+                  {onUpdateSecret && canUpdateSecret && (
+                    <DropdownMenuItem onClick={() => onUpdateSecret(credential)}>
+                      <KeyRound className="h-4 w-4 mr-2" />
+                      Actualizar contraseña
+                    </DropdownMenuItem>
+                  )}
+                  
+                  {/* Compartir */}
+                  {onShare && canShare && (
                     <DropdownMenuItem onClick={() => onShare(credential)}>
                       <Share2 className="h-4 w-4 mr-2" />
                       Compartir
                     </DropdownMenuItem>
                   )}
-                  {onEdit && (
+                  
+                  {/* Editar */}
+                  {onEdit && canEdit && (
                     <DropdownMenuItem onClick={() => onEdit(credential)}>
                       <Edit className="h-4 w-4 mr-2" />
                       Editar
                     </DropdownMenuItem>
                   )}
-                  {onViewAudit && (
+                  
+                  {/* Ver historial */}
+                  {onViewAudit && canViewAudit && (
                     <DropdownMenuItem onClick={() => onViewAudit(credential)}>
                       <History className="h-4 w-4 mr-2" />
                       Ver historial
                     </DropdownMenuItem>
                   )}
-                  {onDelete && (
+                  
+                  {/* Eliminar */}
+                  {onDelete && canDelete && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 
@@ -194,10 +226,25 @@ export function CredentialCard({
       </CardHeader>
 
       <CardContent className="space-y-3">
-        {/* Password reveal */}
+        {/* Password reveal - Solo si tiene permiso */}
         <div className="flex items-center justify-between gap-2 p-2 bg-muted/50 rounded-lg">
           <span className="text-sm font-medium text-muted-foreground">Contraseña:</span>
-          <PasswordReveal credentialId={credential.id} />
+          {canReveal ? (
+            <PasswordReveal credentialId={credential.id} />
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <ShieldAlert className="h-4 w-4" />
+                  <span>Sin permiso para revelar</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                No tienes permiso para revelar esta contraseña.
+                Contacta al owner para solicitar acceso.
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
 
         {/* Descripción */}

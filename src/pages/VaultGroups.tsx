@@ -61,7 +61,7 @@ import {
   GROUP_ROLES,
   GroupRole
 } from '@/services/vaultApi';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 // Colores predefinidos para grupos
 const GROUP_COLORS = [
@@ -101,7 +101,6 @@ export default function VaultGroups() {
   const [availableUsers, setAvailableUsers] = useState<VaultUserDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const { toast } = useToast();
 
   // Dialogs
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
@@ -135,10 +134,8 @@ export default function VaultGroups() {
       setGroups(groupsData);
       setAvailableUsers(usersData);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los grupos',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudieron cargar los grupos'
       });
     } finally {
       setIsLoading(false);
@@ -162,18 +159,15 @@ export default function VaultGroups() {
         color: groupForm.color,
         icon: groupForm.icon
       });
-      toast({
-        title: 'Grupo creado',
+      toast.success('Grupo creado', {
         description: `El grupo "${groupForm.name}" fue creado exitosamente.`
       });
       setGroupDialogOpen(false);
       resetForm();
       loadGroups();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo crear el grupo',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo crear el grupo'
       });
     }
   };
@@ -187,8 +181,7 @@ export default function VaultGroups() {
         color: groupForm.color,
         icon: groupForm.icon
       });
-      toast({
-        title: 'Grupo actualizado',
+      toast.success('Grupo actualizado', {
         description: `El grupo "${groupForm.name}" fue actualizado.`
       });
       setGroupDialogOpen(false);
@@ -196,10 +189,8 @@ export default function VaultGroups() {
       resetForm();
       loadGroups();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar el grupo',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo actualizar el grupo'
       });
     }
   };
@@ -208,18 +199,15 @@ export default function VaultGroups() {
     if (!groupToDelete) return;
     try {
       await vaultApi.deleteGroup(groupToDelete.id);
-      toast({
-        title: 'Grupo eliminado',
+      toast.success('Grupo eliminado', {
         description: `El grupo "${groupToDelete.name}" fue eliminado.`
       });
       setDeleteDialogOpen(false);
       setGroupToDelete(null);
       loadGroups();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo eliminar el grupo',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo eliminar el grupo'
       });
     }
   };
@@ -232,8 +220,7 @@ export default function VaultGroups() {
         role: newMember.role,
         receiveNotifications: newMember.receiveNotifications
       });
-      toast({
-        title: 'Miembro agregado',
+      toast.success('Miembro agregado', {
         description: 'El usuario fue agregado al grupo.'
       });
       setAddMemberDialogOpen(false);
@@ -243,10 +230,8 @@ export default function VaultGroups() {
       setSelectedGroup(updatedGroup);
       loadGroups();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo agregar el miembro',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo agregar el miembro'
       });
     }
   };
@@ -255,18 +240,15 @@ export default function VaultGroups() {
     if (!selectedGroup) return;
     try {
       await vaultApi.removeGroupMember(selectedGroup.id, memberId);
-      toast({
-        title: 'Miembro eliminado',
+      toast.success('Miembro eliminado', {
         description: 'El usuario fue eliminado del grupo.'
       });
       const updatedGroup = await vaultApi.getGroupById(selectedGroup.id);
       setSelectedGroup(updatedGroup);
       loadGroups();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo eliminar el miembro',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo eliminar el miembro'
       });
     }
   };
@@ -275,18 +257,15 @@ export default function VaultGroups() {
     if (!selectedGroup) return;
     try {
       await vaultApi.updateGroupMember(selectedGroup.id, memberId, { role: newRole });
-      toast({
-        title: 'Rol actualizado',
+      toast.success('Rol actualizado', {
         description: 'El rol del miembro fue actualizado.'
       });
       const updatedGroup = await vaultApi.getGroupById(selectedGroup.id);
       setSelectedGroup(updatedGroup);
       loadGroups();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar el rol',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo actualizar el rol'
       });
     }
   };
@@ -474,7 +453,7 @@ export default function VaultGroups() {
 
       {/* Dialog para crear/editar grupo */}
       <Dialog open={groupDialogOpen} onOpenChange={setGroupDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>
               {editingGroup ? 'Editar Grupo' : 'Nuevo Grupo'}
@@ -560,7 +539,7 @@ export default function VaultGroups() {
 
       {/* Sheet de miembros */}
       <Sheet open={membersSheetOpen} onOpenChange={setMembersSheetOpen}>
-        <SheetContent className="sm:max-w-[500px]">
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
@@ -645,7 +624,7 @@ export default function VaultGroups() {
 
       {/* Dialog para agregar miembro */}
       <Dialog open={addMemberDialogOpen} onOpenChange={setAddMemberDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>Agregar miembro</DialogTitle>
             <DialogDescription>

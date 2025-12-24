@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,11 @@ public class KeyManager : IKeyManager
     private readonly IConfiguration _configuration;
     private readonly ILogger<KeyManager> _logger;
     private readonly byte[] _masterKeyBytes;
+    
+    // Cache estático de llaves para evitar accesos repetidos a la base de datos
+    // Esto es seguro porque las llaves no cambian durante la ejecución
+    private static readonly ConcurrentDictionary<string, VaultKey> _keyCache = new();
+    private static readonly object _cacheLock = new();
     
     public KeyManager(
         ApplicationDbContext context, 
@@ -42,37 +48,86 @@ public class KeyManager : IKeyManager
     
     /// <summary>
     /// Obtiene la llave activa para un propósito específico
+    /// Usa cache estático para evitar accesos repetidos a la base de datos (thread-safe)
     /// </summary>
     public VaultKey GetActiveKeyForPurpose(string purpose)
     {
-        var keyRecord = _context.VaultEncryptionKeys
-            .FirstOrDefault(k => k.KeyPurpose == purpose && k.IsActive);
+        var cacheKey = $"active:{purpose}";
         
-        if (keyRecord == null)
+        // Intentar obtener del cache primero (thread-safe)
+        if (_keyCache.TryGetValue(cacheKey, out var cachedKey))
         {
-            throw new InvalidOperationException(
-                $"No hay llave activa para el propósito '{purpose}'. " +
-                "Ejecutar el script de migración para crear la llave inicial.");
+            return cachedKey;
         }
         
-        return CreateVaultKey(keyRecord);
+        // Si no está en cache, cargar de la base de datos con lock
+        lock (_cacheLock)
+        {
+            // Double-check después del lock
+            if (_keyCache.TryGetValue(cacheKey, out cachedKey))
+            {
+                return cachedKey;
+            }
+            
+            var keyRecord = _context.VaultEncryptionKeys
+                .FirstOrDefault(k => k.KeyPurpose == purpose && k.IsActive);
+            
+            if (keyRecord == null)
+            {
+                throw new InvalidOperationException(
+                    $"No hay llave activa para el propósito '{purpose}'. " +
+                    "Ejecutar el script de migración para crear la llave inicial.");
+            }
+            
+            var vaultKey = CreateVaultKey(keyRecord);
+            
+            // Cachear por propósito y también por KeyId:Version
+            _keyCache.TryAdd(cacheKey, vaultKey);
+            _keyCache.TryAdd($"{vaultKey.KeyId}:{vaultKey.Version}", vaultKey);
+            
+            _logger.LogDebug("Llave activa para '{Purpose}' cargada y cacheada", purpose);
+            return vaultKey;
+        }
     }
     
     /// <summary>
     /// Obtiene una llave específica por KeyId y Version
+    /// Usa cache estático para evitar accesos repetidos a la base de datos (thread-safe)
     /// </summary>
     public VaultKey GetKey(Guid keyId, int version)
     {
-        var keyRecord = _context.VaultEncryptionKeys
-            .FirstOrDefault(k => k.KeyId == keyId && k.KeyVersion == version);
+        var cacheKey = $"{keyId}:{version}";
         
-        if (keyRecord == null)
+        // Intentar obtener del cache primero (thread-safe)
+        if (_keyCache.TryGetValue(cacheKey, out var cachedKey))
         {
-            throw new KeyNotFoundException(
-                $"No se encontró la llave con KeyId={keyId}, Version={version}");
+            return cachedKey;
         }
         
-        return CreateVaultKey(keyRecord);
+        // Si no está en cache, cargar de la base de datos con lock
+        lock (_cacheLock)
+        {
+            // Double-check después del lock
+            if (_keyCache.TryGetValue(cacheKey, out cachedKey))
+            {
+                return cachedKey;
+            }
+            
+            var keyRecord = _context.VaultEncryptionKeys
+                .FirstOrDefault(k => k.KeyId == keyId && k.KeyVersion == version);
+            
+            if (keyRecord == null)
+            {
+                throw new KeyNotFoundException(
+                    $"No se encontró la llave con KeyId={keyId}, Version={version}");
+            }
+            
+            var vaultKey = CreateVaultKey(keyRecord);
+            _keyCache.TryAdd(cacheKey, vaultKey);
+            
+            _logger.LogDebug("Llave {KeyId}:{Version} cargada y cacheada", keyId, version);
+            return vaultKey;
+        }
     }
     
     /// <summary>

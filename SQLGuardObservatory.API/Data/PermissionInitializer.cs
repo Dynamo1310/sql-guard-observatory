@@ -90,6 +90,7 @@ public static class PermissionInitializer
         {
             "ConfigSMTP",
             "AlertaServidoresCaidos",
+            "AlertaResumenOverview",
             "ServerRestart",
             "OperationsConfig",
             "HealthScore",

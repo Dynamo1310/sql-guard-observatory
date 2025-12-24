@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SQLGuardObservatory.API.DTOs;
+using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Services;
 using System.Security.Claims;
 
@@ -16,15 +17,21 @@ public class VaultController : ControllerBase
 {
     private readonly IVaultService _vaultService;
     private readonly IPermissionService _permissionService;
+    private readonly IPermissionBitMaskService _permissionBitMaskService;
+    private readonly ICredentialAccessLogService _accessLogService;
     private readonly ILogger<VaultController> _logger;
 
     public VaultController(
         IVaultService vaultService,
         IPermissionService permissionService,
+        IPermissionBitMaskService permissionBitMaskService,
+        ICredentialAccessLogService accessLogService,
         ILogger<VaultController> logger)
     {
         _vaultService = vaultService;
         _permissionService = permissionService;
+        _permissionBitMaskService = permissionBitMaskService;
+        _accessLogService = accessLogService;
         _logger = logger;
     }
 
@@ -73,11 +80,11 @@ public class VaultController : ControllerBase
             return Forbid();
         }
 
-        // Si solo tiene permiso para sus credenciales, forzar filtro de privadas
+        // Si solo tiene permiso para sus credenciales, forzar filtro de propietario
         if (!hasVaultCredentials && hasVaultMyCredentials)
         {
             filter ??= new CredentialFilterRequest();
-            filter.IsPrivate = true;
+            filter.OwnerOnly = true;
         }
 
         var credentials = await _vaultService.GetCredentialsAsync(userId, filter);
@@ -165,22 +172,41 @@ public class VaultController : ControllerBase
     }
 
     /// <summary>
-    /// Revela el password de una credencial
+    /// Revela el password de una credencial (Enterprise v2.1.1)
+    /// Valida permisos bitmask y registra acceso obligatoriamente
     /// </summary>
     [HttpPost("credentials/{id}/reveal")]
+    [ProducesResponseType(typeof(RevealPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<RevealPasswordResponse>> RevealPassword(int id)
     {
         var userId = GetUserId();
+        _accessLogService.SetHttpContext(HttpContext);
+
+        // Validar permiso bitmask
+        if (!await _permissionBitMaskService.CanRevealAsync(userId, id))
+        {
+            await _accessLogService.LogDeniedAsync(id, userId, "Reveal", "NoRevealPermission");
+            return StatusCode(StatusCodes.Status403Forbidden, new { reason = "NoRevealPermission", message = "No tienes permiso para revelar esta credencial" });
+        }
 
         var result = await _vaultService.RevealPasswordAsync(
             id, userId, GetUserName(), GetIpAddress(), GetUserAgent());
 
         if (result == null)
+        {
+            await _accessLogService.LogRevealAsync(id, userId, false, "CredentialNotFound");
             return NotFound();
+        }
 
-        // No cachear respuestas con passwords
+        // Registrar acceso exitoso
+        await _accessLogService.LogRevealAsync(id, userId, true);
+
+        // Headers de seguridad - no cachear respuestas con passwords
         Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
         Response.Headers.Pragma = "no-cache";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
 
         return Ok(result);
     }
@@ -192,11 +218,96 @@ public class VaultController : ControllerBase
     public async Task<ActionResult> RegisterPasswordCopy(int id)
     {
         var userId = GetUserId();
+        _accessLogService.SetHttpContext(HttpContext);
+
+        // Registrar copia en AccessLog
+        await _accessLogService.LogCopyAsync(id, userId);
 
         await _vaultService.RegisterPasswordCopyAsync(
             id, userId, GetUserName(), GetIpAddress(), GetUserAgent());
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Usa una credencial sin revelar el password (Enterprise v2.1.1)
+    /// El secreto nunca sale del backend
+    /// </summary>
+    [HttpPost("credentials/{id}/use")]
+    [ProducesResponseType(typeof(UseCredentialResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<UseCredentialResponse>> UseCredential(int id, [FromBody] UseCredentialRequest request)
+    {
+        var userId = GetUserId();
+        _accessLogService.SetHttpContext(HttpContext);
+
+        // Validar permiso UseWithoutReveal
+        if (!await _permissionBitMaskService.CanUseAsync(userId, id))
+        {
+            await _accessLogService.LogDeniedAsync(id, userId, "Use", "NoUsePermission");
+            return StatusCode(StatusCodes.Status403Forbidden, new { reason = "NoUsePermission", message = "No tienes permiso para usar esta credencial" });
+        }
+
+        // Registrar uso exitoso
+        await _accessLogService.LogUseAsync(id, userId, request.TargetServer, request.TargetInstance, true);
+
+        // TODO: Implementar lógica de uso real de credencial (conexión a servidor, etc.)
+        // Por ahora, solo registramos el uso y devolvemos éxito
+
+        return Ok(new UseCredentialResponse
+        {
+            Success = true,
+            UsageId = Guid.NewGuid(),
+            Message = "Credencial usada exitosamente"
+        });
+    }
+
+    /// <summary>
+    /// Actualiza el secreto guardado (MANUAL) - Enterprise v2.1.1
+    /// IMPORTANTE: NO cambia la password en el servidor destino
+    /// </summary>
+    [HttpPost("credentials/{id}/update-secret")]
+    [ProducesResponseType(typeof(UpdateSecretResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<UpdateSecretResponse>> UpdateSecret(int id, [FromBody] UpdateSecretRequest request)
+    {
+        var userId = GetUserId();
+        _accessLogService.SetHttpContext(HttpContext);
+
+        // Validar permiso UpdateSecret (bit 16)
+        if (!await _permissionBitMaskService.CanUpdateSecretAsync(userId, id))
+        {
+            await _accessLogService.LogDeniedAsync(id, userId, "UpdateSecret", "NoUpdateSecretPermission");
+            return StatusCode(StatusCodes.Status403Forbidden, new UpdateSecretResponse
+            {
+                Success = false,
+                Reason = "NoUpdateSecretPermission",
+                Message = "No tienes permiso para actualizar el secreto de esta credencial"
+            });
+        }
+
+        // Actualizar el secreto usando el servicio existente de vault
+        var success = await _vaultService.UpdateCredentialPasswordAsync(
+            id, request.NewPassword, userId, GetUserName(), GetIpAddress(), GetUserAgent());
+
+        if (!success)
+        {
+            return NotFound(new UpdateSecretResponse
+            {
+                Success = false,
+                Reason = "CredentialNotFound",
+                Message = "Credencial no encontrada"
+            });
+        }
+
+        return Ok(new UpdateSecretResponse
+        {
+            Success = true,
+            Message = "Contraseña actualizada en el Vault",
+            UpdatedAt = LocalClockAR.Now
+        });
     }
 
     // =============================================
@@ -300,6 +411,23 @@ public class VaultController : ControllerBase
             return Forbid();
 
         var logs = await _vaultService.GetFullAuditLogAsync(limit);
+        return Ok(logs);
+    }
+
+    /// <summary>
+    /// Obtiene el historial de accesos completo (Vault + Sistema) - solo admin
+    /// Incluye: Reveal, Copy, Use para todas las credenciales
+    /// </summary>
+    [HttpGet("access-logs")]
+    public async Task<ActionResult<List<CredentialAccessLogDto>>> GetAllAccessLogs([FromQuery] int? limit = 100)
+    {
+        // Verificar permiso de auditoría
+        var hasPermission = await HasPermissionAsync("VaultAudit");
+        if (!hasPermission)
+            return Forbid();
+
+        _accessLogService.SetHttpContext(HttpContext);
+        var logs = await _accessLogService.GetAllAccessLogsAsync(limit ?? 100);
         return Ok(logs);
     }
 

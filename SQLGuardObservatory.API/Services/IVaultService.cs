@@ -41,6 +41,12 @@ public interface IVaultService
     /// </summary>
     Task<RevealPasswordResponse?> RevealPasswordAsync(int id, string userId, string? userName, string? ipAddress, string? userAgent);
 
+    /// <summary>
+    /// Actualiza el password de una credencial (MANUAL) - Enterprise v2.1.1
+    /// IMPORTANTE: NO cambia la password en el servidor destino
+    /// </summary>
+    Task<bool> UpdateCredentialPasswordAsync(int id, string newPassword, string userId, string? userName, string? ipAddress, string? userAgent);
+
     // =============================================
     // Operaciones de Servidores
     // =============================================

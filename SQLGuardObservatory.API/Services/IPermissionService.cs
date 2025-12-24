@@ -9,5 +9,6 @@ public interface IPermissionService
     Task<bool> UpdateRolePermissionsAsync(string role, Dictionary<string, bool> permissions);
     Task<AvailableViewsDto> GetAvailableViewsAndRolesAsync();
     Task<List<string>> GetUserPermissionsAsync(string userId);
+    Task<bool> HasPermissionAsync(string userId, string viewName);
 }
 

@@ -7,10 +7,10 @@ namespace SQLGuardObservatory.API.Services
 {
     public class HealthScoreService : IHealthScoreService
     {
-        private readonly SQLNovaDbContext _context;
+        private readonly ApplicationDbContext _context;
         private readonly ILogger<HealthScoreService> _logger;
 
-        public HealthScoreService(SQLNovaDbContext context, ILogger<HealthScoreService> logger)
+        public HealthScoreService(ApplicationDbContext context, ILogger<HealthScoreService> logger)
         {
             _context = context;
             _logger = logger;

@@ -38,7 +38,7 @@ import {
   CredentialAuditLogDto,
   CredentialType 
 } from '@/services/vaultApi';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -47,7 +47,6 @@ export default function VaultSharedWithMe() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const { toast } = useToast();
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,10 +65,8 @@ export default function VaultSharedWithMe() {
       const data = await vaultApi.getSharedWithMe();
       setCredentials(data);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar las credenciales compartidas',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudieron cargar las credenciales compartidas'
       });
     } finally {
       setIsLoading(false);
@@ -112,10 +109,8 @@ export default function VaultSharedWithMe() {
       setAuditCredentialName(credential.name);
       setAuditSheetOpen(true);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo cargar el historial',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo cargar el historial'
       });
     }
   };

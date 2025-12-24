@@ -14,8 +14,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 const SIDEBAR_COOKIE_NAME = "sidebar:state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH = "15rem"; // Aumentado para mostrar nombres completos
-const SIDEBAR_WIDTH_MOBILE = "16rem";
+const SIDEBAR_WIDTH = "17rem"; // 272px - suficiente para nombres de submenús largos
+const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem"; // 48px - perfecto para ícono de 32px
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 

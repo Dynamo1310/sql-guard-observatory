@@ -65,7 +65,7 @@ import {
   GROUP_ROLES,
   GroupRole
 } from '@/services/vaultApi';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 // Helper para iconos de rol
 function getRoleIcon(role: string) {
@@ -89,7 +89,6 @@ function getRoleBadgeVariant(role: string): "default" | "secondary" | "outline" 
 export default function VaultGroupDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
   
   const [group, setGroup] = useState<CredentialGroupDto | null>(null);
   const [credentials, setCredentials] = useState<CredentialDto[]>([]);
@@ -142,10 +141,8 @@ export default function VaultGroupDetail() {
       setCredentials(credentialsData);
       setAvailableUsers(usersData);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo cargar el grupo',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo cargar el grupo'
       });
       navigate('/vault/groups');
     } finally {
@@ -192,16 +189,13 @@ export default function VaultGroupDetail() {
 
     try {
       await vaultApi.deleteCredential(credentialToDelete.id);
-      toast({
-        title: 'Credencial eliminada',
+      toast.success('Credencial eliminada', {
         description: `"${credentialToDelete.name}" fue eliminada correctamente.`
       });
       loadData(false);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo eliminar la credencial',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo eliminar la credencial'
       });
     } finally {
       setDeleteCredentialDialogOpen(false);
@@ -219,16 +213,13 @@ export default function VaultGroupDetail() {
 
     try {
       await vaultApi.removeCredentialFromGroup(groupId, credentialToRemove.id);
-      toast({
-        title: 'Credencial removida',
+      toast.success('Credencial removida', {
         description: `"${credentialToRemove.name}" fue removida del grupo.`
       });
       loadData(false);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo remover la credencial del grupo',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo remover la credencial del grupo'
       });
     } finally {
       setRemoveFromGroupDialogOpen(false);
@@ -243,10 +234,8 @@ export default function VaultGroupDetail() {
       setAuditCredentialName(credential.name);
       setAuditSheetOpen(true);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo cargar el historial',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo cargar el historial'
       });
     }
   };
@@ -266,18 +255,15 @@ export default function VaultGroupDetail() {
         role: newMember.role,
         receiveNotifications: newMember.receiveNotifications
       });
-      toast({
-        title: 'Miembro agregado',
+      toast.success('Miembro agregado', {
         description: 'El usuario fue agregado al grupo correctamente.'
       });
       setAddMemberDialogOpen(false);
       setNewMember({ userId: '', role: GROUP_ROLES.MEMBER, receiveNotifications: true });
       loadData(false);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo agregar el miembro',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo agregar el miembro'
       });
     }
   };
@@ -287,16 +273,13 @@ export default function VaultGroupDetail() {
     
     try {
       await vaultApi.updateGroupMember(groupId, memberId, { role: newRole });
-      toast({
-        title: 'Rol actualizado',
+      toast.success('Rol actualizado', {
         description: 'El rol del miembro fue actualizado correctamente.'
       });
       loadData(false);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar el rol',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo actualizar el rol'
       });
     }
   };
@@ -306,16 +289,13 @@ export default function VaultGroupDetail() {
     
     try {
       await vaultApi.removeGroupMember(groupId, memberId);
-      toast({
-        title: 'Miembro removido',
+      toast.success('Miembro removido', {
         description: 'El usuario fue removido del grupo.'
       });
       loadData(false);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo remover el miembro',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudo remover el miembro'
       });
     }
   };
@@ -678,7 +658,7 @@ export default function VaultGroupDetail() {
 
       {/* Dialog para agregar miembro */}
       <Dialog open={addMemberDialogOpen} onOpenChange={setAddMemberDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>Agregar miembro</DialogTitle>
             <DialogDescription>

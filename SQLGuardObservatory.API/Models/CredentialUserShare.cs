@@ -32,11 +32,9 @@ public class CredentialUserShare
     public string SharedByUserId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Nivel de permiso: View, Edit
+    /// Bitmask de permisos (post Phase 8)
     /// </summary>
-    [Required]
-    [MaxLength(20)]
-    public string Permission { get; set; } = SharePermissions.View;
+    public long PermissionBitMask { get; set; } = 3; // Default: ViewMetadata (1) + RevealSecret (2)
 
     /// <summary>
     /// Fecha en que se compartió

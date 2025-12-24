@@ -26,10 +26,13 @@ import OnCallReports from "./pages/OnCallReports";
 import OnCallSwaps from "./pages/OnCallSwaps";
 import SmtpSettings from "./pages/SmtpSettings";
 import ProductionAlerts from "./pages/ProductionAlerts";
+import OverviewSummaryAlerts from "./pages/OverviewSummaryAlerts";
 import ServerRestart from "./pages/ServerRestart";
 import OperationalServersConfig from "./pages/OperationalServersConfig";
 import AdminUsers from "./pages/AdminUsers";
 import AdminPermissions from "./pages/AdminPermissions";
+import AdminGroups from "./pages/AdminGroups";
+import AdminGroupDetail from "./pages/AdminGroupDetail";
 import PatchStatus from "./pages/PatchStatus";
 import PatchComplianceConfig from "./pages/PatchComplianceConfig";
 import VaultDashboard from "./pages/VaultDashboard";
@@ -39,7 +42,10 @@ import VaultGroupDetail from "./pages/VaultGroupDetail";
 import VaultMyCredentials from "./pages/VaultMyCredentials";
 import VaultGroups from "./pages/VaultGroups";
 import VaultAudit from "./pages/VaultAudit";
-import VaultMigration from "./pages/VaultMigration";
+import VaultNotificationSettings from "./pages/VaultNotificationSettings";
+import SystemCredentials from "./pages/SystemCredentials";
+import AdminMenuBadges from "./pages/AdminMenuBadges";
+import CollectorConfig from "./pages/admin/CollectorConfig";
 import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
@@ -186,9 +192,19 @@ const App = () => (
                           <SmtpSettings />
                         </ProtectedRoute>
                       } />
+                      <Route path="/admin/system-credentials" element={
+                        <ProtectedRoute viewName="SystemCredentials">
+                          <SystemCredentials />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/admin/alerts/servers-down" element={
                         <ProtectedRoute viewName="AlertaServidoresCaidos">
                           <ProductionAlerts />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/alerts/overview-summary" element={
+                        <ProtectedRoute viewName="AlertaResumenOverview">
+                          <OverviewSummaryAlerts />
                         </ProtectedRoute>
                       } />
                       {/* Operaciones */}
@@ -233,8 +249,10 @@ const App = () => (
                           <VaultAudit />
                         </ProtectedRoute>
                       } />
-                      <Route path="/vault/migration" element={
-                        <VaultMigration />
+                      <Route path="/vault/notifications" element={
+                        <ProtectedRoute viewName="VaultCredentials">
+                          <VaultNotificationSettings />
+                        </ProtectedRoute>
                       } />
                       <Route path="/vault/groups/:id" element={
                         <ProtectedRoute viewName="VaultCredentials">
@@ -251,9 +269,29 @@ const App = () => (
                           <AdminUsers />
                         </ProtectedRoute>
                       } />
+                      <Route path="/admin/groups" element={
+                        <ProtectedRoute viewName="AdminGroups">
+                          <AdminGroups />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/groups/:id" element={
+                        <ProtectedRoute viewName="AdminGroups">
+                          <AdminGroupDetail />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/admin/permissions" element={
                         <ProtectedRoute viewName="AdminPermissions">
                           <AdminPermissions />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/menu-badges" element={
+                        <ProtectedRoute viewName="AdminMenuBadges">
+                          <AdminMenuBadges />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/collectors" element={
+                        <ProtectedRoute viewName="AdminCollectors">
+                          <CollectorConfig />
                         </ProtectedRoute>
                       } />
                       <Route path="/unauthorized" element={<Unauthorized />} />

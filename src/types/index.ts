@@ -323,3 +323,119 @@ export interface IndexAnalysisRequest {
   includeHeaps?: boolean;
   generateScripts?: boolean;
 }
+
+// ==================== SECURITY GROUPS TYPES ====================
+
+export interface SecurityGroup {
+  id: number;
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  isActive: boolean;
+  memberCount: number;
+  permissionCount: number;
+  hasADSync: boolean;
+  adGroupName?: string;
+  createdAt: string;
+  createdByUserName?: string;
+  updatedAt?: string;
+}
+
+export interface SecurityGroupDetail extends SecurityGroup {
+  members: GroupMember[];
+  permissions: Record<string, boolean>;
+  adSyncConfig?: ADSyncConfig;
+}
+
+export interface GroupMember {
+  userId: string;
+  domainUser: string;
+  displayName: string;
+  email?: string;
+  role?: string;
+  addedAt: string;
+  addedByUserName?: string;
+}
+
+export interface CreateGroupRequest {
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  isActive?: boolean;
+  initialMemberIds?: string[];
+  initialPermissions?: Record<string, boolean>;
+}
+
+export interface UpdateGroupRequest {
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  isActive: boolean;
+}
+
+export interface GroupPermission {
+  groupId: number;
+  groupName: string;
+  permissions: Record<string, boolean>;
+}
+
+export interface ADSyncConfig {
+  id?: number;
+  groupId: number;
+  adGroupName: string;
+  autoSync: boolean;
+  syncIntervalHours: number;
+  lastSyncAt?: string;
+  lastSyncResult?: string;
+  lastSyncAddedCount?: number;
+  lastSyncRemovedCount?: number;
+}
+
+export interface UpdateADSyncConfigRequest {
+  adGroupName: string;
+  autoSync: boolean;
+  syncIntervalHours: number;
+}
+
+export interface ADSyncResult {
+  success: boolean;
+  message: string;
+  addedCount: number;
+  removedCount: number;
+  skippedCount: number;
+  addedUsers: string[];
+  removedUsers: string[];
+  errors: string[];
+  syncedAt: string;
+}
+
+export interface UserGroupMembership {
+  groupId: number;
+  groupName: string;
+  groupColor?: string;
+  groupIcon?: string;
+  addedAt: string;
+}
+
+export interface AvailableUser {
+  userId: string;
+  domainUser: string;
+  displayName: string;
+  email?: string;
+  role?: string;
+  isAlreadyMember: boolean;
+}
+
+export interface UserWithGroups {
+  id: string;
+  domainUser: string;
+  displayName: string;
+  email?: string;
+  role: string;
+  active: boolean;
+  createdAt: string;
+  groups: UserGroupMembership[];
+}

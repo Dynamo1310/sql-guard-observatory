@@ -43,48 +43,24 @@ public class Credential
     public string Username { get; set; } = string.Empty;
 
     /// <summary>
-    /// Password cifrado con AES-256-GCM
+    /// Password cifrado con AES-256-GCM (VARBINARY post-migration)
     /// </summary>
-    [Required]
-    public string EncryptedPassword { get; set; } = string.Empty;
+    public byte[]? EncryptedPassword { get; set; }
 
     /// <summary>
-    /// Salt único para esta credencial (Base64)
+    /// Salt único para esta credencial (VARBINARY 32 bytes)
     /// </summary>
-    [Required]
-    [MaxLength(256)]
-    public string Salt { get; set; } = string.Empty;
+    public byte[]? Salt { get; set; }
 
     /// <summary>
-    /// Vector de inicialización para AES-GCM (Base64)
+    /// Vector de inicialización para AES-GCM (VARBINARY 12 bytes)
     /// </summary>
-    [Required]
-    [MaxLength(256)]
-    public string IV { get; set; } = string.Empty;
-
-    // =============================================
-    // NUEVAS COLUMNAS - Enterprise Vault v2.1
-    // =============================================
+    public byte[]? IV { get; set; }
 
     /// <summary>
-    /// Password cifrado en formato VARBINARY (nuevo formato enterprise)
+    /// Authentication Tag para AES-GCM (VARBINARY 16 bytes)
     /// </summary>
-    public byte[]? EncryptedPasswordBin { get; set; }
-
-    /// <summary>
-    /// Salt en formato VARBINARY (nuevo formato enterprise)
-    /// </summary>
-    public byte[]? SaltBin { get; set; }
-
-    /// <summary>
-    /// IV en formato VARBINARY (nuevo formato enterprise)
-    /// </summary>
-    public byte[]? IVBin { get; set; }
-
-    /// <summary>
-    /// Authentication Tag separado (nuevo formato enterprise)
-    /// </summary>
-    public byte[]? AuthTagBin { get; set; }
+    public byte[]? AuthTag { get; set; }
 
     /// <summary>
     /// ID de la llave de cifrado usada
@@ -120,10 +96,6 @@ public class Credential
     /// Indica si esta credencial ya fue migrada al nuevo formato
     /// </summary>
     public bool IsMigratedToV2 { get; set; } = false;
-
-    // =============================================
-    // FIN NUEVAS COLUMNAS
-    // =============================================
 
     /// <summary>
     /// Dominio para credenciales Windows/AD

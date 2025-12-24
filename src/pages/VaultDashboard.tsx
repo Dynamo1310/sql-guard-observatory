@@ -13,7 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CredentialCard, CredentialDialog } from '@/components/vault';
 import { vaultApi, VaultStatsDto, CredentialDto } from '@/services/vaultApi';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -23,7 +23,6 @@ export default function VaultDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { toast } = useToast();
 
   const loadData = async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -37,10 +36,8 @@ export default function VaultDashboard() {
       setStats(statsData);
       setExpiringCredentials(expiringData);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar las estadísticas',
-        variant: 'destructive'
+      toast.error('Error', {
+        description: 'No se pudieron cargar las estadísticas'
       });
     } finally {
       setIsLoading(false);
