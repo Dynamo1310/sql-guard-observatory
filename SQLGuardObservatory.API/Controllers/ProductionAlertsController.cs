@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
 using System.Security.Claims;
@@ -9,6 +10,7 @@ namespace SQLGuardObservatory.API.Controllers;
 [ApiController]
 [Route("api/production-alerts")]
 [Authorize]
+[ViewPermission("AlertaServidoresCaidos")]
 public class ProductionAlertsController : ControllerBase
 {
     private readonly IProductionAlertService _alertService;
@@ -80,6 +82,7 @@ public class ProductionAlertsController : ControllerBase
     }
 
     [HttpPost("config")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult<ProductionAlertConfigDto>> CreateConfig([FromBody] CreateProductionAlertRequest request)
     {
         try
@@ -112,6 +115,7 @@ public class ProductionAlertsController : ControllerBase
     }
 
     [HttpPut("config")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult<ProductionAlertConfigDto>> UpdateConfig([FromBody] UpdateProductionAlertRequest request)
     {
         try
@@ -187,6 +191,7 @@ public class ProductionAlertsController : ControllerBase
     }
 
     [HttpPost("test")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult> TestAlert()
     {
         var (success, message, instancesDown) = await _alertService.TestAlertAsync();
@@ -194,6 +199,7 @@ public class ProductionAlertsController : ControllerBase
     }
 
     [HttpPost("run")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult> RunNow()
     {
         try

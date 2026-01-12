@@ -28,10 +28,23 @@ public class OnCallOperator
     /// </summary>
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Color asignado al operador para mostrar en el calendario (formato hexadecimal #RRGGBB)
+    /// </summary>
+    [MaxLength(7)]
+    public string? ColorCode { get; set; }
+
+    /// <summary>
+    /// Número de teléfono del operador para contacto
+    /// </summary>
+    [MaxLength(20)]
+    public string? PhoneNumber { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }
 }
+
 
 
 

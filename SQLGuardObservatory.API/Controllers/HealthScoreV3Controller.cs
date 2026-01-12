@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.Data;
+using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
 
 namespace SQLGuardObservatory.API.Controllers
 {
     [Authorize]
+    [ViewPermission("HealthScore")]
     [ApiController]
     [Route("api/v3/healthscore")]
     public class HealthScoreV3Controller : ControllerBase
@@ -417,6 +420,39 @@ namespace SQLGuardObservatory.API.Controllers
                 details.MaintenanceDetails = await _context.Database
                     .SqlQueryRaw<InstanceHealthMaintenance>(maintenanceQuery, instanceName)
                     .FirstOrDefaultAsync();
+
+                // Aplicar excepciones de mantenimiento si existen
+                if (details.MaintenanceDetails != null)
+                {
+                    var hostname = instanceName.Split('\\')[0];
+                    var shortName = hostname.Split('.')[0];
+
+                    // Verificar excepción de CHECKDB
+                    var hasCheckdbException = await _context.Set<CollectorException>()
+                        .AsNoTracking()
+                        .AnyAsync(e => e.CollectorName == "Maintenance" 
+                                    && e.ExceptionType == "CHECKDB"
+                                    && e.IsActive
+                                    && (e.ServerName == instanceName || e.ServerName == hostname || e.ServerName == shortName));
+
+                    // Verificar excepción de IndexOptimize
+                    var hasIndexOptimizeException = await _context.Set<CollectorException>()
+                        .AsNoTracking()
+                        .AnyAsync(e => e.CollectorName == "Maintenance" 
+                                    && e.ExceptionType == "IndexOptimize"
+                                    && e.IsActive
+                                    && (e.ServerName == instanceName || e.ServerName == hostname || e.ServerName == shortName));
+
+                    // Si hay excepción, marcar como OK para que el frontend no lo muestre como vencido
+                    if (hasCheckdbException)
+                    {
+                        details.MaintenanceDetails.CheckdbOk = true;
+                    }
+                    if (hasIndexOptimizeException)
+                    {
+                        details.MaintenanceDetails.IndexOptimizeOk = true;
+                    }
+                }
 
                 // Configuracion & TempDB
                 var configQuery = "SELECT TOP 1 * FROM dbo.InstanceHealth_ConfiguracionTempdb WHERE InstanceName = {0} ORDER BY CollectedAtUtc DESC";

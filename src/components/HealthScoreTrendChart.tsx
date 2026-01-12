@@ -102,16 +102,16 @@ export function HealthScoreTrendChart({ instanceName, hours = 24, refreshTrigger
   };
 
   const getStatusColor = (score: number) => {
-    if (score >= 90) return '#22c55e'; // green
-    if (score >= 70) return '#eab308'; // yellow
-    return '#ef4444'; // red
+    if (score >= 90) return 'hsl(var(--foreground))';
+    if (score >= 70) return 'hsl(var(--warning))';
+    return 'hsl(var(--destructive))';
   };
 
   if (loading) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </Card>
     );
@@ -119,8 +119,8 @@ export function HealthScoreTrendChart({ instanceName, hours = 24, refreshTrigger
 
   if (error) {
     return (
-      <Card className="p-6 border-red-200 bg-red-50">
-        <div className="text-red-700">Error: {error}</div>
+      <Card className="p-6 border-destructive/50 bg-destructive/5">
+        <div className="text-destructive">Error: {error}</div>
       </Card>
     );
   }
@@ -128,7 +128,7 @@ export function HealthScoreTrendChart({ instanceName, hours = 24, refreshTrigger
   if (data.length === 0) {
     return (
       <Card className="p-6">
-        <div className="text-center text-gray-500">No hay datos disponibles</div>
+        <div className="text-center text-muted-foreground">No hay datos disponibles</div>
       </Card>
     );
   }
@@ -146,8 +146,8 @@ export function HealthScoreTrendChart({ instanceName, hours = 24, refreshTrigger
     <Card className="p-6">
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-semibold">Health Score - Últimas {hours}h</h3>
-          <p className="text-sm text-gray-500">{instanceName}</p>
+          <h3 className="text-lg font-semibold text-foreground">Health Score - Últimas {hours}h</h3>
+          <p className="text-sm text-muted-foreground">{instanceName}</p>
         </div>
 
         <ResponsiveContainer width="100%" height={300}>
@@ -169,14 +169,14 @@ export function HealthScoreTrendChart({ instanceName, hours = 24, refreshTrigger
                 if (active && payload && payload.length) {
                   const data = payload[0].payload;
                   return (
-                    <div className="bg-white border rounded-lg shadow-lg p-3">
-                      <p className="text-sm font-semibold">{data.fullTimestamp}</p>
-                      <p className="text-sm">
+                    <div className="bg-card border border-border rounded-lg shadow-lg p-3">
+                      <p className="text-sm font-semibold text-foreground">{data.fullTimestamp}</p>
+                      <p className="text-sm text-foreground">
                         Score: <span className="font-bold" style={{ color: getStatusColor(data.score) }}>
                           {data.score}
                         </span>
                       </p>
-                      <p className="text-sm text-gray-600">Estado: {data.status}</p>
+                      <p className="text-sm text-muted-foreground">Estado: {data.status}</p>
                     </div>
                   );
                 }
@@ -187,7 +187,7 @@ export function HealthScoreTrendChart({ instanceName, hours = 24, refreshTrigger
             <Line 
               type="monotone" 
               dataKey="score" 
-              stroke="#3b82f6" 
+              stroke="hsl(var(--foreground))" 
               strokeWidth={3}
               dot={false}
               activeDot={{ r: 5, strokeWidth: 2 }}
@@ -197,17 +197,17 @@ export function HealthScoreTrendChart({ instanceName, hours = 24, refreshTrigger
         </ResponsiveContainer>
 
         {/* Leyenda de thresholds */}
-        <div className="flex items-center gap-4 text-xs text-gray-600">
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
-            <div className="w-3 h-0.5 bg-green-500"></div>
+            <div className="w-3 h-0.5 bg-foreground"></div>
             <span>Healthy (≥90)</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-0.5 bg-yellow-500"></div>
+            <div className="w-3 h-0.5 bg-warning"></div>
             <span>Warning (70-89)</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-0.5 bg-red-500"></div>
+            <div className="w-3 h-0.5 bg-destructive"></div>
             <span>Critical (&lt;70)</span>
           </div>
         </div>

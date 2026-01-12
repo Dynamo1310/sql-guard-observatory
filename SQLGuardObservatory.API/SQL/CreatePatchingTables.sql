@@ -1,5 +1,5 @@
 -- Script para crear las tablas de Patching
--- Ejecutar en la base de datos SQLGuardObservatoryAuth
+-- Ejecutar en la base de datos AppSQLNova
 
 -- Tabla de configuración de compliance por versión SQL Server
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[PatchComplianceConfig]') AND type in (N'U'))

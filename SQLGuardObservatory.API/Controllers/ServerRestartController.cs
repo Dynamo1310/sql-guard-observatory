@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
 using System.Security.Claims;
@@ -12,6 +13,7 @@ namespace SQLGuardObservatory.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
+[ViewPermission("ServerRestart")]
 public class ServerRestartController : ControllerBase
 {
     private readonly IServerRestartService _restartService;

@@ -5,7 +5,7 @@
 -- Fecha: 2025
 -- ============================================
 
-USE [SQLGuardObservatoryAuth];
+USE [AppSQLNova];
 GO
 
 -- ============================================
@@ -198,6 +198,9 @@ FROM RolePermissions
 WHERE ViewName = 'OperationsConfig';
 
 GO
+
+
+
 
 
 

@@ -24,17 +24,19 @@ import OnCallActivations from "./pages/OnCallActivations";
 import OnCallAlerts from "./pages/OnCallAlerts";
 import OnCallReports from "./pages/OnCallReports";
 import OnCallSwaps from "./pages/OnCallSwaps";
+import OnCallSettings from "./pages/OnCallSettings";
 import SmtpSettings from "./pages/SmtpSettings";
 import ProductionAlerts from "./pages/ProductionAlerts";
 import OverviewSummaryAlerts from "./pages/OverviewSummaryAlerts";
 import ServerRestart from "./pages/ServerRestart";
 import OperationalServersConfig from "./pages/OperationalServersConfig";
 import AdminUsers from "./pages/AdminUsers";
-import AdminPermissions from "./pages/AdminPermissions";
 import AdminGroups from "./pages/AdminGroups";
 import AdminGroupDetail from "./pages/AdminGroupDetail";
+import AdminRoles from "./pages/AdminRoles";
 import PatchStatus from "./pages/PatchStatus";
 import PatchComplianceConfig from "./pages/PatchComplianceConfig";
+import ObsoleteInstances from "./pages/ObsoleteInstances";
 import VaultDashboard from "./pages/VaultDashboard";
 import VaultCredentials from "./pages/VaultCredentials";
 import VaultSharedWithMe from "./pages/VaultSharedWithMe";
@@ -46,6 +48,13 @@ import VaultNotificationSettings from "./pages/VaultNotificationSettings";
 import SystemCredentials from "./pages/SystemCredentials";
 import AdminMenuBadges from "./pages/AdminMenuBadges";
 import CollectorConfig from "./pages/admin/CollectorConfig";
+import AdminLogs from "./pages/admin/AdminLogs";
+import SqlServerInstances from "./pages/SqlServerInstances";
+import SqlServerDatabases from "./pages/SqlServerDatabases";
+import PostgreSqlInstances from "./pages/PostgreSqlInstances";
+import PostgreSqlDatabases from "./pages/PostgreSqlDatabases";
+import RedisInstances from "./pages/RedisInstances";
+import DocumentDbInstances from "./pages/DocumentDbInstances";
 import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
@@ -142,6 +151,11 @@ const App = () => (
                           <PatchComplianceConfig />
                         </ProtectedRoute>
                       } />
+                      <Route path="/patching/obsolete" element={
+                        <ProtectedRoute viewName="ObsoleteInstances">
+                          <ObsoleteInstances />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/oncall" element={
                         <ProtectedRoute viewName="OnCall">
                           <OnCallDashboard />
@@ -177,6 +191,11 @@ const App = () => (
                           <OnCallAlerts />
                         </ProtectedRoute>
                       } />
+                      <Route path="/oncall/settings" element={
+                        <ProtectedRoute viewName="OnCall">
+                          <OnCallSettings />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/oncall/reports" element={
                         <ProtectedRoute viewName="OnCall">
                           <OnCallReports />
@@ -192,7 +211,7 @@ const App = () => (
                           <SmtpSettings />
                         </ProtectedRoute>
                       } />
-                      <Route path="/admin/system-credentials" element={
+                      <Route path="/vault/system-credentials" element={
                         <ProtectedRoute viewName="SystemCredentials">
                           <SystemCredentials />
                         </ProtectedRoute>
@@ -279,9 +298,9 @@ const App = () => (
                           <AdminGroupDetail />
                         </ProtectedRoute>
                       } />
-                      <Route path="/admin/permissions" element={
-                        <ProtectedRoute viewName="AdminPermissions">
-                          <AdminPermissions />
+                      <Route path="/admin/roles" element={
+                        <ProtectedRoute viewName="AdminRoles">
+                          <AdminRoles />
                         </ProtectedRoute>
                       } />
                       <Route path="/admin/menu-badges" element={
@@ -292,6 +311,45 @@ const App = () => (
                       <Route path="/admin/collectors" element={
                         <ProtectedRoute viewName="AdminCollectors">
                           <CollectorConfig />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/logs" element={
+                        <ProtectedRoute viewName="AdminLogs">
+                          <AdminLogs />
+                        </ProtectedRoute>
+                      } />
+                      {/* Inventario SQL Server */}
+                      <Route path="/inventory/sqlserver/instances" element={
+                        <ProtectedRoute viewName="InventarioSqlServerInstances">
+                          <SqlServerInstances />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/inventory/sqlserver/databases" element={
+                        <ProtectedRoute viewName="InventarioSqlServerDatabases">
+                          <SqlServerDatabases />
+                        </ProtectedRoute>
+                      } />
+                      {/* Inventario PostgreSQL */}
+                      <Route path="/inventory/postgresql/instances" element={
+                        <ProtectedRoute viewName="InventarioPostgreSqlInstances">
+                          <PostgreSqlInstances />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/inventory/postgresql/databases" element={
+                        <ProtectedRoute viewName="InventarioPostgreSqlDatabases">
+                          <PostgreSqlDatabases />
+                        </ProtectedRoute>
+                      } />
+                      {/* Inventario Redis */}
+                      <Route path="/inventory/redis/instances" element={
+                        <ProtectedRoute viewName="InventarioRedisInstances">
+                          <RedisInstances />
+                        </ProtectedRoute>
+                      } />
+                      {/* Inventario DocumentDB */}
+                      <Route path="/inventory/documentdb/instances" element={
+                        <ProtectedRoute viewName="InventarioDocumentDbInstances">
+                          <DocumentDbInstances />
                         </ProtectedRoute>
                       } />
                       <Route path="/unauthorized" element={<Unauthorized />} />

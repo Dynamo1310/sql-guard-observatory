@@ -1,12 +1,12 @@
 -- =============================================
 -- Script: VaultEnterprise_Phase4_AuditAccessLog.sql
 -- Description: Fase 4 - Auditoría con integridad y AccessLog
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='

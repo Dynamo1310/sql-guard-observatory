@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
 
@@ -9,14 +10,20 @@ namespace SQLGuardObservatory.API.Controllers;
 [ApiController]
 [Route("api/oncall")]
 [Authorize]
+[ViewPermission("OnCall")]
 public class OnCallController : ControllerBase
 {
     private readonly IOnCallService _onCallService;
+    private readonly IOnCallAlertService _alertService;
     private readonly ILogger<OnCallController> _logger;
 
-    public OnCallController(IOnCallService onCallService, ILogger<OnCallController> logger)
+    public OnCallController(
+        IOnCallService onCallService, 
+        IOnCallAlertService alertService,
+        ILogger<OnCallController> logger)
     {
         _onCallService = onCallService;
+        _alertService = alertService;
         _logger = logger;
     }
 
@@ -51,7 +58,7 @@ public class OnCallController : ControllerBase
     {
         try
         {
-            var operador = await _onCallService.AddOperatorAsync(request.UserId, GetUserId());
+            var operador = await _onCallService.AddOperatorAsync(request.UserId, GetUserId(), request.ColorCode, request.PhoneNumber);
             return CreatedAtAction(nameof(GetOperators), operador);
         }
         catch (UnauthorizedAccessException ex)
@@ -70,6 +77,50 @@ public class OnCallController : ControllerBase
         {
             _logger.LogError(ex, "Error al agregar operador");
             return StatusCode(500, new { message = "Error al agregar operador" });
+        }
+    }
+
+    /// <summary>
+    /// Actualiza el color de un operador de guardia
+    /// </summary>
+    [HttpPut("operators/{id}/color")]
+    public async Task<ActionResult> UpdateOperatorColor(int id, [FromBody] UpdateOperatorColorRequest request)
+    {
+        try
+        {
+            await _onCallService.UpdateOperatorColorAsync(id, request.ColorCode, GetUserId());
+            return Ok(new { message = "Color actualizado exitosamente" });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar color del operador");
+            return StatusCode(500, new { message = "Error al actualizar color" });
+        }
+    }
+
+    /// <summary>
+    /// Actualiza el teléfono de un operador
+    /// </summary>
+    [HttpPut("operators/{id}/phone")]
+    public async Task<ActionResult> UpdateOperatorPhone(int id, [FromBody] UpdateOperatorPhoneRequest request)
+    {
+        try
+        {
+            await _onCallService.UpdateOperatorPhoneAsync(id, request.PhoneNumber, GetUserId());
+            return Ok(new { message = "Teléfono actualizado exitosamente" });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar teléfono del operador");
+            return StatusCode(500, new { message = "Error al actualizar teléfono" });
         }
     }
 
@@ -223,6 +274,24 @@ public class OnCallController : ControllerBase
         {
             _logger.LogError(ex, "Error al actualizar guardia");
             return StatusCode(500, new { message = "Error al actualizar guardia" });
+        }
+    }
+
+    /// <summary>
+    /// Obtiene las guardias futuras de un usuario específico
+    /// </summary>
+    [HttpGet("schedule/user/{userId}")]
+    public async Task<ActionResult<List<OnCallScheduleDto>>> GetUserSchedules(string userId)
+    {
+        try
+        {
+            var schedules = await _onCallService.GetUserSchedulesAsync(userId);
+            return Ok(schedules);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener guardias del usuario {UserId}", userId);
+            return StatusCode(500, new { message = "Error al obtener guardias del usuario" });
         }
     }
 
@@ -438,12 +507,12 @@ public class OnCallController : ControllerBase
     /// Agrega un usuario como guardia de escalamiento (solo escalamiento)
     /// </summary>
     [HttpPost("escalation-users")]
-    public async Task<ActionResult> AddEscalationUser([FromBody] AddOperatorRequest request)
+    public async Task<ActionResult<EscalationUserDto>> AddEscalationUser([FromBody] AddEscalationUserRequest request)
     {
         try
         {
-            await _onCallService.AddEscalationUserAsync(request.UserId, GetUserId());
-            return Ok(new { message = "Usuario agregado como guardia de escalamiento" });
+            var result = await _onCallService.AddEscalationUserAsync(request.UserId, GetUserId(), request.ColorCode, request.PhoneNumber);
+            return Ok(result);
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -487,6 +556,32 @@ public class OnCallController : ControllerBase
     }
 
     /// <summary>
+    /// Actualiza un usuario de escalamiento (color y/o teléfono)
+    /// </summary>
+    [HttpPut("escalation-users/{id}")]
+    public async Task<ActionResult> UpdateEscalationUser(int id, [FromBody] UpdateEscalationUserRequest request)
+    {
+        try
+        {
+            await _onCallService.UpdateEscalationUserAsync(id, request, GetUserId());
+            return Ok(new { message = "Usuario de escalamiento actualizado" });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar usuario de escalamiento");
+            return StatusCode(500, new { message = "Error al actualizar usuario de escalamiento" });
+        }
+    }
+
+    /// <summary>
     /// Quita un usuario de guardia de escalamiento (solo escalamiento o SuperAdmin)
     /// </summary>
     [HttpDelete("escalation-users/{userId}")]
@@ -513,6 +608,545 @@ public class OnCallController : ControllerBase
         {
             _logger.LogError(ex, "Error al remover usuario de escalamiento");
             return StatusCode(500, new { message = "Error al remover usuario de escalamiento" });
+        }
+    }
+
+    // ==================== CONFIGURATION ====================
+
+    /// <summary>
+    /// Obtiene la configuración de guardias
+    /// </summary>
+    [HttpGet("config")]
+    public async Task<ActionResult<OnCallConfigDto>> GetConfig()
+    {
+        try
+        {
+            var config = await _onCallService.GetConfigAsync();
+            return Ok(config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener configuración");
+            return StatusCode(500, new { message = "Error al obtener configuración" });
+        }
+    }
+
+    /// <summary>
+    /// Actualiza la configuración de guardias
+    /// </summary>
+    [HttpPut("config")]
+    public async Task<ActionResult> UpdateConfig([FromBody] UpdateOnCallConfigRequest request)
+    {
+        try
+        {
+            await _onCallService.UpdateConfigAsync(request, GetUserId());
+            return Ok(new { message = "Configuración actualizada exitosamente" });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar configuración");
+            return StatusCode(500, new { message = "Error al actualizar configuración" });
+        }
+    }
+
+    // ==================== HOLIDAYS ====================
+
+    /// <summary>
+    /// Obtiene la lista de feriados
+    /// </summary>
+    [HttpGet("holidays")]
+    public async Task<ActionResult<List<OnCallHolidayDto>>> GetHolidays()
+    {
+        try
+        {
+            var holidays = await _onCallService.GetHolidaysAsync();
+            return Ok(holidays);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener feriados");
+            return StatusCode(500, new { message = "Error al obtener feriados" });
+        }
+    }
+
+    /// <summary>
+    /// Crea un nuevo feriado
+    /// </summary>
+    [HttpPost("holidays")]
+    public async Task<ActionResult<OnCallHolidayDto>> CreateHoliday([FromBody] CreateHolidayRequest request)
+    {
+        try
+        {
+            var holiday = await _onCallService.CreateHolidayAsync(request, GetUserId());
+            return CreatedAtAction(nameof(GetHolidays), holiday);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al crear feriado");
+            return StatusCode(500, new { message = "Error al crear feriado" });
+        }
+    }
+
+    /// <summary>
+    /// Actualiza un feriado existente
+    /// </summary>
+    [HttpPut("holidays/{id}")]
+    public async Task<ActionResult> UpdateHoliday(int id, [FromBody] UpdateHolidayRequest request)
+    {
+        try
+        {
+            await _onCallService.UpdateHolidayAsync(id, request, GetUserId());
+            return Ok(new { message = "Feriado actualizado exitosamente" });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar feriado");
+            return StatusCode(500, new { message = "Error al actualizar feriado" });
+        }
+    }
+
+    /// <summary>
+    /// Elimina un feriado
+    /// </summary>
+    [HttpDelete("holidays/{id}")]
+    public async Task<ActionResult> DeleteHoliday(int id)
+    {
+        try
+        {
+            await _onCallService.DeleteHolidayAsync(id, GetUserId());
+            return Ok(new { message = "Feriado eliminado exitosamente" });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar feriado");
+            return StatusCode(500, new { message = "Error al eliminar feriado" });
+        }
+    }
+
+    // ==================== DAY OVERRIDES (Coberturas por día) ====================
+
+    /// <summary>
+    /// Obtiene las coberturas de días para un rango de fechas
+    /// </summary>
+    [HttpGet("day-overrides")]
+    public async Task<ActionResult<List<OnCallDayOverrideDto>>> GetDayOverrides(
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null)
+    {
+        try
+        {
+            var start = startDate ?? DateTime.Today.AddMonths(-1);
+            var end = endDate ?? DateTime.Today.AddMonths(12);
+            
+            var overrides = await _onCallService.GetDayOverridesAsync(start, end);
+            return Ok(overrides);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener coberturas de días");
+            return StatusCode(500, new { message = "Error al obtener coberturas" });
+        }
+    }
+
+    /// <summary>
+    /// Crea una cobertura para un día específico (solo Team Escalamiento)
+    /// </summary>
+    [HttpPost("day-overrides")]
+    public async Task<ActionResult<OnCallDayOverrideDto>> CreateDayOverride([FromBody] CreateDayOverrideRequest request)
+    {
+        try
+        {
+            var result = await _onCallService.CreateDayOverrideAsync(request, GetUserId());
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al crear cobertura de día");
+            return StatusCode(500, new { message = "Error al crear cobertura" });
+        }
+    }
+
+    /// <summary>
+    /// Elimina/desactiva una cobertura de día específico (solo Team Escalamiento)
+    /// </summary>
+    [HttpDelete("day-overrides/{id}")]
+    public async Task<ActionResult> DeleteDayOverride(int id)
+    {
+        try
+        {
+            await _onCallService.DeleteDayOverrideAsync(id, GetUserId());
+            return Ok(new { message = "Cobertura eliminada exitosamente" });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar cobertura de día");
+            return StatusCode(500, new { message = "Error al eliminar cobertura" });
+        }
+    }
+
+    // ==================== EMAIL TEMPLATES ====================
+
+    /// <summary>
+    /// Obtiene todos los templates de email
+    /// </summary>
+    [HttpGet("email-templates")]
+    public async Task<ActionResult<List<OnCallEmailTemplateDto>>> GetEmailTemplates()
+    {
+        try
+        {
+            var templates = await _onCallService.GetEmailTemplatesAsync();
+            return Ok(templates);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener templates de email");
+            return StatusCode(500, new { message = "Error al obtener templates" });
+        }
+    }
+
+    /// <summary>
+    /// Obtiene un template de email por ID
+    /// </summary>
+    [HttpGet("email-templates/{id}")]
+    public async Task<ActionResult<OnCallEmailTemplateDto>> GetEmailTemplate(int id)
+    {
+        try
+        {
+            var template = await _onCallService.GetEmailTemplateAsync(id);
+            if (template == null)
+                return NotFound(new { message = "Template no encontrado" });
+            return Ok(template);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener template de email");
+            return StatusCode(500, new { message = "Error al obtener template" });
+        }
+    }
+
+    /// <summary>
+    /// Obtiene información de placeholders disponibles para cada tipo de template
+    /// Hay 3 templates: Calendario Generado, Notificación Semanal (miércoles), Aviso Previo (martes)
+    /// </summary>
+    [HttpGet("email-templates/placeholders")]
+    public ActionResult<List<EmailTemplatePlaceholderInfo>> GetPlaceholderInfo()
+    {
+        // Placeholders comunes disponibles en todos los templates de guardia
+        var guardiaPlaceholders = new List<PlaceholderDto>
+        {
+            // Operador que ENTRA de guardia
+            new PlaceholderDto { Key = "{{Tecnico}}", Description = "Nombre del técnico/operador de guardia", Example = "Quiroga Javier" },
+            new PlaceholderDto { Key = "{{Movil}}", Description = "Teléfono móvil del operador", Example = "11 2392-7579" },
+            new PlaceholderDto { Key = "{{Inicio}}", Description = "Fecha y hora de inicio de la guardia", Example = "27/08/2025 19:00" },
+            new PlaceholderDto { Key = "{{Fin}}", Description = "Fecha y hora de fin de la guardia", Example = "03/09/2025 07:00" },
+            
+            // Team Escalamiento como tabla HTML
+            new PlaceholderDto { Key = "{{TablaEscalamiento}}", Description = "Tabla HTML con contactos de escalamiento", Example = "<table>...</table>" },
+            new PlaceholderDto { Key = "{{TeamEscalamiento}}", Description = "Lista de nombres del team de escalamiento", Example = "Pablo Morixe, Pablo Rodriguez, Rodrigo Tissera" },
+        };
+
+        var placeholders = new List<EmailTemplatePlaceholderInfo>
+        {
+            new EmailTemplatePlaceholderInfo
+            {
+                AlertType = "ScheduleGenerated",
+                AlertTypeName = "Calendario Generado",
+                Placeholders = new List<PlaceholderDto>
+                {
+                    new PlaceholderDto { Key = "{{FechaInicio}}", Description = "Fecha de inicio del calendario generado", Example = "Miércoles 17 de diciembre de 2025" },
+                    new PlaceholderDto { Key = "{{FechaFin}}", Description = "Fecha de fin del calendario generado", Example = "Miércoles 16 de diciembre de 2026" },
+                    new PlaceholderDto { Key = "{{Semanas}}", Description = "Número de semanas generadas", Example = "52" },
+                    new PlaceholderDto { Key = "{{PrimerOperador}}", Description = "Nombre del primer operador en la rotación", Example = "Juan Pérez" },
+                    new PlaceholderDto { Key = "{{PrimerOperadorTelefono}}", Description = "Teléfono del primer operador", Example = "11-1234-5678" },
+                    new PlaceholderDto { Key = "{{ResumenCalendario}}", Description = "Resumen de las primeras semanas", Example = "• 17/12 - 24/12: Juan Pérez\n• 24/12 - 31/12: Ana Silva" },
+                    new PlaceholderDto { Key = "{{LinkPlanificador}}", Description = "Link al planificador de guardias", Example = "http://app.ejemplo.com/oncall/schedule" },
+                }
+            },
+            new EmailTemplatePlaceholderInfo
+            {
+                AlertType = "WeeklyNotification",
+                AlertTypeName = "Notificación Semanal (Miércoles 12:00)",
+                Placeholders = guardiaPlaceholders.ToList()
+            },
+            new EmailTemplatePlaceholderInfo
+            {
+                AlertType = "PreWeekNotification",
+                AlertTypeName = "Aviso Previo (Martes 16:00)",
+                Placeholders = guardiaPlaceholders.ToList()
+            }
+        };
+        
+        return Ok(placeholders);
+    }
+
+    /// <summary>
+    /// Crea un nuevo template de email
+    /// </summary>
+    [HttpPost("email-templates")]
+    public async Task<ActionResult<OnCallEmailTemplateDto>> CreateEmailTemplate([FromBody] CreateEmailTemplateRequest request)
+    {
+        try
+        {
+            var template = await _onCallService.CreateEmailTemplateAsync(request, GetUserId());
+            return Ok(template);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al crear template de email");
+            return StatusCode(500, new { message = "Error al crear template" });
+        }
+    }
+
+    /// <summary>
+    /// Actualiza un template de email existente
+    /// </summary>
+    [HttpPut("email-templates/{id}")]
+    public async Task<ActionResult<OnCallEmailTemplateDto>> UpdateEmailTemplate(int id, [FromBody] UpdateEmailTemplateRequest request)
+    {
+        try
+        {
+            var template = await _onCallService.UpdateEmailTemplateAsync(id, request, GetUserId());
+            return Ok(template);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar template de email");
+            return StatusCode(500, new { message = "Error al actualizar template" });
+        }
+    }
+
+    /// <summary>
+    /// Elimina un template de email (no se pueden eliminar templates por defecto)
+    /// </summary>
+    [HttpDelete("email-templates/{id}")]
+    public async Task<ActionResult> DeleteEmailTemplate(int id)
+    {
+        try
+        {
+            await _onCallService.DeleteEmailTemplateAsync(id);
+            return Ok(new { message = "Template eliminado exitosamente" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar template de email");
+            return StatusCode(500, new { message = "Error al eliminar template" });
+        }
+    }
+
+    // ==================== SCHEDULE BATCHES (APROBACIÓN) ====================
+
+    /// <summary>
+    /// Obtiene todos los lotes de generación de calendario
+    /// </summary>
+    [HttpGet("batches")]
+    public async Task<ActionResult<List<OnCallScheduleBatchDto>>> GetScheduleBatches()
+    {
+        try
+        {
+            var batches = await _onCallService.GetScheduleBatchesAsync();
+            return Ok(batches);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener lotes de calendario");
+            return StatusCode(500, new { message = "Error al obtener lotes" });
+        }
+    }
+
+    /// <summary>
+    /// Obtiene los lotes pendientes de aprobación
+    /// </summary>
+    [HttpGet("batches/pending")]
+    public async Task<ActionResult<List<OnCallScheduleBatchDto>>> GetPendingBatches()
+    {
+        try
+        {
+            var batches = await _onCallService.GetPendingBatchesAsync();
+            return Ok(batches);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener lotes pendientes");
+            return StatusCode(500, new { message = "Error al obtener lotes pendientes" });
+        }
+    }
+
+    /// <summary>
+    /// Aprueba un lote de calendario
+    /// </summary>
+    [HttpPost("batches/{id}/approve")]
+    public async Task<ActionResult> ApproveScheduleBatch(int id)
+    {
+        try
+        {
+            await _onCallService.ApproveScheduleBatchAsync(id, GetUserId());
+            return Ok(new { message = "Calendario aprobado exitosamente" });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al aprobar lote de calendario");
+            return StatusCode(500, new { message = "Error al aprobar calendario" });
+        }
+    }
+
+    /// <summary>
+    /// Rechaza un lote de calendario
+    /// </summary>
+    [HttpPost("batches/{id}/reject")]
+    public async Task<ActionResult> RejectScheduleBatch(int id, [FromBody] RejectScheduleBatchRequest request)
+    {
+        try
+        {
+            await _onCallService.RejectScheduleBatchAsync(id, GetUserId(), request.Reason);
+            return Ok(new { message = "Calendario rechazado" });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al rechazar lote de calendario");
+            return StatusCode(500, new { message = "Error al rechazar calendario" });
+        }
+    }
+
+    // ==================== NOTIFICACIONES PROGRAMADAS ====================
+
+    /// <summary>
+    /// Envía manualmente la notificación semanal de guardias (normalmente se envía miércoles 12:00)
+    /// </summary>
+    [HttpPost("notifications/weekly/send")]
+    public async Task<ActionResult> SendWeeklyNotification()
+    {
+        try
+        {
+            await _alertService.SendWeeklyNotificationAsync();
+            return Ok(new { message = "Notificación semanal enviada correctamente" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar notificación semanal");
+            return StatusCode(500, new { message = $"Error al enviar notificación: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Envía manualmente el aviso previo de guardias (normalmente se envía martes 16:00)
+    /// </summary>
+    [HttpPost("notifications/preweek/send")]
+    public async Task<ActionResult> SendPreWeekNotification()
+    {
+        try
+        {
+            await _alertService.SendPreWeekNotificationAsync();
+            return Ok(new { message = "Aviso previo enviado correctamente" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar aviso previo");
+            return StatusCode(500, new { message = $"Error al enviar aviso: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Envía un email de prueba del template especificado a una dirección de email específica
+    /// </summary>
+    [HttpPost("notifications/test/{templateId}")]
+    public async Task<ActionResult> SendTestEmail(int templateId, [FromBody] SendTestEmailRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.TestEmail))
+                return BadRequest(new { message = "Debe especificar un email de destino" });
+
+            await _alertService.SendTestEmailAsync(templateId, request.TestEmail);
+            return Ok(new { message = $"Email de prueba enviado a {request.TestEmail}" });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar email de prueba");
+            return StatusCode(500, new { message = $"Error al enviar email de prueba: {ex.Message}" });
         }
     }
 }

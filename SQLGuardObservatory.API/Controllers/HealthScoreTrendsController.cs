@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using System.Data;
 using System.Data.SqlClient;
 
@@ -9,6 +10,7 @@ namespace SQLGuardObservatory.API.Controllers
     /// Controlador para gráficos de tendencias de Health Score
     /// </summary>
     [Authorize]
+    [ViewPermission("HealthScore")]
     [ApiController]
     [Route("api/[controller]")]
     public class HealthScoreTrendsController : ControllerBase
@@ -27,6 +29,7 @@ namespace SQLGuardObservatory.API.Controllers
         /// <summary>
         /// Obtiene tendencia de HealthScore para una instancia
         /// </summary>
+        [HttpGet("{instanceName}")]
         [HttpGet("healthscore/{instanceName}")]
         public async Task<IActionResult> GetHealthScoreTrend(
             string instanceName,
@@ -34,7 +37,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -55,9 +59,9 @@ namespace SQLGuardObservatory.API.Controllers
                         LogChainScore,
                         DatabaseStatesScore,
                         AutogrowthScore
-                    FROM SQLNova.dbo.InstanceHealth_Score
+                    FROM dbo.InstanceHealth_Score
                     WHERE InstanceName = @InstanceName
-                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
+                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETDATE())
                     ORDER BY CollectedAtUtc ASC";
 
                 using var command = new SqlCommand(query, connection);
@@ -119,7 +123,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -128,9 +133,9 @@ namespace SQLGuardObservatory.API.Controllers
                         CollectedAtUtc,
                         ConnectSuccess,
                         ConnectLatencyMs
-                    FROM SQLNova.dbo.InstanceHealth_Critical_Availability
+                    FROM dbo.InstanceHealth_Critical_Availability
                     WHERE InstanceName = @InstanceName
-                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
+                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETDATE())
                     ORDER BY CollectedAtUtc ASC";
 
                 using var command = new SqlCommand(query, connection);
@@ -176,7 +181,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -188,9 +194,9 @@ namespace SQLGuardObservatory.API.Controllers
                         LogDiskAvgFreePct,
                         TempDBDiskFreePct,
                         VolumesJson
-                    FROM SQLNova.dbo.InstanceHealth_Discos
+                    FROM dbo.InstanceHealth_Discos
                     WHERE InstanceName = @InstanceName
-                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
+                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETDATE())
                     ORDER BY CollectedAtUtc ASC";
 
                 using var command = new SqlCommand(query, connection);
@@ -239,7 +245,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -250,9 +257,9 @@ namespace SQLGuardObservatory.API.Controllers
                         LastLogBackup,
                         FullBackupBreached,
                         LogBackupBreached
-                    FROM SQLNova.dbo.InstanceHealth_Backups
+                    FROM dbo.InstanceHealth_Backups
                     WHERE InstanceName = @InstanceName
-                      AND CollectedAtUtc >= DATEADD(DAY, -@Days, GETUTCDATE())
+                      AND CollectedAtUtc >= DATEADD(DAY, -@Days, GETDATE())
                     ORDER BY CollectedAtUtc ASC";
 
                 using var command = new SqlCommand(query, connection);
@@ -300,7 +307,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -310,9 +318,9 @@ namespace SQLGuardObservatory.API.Controllers
                         SQLProcessUtilization,
                         SystemIdleProcess,
                         OtherProcessUtilization
-                    FROM SQLNova.dbo.InstanceHealth_CPU
+                    FROM dbo.InstanceHealth_CPU
                     WHERE InstanceName = @InstanceName
-                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
+                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETDATE())
                     ORDER BY CollectedAtUtc ASC";
 
                 using var command = new SqlCommand(query, connection);
@@ -363,7 +371,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -375,9 +384,9 @@ namespace SQLGuardObservatory.API.Controllers
                         BufferCacheHitRatio,
                         PageLifeExpectancy,
                         MemoryGrantsPending
-                    FROM SQLNova.dbo.InstanceHealth_Memoria
+                    FROM dbo.InstanceHealth_Memoria
                     WHERE InstanceName = @InstanceName
-                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
+                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETDATE())
                     ORDER BY CollectedAtUtc ASC";
 
                 using var command = new SqlCommand(query, connection);
@@ -429,7 +438,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -440,10 +450,10 @@ namespace SQLGuardObservatory.API.Controllers
                         AvgWriteLatencyMs,
                         LogFileAvgWriteMs,
                         DataFileAvgReadMs,
-                        IOByVolumeJson
-                    FROM SQLNova.dbo.InstanceHealth_IO
+                        IODetails
+                    FROM dbo.InstanceHealth_IO
                     WHERE InstanceName = @InstanceName
-                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
+                      AND CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETDATE())
                     ORDER BY CollectedAtUtc ASC";
 
                 using var command = new SqlCommand(query, connection);
@@ -462,7 +472,7 @@ namespace SQLGuardObservatory.API.Controllers
                         avgWriteLatency = reader["AvgWriteLatencyMs"] != DBNull.Value ? Convert.ToDecimal(reader["AvgWriteLatencyMs"]) : 0m,
                         logFileAvgWrite = reader["LogFileAvgWriteMs"] != DBNull.Value ? Convert.ToDecimal(reader["LogFileAvgWriteMs"]) : 0m,
                         dataFileAvgRead = reader["DataFileAvgReadMs"] != DBNull.Value ? Convert.ToDecimal(reader["DataFileAvgReadMs"]) : 0m,
-                        ioByVolumeJson = reader["IOByVolumeJson"] != DBNull.Value ? reader["IOByVolumeJson"].ToString() : null
+                        ioByVolumeJson = reader["IODetails"] != DBNull.Value ? reader["IODetails"].ToString() : null
                     });
                 }
 
@@ -490,7 +500,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("SQLNova");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -502,8 +513,8 @@ namespace SQLGuardObservatory.API.Controllers
                         SUM(CASE WHEN HealthScore >= 90 THEN 1 ELSE 0 END) AS HealthyCount,
                         SUM(CASE WHEN HealthScore >= 70 AND HealthScore < 90 THEN 1 ELSE 0 END) AS WarningCount,
                         SUM(CASE WHEN HealthScore < 70 THEN 1 ELSE 0 END) AS CriticalCount
-                    FROM SQLNova.dbo.InstanceHealth_Score
-                    WHERE CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETUTCDATE())
+                    FROM dbo.InstanceHealth_Score
+                    WHERE CollectedAtUtc >= DATEADD(HOUR, -@Hours, GETDATE())
                     GROUP BY DATEADD(MINUTE, DATEDIFF(MINUTE, 0, CollectedAtUtc) / 15 * 15, 0)
                     ORDER BY TimeSlot ASC";
 

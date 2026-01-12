@@ -37,7 +37,7 @@ El script SQL usaba columnas incorrectas para la tabla `RolePermissions`. Asumí
 ```
 
 Además:
-- Base de datos: `SQLGuardObservatoryAuth` (NO `ObservatoryAuthDb`)
+- Base de datos: `AppSQLNova` (NO `ObservatoryAuthDb`)
 - La tabla no tiene FK, almacena el nombre del rol como string
 
 ## ✅ Solución Aplicada
@@ -56,14 +56,14 @@ FROM [dbo].[AspNetRoles] r
 WHERE r.Name = 'Admin'
 
 -- DESPUÉS (✅)
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 INSERT INTO [dbo].[RolePermissions] ([Role], [ViewName], [Enabled], [CreatedAt])
 VALUES ('Admin', 'HealthScore', 1, GETUTCDATE())
 ```
 
 **Características del nuevo script**:
 - ✅ Usa columnas correctas: `Role`, `ViewName`, `Enabled`, `CreatedAt`
-- ✅ Base de datos correcta: `SQLGuardObservatoryAuth`
+- ✅ Base de datos correcta: `AppSQLNova`
 - ✅ Inserta directamente el nombre del rol (string)
 - ✅ Verifica duplicados antes de insertar
 - ✅ Agrega permisos para Admin, SuperAdmin y Reader
@@ -79,7 +79,7 @@ VALUES ('Admin', 'HealthScore', 1, GETUTCDATE())
 [string]$Database = "ObservatoryAuthDb"
 
 # DESPUÉS
-[string]$Database = "SQLGuardObservatoryAuth"
+[string]$Database = "AppSQLNova"
 ```
 
 ### 3. PermissionService Actualizado
@@ -131,7 +131,7 @@ Aplicando permisos de HealthScore
 ========================================
 
 Servidor: localhost
-Base de datos: SQLGuardObservatoryAuth
+Base de datos: AppSQLNova
 
 📄 Ejecutando script SQL...
 
@@ -157,7 +157,7 @@ SuperAdmin   HealthScore  1       2025-10-22 ...
 ### Opción 2: Ejecutar SQL Manualmente
 
 1. Abre SQL Server Management Studio
-2. Conecta a la instancia donde está `SQLGuardObservatoryAuth`
+2. Conecta a la instancia donde está `AppSQLNova`
 3. Abre `SQLGuardObservatory.API\SQL\AddHealthScorePermission.sql`
 4. Ejecuta (F5)
 
@@ -165,7 +165,7 @@ SuperAdmin   HealthScore  1       2025-10-22 ...
 
 ```powershell
 Invoke-Sqlcmd -ServerInstance "localhost" `
-              -Database "SQLGuardObservatoryAuth" `
+              -Database "AppSQLNova" `
               -InputFile "SQLGuardObservatory.API\SQL\AddHealthScorePermission.sql" `
               -TrustServerCertificate
 ```
@@ -175,7 +175,7 @@ Invoke-Sqlcmd -ServerInstance "localhost" `
 ### 1. Verificar en SQL
 
 ```sql
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 SELECT 
@@ -228,7 +228,7 @@ GO
 1. **Siempre revisar el modelo existente** antes de asumir el esquema
 2. La tabla `RolePermissions` usa **nombres de roles** (strings) en vez de FKs
 3. La columna es `Enabled` (bool), no `CanView`
-4. La base de datos es `SQLGuardObservatoryAuth`, NO `ObservatoryAuthDb`
+4. La base de datos es `AppSQLNova`, NO `ObservatoryAuthDb`
 5. Es importante agregar las nuevas vistas tanto en `PermissionService` como en `PermissionInitializer`
 
 ## ✅ Estado Final

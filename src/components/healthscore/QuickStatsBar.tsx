@@ -24,11 +24,11 @@ function StatBadge({ label, value, icon: Icon, colorClass, bgClass, isActive, on
     <button
       onClick={onClick}
       className={cn(
-        'flex items-center gap-2 px-3 py-2 rounded-lg transition-colors',
-        'border',
+        'flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200',
+        'border hover:-translate-y-0.5',
         isActive 
-          ? cn(bgClass, 'border-current') 
-          : 'bg-muted/50 border-transparent hover:bg-muted'
+          ? cn(bgClass, 'border-current shadow-sm') 
+          : 'bg-muted/30 border-border/30 hover:bg-muted/50 hover:border-border/50'
       )}
     >
       <Icon className={cn('h-4 w-4', isActive ? colorClass : 'text-muted-foreground')} />
@@ -58,52 +58,52 @@ export function QuickStatsBar({ stats, activeFilter, onFilterChange, className }
       value: stats.total,
       icon: Server,
       colorClass: 'text-foreground',
-      bgClass: 'bg-muted',
+      bgClass: 'bg-muted/50',
     },
     {
       key: 'Healthy',
       label: 'Healthy',
       value: stats.healthy,
       icon: CheckCircle2,
-      colorClass: 'text-green-600',
-      bgClass: 'bg-green-500/10',
+      colorClass: 'text-success',
+      bgClass: 'bg-success/10',
     },
     {
       key: 'Warning',
       label: 'Warning',
       value: stats.warning,
       icon: AlertTriangle,
-      colorClass: 'text-yellow-600',
-      bgClass: 'bg-yellow-500/10',
+      colorClass: 'text-warning',
+      bgClass: 'bg-warning/10',
     },
     {
       key: 'Risk',
       label: 'Risk',
       value: stats.risk,
       icon: AlertCircle,
-      colorClass: 'text-orange-600',
-      bgClass: 'bg-orange-500/10',
+      colorClass: 'text-warning',
+      bgClass: 'bg-warning/10',
     },
     {
       key: 'Critical',
       label: 'Critical',
       value: stats.critical,
       icon: XCircle,
-      colorClass: 'text-red-600',
-      bgClass: 'bg-red-500/10',
+      colorClass: 'text-destructive',
+      bgClass: 'bg-destructive/10',
     },
   ];
 
   const getAvgScoreColor = () => {
-    if (stats.avgScore >= 90) return 'text-green-600';
-    if (stats.avgScore >= 75) return 'text-yellow-600';
-    if (stats.avgScore >= 60) return 'text-orange-600';
-    return 'text-red-600';
+    if (stats.avgScore >= 90) return 'text-success';
+    if (stats.avgScore >= 75) return 'text-warning';
+    if (stats.avgScore >= 60) return 'text-warning';
+    return 'text-destructive';
   };
 
   return (
     <div className={cn(
-      'flex items-center gap-2 p-2 rounded-lg bg-muted/30 border flex-wrap',
+      'flex items-center gap-2 p-3 rounded-xl bg-muted/20 border border-border/30 flex-wrap',
       className
     )}>
       {/* Quick filter badges */}
@@ -121,10 +121,10 @@ export function QuickStatsBar({ stats, activeFilter, onFilterChange, className }
       ))}
 
       {/* Separator */}
-      <div className="hidden lg:block h-8 w-px bg-border mx-1" />
+      <div className="hidden lg:block h-8 w-px bg-border/50 mx-1" />
 
       {/* Average score */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30 border border-border/30">
         <TrendingUp className={cn('h-4 w-4', getAvgScoreColor())} />
         <div className="flex flex-col">
           <span className="text-[10px] text-muted-foreground">Promedio</span>

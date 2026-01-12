@@ -42,6 +42,12 @@ public class CollectorInstanceResult
     public string? Error { get; set; }
     public long DurationMs { get; set; }
     public Dictionary<string, object?> Metrics { get; set; } = new();
+    
+    /// <summary>
+    /// Objeto de métricas original (tipado) para post-procesamiento
+    /// Usado por collectors que necesitan sincronizar datos entre instancias (ej: AlwaysOn)
+    /// </summary>
+    public object? MetricsObject { get; set; }
 }
 
 /// <summary>

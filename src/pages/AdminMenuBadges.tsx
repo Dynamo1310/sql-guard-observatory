@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Sparkles, Save, RefreshCw } from 'lucide-react';
+import { Sparkles, Save, RefreshCw, Tag } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -138,10 +139,45 @@ export default function AdminMenuBadges() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">Cargando configuración...</div>
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-48" />
+            <Skeleton className="h-5 w-80" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-36" />
+          </div>
         </div>
+
+        {/* Stats skeleton */}
+        <div className="flex gap-4">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i} className="flex-1">
+              <CardContent className="pt-4">
+                <Skeleton className="h-8 w-12 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Content skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-32" />
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {[...Array(8)].map((_, i) => (
+                <Skeleton key={i} className="h-20" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -150,16 +186,16 @@ export default function AdminMenuBadges() {
   const activeCount = badges.filter(b => b.isNew).length;
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 space-y-4">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-            <Sparkles className="h-8 w-8 text-green-500" />
-            Indicadores de Menú
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Tag className="h-8 w-8" />
+            Etiquetas de Menú
           </h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">
-            Configura qué menús muestran el indicador "Nuevo" en el sidebar
+          <p className="text-muted-foreground">
+            Configura qué menús muestran etiquetas destacadas en el sidebar
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -170,11 +206,11 @@ export default function AdminMenuBadges() {
             Desactivar Todos
           </Button>
           <Button variant="outline" size="sm" onClick={loadBadges}>
-            <RefreshCw className="h-4 w-4 mr-1" />
-            Recargar
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Actualizar
           </Button>
           <Button onClick={handleSave} disabled={!hasChanges || saving}>
-            <Save className="h-4 w-4 mr-1" />
+            <Save className="h-4 w-4 mr-2" />
             {saving ? 'Guardando...' : 'Guardar Cambios'}
           </Button>
         </div>
@@ -184,19 +220,19 @@ export default function AdminMenuBadges() {
       <div className="flex gap-4">
         <Card className="flex-1">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-green-500">{activeCount}</div>
+            <div className="text-2xl font-bold text-foreground">{activeCount}</div>
             <div className="text-sm text-muted-foreground">Menús con badge activo</div>
           </CardContent>
         </Card>
         <Card className="flex-1">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold">{badges.length}</div>
+            <div className="text-2xl font-bold text-foreground">{badges.length}</div>
             <div className="text-sm text-muted-foreground">Total de menús</div>
           </CardContent>
         </Card>
         <Card className="flex-1">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-yellow-500">{changes.size}</div>
+            <div className="text-2xl font-bold text-foreground">{changes.size}</div>
             <div className="text-sm text-muted-foreground">Cambios pendientes</div>
           </CardContent>
         </Card>
@@ -213,7 +249,20 @@ export default function AdminMenuBadges() {
         }, {} as Record<string, MenuBadgeDto[]>);
 
         // Orden de categorías
-        const categoryOrder = ['Observabilidad', 'Parcheos', 'Guardias DBA', 'Operaciones', 'Seguridad', 'Administración', 'Otros'];
+        const categoryOrder = [
+          'Observabilidad',
+          'Observabilidad > Monitoreo',
+          'Observabilidad > Infraestructura',
+          'Observabilidad > Rendimiento',
+          'Observabilidad > Parcheos',
+          'Guardias DBA',
+          'Operaciones',
+          'Seguridad',
+          'Administración > Control de Acceso',
+          'Administración > Configuración',
+          'Administración > Monitoreo Sistema',
+          'Otros'
+        ];
         const sortedCategories = Object.keys(badgesByCategory).sort((a, b) => {
           const indexA = categoryOrder.indexOf(a);
           const indexB = categoryOrder.indexOf(b);
@@ -223,16 +272,9 @@ export default function AdminMenuBadges() {
           return indexA - indexB;
         });
 
-        const getCategoryColor = (category: string) => {
-          switch (category) {
-            case 'Observabilidad': return 'border-blue-500/50 bg-blue-500/5';
-            case 'Parcheos': return 'border-indigo-500/50 bg-indigo-500/5';
-            case 'Guardias DBA': return 'border-teal-500/50 bg-teal-500/5';
-            case 'Operaciones': return 'border-orange-500/50 bg-orange-500/5';
-            case 'Seguridad': return 'border-amber-500/50 bg-amber-500/5';
-            case 'Administración': return 'border-purple-500/50 bg-purple-500/5';
-            default: return 'border-gray-500/50 bg-gray-500/5';
-          }
+        const getCategoryColor = (_category: string) => {
+          // All categories use monochromatic styling
+          return 'border-border/50 bg-muted/20';
         };
 
         return sortedCategories.map((category) => (
@@ -256,7 +298,7 @@ export default function AdminMenuBadges() {
                       key={badge.menuKey} 
                       className={`relative p-3 rounded-lg border transition-all ${
                         isModified ? 'ring-2 ring-yellow-400 dark:ring-yellow-600' : ''
-                      } ${badge.isNew ? 'bg-green-500/5 border-green-500/30' : 'bg-muted/30 border-transparent'} ${
+                      } ${badge.isNew ? 'bg-success/5 border-success/30' : 'bg-muted/30 border-transparent'} ${
                         isMainMenu ? 'col-span-1 md:col-span-2 lg:col-span-1' : ''
                       }`}
                     >
@@ -275,7 +317,7 @@ export default function AdminMenuBadges() {
                         <button
                           onClick={() => handleToggle(badge.menuKey, badge.isNew)}
                           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${
-                            badge.isNew ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'
+                            badge.isNew ? 'bg-foreground' : 'bg-muted'
                           }`}
                         >
                           <span
@@ -334,7 +376,7 @@ export default function AdminMenuBadges() {
                       {/* Indicador de modificado */}
                       {isModified && (
                         <div className="absolute top-1 right-1">
-                          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                          <div className="w-2 h-2 rounded-full bg-warning animate-pulse" />
                         </div>
                       )}
                     </div>

@@ -31,6 +31,12 @@ public class OnCallActivationDto
     public string? Resolution { get; set; }
     public string? InstanceName { get; set; }
     
+    // Service Desk
+    public string? ServiceDeskUrl { get; set; }
+    
+    // Estado
+    public string Status { get; set; } = "Pending";
+    
     // Metadata
     public string CreatedByDisplayName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
@@ -48,6 +54,8 @@ public class CreateActivationRequest
     public string? Description { get; set; }
     public string? Resolution { get; set; }
     public string? InstanceName { get; set; }
+    public string? ServiceDeskUrl { get; set; }
+    public string Status { get; set; } = "Pending";
 }
 
 public class UpdateActivationRequest
@@ -60,6 +68,8 @@ public class UpdateActivationRequest
     public string? Description { get; set; }
     public string? Resolution { get; set; }
     public string? InstanceName { get; set; }
+    public string? ServiceDeskUrl { get; set; }
+    public string? Status { get; set; }
 }
 
 public class ActivationSummaryDto
@@ -106,6 +116,34 @@ public static class ActivationSeverities
 
     public static readonly string[] All = { Low, Medium, High, Critical };
 }
+
+// ==================== ACTIVATION CATEGORY DTOs ====================
+
+public class ActivationCategoryDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Icon { get; set; }
+    public bool IsDefault { get; set; }
+    public bool IsActive { get; set; }
+    public int Order { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string? CreatedByDisplayName { get; set; }
+}
+
+public class CreateActivationCategoryRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Icon { get; set; }
+}
+
+public class UpdateActivationCategoryRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Icon { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
 
 
 

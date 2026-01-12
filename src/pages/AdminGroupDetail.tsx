@@ -4,6 +4,7 @@ import {
   ArrowLeft, 
   Users, 
   Shield, 
+  ShieldCheck,
   FolderSync, 
   UserPlus, 
   Trash2,
@@ -14,7 +15,10 @@ import {
   Check,
   X
 } from 'lucide-react';
+
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -22,6 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
+import { UserAvatar } from '@/components/UserAvatar';
 import {
   Dialog,
   DialogContent,
@@ -41,7 +46,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { groupsApi, permissionsApi, AvailableViewsDto } from '@/services/api';
+import { groupsApi, permissionsApi, adminAssignmentsApi, AvailableViewsDto, GroupAdminsDto, AvailableAdminDto } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import type { 
   SecurityGroupDetail, 
   GroupMember, 
@@ -53,6 +59,7 @@ import type {
 export default function AdminGroupDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { isSuperAdmin, isReader, canManageGroup } = useAuth();
   const groupId = parseInt(id || '0');
 
   const [group, setGroup] = useState<SecurityGroupDetail | null>(null);
@@ -84,6 +91,19 @@ export default function AdminGroupDetail() {
   const [syncingAD, setSyncingAD] = useState(false);
   const [savingADConfig, setSavingADConfig] = useState(false);
   const [adSyncResult, setAdSyncResult] = useState<ADSyncResult | null>(null);
+  
+  // Estado para Administradores (solo SuperAdmin)
+  const [groupAdmins, setGroupAdmins] = useState<GroupAdminsDto | null>(null);
+  const [availableAdmins, setAvailableAdmins] = useState<AvailableAdminDto[]>([]);
+  const [showAddAdminDialog, setShowAddAdminDialog] = useState(false);
+  const [selectedAdmins, setSelectedAdmins] = useState<Set<string>>(new Set());
+  const [loadingAdmins, setLoadingAdmins] = useState(false);
+  const [addingAdmins, setAddingAdmins] = useState(false);
+  const [adminToRemove, setAdminToRemove] = useState<string | null>(null);
+  const [showRemoveAdminDialog, setShowRemoveAdminDialog] = useState(false);
+  
+  // Verificar si el usuario actual puede editar este grupo
+  const canEdit = canManageGroup(groupId) && !isReader;
 
   useEffect(() => {
     if (groupId > 0) {
@@ -109,11 +129,100 @@ export default function AdminGroupDetail() {
           syncIntervalHours: groupData.adSyncConfig.syncIntervalHours,
         });
       }
+      
+      // Cargar administradores si es SuperAdmin
+      if (isSuperAdmin) {
+        loadGroupAdmins();
+      }
     } catch (err: any) {
       toast.error('Error al cargar grupo: ' + err.message);
       navigate('/admin/groups');
     } finally {
       setLoading(false);
+    }
+  };
+  
+  // ==================== ADMINISTRADORES (Solo SuperAdmin) ====================
+  
+  const loadGroupAdmins = async () => {
+    try {
+      const admins = await adminAssignmentsApi.getGroupAdmins(groupId);
+      setGroupAdmins(admins);
+    } catch (err: any) {
+      console.error('Error al cargar administradores:', err);
+    }
+  };
+  
+  const loadAvailableAdmins = async () => {
+    try {
+      setLoadingAdmins(true);
+      const admins = await adminAssignmentsApi.getAvailableAdminsForGroup(groupId);
+      setAvailableAdmins(admins);
+    } catch (err: any) {
+      toast.error('Error al cargar administradores disponibles: ' + err.message);
+    } finally {
+      setLoadingAdmins(false);
+    }
+  };
+  
+  const handleAddAdminClick = () => {
+    loadAvailableAdmins();
+    setSelectedAdmins(new Set());
+    setShowAddAdminDialog(true);
+  };
+  
+  const handleAddAdmins = async () => {
+    if (selectedAdmins.size === 0) return;
+    
+    try {
+      setAddingAdmins(true);
+      
+      // Obtener administradores actuales
+      const currentAdmins = groupAdmins?.admins || [];
+      const newAdmins = [...currentAdmins.map(a => ({
+        userId: a.userId,
+        canEdit: a.canEdit,
+        canDelete: a.canDelete,
+        canManageMembers: a.canManageMembers,
+        canManagePermissions: a.canManagePermissions,
+      }))];
+      
+      // Agregar nuevos administradores
+      for (const userId of selectedAdmins) {
+        if (!newAdmins.find(a => a.userId === userId)) {
+          newAdmins.push({
+            userId,
+            canEdit: true,
+            canDelete: false,
+            canManageMembers: true,
+            canManagePermissions: true,
+          });
+        }
+      }
+      
+      await adminAssignmentsApi.updateGroupAdmins(groupId, newAdmins);
+      toast.success('Administradores agregados exitosamente');
+      setShowAddAdminDialog(false);
+      setSelectedAdmins(new Set());
+      loadGroupAdmins();
+    } catch (err: any) {
+      toast.error('Error al agregar administradores: ' + err.message);
+    } finally {
+      setAddingAdmins(false);
+    }
+  };
+  
+  const handleRemoveAdmin = async () => {
+    if (!adminToRemove) return;
+    
+    try {
+      await adminAssignmentsApi.removeGroupFromUser(adminToRemove, groupId);
+      toast.success('Administrador removido exitosamente');
+      setShowRemoveAdminDialog(false);
+      setAdminToRemove(null);
+      loadGroupAdmins();
+    } catch (err: any) {
+      toast.error('Error al remover administrador: ' + err.message);
     }
   };
 
@@ -281,10 +390,39 @@ export default function AdminGroupDetail() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-20" />
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-4 w-4 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-7 w-48" />
+                <Skeleton className="h-4 w-64" />
+              </div>
+            </div>
+          </div>
+          <Skeleton className="h-6 w-16" />
         </div>
+
+        {/* Tabs skeleton */}
+        <Skeleton className="h-10 w-96" />
+
+        {/* Content skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-72" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[...Array(6)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -294,7 +432,7 @@ export default function AdminGroupDetail() {
   }
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 space-y-4">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
@@ -304,18 +442,27 @@ export default function AdminGroupDetail() {
           </Button>
           <div className="flex items-center gap-3">
             <div 
-              className="w-4 h-4 rounded-full" 
+              className="w-5 h-5 rounded-full" 
               style={{ backgroundColor: group.color || '#3b82f6' }}
             />
             <div>
-              <h1 className="text-2xl font-bold">{group.name}</h1>
-              <p className="text-sm text-muted-foreground">{group.description || 'Sin descripción'}</p>
+              <h1 className="text-3xl font-bold tracking-tight">{group.name}</h1>
+              <p className="text-muted-foreground">{group.description || 'Sin descripción'}</p>
             </div>
           </div>
         </div>
-        <Badge variant={group.isActive ? 'default' : 'secondary'}>
-          {group.isActive ? 'Activo' : 'Inactivo'}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => loadGroupData()}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Actualizar
+          </Button>
+          <Badge variant={group.isActive ? 'default' : 'secondary'}>
+            {group.isActive ? 'Activo' : 'Inactivo'}
+          </Badge>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -333,6 +480,12 @@ export default function AdminGroupDetail() {
             <FolderSync className="h-4 w-4" />
             Sincronización AD
           </TabsTrigger>
+          {isSuperAdmin && (
+            <TabsTrigger value="admins" className="gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Administradores ({groupAdmins?.admins.length || 0})
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Tab: Miembros */}
@@ -364,7 +517,17 @@ export default function AdminGroupDetail() {
                 <TableBody>
                   {group.members.map((member) => (
                     <TableRow key={member.userId}>
-                      <TableCell className="font-mono text-sm">{member.domainUser}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        <div className="flex items-center gap-2">
+                          <UserAvatar
+                            photoUrl={member.profilePhotoUrl}
+                            displayName={member.displayName}
+                            domainUser={member.domainUser}
+                            size="xs"
+                          />
+                          {member.domainUser}
+                        </div>
+                      </TableCell>
                       <TableCell>{member.displayName}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{member.role || 'Reader'}</Badge>
@@ -426,48 +589,132 @@ export default function AdminGroupDetail() {
               )}
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Vista</TableHead>
-                    <TableHead>Descripción</TableHead>
-                    <TableHead className="text-center">Acceso</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {availableViews?.views.map((view) => {
-                    const hasPermission = getPermissionValue(view.viewName);
-                    const isModified = permissionChanges.has(view.viewName);
-                    
-                    return (
-                      <TableRow 
-                        key={view.viewName}
-                        className={isModified ? 'bg-yellow-50 dark:bg-yellow-950/20' : ''}
-                      >
-                        <TableCell className="font-medium">{view.displayName}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {view.description}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <button
-                            onClick={() => handleTogglePermission(view.viewName)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                              hasPermission ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'
-                            }`}
-                            disabled={saving}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                hasPermission ? 'translate-x-6' : 'translate-x-1'
-                              }`}
-                            />
-                          </button>
-                        </TableCell>
+              {(() => {
+                // Agrupar vistas por categoría
+                const viewsByCategory = availableViews?.views.reduce((acc, view) => {
+                  const category = view.category || 'Sin Categoría';
+                  if (!acc[category]) {
+                    acc[category] = [];
+                  }
+                  acc[category].push(view);
+                  return acc;
+                }, {} as Record<string, typeof availableViews.views>) || {};
+
+                // Orden de las categorías
+                const categoryOrder = [
+                  'Observabilidad',
+                  'Observabilidad > Monitoreo',
+                  'Observabilidad > Infraestructura',
+                  'Observabilidad > Rendimiento',
+                  'Observabilidad > Parcheos',
+                  'Inventario',
+                  'Guardias DBA',
+                  'Operaciones',
+                  'Seguridad',
+                  'Administración > Control de Acceso',
+                  'Administración > Configuración',
+                  'Administración > Monitoreo Sistema',
+                ];
+                const sortedCategories = Object.keys(viewsByCategory).sort((a, b) => {
+                  const indexA = categoryOrder.indexOf(a);
+                  const indexB = categoryOrder.indexOf(b);
+                  if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+                  if (indexA === -1) return 1;
+                  if (indexB === -1) return -1;
+                  return indexA - indexB;
+                });
+
+                const getCategoryColor = (_category: string) => {
+                  // Estilo monocromático para todas las categorías
+                  return 'bg-muted text-foreground border-border/50';
+                };
+
+                // Contar permisos habilitados por categoría
+                const getEnabledCount = (views: typeof availableViews.views) => {
+                  return views.filter(v => getPermissionValue(v.viewName)).length;
+                };
+
+                return (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Vista</TableHead>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead className="text-center">Acceso</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedCategories.map((category) => (
+                        <>
+                          {/* Encabezado de categoría */}
+                          <TableRow key={`category-${category}`} className="bg-muted/50 hover:bg-muted/50">
+                            <TableCell colSpan={2} className="py-2">
+                              <Badge variant="outline" className={`${getCategoryColor(category)} font-semibold`}>
+                                {category}
+                              </Badge>
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                ({getEnabledCount(viewsByCategory[category])}/{viewsByCategory[category].length} habilitados)
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-center py-2">
+                              <button
+                                onClick={() => {
+                                  // Toggle all permissions in category
+                                  const allEnabled = viewsByCategory[category].every(v => getPermissionValue(v.viewName));
+                                  viewsByCategory[category].forEach(view => {
+                                    const currentValue = getPermissionValue(view.viewName);
+                                    if (allEnabled ? currentValue : !currentValue) {
+                                      handleTogglePermission(view.viewName);
+                                    }
+                                  });
+                                }}
+                                className="text-xs text-primary hover:underline"
+                                disabled={saving}
+                              >
+                                {viewsByCategory[category].every(v => getPermissionValue(v.viewName)) 
+                                  ? 'Desmarcar todos' 
+                                  : 'Marcar todos'}
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                          {/* Vistas de la categoría */}
+                          {viewsByCategory[category].map((view) => {
+                            const hasPermission = getPermissionValue(view.viewName);
+                            const isModified = permissionChanges.has(view.viewName);
+                            
+                            return (
+                              <TableRow 
+                                key={view.viewName}
+                                className={isModified ? 'bg-warning/5 dark:bg-warning/10' : ''}
+                              >
+                                <TableCell className="font-medium pl-6">{view.displayName}</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {view.description}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <button
+                                    onClick={() => handleTogglePermission(view.viewName)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                      hasPermission ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'
+                                    }`}
+                                    disabled={saving}
+                                  >
+                                    <span
+                                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                        hasPermission ? 'translate-x-6' : 'translate-x-1'
+                                      }`}
+                                    />
+                                  </button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </>
+                      ))}
+                    </TableBody>
+                  </Table>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -587,13 +834,13 @@ export default function AdminGroupDetail() {
               {/* Resultado de sincronización reciente */}
               {adSyncResult && (
                 <div className={`border rounded-lg p-4 max-w-md ${
-                  adSyncResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                  adSyncResult.success ? 'bg-success/5 border-success/20' : 'bg-destructive/5 border-destructive/20'
                 }`}>
                   <h4 className="font-medium mb-2 flex items-center gap-2">
                     {adSyncResult.success ? (
-                      <Check className="h-4 w-4 text-green-600" />
+                      <Check className="h-4 w-4 text-success" />
                     ) : (
-                      <X className="h-4 w-4 text-red-600" />
+                      <X className="h-4 w-4 text-destructive" />
                     )}
                     Resultado de Sincronización
                   </h4>
@@ -613,6 +860,107 @@ export default function AdminGroupDetail() {
             </CardContent>
           </Card>
         </TabsContent>
+        
+        {/* Tab: Administradores (Solo SuperAdmin) */}
+        {isSuperAdmin && (
+          <TabsContent value="admins">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Administradores del Grupo</CardTitle>
+                  <CardDescription>
+                    Usuarios con rol Admin que pueden gestionar este grupo
+                  </CardDescription>
+                </div>
+                <Button onClick={handleAddAdminClick}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Asignar Admin
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {!groupAdmins || groupAdmins.admins.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <ShieldCheck className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No hay administradores asignados a este grupo</p>
+                    <p className="text-sm">Solo los SuperAdmin pueden gestionar este grupo actualmente</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Usuario</TableHead>
+                        <TableHead className="text-center">Editar Grupo</TableHead>
+                        <TableHead className="text-center">Eliminar Grupo</TableHead>
+                        <TableHead className="text-center">Gestionar Miembros</TableHead>
+                        <TableHead className="text-center">Gestionar Permisos</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {groupAdmins.admins.map((admin) => (
+                        <TableRow key={admin.userId}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{admin.userDisplayName}</div>
+                              <div className="text-xs text-muted-foreground">{admin.userEmail}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {admin.canEdit ? (
+                              <Check className="h-4 w-4 mx-auto text-success" />
+                            ) : (
+                              <X className="h-4 w-4 mx-auto text-muted-foreground" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {admin.canDelete ? (
+                              <Check className="h-4 w-4 mx-auto text-success" />
+                            ) : (
+                              <X className="h-4 w-4 mx-auto text-muted-foreground" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {admin.canManageMembers ? (
+                              <Check className="h-4 w-4 mx-auto text-success" />
+                            ) : (
+                              <X className="h-4 w-4 mx-auto text-muted-foreground" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {admin.canManagePermissions ? (
+                              <Check className="h-4 w-4 mx-auto text-success" />
+                            ) : (
+                              <X className="h-4 w-4 mx-auto text-muted-foreground" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setAdminToRemove(admin.userId);
+                                setShowRemoveAdminDialog(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+                
+                <div className="mt-4 p-3 bg-muted/50 rounded-md">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Nota:</strong> Los administradores asignados aquí podrán gestionar este grupo según los permisos otorgados.
+                    SuperAdmin siempre puede gestionar todos los grupos.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Dialog: Agregar Miembros */}
@@ -725,6 +1073,114 @@ export default function AdminGroupDetail() {
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction onClick={handleRemoveMember}>
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog: Agregar Administradores */}
+      <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Asignar Administradores al Grupo</DialogTitle>
+            <DialogDescription>
+              Selecciona los usuarios con rol Admin que podrán gestionar este grupo
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {loadingAdmins ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="border rounded-md max-h-60 overflow-y-auto">
+                {availableAdmins.filter(a => !a.isAlreadyAssigned).length === 0 ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    No hay administradores disponibles para asignar
+                  </div>
+                ) : (
+                  availableAdmins.filter(a => !a.isAlreadyAssigned).map((admin) => (
+                    <div 
+                      key={admin.userId}
+                      className="flex items-center space-x-3 p-3 hover:bg-accent border-b last:border-0"
+                    >
+                      <Checkbox
+                        checked={selectedAdmins.has(admin.userId)}
+                        onCheckedChange={(checked) => {
+                          const newSelected = new Set(selectedAdmins);
+                          if (checked) {
+                            newSelected.add(admin.userId);
+                          } else {
+                            newSelected.delete(admin.userId);
+                          }
+                          setSelectedAdmins(newSelected);
+                        }}
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium">{admin.displayName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {admin.email}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="bg-muted text-foreground border-border/50">
+                        <Shield className="h-3 w-3 mr-1" />
+                        Admin
+                      </Badge>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            
+            {selectedAdmins.size > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {selectedAdmins.size} administrador(es) seleccionado(s)
+              </p>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowAddAdminDialog(false);
+                setSelectedAdmins(new Set());
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleAddAdmins}
+              disabled={addingAdmins || selectedAdmins.size === 0}
+            >
+              {addingAdmins ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4 mr-2" />
+              )}
+              Asignar {selectedAdmins.size > 0 ? `(${selectedAdmins.size})` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Confirmar remover administrador */}
+      <AlertDialog open={showRemoveAdminDialog} onOpenChange={setShowRemoveAdminDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Remover administrador?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas remover este administrador del grupo?
+              El usuario ya no podrá gestionar este grupo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAdminToRemove(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleRemoveAdmin}>
               Remover
             </AlertDialogAction>
           </AlertDialogFooter>

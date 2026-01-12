@@ -6,7 +6,7 @@
 [CmdletBinding()]
 param(
     [string]$SqlServer = "localhost",
-    [string]$Database = "SQLGuardObservatoryAuth"
+    [string]$Database = "AppSQLNova"
 )
 
 $ErrorActionPreference = "Stop"

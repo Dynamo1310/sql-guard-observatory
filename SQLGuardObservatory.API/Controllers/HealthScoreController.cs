@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
 
 namespace SQLGuardObservatory.API.Controllers
 {
     [Authorize]
+    [ViewPermission("HealthScore")]
     [ApiController]
     [Route("api/[controller]")]
     public class HealthScoreController : ControllerBase

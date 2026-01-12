@@ -1,13 +1,13 @@
 -- =============================================
 -- Script: VaultEnterprise_Phase1_ForeignKeys.sql
 -- Description: Fase 1.2 - FK Compuestas para KeyId + KeyVersion
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 -- PREREQUISITE: Ejecutar VaultEnterprise_Phase1_EncryptionKeys.sql primero
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='

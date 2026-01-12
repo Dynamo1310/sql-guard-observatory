@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Key, Lock, Unlock, AlertTriangle, Clock, Server, 
-  Database, Monitor, Activity, RefreshCw
+  Database, Monitor, Activity, RefreshCw, KeyRound
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,13 +52,50 @@ export default function VaultDashboard() {
   if (isLoading) {
     return (
       <div className="container mx-auto p-6 space-y-6">
-        <Skeleton className="h-8 w-64" />
+        {/* Header skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-48" />
+            <Skeleton className="h-5 w-72" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-10" />
+            <Skeleton className="h-10 w-40" />
+          </div>
+        </div>
+        
+        {/* Stats cards skeleton */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32" />
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-4 w-32" />
+              </CardContent>
+            </Card>
           ))}
         </div>
-        <Skeleton className="h-64" />
+        
+        {/* Content skeleton */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-64" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[...Array(3)].map((_, j) => (
+                  <Skeleton key={j} className="h-12 w-full" />
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
@@ -67,20 +104,17 @@ export default function VaultDashboard() {
     { 
       type: 'SQL Server', 
       count: stats?.sqlAuthCredentials || 0, 
-      icon: Database, 
-      color: 'bg-blue-500' 
+      icon: Database
     },
     { 
       type: 'Windows/AD', 
       count: stats?.windowsCredentials || 0, 
-      icon: Monitor, 
-      color: 'bg-purple-500' 
+      icon: Monitor
     },
     { 
       type: 'Otros', 
       count: stats?.otherCredentials || 0, 
-      icon: Key, 
-      color: 'bg-gray-500' 
+      icon: Key
     }
   ];
 
@@ -91,7 +125,10 @@ export default function VaultDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Vault DBA</h1>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <KeyRound className="h-8 w-8" />
+            Vault DBA
+          </h1>
           <p className="text-muted-foreground">
             Gestión segura de credenciales del equipo
           </p>
@@ -99,11 +136,11 @@ export default function VaultDashboard() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            size="icon"
             onClick={() => loadData(false)}
             disabled={isRefreshing}
           >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Actualizar
           </Button>
           <Button onClick={() => setDialogOpen(true)}>
             <Key className="h-4 w-4 mr-2" />
@@ -117,10 +154,10 @@ export default function VaultDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Credenciales</CardTitle>
-            <Key className="h-4 w-4 text-muted-foreground" />
+            <Key className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalCredentials || 0}</div>
+            <div className="text-2xl font-bold text-primary">{stats?.totalCredentials || 0}</div>
             <p className="text-xs text-muted-foreground">
               {stats?.totalServersLinked || 0} servidores vinculados
             </p>
@@ -130,10 +167,10 @@ export default function VaultDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Compartidas</CardTitle>
-            <Unlock className="h-4 w-4 text-green-500" />
+            <Unlock className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.sharedCredentials || 0}</div>
+            <div className="text-2xl font-bold text-emerald-500">{stats?.sharedCredentials || 0}</div>
             <p className="text-xs text-muted-foreground">
               Accesibles por el equipo
             </p>
@@ -143,33 +180,39 @@ export default function VaultDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Privadas</CardTitle>
-            <Lock className="h-4 w-4 text-amber-500" />
+            <Lock className="h-4 w-4 text-violet-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.privateCredentials || 0}</div>
+            <div className="text-2xl font-bold text-violet-500">{stats?.privateCredentials || 0}</div>
             <p className="text-xs text-muted-foreground">
               Solo visibles para ti
             </p>
           </CardContent>
         </Card>
 
-        <Card className={stats?.expiringCredentials || stats?.expiredCredentials ? 'border-amber-200 bg-amber-50/50 dark:bg-amber-950/20' : ''}>
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Atención</CardTitle>
-            <AlertTriangle className={`h-4 w-4 ${stats?.expiredCredentials ? 'text-red-500' : stats?.expiringCredentials ? 'text-amber-500' : 'text-muted-foreground'}`} />
+            <AlertTriangle className={`h-4 w-4 ${
+              (stats?.expiredCredentials || 0) > 0 ? 'text-red-500' : 
+              (stats?.expiringCredentials || 0) > 0 ? 'text-warning' : 'text-emerald-500'
+            }`} />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className={`text-2xl font-bold ${
+              (stats?.expiredCredentials || 0) > 0 ? 'text-red-500' : 
+              (stats?.expiringCredentials || 0) > 0 ? 'text-warning' : 'text-emerald-500'
+            }`}>
               {(stats?.expiringCredentials || 0) + (stats?.expiredCredentials || 0)}
             </div>
             <div className="flex items-center gap-2 text-xs">
               {stats?.expiredCredentials ? (
-                <Badge variant="destructive" className="text-xs">
+                <Badge variant="soft-destructive" className="text-xs">
                   {stats.expiredCredentials} expiradas
                 </Badge>
               ) : null}
               {stats?.expiringCredentials ? (
-                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-xs">
+                <Badge variant="soft-warning" className="text-xs">
                   {stats.expiringCredentials} por expirar
                 </Badge>
               ) : null}
@@ -223,10 +266,10 @@ export default function VaultDashboard() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4 text-green-500" />
+                <Activity className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Estado del Vault</span>
               </div>
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              <Badge variant="soft-success">
                 Operativo
               </Badge>
             </div>
@@ -259,7 +302,7 @@ export default function VaultDashboard() {
       {expiringCredentials.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-xl font-semibold flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            <AlertTriangle className="h-5 w-5 text-foreground" />
             Credenciales que requieren atención
           </h2>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

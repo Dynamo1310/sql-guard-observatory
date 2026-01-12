@@ -96,22 +96,22 @@ export function MemoryTrendChart({ instanceName, hours = 24, refreshTrigger = 0 
   };
 
   const getMemoryColor = (pct: number) => {
-    if (pct >= 95) return '#ef4444'; // red
-    if (pct >= 85) return '#eab308'; // yellow
-    return '#22c55e'; // green
+    if (pct >= 95) return 'hsl(var(--destructive))';
+    if (pct >= 85) return 'hsl(var(--warning))';
+    return 'hsl(var(--foreground))';
   };
 
   const getPLEColor = (ple: number) => {
-    if (ple < 300) return '#ef4444'; // red
-    if (ple < 600) return '#eab308'; // yellow
-    return '#22c55e'; // green
+    if (ple < 300) return 'hsl(var(--destructive))';
+    if (ple < 600) return 'hsl(var(--warning))';
+    return 'hsl(var(--foreground))';
   };
 
   if (loading) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </Card>
     );
@@ -119,8 +119,8 @@ export function MemoryTrendChart({ instanceName, hours = 24, refreshTrigger = 0 
 
   if (error) {
     return (
-      <Card className="p-6 border-red-200 bg-red-50">
-        <div className="text-red-700">Error: {error}</div>
+      <Card className="p-6 border-destructive/50 bg-destructive/5">
+        <div className="text-destructive">Error: {error}</div>
       </Card>
     );
   }
@@ -128,7 +128,7 @@ export function MemoryTrendChart({ instanceName, hours = 24, refreshTrigger = 0 
   if (data.length === 0) {
     return (
       <Card className="p-6">
-        <div className="text-center text-gray-500">No hay datos disponibles</div>
+        <div className="text-center text-muted-foreground">No hay datos disponibles</div>
       </Card>
     );
   }
@@ -151,16 +151,16 @@ export function MemoryTrendChart({ instanceName, hours = 24, refreshTrigger = 0 
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Activity className="h-5 w-5" />
+              <Activity className="h-5 w-5 text-muted-foreground" />
               Memoria - Últimas {hours}h
             </h3>
-            <p className="text-sm text-gray-500">{instanceName}</p>
+            <p className="text-sm text-muted-foreground">{instanceName}</p>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold" style={{ color: getMemoryColor(latestMemory) }}>
               {latestMemory.toFixed(1)}%
             </div>
-            <div className="text-xs text-gray-500">Memoria en uso</div>
+            <div className="text-xs text-muted-foreground">Memoria en uso</div>
           </div>
         </div>
 
@@ -184,19 +184,19 @@ export function MemoryTrendChart({ instanceName, hours = 24, refreshTrigger = 0 
                 if (active && payload && payload.length) {
                   const data = payload[0].payload;
                   return (
-                    <div className="bg-white border rounded-lg shadow-lg p-3">
-                      <p className="text-sm font-semibold">{data.fullTimestamp}</p>
-                      <p className="text-sm">
-                        Memoria Usada: <span className="font-bold text-blue-600">
+                    <div className="bg-card border border-border rounded-lg shadow-lg p-3">
+                      <p className="text-sm font-semibold text-foreground">{data.fullTimestamp}</p>
+                      <p className="text-sm text-foreground">
+                        Memoria Usada: <span className="font-bold">
                           {data.memoryUsed}%
                         </span>
                       </p>
-                      <p className="text-sm">
-                        Buffer Cache: <span className="font-bold text-green-600">
+                      <p className="text-sm text-muted-foreground">
+                        Buffer Cache: <span className="font-bold">
                           {data.bufferCache}%
                         </span>
                       </p>
-                      <p className="text-sm">
+                      <p className="text-sm text-foreground">
                         PLE: <span className="font-bold" style={{ color: getPLEColor(data.ple) }}>
                           {data.ple}s
                         </span>
@@ -213,7 +213,7 @@ export function MemoryTrendChart({ instanceName, hours = 24, refreshTrigger = 0 
             <Line 
               type="monotone" 
               dataKey="memoryUsed" 
-              stroke="#3b82f6" 
+              stroke="#2563eb" 
               strokeWidth={3}
               dot={false}
               activeDot={{ r: 4, strokeWidth: 2 }}
@@ -222,7 +222,7 @@ export function MemoryTrendChart({ instanceName, hours = 24, refreshTrigger = 0 
             <Line 
               type="monotone" 
               dataKey="bufferCache" 
-              stroke="#22c55e" 
+              stroke="#60a5fa" 
               strokeWidth={2.5}
               dot={false}
               activeDot={{ r: 4, strokeWidth: 2 }}
@@ -233,17 +233,17 @@ export function MemoryTrendChart({ instanceName, hours = 24, refreshTrigger = 0 
 
         {/* Estadísticas adicionales */}
         <div className="grid grid-cols-3 gap-2 text-xs">
-          <div className="bg-blue-50 p-2 rounded">
-            <div className="text-gray-600">Memoria Usada</div>
-            <div className="font-bold text-blue-700">{latestMemory.toFixed(1)}%</div>
+          <div className="bg-muted/50 p-2 rounded border border-border/50">
+            <div className="text-muted-foreground">Memoria Usada</div>
+            <div className="font-bold text-foreground">{latestMemory.toFixed(1)}%</div>
           </div>
-          <div className="bg-green-50 p-2 rounded">
-            <div className="text-gray-600">Buffer Cache</div>
-            <div className="font-bold text-green-700">{latestBufferCache.toFixed(1)}%</div>
+          <div className="bg-muted/50 p-2 rounded border border-border/50">
+            <div className="text-muted-foreground">Buffer Cache</div>
+            <div className="font-bold text-foreground">{latestBufferCache.toFixed(1)}%</div>
           </div>
-          <div className="bg-purple-50 p-2 rounded">
-            <div className="text-gray-600">PLE</div>
-            <div className="font-bold text-purple-700" style={{ color: getPLEColor(latestPLE) }}>
+          <div className="bg-muted/50 p-2 rounded border border-border/50">
+            <div className="text-muted-foreground">PLE</div>
+            <div className="font-bold" style={{ color: getPLEColor(latestPLE) }}>
               {latestPLE}s
             </div>
           </div>
@@ -251,13 +251,13 @@ export function MemoryTrendChart({ instanceName, hours = 24, refreshTrigger = 0 
 
         {/* Alertas */}
         {(latestMemory >= 85 || latestPLE < 600) && (
-          <div className={`p-3 rounded-lg ${
-            latestMemory >= 95 || latestPLE < 300 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+          <div className={`p-3 rounded-lg border ${
+            latestMemory >= 95 || latestPLE < 300 ? 'bg-destructive/5 border-destructive/20 text-destructive' : 'bg-warning/5 border-warning/20 text-warning'
           }`}>
             <p className="text-sm font-semibold">
               {latestMemory >= 95 || latestPLE < 300 ? '⚠️ Alerta Crítica' : '⚠️ Advertencia'}
             </p>
-            <p className="text-xs">
+            <p className="text-xs opacity-80">
               {latestMemory >= 85 && `Memoria alta (${latestMemory.toFixed(1)}%). `}
               {latestPLE < 600 && `PLE bajo (${latestPLE}s). Posible presión de memoria.`}
             </p>

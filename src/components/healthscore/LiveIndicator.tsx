@@ -16,24 +16,24 @@ export function LiveIndicator({ className, showLabel = true }: LiveIndicatorProp
         return {
           label: 'Reconectando',
           icon: RefreshCw,
-          dotColor: 'bg-yellow-500',
-          textColor: 'text-yellow-600',
+          dotColor: 'bg-warning',
+          textColor: 'text-warning',
           animate: 'animate-spin',
         };
       }
       return {
         label: 'Desconectado',
         icon: WifiOff,
-        dotColor: 'bg-red-500',
-        textColor: 'text-red-600',
+        dotColor: 'bg-destructive',
+        textColor: 'text-destructive',
         animate: '',
       };
     }
     return {
       label: 'EN VIVO',
       icon: Wifi,
-      dotColor: 'bg-green-500',
-      textColor: 'text-green-600',
+      dotColor: 'bg-success',
+      textColor: 'text-success',
       animate: '',
     };
   };

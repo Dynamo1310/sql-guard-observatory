@@ -190,3 +190,10 @@ C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bi
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\System.Management.dll
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\runtimes\win\lib\net8.0\System.Management.dll
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\Data\dbatools-buildref-index.json
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\ClosedXML.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\DocumentFormat.OpenXml.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\ExcelNumberFormat.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\Irony.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\SixLabors.Fonts.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\System.IO.Packaging.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Release\net8.0\XLParser.dll

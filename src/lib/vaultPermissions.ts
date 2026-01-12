@@ -114,3 +114,6 @@ export function combinePermissions(...permissions: number[]): number {
   return permissions.reduce((acc, perm) => acc | perm, 0);
 }
 
+
+
+

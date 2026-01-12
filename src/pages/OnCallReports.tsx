@@ -3,23 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import { 
   FileText, 
   ArrowLeft,
-  Loader2,
   Download,
-  Calendar,
-  TrendingUp,
   Clock,
-  Users,
-  Filter,
   Activity,
   AlertTriangle,
   CheckCircle,
-  BarChart3
+  BarChart3,
+  RefreshCw,
+  Filter,
+  Users
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -29,6 +28,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { 
   onCallApi, 
   activationsApi,
@@ -42,32 +42,72 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
   LineChart,
   Line,
   Area,
-  AreaChart
+  AreaChart,
+  Legend
 } from 'recharts';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 
-// Colores para gráficos (evitando rojos y naranjas fuertes)
-const COLORS = ['#06b6d4', '#8b5cf6', '#10b981', '#3b82f6', '#6366f1', '#14b8a6', '#0ea5e9'];
+// Paleta Azul para gráficos
+const BLUE_PALETTE = ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe'];
 const SEVERITY_COLORS: Record<string, string> = {
-  'Critical': '#dc2626',
-  'High': '#f59e0b',
-  'Medium': '#3b82f6',
-  'Low': '#10b981',
+  'Critical': '#1d4ed8',
+  'High': '#2563eb',
+  'Medium': '#60a5fa',
+  'Low': '#93c5fd',
 };
 const CATEGORY_COLORS: Record<string, string> = {
-  'Incident': '#8b5cf6',
-  'Maintenance': '#06b6d4',
-  'Support': '#10b981',
-  'Other': '#6366f1',
+  'Incident': '#1d4ed8',
+  'Maintenance': '#3b82f6',
+  'Support': '#60a5fa',
+  'Other': '#93c5fd',
 };
+
+// Configuración de gráficos shadcn - Paleta Azul
+const categoryChartConfig = {
+  value: { label: "Cantidad" },
+  Incident: { label: "Incidente", color: "#1d4ed8" },
+  Maintenance: { label: "Mantenimiento", color: "#3b82f6" },
+  Support: { label: "Soporte", color: "#60a5fa" },
+  Other: { label: "Otro", color: "#93c5fd" },
+} satisfies ChartConfig;
+
+const severityChartConfig = {
+  value: { label: "Cantidad" },
+  Critical: { label: "Crítico", color: "#1d4ed8" },
+  High: { label: "Alto", color: "#2563eb" },
+  Medium: { label: "Medio", color: "#60a5fa" },
+  Low: { label: "Bajo", color: "#93c5fd" },
+} satisfies ChartConfig;
+
+const monthlyTrendConfig = {
+  activations: { label: "Activaciones", color: "#2563eb" },
+  hours: { label: "Horas", color: "#60a5fa" },
+} satisfies ChartConfig;
+
+const operatorActivationsConfig = {
+  value: { label: "Activaciones", color: "#3b82f6" },
+} satisfies ChartConfig;
+
+const operatorHoursConfig = {
+  hours: { label: "Horas", color: "#2563eb" },
+} satisfies ChartConfig;
+
+const weeklyTrendConfig = {
+  activaciones: { label: "Activaciones", color: "#2563eb" },
+} satisfies ChartConfig;
 
 export default function OnCallReports() {
   const navigate = useNavigate();
@@ -178,18 +218,22 @@ export default function OnCallReports() {
     activations.forEach(a => {
       const date = new Date(a.activatedAt);
       const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay());
+      // Las semanas de guardia empiezan los miércoles (día 3)
+      const day = date.getDay();
+      const daysToWednesday = (day - 3 + 7) % 7; // Días desde el miércoles anterior
+      weekStart.setDate(date.getDate() - daysToWednesday);
       const weekKey = weekStart.toISOString().split('T')[0];
       
       byWeek[weekKey] = (byWeek[weekKey] || 0) + 1;
     });
     
     return Object.entries(byWeek)
+      .sort(([a], [b]) => a.localeCompare(b)) // Ordenar por fecha ascendente
+      .slice(-12) // Tomar las últimas 12 semanas
       .map(([week, count]) => ({
         week: new Date(week).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }),
         activaciones: count
-      }))
-      .slice(-12); // Últimas 12 semanas
+      }));
   };
 
   // Filtrar activaciones
@@ -240,16 +284,71 @@ export default function OnCallReports() {
   // Obtener operadores únicos
   const operators = [...new Map(activations.map(a => [a.operatorUserId, { id: a.operatorUserId, name: a.operatorDisplayName }])).values()];
 
+  // Stats
+  const resolvedCount = activations.filter(a => a.resolvedAt).length;
+  const pendingCount = activations.filter(a => !a.resolvedAt).length;
+
   if (loading) {
     return (
-      <div className="container py-6 flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-10" />
+            <div>
+              <Skeleton className="h-8 w-56 mb-2" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-36" />
+        </div>
+
+        {/* KPIs Skeleton */}
+        <div className="grid gap-4 md:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-10 w-16 mb-1" />
+                <Skeleton className="h-3 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Filters Skeleton */}
+        <Card>
+          <CardHeader className="pb-3">
+            <Skeleton className="h-5 w-24" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4">
+              <Skeleton className="h-10 w-40" />
+              <Skeleton className="h-10 w-40" />
+              <Skeleton className="h-10 w-48" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Charts Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-[300px] w-full" />
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="container py-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -257,8 +356,8 @@ export default function OnCallReports() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <BarChart3 className="h-6 w-6 text-indigo-500" />
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <BarChart3 className="h-8 w-8" />
               Reportes y Dashboard
             </h1>
             <p className="text-muted-foreground">
@@ -266,87 +365,88 @@ export default function OnCallReports() {
             </p>
           </div>
         </div>
-        <Button onClick={handleExport} disabled={exporting}>
-          {exporting ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4 mr-2" />
-          )}
-          Exportar CSV
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={loadData} disabled={loading}>
+            <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
+            Actualizar
+          </Button>
+          <Button onClick={handleExport} disabled={exporting}>
+            {exporting ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Exportar CSV
+          </Button>
+        </div>
       </div>
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="bg-gradient-to-br from-cyan-500/10 to-cyan-600/5 border-cyan-500/20">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Activaciones</CardTitle>
-            <Activity className="h-4 w-4 text-cyan-500" />
+            <Activity className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-cyan-600">{summary?.totalActivations || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              En el período seleccionado
-            </p>
+            <div className="text-3xl font-bold text-primary">{summary?.totalActivations || 0}</div>
+            <p className="text-xs text-muted-foreground">En el período seleccionado</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Horas Totales</CardTitle>
-            <Clock className="h-4 w-4 text-purple-500" />
+            <Clock className="h-4 w-4 text-violet-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-purple-600">
+            <div className="text-3xl font-bold text-violet-500">
               {Math.round((summary?.totalHours || 0) * 10) / 10}h
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground">
               Promedio: {summary?.totalActivations ? Math.round((summary.totalHours / summary.totalActivations) * 10) / 10 : 0}h/activación
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/20">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Resueltas</CardTitle>
             <CheckCircle className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-emerald-600">
-              {activations.filter(a => a.resolvedAt).length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <div className="text-3xl font-bold text-emerald-500">{resolvedCount}</div>
+            <p className="text-xs text-muted-foreground">
               {activations.length > 0 
-                ? `${Math.round(activations.filter(a => a.resolvedAt).length / activations.length * 100)}% del total`
+                ? `${Math.round(resolvedCount / activations.length * 100)}% del total`
                 : '0%'
               }
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pendientes</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <AlertTriangle className={cn('h-4 w-4', pendingCount > 0 ? 'text-warning' : 'text-muted-foreground')} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-amber-600">
-              {activations.filter(a => !a.resolvedAt).length}
+            <div className={cn('text-3xl font-bold', pendingCount > 0 ? 'text-warning' : 'text-muted-foreground')}>
+              {pendingCount}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Activaciones sin resolver
-            </p>
+            <p className="text-xs text-muted-foreground">Activaciones sin resolver</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Filtros */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Filter className="h-4 w-4" />
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5 text-primary" />
             Filtros
           </CardTitle>
+          <CardDescription>Filtra los datos por rango de fechas y operador</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-4">
@@ -401,11 +501,18 @@ export default function OnCallReports() {
             {/* Por Categoría */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Activaciones por Categoría</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-primary" />
+                  Activaciones por Categoría
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+                <ChartContainer config={categoryChartConfig} className="mx-auto aspect-square h-[300px]">
                   <PieChart>
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent hideLabel nameKey="name" />}
+                    />
                     <Pie
                       data={getActivationsByCategory()}
                       cx="50%"
@@ -413,38 +520,43 @@ export default function OnCallReports() {
                       labelLine={false}
                       label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                       outerRadius={100}
-                      fill="#8884d8"
                       dataKey="value"
+                      nameKey="name"
                     >
                       {getActivationsByCategory().map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || COLORS[index % COLORS.length]} />
+                        <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || BLUE_PALETTE[index % BLUE_PALETTE.length]} />
                       ))}
                     </Pie>
-                    <Tooltip />
                   </PieChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </CardContent>
             </Card>
 
             {/* Por Severidad */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Activaciones por Severidad</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-warning" />
+                  Activaciones por Severidad
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+                <ChartContainer config={severityChartConfig} className="h-[300px] w-full">
                   <BarChart data={getActivationsBySeverity()} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={80} />
-                    <Tooltip />
-                    <Bar dataKey="value" name="Cantidad">
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent />}
+                    />
+                    <Bar dataKey="value" name="Cantidad" radius={[0, 4, 4, 0]}>
                       {getActivationsBySeverity().map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={SEVERITY_COLORS[entry.name] || COLORS[index]} />
+                        <Cell key={`cell-${index}`} fill={SEVERITY_COLORS[entry.name] || BLUE_PALETTE[index % BLUE_PALETTE.length]} />
                       ))}
                     </Bar>
                   </BarChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </CardContent>
             </Card>
           </div>
@@ -452,25 +564,28 @@ export default function OnCallReports() {
           {/* Tendencia mensual */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Tendencia Mensual</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-violet-500" />
+                Tendencia Mensual
+              </CardTitle>
               <CardDescription>Activaciones y horas por mes</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
+              <ChartContainer config={monthlyTrendConfig} className="h-[300px] w-full">
                 <AreaChart data={getActivationsByMonth()}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis yAxisId="left" />
                   <YAxis yAxisId="right" orientation="right" />
-                  <Tooltip />
-                  <Legend />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartLegend content={<ChartLegendContent />} />
                   <Area
                     yAxisId="left"
                     type="monotone"
                     dataKey="activations"
                     name="Activaciones"
-                    stroke="#06b6d4"
-                    fill="#06b6d4"
+                    stroke="var(--color-activations)"
+                    fill="var(--color-activations)"
                     fillOpacity={0.3}
                   />
                   <Area
@@ -478,12 +593,12 @@ export default function OnCallReports() {
                     type="monotone"
                     dataKey="hours"
                     name="Horas"
-                    stroke="#8b5cf6"
-                    fill="#8b5cf6"
+                    stroke="var(--color-hours)"
+                    fill="var(--color-hours)"
                     fillOpacity={0.3}
                   />
                 </AreaChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </CardContent>
           </Card>
         </TabsContent>
@@ -494,36 +609,48 @@ export default function OnCallReports() {
             {/* Activaciones por Operador */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Activaciones por Operador</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-cyan-500" />
+                  Activaciones por Operador
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
+                <ChartContainer config={operatorActivationsConfig} className="h-[350px] w-full">
                   <BarChart data={getActivationsByOperator()} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Bar dataKey="value" name="Activaciones" fill="#06b6d4" radius={[0, 4, 4, 0]} />
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent />}
+                    />
+                    <Bar dataKey="value" name="Activaciones" fill="var(--color-value)" radius={[0, 4, 4, 0]} />
                   </BarChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </CardContent>
             </Card>
 
             {/* Horas por Operador */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Horas por Operador</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-violet-500" />
+                  Horas por Operador
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
+                <ChartContainer config={operatorHoursConfig} className="h-[350px] w-full">
                   <BarChart data={getHoursByOperator()} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Bar dataKey="hours" name="Horas" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent />}
+                    />
+                    <Bar dataKey="hours" name="Horas" fill="var(--color-hours)" radius={[0, 4, 4, 0]} />
                   </BarChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </CardContent>
             </Card>
           </div>
@@ -531,30 +658,41 @@ export default function OnCallReports() {
           {/* Ranking */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Ranking de Operadores</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-emerald-500" />
+                Ranking de Operadores
+              </CardTitle>
               <CardDescription>Ordenado por cantidad de horas dedicadas</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {getHoursByOperator().slice(0, 5).map((op, index) => (
-                  <div key={op.name} className="flex items-center gap-4">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${
-                      index === 0 ? 'bg-amber-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-700' : 'bg-slate-500'
-                    }`}>
-                      {index + 1}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium">{op.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {op.hours} horas totales
+              {getHoursByOperator().length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Sin datos de operadores</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {getHoursByOperator().slice(0, 5).map((op, index) => (
+                    <div key={op.name} className="flex items-center gap-4">
+                      <div className={cn(
+                        'w-8 h-8 rounded-full flex items-center justify-center text-white font-bold',
+                        index === 0 ? 'bg-primary' : index === 1 ? 'bg-muted-foreground' : index === 2 ? 'bg-muted-foreground/70' : 'bg-muted text-muted-foreground'
+                      )}>
+                        {index + 1}
                       </div>
+                      <div className="flex-1">
+                        <div className="font-medium">{op.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {op.hours} horas totales
+                        </div>
+                      </div>
+                      <Badge variant="outline">
+                        {Math.round(op.hours / (summary?.totalHours || 1) * 100)}%
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-purple-600 border-purple-500/30">
-                      {Math.round(op.hours / (summary?.totalHours || 1) * 100)}%
-                    </Badge>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -563,62 +701,65 @@ export default function OnCallReports() {
         <TabsContent value="trends" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Tendencia Semanal</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                Tendencia Semanal
+              </CardTitle>
               <CardDescription>Activaciones por semana (últimas 12 semanas)</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={getWeeklyTrend()}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    type="monotone"
+              <ChartContainer config={weeklyTrendConfig} className="h-[400px] w-full">
+                <BarChart data={getWeeklyTrend()}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="week" tickLine={false} axisLine={false} />
+                  <YAxis tickLine={false} axisLine={false} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar
                     dataKey="activaciones"
                     name="Activaciones"
-                    stroke="#06b6d4"
-                    strokeWidth={3}
-                    dot={{ fill: '#06b6d4', strokeWidth: 2, r: 5 }}
-                    activeDot={{ r: 8 }}
+                    fill="var(--color-activaciones)"
+                    radius={[4, 4, 0, 0]}
                   />
-                </LineChart>
-              </ResponsiveContainer>
+                </BarChart>
+              </ChartContainer>
             </CardContent>
           </Card>
 
           {/* Estadísticas adicionales */}
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Promedio Semanal</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Promedio Semanal</CardTitle>
+                <Activity className="h-4 w-4 text-primary" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-2xl font-bold text-primary">
                   {(getWeeklyTrend().reduce((sum, w) => sum + w.activaciones, 0) / Math.max(getWeeklyTrend().length, 1)).toFixed(1)}
                 </div>
                 <p className="text-xs text-muted-foreground">activaciones/semana</p>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Semana más activa</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Semana más activa</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-warning" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-2xl font-bold text-warning">
                   {Math.max(...getWeeklyTrend().map(w => w.activaciones), 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">activaciones máximo</p>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Semana más tranquila</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Semana más tranquila</CardTitle>
+                <CheckCircle className="h-4 w-4 text-emerald-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {Math.min(...getWeeklyTrend().map(w => w.activaciones), 0)}
+                <div className="text-2xl font-bold text-emerald-500">
+                  {getWeeklyTrend().length > 0 ? Math.min(...getWeeklyTrend().map(w => w.activaciones)) : 0}
                 </div>
                 <p className="text-xs text-muted-foreground">activaciones mínimo</p>
               </CardContent>
@@ -630,7 +771,10 @@ export default function OnCallReports() {
         <TabsContent value="details">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Detalle de Activaciones</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Detalle de Activaciones
+              </CardTitle>
               <CardDescription>
                 {filteredActivations.length} registros en el período seleccionado
               </CardDescription>
@@ -652,8 +796,10 @@ export default function OnCallReports() {
                   <tbody>
                     {filteredActivations.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-8 text-muted-foreground">
-                          No hay activaciones en el período seleccionado
+                        <td colSpan={7} className="text-center py-12">
+                          <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                          <p className="text-lg font-semibold mb-2">Sin datos</p>
+                          <p className="text-muted-foreground">No hay activaciones en el período seleccionado</p>
                         </td>
                       </tr>
                     ) : (
@@ -666,7 +812,7 @@ export default function OnCallReports() {
                               year: '2-digit'
                             })}
                           </td>
-                          <td className="p-3">{a.operatorDisplayName}</td>
+                          <td className="p-3 font-medium">{a.operatorDisplayName}</td>
                           <td className="p-3">
                             <Badge variant="outline" style={{ borderColor: CATEGORY_COLORS[a.category] + '50', color: CATEGORY_COLORS[a.category] }}>
                               {a.category}
@@ -683,9 +829,9 @@ export default function OnCallReports() {
                           </td>
                           <td className="p-3">
                             {a.resolvedAt ? (
-                              <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">Resuelto</Badge>
+                              <Badge variant="soft-success">Resuelto</Badge>
                             ) : (
-                              <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/30">Abierto</Badge>
+                              <Badge variant="soft-warning">Abierto</Badge>
                             )}
                           </td>
                         </tr>

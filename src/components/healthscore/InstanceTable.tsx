@@ -64,10 +64,10 @@ export function InstanceTable({
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'Healthy': return <CheckCircle2 className="h-4 w-4 text-green-600" />;
-      case 'Warning': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'Risk': return <AlertCircle className="h-4 w-4 text-orange-500" />;
-      case 'Critical': return <XCircle className="h-4 w-4 text-red-600" />;
+      case 'Healthy': return <CheckCircle2 className="h-4 w-4 text-success" />;
+      case 'Warning': return <AlertTriangle className="h-4 w-4 text-warning" />;
+      case 'Risk': return <AlertCircle className="h-4 w-4 text-warning" />;
+      case 'Critical': return <XCircle className="h-4 w-4 text-destructive" />;
       default: return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
     }
   };
@@ -75,10 +75,10 @@ export function InstanceTable({
   const getAmbienteBadge = (ambiente?: string) => {
     const priority = getAmbientePriority(ambiente);
     if (priority === 0) {
-      return <Badge className="text-[9px] px-1.5 py-0 bg-rose-600 text-white border-0">PROD</Badge>;
+      return <Badge className="text-[9px] px-1.5 py-0 bg-foreground text-background border-0">PROD</Badge>;
     }
     if (priority === 1) {
-      return <Badge className="text-[9px] px-1.5 py-0 bg-violet-600 text-white border-0">TEST</Badge>;
+      return <Badge variant="secondary" className="text-[9px] px-1.5 py-0">TEST</Badge>;
     }
     return <Badge variant="outline" className="text-[9px] px-1.5 py-0">{ambiente || 'DEV'}</Badge>;
   };
@@ -141,7 +141,7 @@ export function InstanceTable({
                 className={cn(
                   'cursor-pointer transition-colors',
                   'hover:bg-accent/50',
-                  isUpdating && 'bg-blue-500/10'
+                  isUpdating && 'bg-primary/10'
                 )}
               >
                 <TableCell className="py-2">
@@ -170,10 +170,10 @@ export function InstanceTable({
                     value={score.healthScore} 
                     className={cn(
                       'h-2',
-                      score.healthScore >= 90 && '[&>div]:bg-green-600',
-                      score.healthScore >= 75 && score.healthScore < 90 && '[&>div]:bg-yellow-500',
-                      score.healthScore >= 60 && score.healthScore < 75 && '[&>div]:bg-orange-500',
-                      score.healthScore < 60 && '[&>div]:bg-red-600'
+                      score.healthScore >= 90 && '[&>div]:bg-success',
+                      score.healthScore >= 75 && score.healthScore < 90 && '[&>div]:bg-warning',
+                      score.healthScore >= 60 && score.healthScore < 75 && '[&>div]:bg-warning',
+                      score.healthScore < 60 && '[&>div]:bg-destructive'
                     )}
                   />
                 </TableCell>

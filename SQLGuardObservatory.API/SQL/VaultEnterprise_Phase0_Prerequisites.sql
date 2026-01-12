@@ -1,12 +1,12 @@
 -- =============================================
 -- Script: VaultEnterprise_Phase0_Prerequisites.sql
 -- Description: Pre-requisitos para migración Vault Enterprise v2.1.1
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='

@@ -180,6 +180,7 @@ export function OnCallOperatorDialog({
                 )}
               </SelectContent>
             </Select>
+
             <Button onClick={handleAddOperator} disabled={!selectedUserId || addingOperator}>
               {addingOperator ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -189,6 +190,9 @@ export function OnCallOperatorDialog({
               <span className="ml-2">Agregar</span>
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Los colores de los operadores se configuran desde la página "Operadores"
+          </p>
 
           {/* Operators list */}
           <div className="border rounded-lg divide-y">
@@ -214,6 +218,14 @@ export function OnCallOperatorDialog({
                   <Badge variant="outline" className="w-8 justify-center">
                     {index + 1}
                   </Badge>
+                  
+                  {/* Color indicator (solo visual) */}
+                  <div
+                    className="w-6 h-6 rounded-full border-2 border-border"
+                    style={{ backgroundColor: operator.colorCode || '#3B82F6' }}
+                    title={`Color: ${operator.colorCode || '#3B82F6'}`}
+                  />
+
                   <div className="flex-1">
                     <p className="font-medium">{operator.displayName}</p>
                     <p className="text-xs text-muted-foreground">{operator.domainUser}</p>
@@ -251,4 +263,3 @@ export function OnCallOperatorDialog({
     </Dialog>
   );
 }
-

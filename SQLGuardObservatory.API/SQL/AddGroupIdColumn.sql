@@ -1,11 +1,11 @@
 -- =============================================
 -- Script: AddGroupIdColumn.sql
 -- Description: Agrega la columna GroupId a la tabla Credentials existente
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- Date: December 2025
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- Verificar si la columna GroupId ya existe
@@ -62,4 +62,7 @@ PRINT '============================================='
 PRINT 'Script AddGroupIdColumn.sql ejecutado correctamente.'
 PRINT '============================================='
 GO
+
+
+
 

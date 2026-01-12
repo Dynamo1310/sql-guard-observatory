@@ -17,30 +17,30 @@ export default function SignalRStatus() {
         return {
           icon: <Wifi className="h-3 w-3" />,
           text: 'Conectado',
-          variant: 'default' as const,
-          className: 'bg-green-500/20 text-green-700 border-green-500/40',
+          variant: 'outline' as const,
+          dotColor: 'bg-success',
         };
       case signalR.HubConnectionState.Connecting:
         return {
           icon: <Activity className="h-3 w-3 animate-pulse" />,
           text: 'Conectando...',
-          variant: 'secondary' as const,
-          className: 'bg-blue-500/20 text-blue-700 border-blue-500/40',
+          variant: 'outline' as const,
+          dotColor: 'bg-muted-foreground',
         };
       case signalR.HubConnectionState.Reconnecting:
         return {
           icon: <Activity className="h-3 w-3 animate-pulse" />,
           text: 'Reconectando...',
-          variant: 'secondary' as const,
-          className: 'bg-yellow-500/20 text-yellow-700 border-yellow-500/40',
+          variant: 'outline' as const,
+          dotColor: 'bg-warning',
         };
       case signalR.HubConnectionState.Disconnected:
       default:
         return {
           icon: <WifiOff className="h-3 w-3" />,
           text: 'Desconectado',
-          variant: 'destructive' as const,
-          className: 'bg-red-500/20 text-red-700 border-red-500/40',
+          variant: 'outline' as const,
+          dotColor: 'bg-destructive',
         };
     }
   };
@@ -53,8 +53,9 @@ export default function SignalRStatus() {
         <TooltipTrigger asChild>
           <Badge 
             variant={config.variant}
-            className={`flex items-center gap-1.5 ${config.className}`}
+            className="flex items-center gap-1.5"
           >
+            <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
             {config.icon}
             <span className="text-xs font-medium">{config.text}</span>
           </Badge>

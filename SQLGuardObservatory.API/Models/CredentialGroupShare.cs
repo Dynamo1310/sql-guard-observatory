@@ -49,6 +49,11 @@ public class CredentialGroupShare
     /// </summary>
     public DateTime SharedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Si true, los miembros del grupo pueden re-compartir esta credencial con otros usuarios/grupos
+    /// </summary>
+    public bool AllowReshare { get; set; } = false;
+
     // Navegación
     [ForeignKey("CredentialId")]
     public virtual Credential? Credential { get; set; }

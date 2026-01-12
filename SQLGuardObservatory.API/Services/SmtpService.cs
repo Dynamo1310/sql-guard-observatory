@@ -112,7 +112,8 @@ public class SmtpService : ISmtpService
     }
 
     public async Task<bool> SendEmailAsync(string toEmail, string? toName, string subject, string htmlBody,
-        string notificationType, string? referenceType = null, int? referenceId = null)
+        string notificationType, string? referenceType = null, int? referenceId = null,
+        byte[]? attachmentData = null, string? attachmentName = null)
     {
         var settings = await _context.SmtpSettings.FirstOrDefaultAsync(s => s.IsActive);
         
@@ -144,6 +145,15 @@ public class SmtpService : ISmtpService
             };
 
             message.To.Add(new MailAddress(toEmail, toName));
+
+            // Agregar attachment si se proporciona
+            if (attachmentData != null && !string.IsNullOrEmpty(attachmentName))
+            {
+                var stream = new MemoryStream(attachmentData);
+                var attachment = new Attachment(stream, attachmentName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                message.Attachments.Add(attachment);
+                _logger.LogInformation("Adjuntando archivo: {FileName} ({Size} bytes)", attachmentName, attachmentData.Length);
+            }
 
             await client.SendMailAsync(message);
 

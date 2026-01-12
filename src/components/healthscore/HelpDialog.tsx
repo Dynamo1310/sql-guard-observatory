@@ -44,7 +44,9 @@ export function HelpDialog({ trigger }: HelpDialogProps) {
       <DialogContent className="max-w-2xl max-h-[85vh] p-0">
         <DialogHeader className="p-6 pb-0">
           <DialogTitle className="flex items-center gap-2">
-            <HelpCircle className="h-5 w-5 text-blue-500" />
+            <div className="p-2 rounded-lg bg-info/10">
+              <HelpCircle className="h-5 w-5 text-info" />
+            </div>
             ¿Cómo se calcula el HealthScore?
           </DialogTitle>
           <DialogDescription>
@@ -55,7 +57,7 @@ export function HelpDialog({ trigger }: HelpDialogProps) {
         <ScrollArea className="max-h-[calc(85vh-100px)]">
           <div className="p-6 pt-4 space-y-6">
             {/* Overview */}
-            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+            <div className="bg-info/5 border border-info/20 rounded-xl p-4">
               <p className="text-sm">
                 El <span className="font-bold">Health Score v3.0</span> es una métrica de{' '}
                 <span className="font-mono font-bold">0 a 100 puntos</span> que evalúa la salud 
@@ -69,10 +71,10 @@ export function HelpDialog({ trigger }: HelpDialogProps) {
             <div>
               <h3 className="font-semibold text-sm mb-3">Niveles de Estado</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <StatusCard icon={CheckCircle2} label="HEALTHY" range="90-100" colorClass="text-green-600" bgClass="bg-green-500/10 border-green-500/30" />
-                <StatusCard icon={AlertTriangle} label="WARNING" range="75-89" colorClass="text-yellow-500" bgClass="bg-yellow-500/10 border-yellow-500/30" />
-                <StatusCard icon={AlertCircle} label="RISK" range="60-74" colorClass="text-orange-500" bgClass="bg-orange-500/10 border-orange-500/30" />
-                <StatusCard icon={XCircle} label="CRITICAL" range="<60" colorClass="text-red-600" bgClass="bg-red-500/10 border-red-500/30" />
+                <StatusCard icon={CheckCircle2} label="HEALTHY" range="90-100" colorClass="text-success" bgClass="bg-success/10 border-success/20" />
+                <StatusCard icon={AlertTriangle} label="WARNING" range="75-89" colorClass="text-warning" bgClass="bg-warning/10 border-warning/20" />
+                <StatusCard icon={AlertCircle} label="RISK" range="60-74" colorClass="text-warning" bgClass="bg-warning/10 border-warning/20" />
+                <StatusCard icon={XCircle} label="CRITICAL" range="<60" colorClass="text-destructive" bgClass="bg-destructive/10 border-destructive/20" />
               </div>
             </div>
 
@@ -118,13 +120,13 @@ export function HelpDialog({ trigger }: HelpDialogProps) {
             </div>
 
             {/* Calculation Summary */}
-            <div className="bg-muted/30 rounded-lg p-4">
+            <div className="bg-muted/20 rounded-xl border border-border/30 p-4">
               <h3 className="font-semibold text-sm mb-2">Cálculo del Score Final</h3>
-              <div className="space-y-1 text-xs text-muted-foreground">
+              <div className="space-y-1.5 text-xs text-muted-foreground">
                 <p>1. Cada categoría se evalúa de 0-100 según métricas específicas</p>
                 <p>2. Se multiplica por su peso (ej: Backups × 18%)</p>
                 <p>3. Se suman todas las contribuciones ponderadas</p>
-                <p className="font-medium text-foreground pt-2">
+                <p className="font-medium text-foreground pt-2 font-mono text-sm">
                   Score Final = Σ (Score_Categoría × Peso_Categoría)
                 </p>
               </div>
@@ -146,7 +148,7 @@ interface StatusCardProps {
 
 function StatusCard({ icon: Icon, label, range, colorClass, bgClass }: StatusCardProps) {
   return (
-    <div className={cn('rounded-lg border p-3 text-center', bgClass)}>
+    <div className={cn('rounded-xl border p-3 text-center transition-all duration-200 hover:shadow-sm', bgClass)}>
       <Icon className={cn('h-6 w-6 mx-auto mb-1', colorClass)} />
       <p className={cn('text-xs font-bold', colorClass)}>{label}</p>
       <p className={cn('text-sm font-mono font-bold', colorClass)}>{range}</p>
@@ -163,15 +165,16 @@ function CategoryRow({ category }: CategoryRowProps) {
   
   return (
     <div className={cn(
-      'flex items-center gap-2 p-2 rounded-lg border',
-      category.bgColor,
-      category.borderColor
+      'flex items-center gap-2 p-2.5 rounded-lg border transition-all duration-200',
+      'bg-muted/10 border-border/30 hover:border-border/50 hover:bg-muted/20'
     )}>
-      <Icon className={cn('h-4 w-4 flex-shrink-0', category.color)} />
+      <div className={cn('p-1.5 rounded-md', category.bgColor)}>
+        <Icon className={cn('h-3.5 w-3.5', category.color)} />
+      </div>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium truncate">{category.shortName}</p>
       </div>
-      <Badge variant="outline" className={cn('text-[10px] px-1.5', category.color, category.borderColor)}>
+      <Badge variant="outline" className="text-[10px] px-1.5 font-mono font-medium">
         {category.weight}%
       </Badge>
     </div>

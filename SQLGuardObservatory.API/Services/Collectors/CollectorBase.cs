@@ -1,4 +1,6 @@
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.DependencyInjection;
+using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using System.Collections.Concurrent;
 using System.Data;
@@ -17,6 +19,7 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
     protected readonly ICollectorConfigService _configService;
     protected readonly ISqlConnectionFactory _connectionFactory;
     protected readonly IInstanceProvider _instanceProvider;
+    protected readonly IServiceScopeFactory _scopeFactory;
     
     private volatile bool _isRunning;
     private readonly SemaphoreSlim _executionLock = new(1, 1);
@@ -29,12 +32,24 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
         ILogger logger,
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
-        IInstanceProvider instanceProvider)
+        IInstanceProvider instanceProvider,
+        IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _configService = configService;
         _connectionFactory = connectionFactory;
         _instanceProvider = instanceProvider;
+        _scopeFactory = scopeFactory;
+    }
+
+    /// <summary>
+    /// Crea un nuevo DbContext dentro de un scope para operaciones thread-safe
+    /// </summary>
+    protected async Task SaveWithScopedContextAsync(Func<ApplicationDbContext, Task> saveAction, CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await saveAction(context);
     }
 
     /// <summary>
@@ -75,6 +90,9 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
             // Obtener instancias
             var instances = await _instanceProvider.GetFilteredInstancesAsync(ct: ct);
             _logger.LogInformation("Collector {CollectorName} starting for {Count} instances", CollectorName, instances.Count);
+
+            // Pre-procesamiento (opcional, para identificar grupos de instancias como AlwaysOn)
+            await PreProcessAsync(instances, ct);
 
             // Obtener umbrales
             var thresholds = await _configService.GetActiveThresholdsAsync(CollectorName, ct);
@@ -214,6 +232,7 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
             result.Success = true;
             result.Score = score;
             result.Metrics = GetMetricsFromResult(data);
+            result.MetricsObject = data; // Para post-procesamiento (ej: AlwaysOn sync)
         }
         catch (Exception ex)
         {
@@ -275,6 +294,15 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
     protected virtual Dictionary<string, object?> GetMetricsFromResult(TResult data)
     {
         return new Dictionary<string, object?>();
+    }
+
+    /// <summary>
+    /// Pre-procesamiento antes de procesar las instancias
+    /// Útil para identificar grupos de instancias (ej: AlwaysOn)
+    /// </summary>
+    protected virtual Task PreProcessAsync(List<SqlInstanceInfo> instances, CancellationToken ct)
+    {
+        return Task.CompletedTask;
     }
 
     /// <summary>

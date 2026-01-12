@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { HardDrive, Save, Wrench, Heart, AlertTriangle } from 'lucide-react';
-import { KPICard } from '@/components/dashboard/KPICard';
+import { HardDrive, Save, Wrench, Heart, AlertTriangle, LayoutDashboard, RefreshCw } from 'lucide-react';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useTableSort } from '@/hooks/use-table-sort';
 import { healthScoreV3Api, HealthScoreV3Dto, HealthScoreV3DetailDto, disksApi, DiskDto } from '@/services/api';
 import { useNavigate } from 'react-router-dom';
@@ -50,14 +52,17 @@ export default function Overview() {
   const [disks, setDisks] = useState<DiskDto[]>([]);
   const [instanceDetails, setInstanceDetails] = useState<Record<string, HealthScoreV3DetailDto>>({});
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   useEffect(() => {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
+      setIsRefreshing(true);
+      
       const [healthData, disksData] = await Promise.all([
         healthScoreV3Api.getAllHealthScores(),
         disksApi.getDisks()
@@ -72,6 +77,7 @@ export default function Overview() {
       console.error('Error al cargar datos del overview:', error);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -125,7 +131,8 @@ export default function Overview() {
     // Backups atrasados: donde score_Backups < 100
     const backupsOverdue = productionScores.filter(s => (s.score_Backups ?? 100) < 100).length;
     
-    // Discos críticos: según vista de discos (isAlerted = true, que indica growth + espacio real <= 10%)
+    // Discos críticos: isAlerted = true
+    // El backend ya marca isAlerted = true para discos de logs con % físico < 10%
     const criticalDisks = productionDisks.filter(d => d.isAlerted === true).length;
 
     return { total, healthy, warning, risk, critical, avgScore, backupsOverdue, criticalDisks };
@@ -142,7 +149,6 @@ export default function Overview() {
         if ((s.score_CPU ?? 100) < 50) issues.push('CPU Alto');
         if ((s.score_Memoria ?? 100) < 50) issues.push('Memoria');
         if ((s.score_Discos ?? 100) < 50) issues.push('Discos');
-        if ((s.score_ErroresCriticos ?? 100) < 100) issues.push('Errores Críticos');
         if ((s.score_Maintenance ?? 100) < 100) issues.push('Mantenimiento');
         if (issues.length === 0) issues.push('Score bajo');
         
@@ -179,6 +185,7 @@ export default function Overview() {
   }, [productionScores]);
 
   // Discos críticos de producción (isAlerted = true)
+  // El backend ya marca isAlerted = true para discos de logs con % físico < 10%
   const criticalDisksData: CriticalDiskData[] = useMemo(() => {
     return productionDisks
       .filter(d => d.isAlerted === true)
@@ -265,128 +272,226 @@ export default function Overview() {
 
   if (loading) {
     return (
-      <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Overview</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">Cargando datos...</p>
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-5 w-96" />
+        </div>
+        
+        {/* KPI Cards skeleton */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-lg" />
+          ))}
+        </div>
+        
+        {/* Primera fila de tablas skeleton */}
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i} className="border-border/50">
+              <CardHeader className="pb-3">
+                <Skeleton className="h-6 w-48" />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {[...Array(4)].map((_, j) => (
+                    <Skeleton key={j} className="h-10 w-full" />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        
+        {/* Segunda fila de tablas skeleton */}
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i} className="border-border/50">
+              <CardHeader className="pb-3">
+                <Skeleton className="h-6 w-48" />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {[...Array(4)].map((_, j) => (
+                    <Skeleton key={j} className="h-10 w-full" />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold">Overview</h1>
-        <p className="text-sm sm:text-base text-muted-foreground mt-1">
-          Panel de control - Estado general del sistema 
-          <span className="ml-2 text-xs bg-blue-500/20 text-blue-600 px-2 py-0.5 rounded-full font-medium">
-            Solo Producción ({stats.total} instancias)
-          </span>
-        </p>
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between animate-slide-up">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <LayoutDashboard className="h-8 w-8" />
+            Overview
+          </h1>
+          <p className="text-muted-foreground">
+            Panel de control - Estado general del sistema
+            <Badge variant="outline" className="ml-2 font-medium text-muted-foreground">
+              Solo Producción ({stats.total} instancias)
+            </Badge>
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => fetchData(false)}
+          disabled={isRefreshing}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Actualizar
+        </Button>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
-        <KPICard
-          title="Health Score"
-          value={stats.avgScore > 0 ? `${stats.avgScore}` : '-'}
-          icon={Heart}
-          description={`${stats.healthy} Healthy, ${stats.warning} Warn, ${stats.risk} Risk, ${stats.critical} Crit`}
-          variant={
-            stats.avgScore >= 90 
-              ? 'success' 
-              : stats.avgScore >= 70 
-                ? 'warning' 
-                : 'critical'
-          }
+      {/* Estadísticas */}
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+        <Card 
+          className="group relative overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-emerald-500/30 animate-slide-up delay-50"
           onClick={() => navigate('/healthscore')}
-        />
-        <KPICard
-          title="Mantenimiento Atrasado"
-          value={maintenanceOverdueData.length}
-          icon={Wrench}
-          description={`Instancias con mantenimiento vencido`}
-          variant={
-            maintenanceOverdueData.length === 0 
-              ? 'success' 
-              : maintenanceOverdueData.length < 5 
-                ? 'warning' 
-                : 'critical'
-          }
+        >
+          <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+            <CardTitle className="text-sm font-medium">Health Score</CardTitle>
+            <Heart className={`h-4 w-4 transition-transform duration-300 group-hover:scale-110 ${
+              stats.avgScore >= 90 ? 'text-emerald-500' : stats.avgScore >= 70 ? 'text-warning' : 'text-red-500'
+            }`} />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className={`text-2xl font-bold tabular-nums ${
+              stats.avgScore >= 90 ? 'text-emerald-500' : stats.avgScore >= 70 ? 'text-warning' : 'text-red-500'
+            }`}>{stats.avgScore > 0 ? stats.avgScore : '-'}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.healthy} Healthy, {stats.warning} Warn, {stats.risk} Risk
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="group relative overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-violet-500/30 animate-slide-up delay-100"
           onClick={() => navigate('/jobs')}
-        />
-        <KPICard
-          title="Discos Críticos"
-          value={stats.criticalDisks}
-          icon={HardDrive}
-          description="Con riesgo real (alertados)"
-          variant={
-            stats.criticalDisks === 0 
-              ? 'success' 
-              : stats.criticalDisks < 3 
-                ? 'warning' 
-                : 'critical'
-          }
+        >
+          <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+            <CardTitle className="text-sm font-medium">Mantenimiento</CardTitle>
+            <Wrench className={`h-4 w-4 transition-transform duration-300 group-hover:scale-110 ${
+              maintenanceOverdueData.length === 0 ? 'text-emerald-500' : maintenanceOverdueData.length < 5 ? 'text-warning' : 'text-red-500'
+            }`} />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className={`text-2xl font-bold tabular-nums ${
+              maintenanceOverdueData.length === 0 ? 'text-emerald-500' : maintenanceOverdueData.length < 5 ? 'text-warning' : 'text-red-500'
+            }`}>{maintenanceOverdueData.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Instancias con mant. vencido
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="group relative overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-cyan-500/30 animate-slide-up delay-150"
           onClick={() => navigate('/disks')}
-        />
-        <KPICard
-          title="Backups Atrasados"
-          value={stats.backupsOverdue}
-          icon={Save}
-          description="Backups vencidos (Producción)"
-          variant={
-            stats.backupsOverdue === 0 
-              ? 'success' 
-              : stats.backupsOverdue < 3 
-                ? 'warning' 
-                : 'critical'
-          }
+        >
+          <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+            <CardTitle className="text-sm font-medium">Discos Críticos</CardTitle>
+            <HardDrive className={`h-4 w-4 transition-transform duration-300 group-hover:scale-110 ${
+              stats.criticalDisks === 0 ? 'text-emerald-500' : stats.criticalDisks < 3 ? 'text-warning' : 'text-red-500'
+            }`} />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className={`text-2xl font-bold tabular-nums ${
+              stats.criticalDisks === 0 ? 'text-emerald-500' : stats.criticalDisks < 3 ? 'text-warning' : 'text-red-500'
+            }`}>{stats.criticalDisks}</div>
+            <p className="text-xs text-muted-foreground">
+              Con riesgo real (alertados)
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="group relative overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-warning/30 animate-slide-up delay-200"
           onClick={() => navigate('/backups')}
-        />
-        <KPICard
-          title="Instancias Críticas"
-          value={stats.critical}
-          icon={AlertTriangle}
-          description="Health Score < 60 (Producción)"
-          variant={
-            stats.critical === 0 
-              ? 'success' 
-              : stats.critical < 5 
-                ? 'warning' 
-                : 'critical'
-          }
+        >
+          <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+            <CardTitle className="text-sm font-medium">Backups Atrasados</CardTitle>
+            <Save className={`h-4 w-4 transition-transform duration-300 group-hover:scale-110 ${
+              stats.backupsOverdue === 0 ? 'text-emerald-500' : stats.backupsOverdue < 3 ? 'text-warning' : 'text-red-500'
+            }`} />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className={`text-2xl font-bold tabular-nums ${
+              stats.backupsOverdue === 0 ? 'text-emerald-500' : stats.backupsOverdue < 3 ? 'text-warning' : 'text-red-500'
+            }`}>{stats.backupsOverdue}</div>
+            <p className="text-xs text-muted-foreground">
+              Backups vencidos (Producción)
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="group relative overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-destructive/30 animate-slide-up delay-250"
           onClick={() => navigate('/healthscore')}
-        />
+        >
+          <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+            <CardTitle className="text-sm font-medium">Inst. Críticas</CardTitle>
+            <AlertTriangle className={`h-4 w-4 transition-transform duration-300 group-hover:scale-110 ${
+              stats.critical === 0 ? 'text-emerald-500' : stats.critical < 5 ? 'text-warning' : 'text-red-500'
+            }`} />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className={`text-2xl font-bold tabular-nums ${
+              stats.critical === 0 ? 'text-emerald-500' : stats.critical < 5 ? 'text-warning' : 'text-red-500'
+            }`}>{stats.critical}</div>
+            <p className="text-xs text-muted-foreground">
+              Health Score &lt; 60
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Primera fila: Instancias Críticas y Backups Atrasados */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-        <Card className="gradient-card shadow-card">
+        <Card className="animate-slide-up delay-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
               Instancias Críticas
-              <span className="text-xs font-normal bg-red-500/20 text-red-600 px-2 py-0.5 rounded-full">
+              <Badge variant="outline" className="font-medium text-muted-foreground">
                 Producción
-              </span>
+              </Badge>
             </CardTitle>
+            <CardDescription>
+              Instancias con Health Score menor a 60 que requieren atención inmediata
+            </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent>
+            <div className="max-h-[400px] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => requestSortCritical('instanceName')}
                   >
                     Instancia {getSortIndicatorCritical('instanceName')}
                   </TableHead>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent text-center"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
                     onClick={() => requestSortCritical('healthScore')}
                   >
                     Score {getSortIndicatorCritical('healthScore')}
                   </TableHead>
-                  <TableHead className="text-xs">
+                  <TableHead>
                     Problemas
                   </TableHead>
                 </TableRow>
@@ -395,47 +500,57 @@ export default function Overview() {
                 {sortedCriticalInstances.length > 0 ? (
                   sortedCriticalInstances.map((instance, idx) => (
                     <TableRow key={idx}>
-                      <TableCell className="font-mono text-xs py-2">{instance.instanceName}</TableCell>
-                      <TableCell className="py-2 text-center">
+                      <TableCell className="font-medium">{instance.instanceName}</TableCell>
+                      <TableCell className="text-center">
                         <StatusBadge status="critical">{instance.healthScore}</StatusBadge>
                       </TableCell>
-                      <TableCell className="text-xs py-2">
+                      <TableCell className="text-sm">
                         {instance.issues.join(', ')}
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground">
-                      ✅ No hay instancias críticas en Producción
+                    <TableCell colSpan={3} className="text-center py-12">
+                      <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">No hay instancias críticas</h3>
+                      <p className="text-muted-foreground">
+                        Todas las instancias de Producción están saludables.
+                      </p>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="gradient-card shadow-card">
+        <Card className="animate-slide-up delay-350">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <Save className="h-5 w-5 text-warning" />
               Backups Atrasados
-              <span className="text-xs font-normal bg-amber-500/20 text-amber-600 px-2 py-0.5 rounded-full">
+              <Badge variant="outline" className="font-medium text-muted-foreground">
                 Producción
-              </span>
+              </Badge>
             </CardTitle>
+            <CardDescription>
+              Instancias con backups FULL o LOG vencidos en Producción
+            </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent>
+            <div className="max-h-[400px] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => requestSortBackups('instanceName')}
                   >
                     Instancia {getSortIndicatorBackups('instanceName')}
                   </TableHead>
-                  <TableHead className="text-xs">
+                  <TableHead>
                     Problema
                   </TableHead>
                 </TableRow>
@@ -444,8 +559,8 @@ export default function Overview() {
                 {sortedBackupIssues.length > 0 ? (
                   sortedBackupIssues.map((issue, idx) => (
                     <TableRow key={idx}>
-                      <TableCell className="font-mono text-xs py-2">{issue.instanceName}</TableCell>
-                      <TableCell className="text-xs py-2">
+                      <TableCell className="font-medium">{issue.instanceName}</TableCell>
+                      <TableCell className="text-sm">
                         <StatusBadge status={issue.score < 50 ? 'critical' : 'warning'}>
                           {issue.issues.join(', ')}
                         </StatusBadge>
@@ -454,59 +569,68 @@ export default function Overview() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={2} className="text-center text-muted-foreground">
-                      ✅ Todos los backups de Producción están al día
+                    <TableCell colSpan={2} className="text-center py-12">
+                      <Save className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">No hay backups atrasados</h3>
+                      <p className="text-muted-foreground">
+                        Todos los backups de Producción están al día.
+                      </p>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Segunda fila: Discos Críticos y Mantenimiento Atrasado */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-        <Card className="gradient-card shadow-card">
+        <Card className="animate-slide-up delay-400">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <HardDrive className="h-5 w-5" />
+              <HardDrive className="h-5 w-5 text-cyan-500" />
               Discos Críticos
-              <span className="text-xs font-normal bg-orange-500/20 text-orange-600 px-2 py-0.5 rounded-full">
+              <Badge variant="outline" className="font-medium text-muted-foreground">
                 Producción
-              </span>
+              </Badge>
             </CardTitle>
+            <CardDescription>
+              Discos con riesgo real de quedarse sin espacio
+            </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent>
+            <div className="max-h-[400px] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => requestSortDisks('instanceName')}
                   >
                     Instancia {getSortIndicatorDisks('instanceName')}
                   </TableHead>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent text-center"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
                     onClick={() => requestSortDisks('drive')}
                   >
                     Disco {getSortIndicatorDisks('drive')}
                   </TableHead>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent text-center"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
                     onClick={() => requestSortDisks('porcentajeLibre')}
                   >
                     % Disco {getSortIndicatorDisks('porcentajeLibre')}
                   </TableHead>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent text-center"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
                     onClick={() => requestSortDisks('realPorcentajeLibre')}
                   >
                     % Real {getSortIndicatorDisks('realPorcentajeLibre')}
                   </TableHead>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent text-center"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
                     onClick={() => requestSortDisks('libreGB')}
                   >
                     Libre (GB) {getSortIndicatorDisks('libreGB')}
@@ -517,23 +641,23 @@ export default function Overview() {
                 {sortedCriticalDisks.length > 0 ? (
                   sortedCriticalDisks.map((disk, idx) => (
                     <TableRow key={idx}>
-                      <TableCell className="font-mono text-xs py-2">{disk.instanceName}</TableCell>
-                      <TableCell className="text-xs py-2 text-center font-medium">{disk.drive}</TableCell>
-                      <TableCell className="py-2 text-center">
-                        <span className="text-xs text-muted-foreground">
+                      <TableCell className="font-medium">{disk.instanceName}</TableCell>
+                      <TableCell className="text-center font-medium">{disk.drive}</TableCell>
+                      <TableCell className="text-center">
+                        <span className="text-sm text-muted-foreground">
                           {disk.porcentajeLibre.toFixed(1)}%
                         </span>
                       </TableCell>
-                      <TableCell className="py-2 text-center">
+                      <TableCell className="text-center">
                         <StatusBadge status={disk.realPorcentajeLibre < 5 ? 'critical' : 'warning'}>
                           {disk.realPorcentajeLibre.toFixed(1)}%
                         </StatusBadge>
                       </TableCell>
-                      <TableCell className="text-xs py-2 text-center">
+                      <TableCell className="text-sm text-center">
                         <div className="flex flex-col items-center">
                           <span>{disk.libreGB.toFixed(1)} GB</span>
                           {disk.espacioInternoEnArchivosGB > 0.01 && (
-                            <span className="text-[10px] text-green-600 dark:text-green-400">
+                            <span className="text-xs text-success">
                               +{disk.espacioInternoEnArchivosGB.toFixed(1)} GB int.
                             </span>
                           )}
@@ -543,38 +667,47 @@ export default function Overview() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      ✅ No hay discos críticos en Producción
+                    <TableCell colSpan={5} className="text-center py-12">
+                      <HardDrive className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">No hay discos críticos</h3>
+                      <p className="text-muted-foreground">
+                        Todos los discos de Producción están en buen estado.
+                      </p>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="gradient-card shadow-card">
+        <Card className="animate-slide-up delay-450">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Wrench className="h-5 w-5" />
+              <Wrench className="h-5 w-5 text-violet-500" />
               Mantenimiento Atrasado
-              <span className="text-xs font-normal bg-purple-500/20 text-purple-600 px-2 py-0.5 rounded-full">
+              <Badge variant="outline" className="font-medium text-muted-foreground">
                 Producción
-              </span>
+              </Badge>
             </CardTitle>
+            <CardDescription>
+              Instancias con CHECKDB o IndexOptimize vencidos según los umbrales configurados
+            </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent>
+            <div className="max-h-[400px] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => requestSortMaintenance('displayName')}
                   >
                     Instancia/AG {getSortIndicatorMaintenance('displayName')}
                   </TableHead>
                   <TableHead 
-                    className="text-xs cursor-pointer hover:bg-accent text-center"
+                    className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
                     onClick={() => requestSortMaintenance('tipo')}
                   >
                     Tipo {getSortIndicatorMaintenance('tipo')}
@@ -585,11 +718,11 @@ export default function Overview() {
                 {sortedMaintenanceOverdue.length > 0 ? (
                   sortedMaintenanceOverdue.map((item, idx) => (
                     <TableRow key={idx}>
-                      <TableCell className="font-mono text-xs py-2">
+                      <TableCell className="font-medium">
                         {item.displayName}
-                        {item.agName && <span className="ml-1 text-muted-foreground">(AG)</span>}
+                        {item.agName && <span className="ml-1 text-sm text-muted-foreground">(AG)</span>}
                       </TableCell>
-                      <TableCell className="py-2 text-center">
+                      <TableCell className="text-center">
                         <StatusBadge status={item.checkdbVencido && item.indexOptimizeVencido ? 'critical' : 'warning'}>
                           {item.tipo}
                         </StatusBadge>
@@ -598,13 +731,18 @@ export default function Overview() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={2} className="text-center text-muted-foreground">
-                      ✅ Todo el mantenimiento de Producción está al día
+                    <TableCell colSpan={2} className="text-center py-12">
+                      <Wrench className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">No hay mantenimiento atrasado</h3>
+                      <p className="text-muted-foreground">
+                        Todo el mantenimiento de Producción está al día.
+                      </p>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       </div>

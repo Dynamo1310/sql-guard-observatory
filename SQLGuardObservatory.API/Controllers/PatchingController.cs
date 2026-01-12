@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
+using SQLGuardObservatory.API.Models;
 using SQLGuardObservatory.API.Services;
 using System.Security.Claims;
 
@@ -12,6 +14,7 @@ namespace SQLGuardObservatory.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
+[ViewPermission("Patching")]
 public class PatchingController : ControllerBase
 {
     private readonly IPatchingService _patchingService;
@@ -136,6 +139,7 @@ public class PatchingController : ControllerBase
     /// Obtiene los años de compliance disponibles
     /// </summary>
     [HttpGet("compliance/years")]
+    [ViewPermission("PatchingConfig")]
     public async Task<ActionResult<List<int>>> GetComplianceYears()
     {
         try
@@ -154,6 +158,7 @@ public class PatchingController : ControllerBase
     /// Obtiene todas las configuraciones de compliance
     /// </summary>
     [HttpGet("compliance")]
+    [ViewPermission("PatchingConfig")]
     public async Task<ActionResult<List<PatchComplianceConfigDto>>> GetComplianceConfigs([FromQuery] int? year = null)
     {
         try
@@ -172,6 +177,7 @@ public class PatchingController : ControllerBase
     /// Obtiene la configuración de compliance para una versión específica
     /// </summary>
     [HttpGet("compliance/{sqlVersion}")]
+    [ViewPermission("PatchingConfig")]
     public async Task<ActionResult<PatchComplianceConfigDto>> GetComplianceConfig(string sqlVersion)
     {
         try
@@ -190,6 +196,8 @@ public class PatchingController : ControllerBase
     /// Guarda o actualiza una configuración de compliance
     /// </summary>
     [HttpPost("compliance")]
+    [ViewPermission("PatchingConfig")]
+    [RequireCapability(CapabilityDefinitions.PatchingConfigureCompliance)]
     public async Task<ActionResult<PatchComplianceConfigDto>> SaveComplianceConfig([FromBody] PatchComplianceConfigDto config)
     {
         try
@@ -214,6 +222,8 @@ public class PatchingController : ControllerBase
     /// Elimina una configuración de compliance
     /// </summary>
     [HttpDelete("compliance/{id}")]
+    [ViewPermission("PatchingConfig")]
+    [RequireCapability(CapabilityDefinitions.PatchingConfigureCompliance)]
     public async Task<ActionResult> DeleteComplianceConfig(int id)
     {
         try

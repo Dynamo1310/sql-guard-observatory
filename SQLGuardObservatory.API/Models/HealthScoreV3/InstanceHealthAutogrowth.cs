@@ -31,6 +31,8 @@ namespace SQLGuardObservatory.API.Models.HealthScoreV3
         public int AutogrowthEventsLast24h { get; set; }
         public int FilesNearLimit { get; set; }
         public int FilesWithBadGrowth { get; set; }
+        
+        [Column(TypeName = "decimal(5,2)")]
         public decimal WorstPercentOfMax { get; set; }
         public string? AutogrowthDetails { get; set; }  // JSON
     }

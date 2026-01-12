@@ -103,7 +103,7 @@ function generatePassword(options: GeneratorOptions): string {
 }
 
 function calculateStrength(password: string): { score: number; label: string; color: string } {
-  if (!password) return { score: 0, label: 'Sin contraseña', color: 'bg-gray-200' };
+  if (!password) return { score: 0, label: 'Sin contraseña', color: 'bg-muted' };
   
   let score = 0;
   
@@ -127,11 +127,11 @@ function calculateStrength(password: string): { score: number; label: string; co
   const normalizedScore = Math.min(4, Math.floor(score / 2.25));
   
   const levels = [
-    { label: 'Muy débil', color: 'bg-red-500' },
-    { label: 'Débil', color: 'bg-orange-500' },
-    { label: 'Media', color: 'bg-yellow-500' },
-    { label: 'Fuerte', color: 'bg-lime-500' },
-    { label: 'Muy fuerte', color: 'bg-green-500' },
+    { label: 'Muy débil', color: 'bg-destructive' },
+    { label: 'Débil', color: 'bg-destructive' },
+    { label: 'Media', color: 'bg-warning' },
+    { label: 'Fuerte', color: 'bg-success' },
+    { label: 'Muy fuerte', color: 'bg-success' },
   ];
   
   return { score: normalizedScore, ...levels[normalizedScore] };
@@ -216,7 +216,7 @@ export function PasswordInput({
           title="Copiar contraseña"
           className="flex-shrink-0"
         >
-          {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
         </Button>
         
         {/* Botón de generar rápido */}
@@ -250,7 +250,7 @@ export function PasswordInput({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h4 className="font-medium flex items-center gap-2">
-                  <Wand2 className="h-4 w-4 text-violet-500" />
+                  <Wand2 className="h-4 w-4 text-primary" />
                   Generador de Contraseñas
                 </h4>
               </div>
@@ -358,7 +358,7 @@ export function PasswordInput({
                 key={i}
                 className={cn(
                   "h-1.5 flex-1 rounded-full transition-colors",
-                  i <= strength.score ? strength.color : "bg-gray-200 dark:bg-gray-700"
+                  i <= strength.score ? strength.color : "bg-muted"
                 )}
               />
             ))}

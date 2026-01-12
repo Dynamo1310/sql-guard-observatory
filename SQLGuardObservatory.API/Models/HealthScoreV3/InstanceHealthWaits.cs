@@ -88,6 +88,10 @@ namespace SQLGuardObservatory.API.Models.HealthScoreV3
         // ===== LOCK WAITS =====
         public long LockWaitCount { get; set; }
         public long LockWaitMs { get; set; }
+        
+        // ===== NETWORK WAITS (v3.1) =====
+        public long NetworkWaitCount { get; set; }
+        public long NetworkWaitMs { get; set; }
 
         // ===== CONFIG =====
         public int? MaxDOP { get; set; }
@@ -95,6 +99,7 @@ namespace SQLGuardObservatory.API.Models.HealthScoreV3
         // ===== TOTALS =====
         public long TotalWaits { get; set; }
         public long TotalWaitMs { get; set; }
+        public long TotalSignalWaitMs { get; set; }
 
         // ===== COMPUTED PROPERTIES =====
         

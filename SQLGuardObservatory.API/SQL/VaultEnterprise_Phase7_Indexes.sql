@@ -1,12 +1,12 @@
 -- =============================================
 -- Script: VaultEnterprise_Phase7_Indexes.sql
 -- Description: Fase 7 - Índices de performance
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='

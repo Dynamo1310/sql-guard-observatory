@@ -2,23 +2,31 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Models;
+using SQLGuardObservatory.API.Services;
 
 namespace SQLGuardObservatory.API.Controllers;
 
 [ApiController]
 [Route("api/alerts")]
 [Authorize]
+[ViewPermission("OnCallAlerts")]
 public class AlertsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
+    private readonly IOnCallAlertService _alertService;
     private readonly ILogger<AlertsController> _logger;
 
-    public AlertsController(ApplicationDbContext context, ILogger<AlertsController> logger)
+    public AlertsController(
+        ApplicationDbContext context,
+        IOnCallAlertService alertService,
+        ILogger<AlertsController> logger)
     {
         _context = context;
+        _alertService = alertService;
         _logger = logger;
     }
 
@@ -45,6 +53,7 @@ public class AlertsController : ControllerBase
                     AlertType = r.AlertType,
                     ConditionDays = r.ConditionDays,
                     IsEnabled = r.IsEnabled,
+                    AttachExcel = r.AttachExcel,
                     CreatedByDisplayName = r.CreatedByUser.DisplayName ?? r.CreatedByUser.DomainUser ?? "",
                     CreatedAt = r.CreatedAt,
                     UpdatedAt = r.UpdatedAt,
@@ -87,6 +96,7 @@ public class AlertsController : ControllerBase
                     AlertType = r.AlertType,
                     ConditionDays = r.ConditionDays,
                     IsEnabled = r.IsEnabled,
+                    AttachExcel = r.AttachExcel,
                     CreatedByDisplayName = r.CreatedByUser.DisplayName ?? r.CreatedByUser.DomainUser ?? "",
                     CreatedAt = r.CreatedAt,
                     UpdatedAt = r.UpdatedAt,
@@ -128,6 +138,7 @@ public class AlertsController : ControllerBase
                 Description = request.Description,
                 AlertType = request.AlertType,
                 ConditionDays = request.ConditionDays,
+                AttachExcel = request.AttachExcel,
                 IsEnabled = true,
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.Now,
@@ -177,6 +188,9 @@ public class AlertsController : ControllerBase
             
             if (request.IsEnabled.HasValue)
                 rule.IsEnabled = request.IsEnabled.Value;
+            
+            if (request.AttachExcel.HasValue)
+                rule.AttachExcel = request.AttachExcel.Value;
 
             rule.UpdatedAt = DateTime.Now;
 
@@ -320,6 +334,26 @@ public class AlertsController : ControllerBase
         {
             _logger.LogError(ex, "Error al actualizar destinatario {RecipientId}", recipientId);
             return StatusCode(500, new { message = "Error al actualizar destinatario" });
+        }
+    }
+
+    /// <summary>
+    /// Ejecuta manualmente la verificación de alertas por días restantes
+    /// Este endpoint debería ser llamado por un job programado diariamente
+    /// </summary>
+    [HttpPost("check-days-remaining")]
+    public async Task<ActionResult> CheckDaysRemaining()
+    {
+        try
+        {
+            await _alertService.CheckAndTriggerDaysRemainingAlertsAsync();
+            _logger.LogInformation("Verificación de días restantes ejecutada exitosamente");
+            return Ok(new { message = "Verificación completada exitosamente" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al verificar días restantes");
+            return StatusCode(500, new { message = "Error al verificar días restantes" });
         }
     }
 }

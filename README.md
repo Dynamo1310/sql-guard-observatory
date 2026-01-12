@@ -1,73 +1,51 @@
-# Welcome to your Lovable project
+# SQL Nova
 
-## Project info
+Panel de Observabilidad SQL Server para Banco Supervielle.
 
-**URL**: https://lovable.dev/projects/d189df63-8c92-49e0-aef6-85239bf804ac
+## Descripción
 
-## How can I edit this code?
+SQL Nova es una herramienta interna de monitoreo y observabilidad para bases de datos SQL Server, desarrollada por el equipo de DBA de Banco Supervielle.
 
-There are several ways of editing your application.
+## Características
 
-**Use Lovable**
+- **Overview**: Dashboard principal con resumen de alertas y estado general
+- **Health Score**: Puntuación de salud de los servidores SQL
+- **Jobs**: Monitoreo de SQL Agent Jobs
+- **Discos**: Estado y uso de discos
+- **Bases de Datos**: Información de bases de datos
+- **Backups**: Estado de backups
+- **Índices**: Análisis de índices
+- **Parcheos**: Dashboard de compliance de parcheos
+- **Guardias DBA**: Sistema de gestión de guardias con intercambios
+- **Vault DBA**: Gestión segura de credenciales
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/d189df63-8c92-49e0-aef6-85239bf804ac) and start prompting.
+## Tecnologías
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Frontend**: React + TypeScript + Vite
+- **UI**: shadcn/ui + Tailwind CSS
+- **Backend**: .NET Core Web API
+- **Base de Datos**: SQL Server
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Desarrollo Local
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Instalar dependencias
+npm install
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Iniciar servidor de desarrollo
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Build
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```sh
+# Build de producción
+npm run build
 
-**Use GitHub Codespaces**
+# Build de desarrollo
+npm run build:dev
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Autor
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/d189df63-8c92-49e0-aef6-85239bf804ac) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Equipo DBA - Banco Supervielle

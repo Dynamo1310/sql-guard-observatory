@@ -1,7 +1,7 @@
 -- =============================================
 -- Script: VaultEnterprise_PreImplementation_Checklist.sql
 -- Description: Checklist pre-implementación ejecutable por DBA/DevOps
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 --
@@ -11,7 +11,7 @@
 -- Si alguno falla, STOP y resolver antes de continuar.
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='
@@ -41,9 +41,9 @@ SELECT
 -- CHECK 2: Base de datos existe
 SELECT 
     CASE 
-        WHEN DB_ID('SQLGuardObservatoryAuth') IS NOT NULL 
-        THEN 'PASS: Database SQLGuardObservatoryAuth exists'
-        ELSE 'FAIL: Database SQLGuardObservatoryAuth not found' 
+        WHEN DB_ID('AppSQLNova') IS NOT NULL 
+        THEN 'PASS: Database AppSQLNova exists'
+        ELSE 'FAIL: Database AppSQLNova not found' 
     END AS [CHECK_2_DatabaseExists];
 
 -- CHECK 3: Función fn_GetArgentinaTimeOffset existe
@@ -262,7 +262,7 @@ GO
 PRINT ''
 PRINT '=== 4.6 BACKUP Y RECOVERY (Manual) ==='
 PRINT ''
-PRINT '[ ] Backup FULL de SQLGuardObservatoryAuth completado'
+PRINT '[ ] Backup FULL de AppSQLNova completado'
 PRINT '[ ] Backup verificado (RESTORE VERIFYONLY)'
 PRINT '[ ] Plan de rollback documentado y aprobado'
 PRINT '[ ] Ventana de mantenimiento coordinada (si aplica)'

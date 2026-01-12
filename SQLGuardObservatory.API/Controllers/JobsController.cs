@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.Services;
 
 namespace SQLGuardObservatory.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "WhitelistOnly")]
+[Authorize]
+[ViewPermission("Jobs")]
 public class JobsController : ControllerBase
 {
     private readonly IJobsService _jobsService;

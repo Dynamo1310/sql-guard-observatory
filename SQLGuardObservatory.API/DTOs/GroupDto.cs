@@ -78,8 +78,12 @@ public class GroupMemberDto
     public string DisplayName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string? Role { get; set; }
+    public int? RoleId { get; set; }
+    public string? RoleColor { get; set; }
+    public string? RoleIcon { get; set; }
     public string AddedAt { get; set; } = string.Empty;
     public string? AddedByUserName { get; set; }
+    public string? ProfilePhotoUrl { get; set; }
 }
 
 /// <summary>
@@ -172,6 +176,9 @@ public class AvailableUserDto
     public string DisplayName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string? Role { get; set; }
+    public int? RoleId { get; set; }
+    public string? RoleColor { get; set; }
+    public string? RoleIcon { get; set; }
     public bool IsAlreadyMember { get; set; }
 }
 
@@ -185,6 +192,9 @@ public class UserWithGroupsDto
     public string DisplayName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string Role { get; set; } = string.Empty;
+    public int? RoleId { get; set; }
+    public string? RoleColor { get; set; }
+    public string? RoleIcon { get; set; }
     public bool Active { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
     public List<UserGroupMembershipDto> Groups { get; set; } = new();

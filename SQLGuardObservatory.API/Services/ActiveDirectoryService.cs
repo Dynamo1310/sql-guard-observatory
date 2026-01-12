@@ -8,10 +8,14 @@ namespace SQLGuardObservatory.API.Services;
 public class ActiveDirectoryService : IActiveDirectoryService
 {
     private readonly ILogger<ActiveDirectoryService> _logger;
+    private readonly IConfiguration _configuration;
+    private readonly string _domainName;
 
-    public ActiveDirectoryService(ILogger<ActiveDirectoryService> logger)
+    public ActiveDirectoryService(ILogger<ActiveDirectoryService> logger, IConfiguration configuration)
     {
         _logger = logger;
+        _configuration = configuration;
+        _domainName = _configuration["ActiveDirectory:Domain"] ?? "gscorp.ad";
     }
 
     public async Task<List<ActiveDirectoryUserDto>> GetGroupMembersAsync(string groupName)
@@ -33,7 +37,7 @@ public class ActiveDirectoryService : IActiveDirectoryService
             _logger.LogInformation($"Buscando miembros del grupo AD: {cleanGroupName}");
 
             // Conectar al dominio actual
-            using var context = new PrincipalContext(ContextType.Domain, "gscorp.ad");
+            using var context = new PrincipalContext(ContextType.Domain, _domainName);
             
             // Buscar el grupo
             using var group = GroupPrincipal.FindByIdentity(context, IdentityType.SamAccountName, cleanGroupName);
@@ -46,8 +50,8 @@ public class ActiveDirectoryService : IActiveDirectoryService
 
             _logger.LogInformation($"Grupo encontrado: {group.Name}");
 
-            // Obtener los miembros del grupo
-            var members = group.GetMembers(true); // true = incluye grupos anidados
+            // Obtener los miembros directos del grupo (sin recursividad en grupos anidados)
+            var members = group.GetMembers(false); // false = solo miembros directos
 
             foreach (var member in members)
             {
@@ -88,4 +92,3 @@ public class ActiveDirectoryService : IActiveDirectoryService
         return users.OrderBy(u => u.DisplayName).ToList();
     }
 }
-

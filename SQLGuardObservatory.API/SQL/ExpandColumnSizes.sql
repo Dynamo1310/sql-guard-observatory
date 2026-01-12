@@ -2,7 +2,7 @@
 -- SQL Guard Observatory - Patching Module
 -- Soluciona: "String or binary data would be truncated"
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- Expandir ServerName y InstanceName a 200
@@ -73,4 +73,7 @@ GO
 
 PRINT 'Expansión de columnas completada exitosamente'
 GO
+
+
+
 

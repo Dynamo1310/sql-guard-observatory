@@ -17,13 +17,9 @@ export function ThemeToggle() {
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     
-    // Actualizar DOM primero
     document.documentElement.classList.toggle('dark', newTheme === 'dark');
-    
-    // Disparar evento inmediatamente después (síncrono)
     window.dispatchEvent(new CustomEvent('themeChange', { detail: { theme: newTheme } }));
     
-    // Actualizar estado local y localStorage
     setTheme(newTheme);
     localStorage.setItem('theme', newTheme);
   };
@@ -31,9 +27,9 @@ export function ThemeToggle() {
   return (
     <Button
       variant="ghost"
-      size="icon"
+      size="icon-sm"
       onClick={toggleTheme}
-      className="h-9 w-9"
+      className="h-8 w-8 rounded-lg"
     >
       {theme === 'light' ? (
         <Moon className="h-4 w-4" />

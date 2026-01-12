@@ -1,12 +1,21 @@
 using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Data;
+using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
+using System.Text.Json;
 
 namespace SQLGuardObservatory.API.Services.Collectors;
 
 /// <summary>
 /// Servicio consolidador que calcula el HealthScore final
-/// basado en los datos recolectados por cada collector
+/// 
+/// Caracteristicas:
+/// - 8 categorias con pesos configurables desde BD (total = 100%)
+/// - Penalizaciones SELECTIVAS (NO caps globales)
+/// - Health Status: Healthy (>=90), Warning (75-89), Risk (60-74), Critical (menos de 60)
+/// 
+/// Categorias ELIMINADAS (ya no se recolectan ni ponderan):
+/// - DatabaseStates, ErroresCriticos, ConfiguracionTempdb, Autogrowth
 /// </summary>
 public class HealthScoreConsolidator : BackgroundService
 {
@@ -14,21 +23,18 @@ public class HealthScoreConsolidator : BackgroundService
     private readonly ILogger<HealthScoreConsolidator> _logger;
     private readonly TimeSpan _consolidationInterval = TimeSpan.FromMinutes(5);
 
-    // Pesos por categoría (suma = 100%)
-    private static readonly Dictionary<string, decimal> CategoryWeights = new()
+    // Pesos por defecto (se sobrescriben con valores de BD si existen)
+    // 8 categorias activas - Total: 100%
+    private static readonly Dictionary<string, decimal> DefaultWeights = new()
     {
-        ["Backups"] = 18m,
-        ["AlwaysOn"] = 14m,
-        ["LogChain"] = 5m,
-        ["DatabaseStates"] = 3m,
-        ["CPU"] = 10m,
-        ["Memoria"] = 8m,
-        ["IO"] = 10m,
-        ["Discos"] = 7m,
-        ["ErroresCriticos"] = 7m,
-        ["Mantenimientos"] = 5m,
-        ["ConfiguracionTempdb"] = 8m,
-        ["Autogrowth"] = 5m
+        ["Backups"] = 23m,
+        ["AlwaysOn"] = 17m,
+        ["CPU"] = 12m,
+        ["Memoria"] = 10m,
+        ["IO"] = 13m,
+        ["Discos"] = 9m,
+        ["Waits"] = 10m,
+        ["Maintenance"] = 6m
     };
 
     public HealthScoreConsolidator(
@@ -37,6 +43,46 @@ public class HealthScoreConsolidator : BackgroundService
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Obtiene los pesos de cada collector desde la BD
+    /// </summary>
+    private async Task<Dictionary<string, decimal>> GetCategoryWeightsAsync(ApplicationDbContext context, CancellationToken ct)
+    {
+        var configs = await context.CollectorConfigs
+            .Where(c => c.IsEnabled && c.Weight > 0)
+            .ToListAsync(ct);
+
+        var weights = new Dictionary<string, decimal>(DefaultWeights);
+
+        foreach (var config in configs)
+        {
+            // Mapear nombre del collector a categoria
+            var category = config.CollectorName switch
+            {
+                "Maintenance" => "Maintenance",
+                _ => config.CollectorName
+            };
+
+            if (weights.ContainsKey(category))
+            {
+                weights[category] = config.Weight;
+            }
+        }
+
+        // Normalizar pesos para que sumen 100%
+        var total = weights.Values.Sum();
+        if (total > 0 && Math.Abs(total - 100m) > 0.01m)
+        {
+            var factor = 100m / total;
+            foreach (var key in weights.Keys.ToList())
+            {
+                weights[key] = Math.Round(weights[key] * factor, 2);
+            }
+        }
+
+        return weights;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -67,6 +113,11 @@ public class HealthScoreConsolidator : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var instanceProvider = scope.ServiceProvider.GetRequiredService<IInstanceProvider>();
 
+        // Cargar excepciones de mantenimiento activas
+        var maintenanceExceptions = await LoadMaintenanceExceptionsAsync(context, ct);
+        _logger.LogDebug("Excepciones de mantenimiento cargadas: CHECKDB={CheckdbCount}, IndexOptimize={IndexCount}",
+            maintenanceExceptions.CheckdbExceptions.Count, maintenanceExceptions.IndexOptimizeExceptions.Count);
+
         var instances = await instanceProvider.GetFilteredInstancesAsync(ct: ct);
         _logger.LogInformation("Consolidating scores for {Count} instances", instances.Count);
 
@@ -74,7 +125,7 @@ public class HealthScoreConsolidator : BackgroundService
         {
             try
             {
-                await ConsolidateInstanceScoreAsync(context, instance.InstanceName, ct);
+                await ConsolidateInstanceScoreAsync(context, instance.InstanceName, maintenanceExceptions, ct);
             }
             catch (Exception ex)
             {
@@ -83,10 +134,53 @@ public class HealthScoreConsolidator : BackgroundService
         }
     }
 
-    private async Task ConsolidateInstanceScoreAsync(ApplicationDbContext context, string instanceName, CancellationToken ct)
+    /// <summary>
+    /// Carga las excepciones de mantenimiento activas desde la BD
+    /// </summary>
+    private async Task<MaintenanceExceptions> LoadMaintenanceExceptionsAsync(ApplicationDbContext context, CancellationToken ct)
+    {
+        var exceptions = await context.Set<CollectorException>()
+            .AsNoTracking()
+            .Where(e => e.CollectorName == "Maintenance" && e.IsActive)
+            .ToListAsync(ct);
+
+        var result = new MaintenanceExceptions();
+
+        foreach (var ex in exceptions)
+        {
+            if (ex.ExceptionType.Equals("CHECKDB", StringComparison.OrdinalIgnoreCase))
+            {
+                result.CheckdbExceptions.Add(ex.ServerName);
+            }
+            else if (ex.ExceptionType.Equals("IndexOptimize", StringComparison.OrdinalIgnoreCase))
+            {
+                result.IndexOptimizeExceptions.Add(ex.ServerName);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Verifica si una instancia está exceptuada de un tipo de mantenimiento
+    /// Soporta nombre de instancia completo, hostname y nombre corto (sin FQDN)
+    /// </summary>
+    private static bool IsExcepted(string instanceName, HashSet<string> exceptions)
+    {
+        if (exceptions.Count == 0) return false;
+
+        var hostname = instanceName.Split('\\')[0];
+        var shortName = hostname.Split('.')[0];
+
+        return exceptions.Contains(instanceName)
+            || exceptions.Contains(hostname)
+            || exceptions.Contains(shortName);
+    }
+
+    private async Task ConsolidateInstanceScoreAsync(ApplicationDbContext context, string instanceName, MaintenanceExceptions maintenanceExceptions, CancellationToken ct)
     {
         // Obtener los datos más recientes de cada collector
-        var cutoffTime = DateTime.Now.AddHours(-1); // Solo considerar datos de la última hora
+        var cutoffTime = DateTime.Now.AddHours(-1);
 
         var cpuData = await context.InstanceHealthCPU
             .Where(x => x.InstanceName == instanceName && x.CollectedAtUtc >= cutoffTime)
@@ -123,27 +217,14 @@ public class HealthScoreConsolidator : BackgroundService
             .OrderByDescending(x => x.CollectedAtUtc)
             .FirstOrDefaultAsync(ct);
 
-        var dbStatesData = await context.InstanceHealthDatabaseStates
-            .Where(x => x.InstanceName == instanceName && x.CollectedAtUtc >= cutoffTime)
-            .OrderByDescending(x => x.CollectedAtUtc)
-            .FirstOrDefaultAsync(ct);
-
-        var erroresData = await context.InstanceHealthErroresCriticos
-            .Where(x => x.InstanceName == instanceName && x.CollectedAtUtc >= cutoffTime)
-            .OrderByDescending(x => x.CollectedAtUtc)
-            .FirstOrDefaultAsync(ct);
+        // NOTA: DatabaseStates, ErroresCriticos, ConfiguracionTempdb y Autogrowth fueron eliminados del HealthScore
 
         var maintenanceData = await context.InstanceHealthMaintenance
             .Where(x => x.InstanceName == instanceName && x.CollectedAtUtc >= cutoffTime)
             .OrderByDescending(x => x.CollectedAtUtc)
             .FirstOrDefaultAsync(ct);
 
-        var tempdbData = await context.InstanceHealthConfiguracionTempdb
-            .Where(x => x.InstanceName == instanceName && x.CollectedAtUtc >= cutoffTime)
-            .OrderByDescending(x => x.CollectedAtUtc)
-            .FirstOrDefaultAsync(ct);
-
-        var autogrowthData = await context.InstanceHealthAutogrowth
+        var waitsData = await context.InstanceHealthWaits
             .Where(x => x.InstanceName == instanceName && x.CollectedAtUtc >= cutoffTime)
             .OrderByDescending(x => x.CollectedAtUtc)
             .FirstOrDefaultAsync(ct);
@@ -155,39 +236,44 @@ public class HealthScoreConsolidator : BackgroundService
             return;
         }
 
-        // Calcular scores individuales (usando lógica similar a PowerShell)
+        // Obtener pesos configurados desde la BD
+        var categoryWeights = await GetCategoryWeightsAsync(context, ct);
+
+        // Verificar excepciones de mantenimiento para esta instancia
+        var isCheckdbExcepted = IsExcepted(instanceName, maintenanceExceptions.CheckdbExceptions);
+        var isIndexOptimizeExcepted = IsExcepted(instanceName, maintenanceExceptions.IndexOptimizeExceptions);
+
+        // Calcular scores individuales (8 categorias activas)
         var scores = new Dictionary<string, int>
         {
-            ["CPU"] = CalculateCPUScore(cpuData),
-            ["Memoria"] = CalculateMemoriaScore(memoriaData),
-            ["IO"] = CalculateIOScore(ioData),
+            ["CPU"] = CalculateCPUScore(cpuData, waitsData),
+            ["Memoria"] = CalculateMemoriaScore(memoriaData, waitsData),
+            ["IO"] = CalculateIOScore(ioData, waitsData),
             ["Discos"] = CalculateDiscosScore(discosData),
+            ["Waits"] = CalculateWaitsScore(waitsData),
             ["Backups"] = CalculateBackupsScore(backupsData),
             ["AlwaysOn"] = CalculateAlwaysOnScore(alwaysOnData),
-            ["LogChain"] = CalculateLogChainScore(logChainData),
-            ["DatabaseStates"] = CalculateDatabaseStatesScore(dbStatesData),
-            ["ErroresCriticos"] = CalculateErroresScore(erroresData),
-            ["Mantenimientos"] = CalculateMaintenanceScore(maintenanceData),
-            ["ConfiguracionTempdb"] = CalculateTempDBScore(tempdbData),
-            ["Autogrowth"] = CalculateAutogrowthScore(autogrowthData)
+            ["Maintenance"] = CalculateMaintenanceScore(maintenanceData, isCheckdbExcepted, isIndexOptimizeExcepted)
         };
 
-        // Aplicar penalizaciones selectivas
-        ApplySelectivePenalties(scores, discosData, autogrowthData, alwaysOnData);
+        // LogChain se calcula pero NO se pondera (guardamos para historial)
+        var logChainScore = CalculateLogChainScore(logChainData);
 
-        // Calcular contribuciones ponderadas
+        // Calcular contribuciones base usando pesos de BD
         var contributions = new Dictionary<string, decimal>();
-        decimal totalScore = 0;
-
         foreach (var (category, score) in scores)
         {
-            if (CategoryWeights.TryGetValue(category, out var weight))
+            if (categoryWeights.TryGetValue(category, out var weight))
             {
-                var contribution = (score * weight) / 100m;
-                contributions[category] = contribution;
-                totalScore += contribution;
+                contributions[category] = Math.Round((score * weight) / 100m, 0);
             }
         }
+
+        // Aplicar PENALIZACIONES SELECTIVAS simplificadas (sin las categorías eliminadas)
+        ApplySelectivePenalties(contributions, scores, discosData);
+
+        // Calcular score final (suma de contribuciones con penalizaciones)
+        var totalScore = (int)contributions.Values.Sum();
 
         // Crear registro consolidado
         var healthScore = new InstanceHealthScore
@@ -197,36 +283,45 @@ public class HealthScoreConsolidator : BackgroundService
             HostingSite = cpuData?.HostingSite ?? backupsData?.HostingSite,
             SqlVersion = cpuData?.SqlVersion ?? backupsData?.SqlVersion,
             CollectedAtUtc = DateTime.Now,
-            HealthScore = (int)Math.Round(totalScore),
-            HealthStatus = GetHealthStatus((int)Math.Round(totalScore)),
+            HealthScore = totalScore,
+            HealthStatus = GetHealthStatus(totalScore),
             
-            // Scores individuales
+            // Scores individuales (0-100) - 8 categorías activas
             BackupsScore = scores["Backups"],
             AlwaysOnScore = scores["AlwaysOn"],
-            LogChainScore = scores["LogChain"],
-            DatabaseStatesScore = scores["DatabaseStates"],
+            LogChainScore = logChainScore,  // Se guarda pero NO se pondera
+            DatabaseStatesScore = 0,  // ELIMINADO - ya no se recolecta
             CPUScore = scores["CPU"],
             MemoriaScore = scores["Memoria"],
             IOScore = scores["IO"],
             DiscosScore = scores["Discos"],
-            ErroresCriticosScore = scores["ErroresCriticos"],
-            MantenimientosScore = scores["Mantenimientos"],
-            ConfiguracionTempdbScore = scores["ConfiguracionTempdb"],
-            AutogrowthScore = scores["Autogrowth"],
+            WaitsScore = scores["Waits"],
+            ErroresCriticosScore = 0,  // ELIMINADO - ya no se recolecta
+            MantenimientosScore = scores["Maintenance"],
+            ConfiguracionTempdbScore = 0,  // ELIMINADO - ya no se recolecta
+            AutogrowthScore = 0,  // ELIMINADO - ya no se recolecta
             
-            // Contribuciones (scores ponderados)
+            // Diagnostico inteligente de I/O (deshabilitado sin TempDB data)
+            TempDBIODiagnosis = null,
+            TempDBIOSuggestion = null,
+            TempDBIOSeverity = "OK",
+            
+            // Contribuciones ponderadas (8 categorías activas)
             BackupsContribution = (int)contributions.GetValueOrDefault("Backups"),
             AlwaysOnContribution = (int)contributions.GetValueOrDefault("AlwaysOn"),
-            LogChainContribution = (int)contributions.GetValueOrDefault("LogChain"),
-            DatabaseStatesContribution = (int)contributions.GetValueOrDefault("DatabaseStates"),
+            LogChainContribution = 0,  // Ya no se pondera
+            DatabaseStatesContribution = 0,  // ELIMINADO
             CPUContribution = (int)contributions.GetValueOrDefault("CPU"),
             MemoriaContribution = (int)contributions.GetValueOrDefault("Memoria"),
             IOContribution = (int)contributions.GetValueOrDefault("IO"),
             DiscosContribution = (int)contributions.GetValueOrDefault("Discos"),
-            ErroresCriticosContribution = (int)contributions.GetValueOrDefault("ErroresCriticos"),
-            MantenimientosContribution = (int)contributions.GetValueOrDefault("Mantenimientos"),
-            ConfiguracionTempdbContribution = (int)contributions.GetValueOrDefault("ConfiguracionTempdb"),
-            AutogrowthContribution = (int)contributions.GetValueOrDefault("Autogrowth")
+            WaitsContribution = (int)contributions.GetValueOrDefault("Waits"),
+            ErroresCriticosContribution = 0,  // ELIMINADO
+            MantenimientosContribution = (int)contributions.GetValueOrDefault("Maintenance"),
+            ConfiguracionTempdbContribution = 0,  // ELIMINADO
+            AutogrowthContribution = 0,  // ELIMINADO
+            
+            GlobalCap = 100 // No usamos cap global, solo penalizaciones selectivas
         };
 
         context.InstanceHealthScores.Add(healthScore);
@@ -235,48 +330,41 @@ public class HealthScoreConsolidator : BackgroundService
         _logger.LogDebug("Consolidated score for {Instance}: {Score}", instanceName, healthScore.HealthScore);
     }
 
+    /// <summary>
+    /// Aplica penalizaciones SELECTIVAS simplificadas (8 categorías)
+    /// En lugar de un cap global que penaliza TODO, penalizamos solo categorías RELACIONADAS
+    /// </summary>
     private void ApplySelectivePenalties(
+        Dictionary<string, decimal> contributions,
         Dictionary<string, int> scores,
-        InstanceHealthDiscos? discosData,
-        InstanceHealthAutogrowth? autogrowthData,
-        InstanceHealthAlwaysOn? alwaysOnData)
+        InstanceHealthDiscos? discosData)
     {
-        // Penalización por Autogrowth crítico afecta Discos, IO, AlwaysOn
-        if (scores["Autogrowth"] < 50)
+        // PENALIZACION SELECTIVA 1: Backups criticos
+        if (scores["Backups"] == 0)
         {
-            var penaltyFactor = scores["Autogrowth"] / 100m;
-            scores["Discos"] = (int)(scores["Discos"] * (0.7m + penaltyFactor * 0.3m));
-            scores["IO"] = (int)(scores["IO"] * (0.8m + penaltyFactor * 0.2m));
+            contributions["AlwaysOn"] = Math.Round(contributions["AlwaysOn"] * 0.8m);  // -20% (DR complementario)
         }
 
-        // Penalización por LogChain rota afecta Backups
-        if (scores["LogChain"] < 50)
+        // PENALIZACIÓN SELECTIVA 2: Discos críticos (< 10% libre)
+        if (scores["Discos"] < 30)
         {
-            scores["Backups"] = Math.Min(scores["Backups"], 60);
-        }
-
-        // Penalización por Database States crítico afecta todo
-        if (scores["DatabaseStates"] < 20)
-        {
-            foreach (var key in scores.Keys.ToList())
-            {
-                if (key != "DatabaseStates")
-                {
-                    scores[key] = Math.Min(scores[key], 50);
-                }
-            }
+            contributions["IO"] = Math.Round(contributions["IO"] * 0.7m);  // -30% (disco lleno afecta I/O)
         }
     }
 
+    // NOTA: GetIODiagnosisForTempDB fue eliminado (ConfiguracionTempdb desactivado)
+
     private static string GetHealthStatus(int score) => score switch
     {
-        >= 80 => "Healthy",
-        >= 60 => "Warning",
+        >= 90 => "Healthy",
+        >= 75 => "Warning",
+        >= 60 => "Risk",
         _ => "Critical"
     };
 
-    // Métodos de cálculo de score por categoría
-    private static int CalculateCPUScore(InstanceHealthCPU? data)
+    #region Métodos de cálculo de score por categoría (lógica exacta del PowerShell)
+
+    private static int CalculateCPUScore(InstanceHealthCPU? data, InstanceHealthWaits? waitsData)
     {
         if (data == null) return 100;
         
@@ -287,34 +375,132 @@ public class HealthScoreConsolidator : BackgroundService
             _ => 40
         };
 
-        if (data.RunnableTasks > 1)
-            score = Math.Min(score, 70);
+        var cap = 100;
 
-        return score;
+        // RunnableTask >1 sostenido => cap 70
+        if (data.RunnableTasks > 1)
+            cap = 70;
+
+        // Waits de CPU
+        if (waitsData != null && waitsData.TotalWaitMs > 0)
+        {
+            var parallelismMs = waitsData.CXPacketWaitMs + waitsData.CXConsumerWaitMs;
+            var parallelismPct = (parallelismMs * 100m) / waitsData.TotalWaitMs;
+            
+            if (parallelismPct > 15)
+                score = Math.Min(score, 50);
+            else if (parallelismPct > 10)
+                score = Math.Min(score, 70);
+
+            var sosYieldMs = waitsData.SOSSchedulerYieldMs;
+            var sosYieldPct = (sosYieldMs * 100m) / waitsData.TotalWaitMs;
+
+            if (sosYieldPct > 15)
+            {
+                score = Math.Min(score, 40);
+                cap = Math.Min(cap, 70);
+            }
+            else if (sosYieldPct > 10)
+                score = Math.Min(score, 60);
+        }
+
+        return Math.Clamp(Math.Min(score, cap), 0, 100);
     }
 
-    private static int CalculateMemoriaScore(InstanceHealthMemoria? data)
+    private static int CalculateMemoriaScore(InstanceHealthMemoria? data, InstanceHealthWaits? waitsData)
     {
         if (data == null) return 100;
 
-        var pleRatio = data.PLETarget > 0 ? (data.PageLifeExpectancy * 100.0m) / data.PLETarget : 100m;
-        
-        var score = pleRatio switch
+        // PLE Score (60% del score)
+        int pleScore;
+        if (data.PLETarget > 0)
         {
-            >= 100 => 100,
-            >= 70 => 80,
-            >= 50 => 60,
-            >= 30 => 40,
-            _ => 20
+            var pleRatio = (decimal)data.PageLifeExpectancy / data.PLETarget;
+            pleScore = pleRatio switch
+            {
+                >= 1.0m => 100,
+                >= 0.7m => 80,
+                >= 0.5m => 60,
+                >= 0.3m => 40,
+                _ => 20
+            };
+        }
+        else
+        {
+            pleScore = data.PageLifeExpectancy switch
+            {
+                >= 300 => 100,
+                >= 200 => 80,
+                >= 100 => 60,
+                _ => 40
+            };
+        }
+
+        // Memory Grants Score (25%)
+        var grantsScore = data.MemoryGrantsPending switch
+        {
+            0 => 100,
+            <= 5 => 80,
+            <= 10 => 50,
+            _ => 0
         };
 
-        if (data.MemoryGrantsPending > 10)
-            score = Math.Min(score, 60);
+        // Uso de Memoria Score (15%)
+        var usoScore = 100;
+        if (data.MaxServerMemoryMB > 0)
+        {
+            var usoRatio = (decimal)data.TotalServerMemoryMB / data.MaxServerMemoryMB;
+            usoScore = usoRatio switch
+            {
+                >= 0.95m => 100,
+                >= 0.80m => 90,
+                >= 0.60m => 70,
+                _ => 50
+            };
+        }
 
-        return score;
+        var score = (int)((pleScore * 0.6m) + (grantsScore * 0.25m) + (usoScore * 0.15m));
+        var cap = 100;
+
+        // Waits de memoria
+        if (waitsData != null && waitsData.TotalWaitMs > 0)
+        {
+            var resSemMs = waitsData.ResourceSemaphoreWaitMs;
+            var resSemPct = (resSemMs * 100m) / waitsData.TotalWaitMs;
+
+            if (resSemPct > 5)
+            {
+                score = Math.Min(score, 40);
+                cap = Math.Min(cap, 60);
+            }
+            else if (resSemPct > 2)
+                score = Math.Min(score, 60);
+        }
+
+        // Stolen Memory
+        if (data.TotalServerMemoryMB > 0 && data.StolenServerMemoryMB > 0)
+        {
+            var stolenPct = (data.StolenServerMemoryMB * 100m) / data.TotalServerMemoryMB;
+
+            if (stolenPct > 50)
+            {
+                score = Math.Min(score, 50);
+                cap = Math.Min(cap, 70);
+            }
+            else if (stolenPct > 30)
+                score = Math.Min(score, 70);
+        }
+
+        // Caps adicionales
+        if (data.PLETarget > 0 && data.PageLifeExpectancy < (data.PLETarget * 0.15))
+            cap = Math.Min(cap, 60);
+        if (data.MemoryGrantsPending > 10)
+            cap = Math.Min(cap, 60);
+
+        return Math.Clamp(Math.Min(score, cap), 0, 100);
     }
 
-    private static int CalculateIOScore(InstanceHealthIO? data)
+    private static int CalculateIOScore(InstanceHealthIO? data, InstanceHealthWaits? waitsData)
     {
         if (data == null) return 100;
 
@@ -328,17 +514,55 @@ public class HealthScoreConsolidator : BackgroundService
             _ => 40
         };
 
-        if (data.LogFileAvgWriteMs > 20)
-            score = Math.Min(score, 70);
+        var cap = 100;
 
-        return score;
+        // Log p95 >20ms => cap 70
+        if (data.LogFileAvgWriteMs > 20)
+            cap = 70;
+
+        // Waits de I/O
+        if (waitsData != null && waitsData.TotalWaitMs > 0)
+        {
+            var pageIOLatchMs = waitsData.PageIOLatchWaitMs;
+            var pageIOLatchPct = (pageIOLatchMs * 100m) / waitsData.TotalWaitMs;
+
+            if (pageIOLatchPct > 10)
+            {
+                score = Math.Min(score, 40);
+                cap = Math.Min(cap, 60);
+            }
+            else if (pageIOLatchPct > 5)
+                score = Math.Min(score, 60);
+
+            var writeLogMs = waitsData.WriteLogWaitMs;
+            var writeLogPct = (writeLogMs * 100m) / waitsData.TotalWaitMs;
+
+            if (writeLogPct > 10)
+            {
+                score = Math.Min(score, 50);
+                cap = Math.Min(cap, 70);
+            }
+            else if (writeLogPct > 5)
+                score = Math.Min(score, 70);
+
+            var asyncIOMs = waitsData.AsyncIOCompletionMs;
+            var asyncIOPct = (asyncIOMs * 100m) / waitsData.TotalWaitMs;
+
+            if (asyncIOPct > 20)
+                score = Math.Min(score, 80);
+        }
+
+        return Math.Clamp(Math.Min(score, cap), 0, 100);
     }
 
     private static int CalculateDiscosScore(InstanceHealthDiscos? data)
     {
         if (data == null) return 100;
 
-        return data.WorstFreePct switch
+        // Usar WorstFreePct (el PowerShell usa WorstRealFreePct si está disponible)
+        var worstFreePct = data.WorstFreePct;
+
+        var score = worstFreePct switch
         {
             >= 20 => 100,
             >= 15 => 80,
@@ -346,11 +570,40 @@ public class HealthScoreConsolidator : BackgroundService
             >= 5 => 40,
             _ => 0
         };
+
+        // Analizar volúmenes para alertas reales (v3.3)
+        if (!string.IsNullOrEmpty(data.VolumesJson))
+        {
+            try
+            {
+                var volumes = JsonSerializer.Deserialize<List<VolumeInfoForDiagnosis>>(data.VolumesJson);
+                var alertedVolumes = volumes?.Where(v => v.IsAlerted).ToList() ?? new();
+
+                if (alertedVolumes.Count > 0)
+                {
+                    var worstAlertedPct = alertedVolumes.Min(v => v.RealFreePct ?? 100);
+
+                    if (worstAlertedPct <= 5)
+                        score = 0;
+                    else if (worstAlertedPct <= 10)
+                        score = Math.Min(score, 30);
+                }
+                else if (worstFreePct < 10)
+                {
+                    var hasAnyGrowthFiles = volumes?.Any(v => v.FilesWithGrowth > 0) ?? false;
+                    if (!hasAnyGrowthFiles)
+                        score = Math.Min(100, score + 20);
+                }
+            }
+            catch { /* Ignorar errores de parseo */ }
+        }
+
+        return Math.Clamp(score, 0, 100);
     }
 
     private static int CalculateBackupsScore(InstanceHealthBackups? data)
     {
-        if (data == null) return 0; // Sin datos = sin backup
+        if (data == null) return 0;
 
         if (data.LogBackupBreached)
             return 0;
@@ -362,20 +615,27 @@ public class HealthScoreConsolidator : BackgroundService
     private static int CalculateAlwaysOnScore(InstanceHealthAlwaysOn? data)
     {
         if (data == null || !data.AlwaysOnEnabled)
-            return 100; // No aplica
+            return 100;
+
+        var score = 100;
+        var cap = 100;
 
         if (data.SuspendedCount > 0)
-            return 0;
-        if (data.SynchronizedCount < data.DatabaseCount)
-            return 50;
-        
-        var score = 100;
-        if (data.MaxSendQueueKB > 100000)
-            score -= 30;
-        if (data.MaxRedoQueueKB > 100000)
-            score -= 20;
+        {
+            score = 0;
+            cap = 60;
+        }
+        else if (data.SynchronizedCount < data.DatabaseCount)
+        {
+            score = 50;
+            cap = 60;
+        }
+        else if (data.MaxSendQueueKB > 100000)
+            score = 70;
+        else if (data.MaxRedoQueueKB > 100000)
+            score = 80;
 
-        return Math.Max(0, score);
+        return Math.Clamp(Math.Min(score, cap), 0, 100);
     }
 
     private static int CalculateLogChainScore(InstanceHealthLogChain? data)
@@ -386,113 +646,204 @@ public class HealthScoreConsolidator : BackgroundService
             return 0;
         if (data.BrokenChainCount > 2)
             return 20;
-        if (data.BrokenChainCount > 0)
+        if (data.BrokenChainCount == 1)
+            return 50;
+        if (data.FullDBsWithoutLogBackup == 1)
             return 80;
         return 100;
     }
 
-    private static int CalculateDatabaseStatesScore(InstanceHealthDatabaseStates? data)
+    // NOTA: CalculateDatabaseStatesScore y CalculateErroresScore fueron eliminados (categorías desactivadas)
+
+    /// <summary>
+    /// Calcula el score de mantenimiento considerando excepciones configuradas
+    /// Si CHECKDB está exceptuado, no penaliza por falta de CHECKDB
+    /// Si IndexOptimize está exceptuado, no penaliza por falta de IndexOptimize
+    /// </summary>
+    private static int CalculateMaintenanceScore(InstanceHealthMaintenance? data, bool isCheckdbExcepted, bool isIndexOptimizeExcepted)
     {
-        if (data == null) return 100;
-
-        if (data.SuspectCount > 0 || data.EmergencyCount > 0)
-            return 0;
-        if (data.OfflineCount > 0)
-            return 0;
-        if (data.SuspectPageCount > 0)
-            return 40;
-        if (data.RecoveryPendingCount > 0)
-            return 40;
-        return 100;
-    }
-
-    private static int CalculateErroresScore(InstanceHealthErroresCriticos? data)
-    {
-        if (data == null) return 100;
-
-        var score = 100 - (data.Severity20PlusCount * 10);
-        if (score < 60) score = 60;
-
-        if (data.Severity20PlusLast1h > 0)
-            score = Math.Min(score, 70);
-
-        return score;
-    }
-
-    private static int CalculateMaintenanceScore(InstanceHealthMaintenance? data)
-    {
-        if (data == null) return 50; // Sin datos = posible problema
-
-        if (data.CheckdbOk)
+        // Si está completamente exceptuado, score perfecto
+        if (isCheckdbExcepted && isIndexOptimizeExcepted)
             return 100;
 
-        // Calcular días desde último CHECKDB
-        if (data.LastCheckdb.HasValue)
-        {
-            var days = (DateTime.Now - data.LastCheckdb.Value).TotalDays;
-            return days switch
-            {
-                <= 7 => 100,
-                <= 14 => 80,
-                <= 30 => 50,
-                _ => 0
-            };
-        }
-
-        return 0;
-    }
-
-    private static int CalculateTempDBScore(InstanceHealthConfiguracionTempdb? data)
-    {
-        if (data == null) return 100;
+        // Si no hay datos y no está exceptuado de CHECKDB, score 0
+        if (data == null)
+            return isCheckdbExcepted ? 100 : 0;
 
         var score = 100;
-        
-        // Contención
-        if (data.TempDBContentionScore > 50)
-            score -= 30;
-        else if (data.TempDBContentionScore > 20)
-            score -= 15;
-            
-        // Latencia
-        if (data.TempDBAvgWriteLatencyMs > 50)
-            score -= 30;
-        else if (data.TempDBAvgWriteLatencyMs > 20)
-            score -= 15;
-            
-        // Configuración
-        if (!data.TempDBAllSameSize)
-            score -= 10;
-        if (!data.TempDBGrowthConfigOK)
-            score -= 10;
-            
-        // Espacio
-        if (data.TempDBFreeSpacePct < 10)
-            score -= 20;
-        else if (data.TempDBFreeSpacePct < 20)
-            score -= 10;
+
+        // Evaluar CHECKDB (solo si NO está exceptuado)
+        if (!isCheckdbExcepted)
+        {
+            if (data.LastCheckdb == null)
+            {
+                score -= 50; // Sin CHECKDB = -50 puntos
+            }
+            else
+            {
+                var checkdbDays = (DateTime.Now - data.LastCheckdb.Value).TotalDays;
+                if (checkdbDays > 30)
+                    score -= 50;
+                else if (checkdbDays > 14)
+                    score -= 25;
+                else if (checkdbDays > 7)
+                    score -= 10;
+            }
+        }
+
+        // Evaluar IndexOptimize (solo si NO está exceptuado)
+        if (!isIndexOptimizeExcepted)
+        {
+            if (data.LastIndexOptimize == null)
+            {
+                score -= 30; // Sin IndexOptimize = -30 puntos
+            }
+            else
+            {
+                var indexDays = (DateTime.Now - data.LastIndexOptimize.Value).TotalDays;
+                if (indexDays > 30)
+                    score -= 30;
+                else if (indexDays > 14)
+                    score -= 15;
+                else if (indexDays > 7)
+                    score -= 5;
+            }
+        }
 
         return Math.Clamp(score, 0, 100);
     }
 
-    private static int CalculateAutogrowthScore(InstanceHealthAutogrowth? data)
+    // NOTA: CalculateTempDBScore y CalculateAutogrowthScore fueron eliminados (categorías desactivadas)
+
+    /// <summary>
+    /// Calcula el score de Waits (NUEVO - reemplaza LogChain en ponderacion)
+    /// Evalua la salud del servidor basado en esperas de SQL Server
+    /// </summary>
+    private static int CalculateWaitsScore(InstanceHealthWaits? data)
     {
         if (data == null) return 100;
 
-        var score = data.AutogrowthEventsLast24h switch
+        var score = 100;
+        var cap = 100;
+
+        // Si no hay waits significativos, score perfecto
+        if (data.TotalWaitMs == 0) return 100;
+
+        // Evaluar blocking (mas critico)
+        if (data.BlockedSessionCount > 10 || data.MaxBlockTimeSeconds > 60)
         {
-            <= 10 => 100,
-            <= 50 => 80,
-            <= 100 => 60,
-            _ => 40
-        };
+            score = 30;
+            cap = 50;
+        }
+        else if (data.BlockedSessionCount > 5 || data.MaxBlockTimeSeconds > 30)
+        {
+            score = 50;
+            cap = 70;
+        }
+        else if (data.BlockedSessionCount > 0 || data.MaxBlockTimeSeconds > 10)
+        {
+            score = Math.Min(score, 70);
+        }
 
-        if (data.FilesNearLimit > 0)
-            score -= 30;
-        if (data.WorstPercentOfMax > 90)
-            score = 0;
+        // Evaluar waits de I/O (PAGEIOLATCH)
+        var pageIOPct = data.TotalWaitMs > 0 
+            ? (data.PageIOLatchWaitMs * 100m) / data.TotalWaitMs 
+            : 0;
+        
+        if (pageIOPct > 20)
+        {
+            score = Math.Min(score, 40);
+            cap = Math.Min(cap, 60);
+        }
+        else if (pageIOPct > 10)
+        {
+            score = Math.Min(score, 60);
+        }
+        else if (pageIOPct > 5)
+        {
+            score = Math.Min(score, 80);
+        }
 
-        return Math.Max(0, score);
+        // Evaluar waits de CPU (CXPACKET, SOS_SCHEDULER_YIELD)
+        var cpuWaitMs = data.CXPacketWaitMs + data.CXConsumerWaitMs + data.SOSSchedulerYieldMs;
+        var cpuWaitPct = data.TotalWaitMs > 0 
+            ? (cpuWaitMs * 100m) / data.TotalWaitMs 
+            : 0;
+
+        if (cpuWaitPct > 30)
+        {
+            score = Math.Min(score, 50);
+            cap = Math.Min(cap, 70);
+        }
+        else if (cpuWaitPct > 20)
+        {
+            score = Math.Min(score, 70);
+        }
+        else if (cpuWaitPct > 10)
+        {
+            score = Math.Min(score, 85);
+        }
+
+        // Evaluar waits de memoria (RESOURCE_SEMAPHORE)
+        var memWaitPct = data.TotalWaitMs > 0 
+            ? (data.ResourceSemaphoreWaitMs * 100m) / data.TotalWaitMs 
+            : 0;
+
+        if (memWaitPct > 10)
+        {
+            score = Math.Min(score, 40);
+            cap = Math.Min(cap, 60);
+        }
+        else if (memWaitPct > 5)
+        {
+            score = Math.Min(score, 60);
+        }
+        else if (memWaitPct > 2)
+        {
+            score = Math.Min(score, 80);
+        }
+
+        // Evaluar waits de log (WRITELOG)
+        var logWaitPct = data.TotalWaitMs > 0 
+            ? (data.WriteLogWaitMs * 100m) / data.TotalWaitMs 
+            : 0;
+
+        if (logWaitPct > 15)
+        {
+            score = Math.Min(score, 50);
+            cap = Math.Min(cap, 70);
+        }
+        else if (logWaitPct > 10)
+        {
+            score = Math.Min(score, 70);
+        }
+        else if (logWaitPct > 5)
+        {
+            score = Math.Min(score, 85);
+        }
+
+        return Math.Clamp(Math.Min(score, cap), 0, 100);
+    }
+
+    #endregion
+
+    private class VolumeInfoForDiagnosis
+    {
+        public string? MountPoint { get; set; }
+        public string? MediaType { get; set; }
+        public string? HealthStatus { get; set; }
+        public int DatabaseCount { get; set; }
+        public bool IsAlerted { get; set; }
+        public decimal? RealFreePct { get; set; }
+        public int FilesWithGrowth { get; set; }
+    }
+
+    /// <summary>
+    /// Clase auxiliar para almacenar excepciones de mantenimiento cargadas de la BD
+    /// </summary>
+    private class MaintenanceExceptions
+    {
+        public HashSet<string> CheckdbExceptions { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> IndexOptimizeExceptions { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }
-

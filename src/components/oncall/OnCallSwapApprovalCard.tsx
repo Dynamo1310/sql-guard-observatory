@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { onCallApi, OnCallSwapRequestDto } from '@/services/api';
+import { cn } from '@/lib/utils';
 
 interface OnCallSwapApprovalCardProps {
   requests: OnCallSwapRequestDto[];
@@ -104,11 +105,11 @@ export function OnCallSwapApprovalCard({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Pending':
-        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">Pendiente</Badge>;
+        return <Badge variant="soft-warning">Pendiente</Badge>;
       case 'Approved':
-        return <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">Aprobado</Badge>;
+        return <Badge variant="soft-success">Aprobado</Badge>;
       case 'Rejected':
-        return <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">Rechazado</Badge>;
+        return <Badge variant="soft-destructive">Rechazado</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -120,10 +121,12 @@ export function OnCallSwapApprovalCard({
 
   return (
     <>
-      <Card className="border-yellow-500/50 bg-yellow-500/5">
+      <Card className="border-warning/30 bg-warning/5">
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-yellow-600">
-            <Clock className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-warning">
+            <div className="p-2 rounded-lg bg-warning/10">
+              <Clock className="h-5 w-5" />
+            </div>
             Solicitudes de Intercambio Pendientes ({myPendingRequests.length})
           </CardTitle>
         </CardHeader>
@@ -132,9 +135,11 @@ export function OnCallSwapApprovalCard({
             {myPendingRequests.map((request) => (
               <div
                 key={request.id}
-                className="flex items-start gap-4 p-4 rounded-lg border bg-card"
+                className="flex items-start gap-4 p-4 rounded-xl border bg-card transition-all duration-200 hover:shadow-sm"
               >
-                <ArrowRightLeft className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div className="p-2 rounded-lg bg-muted/50">
+                  <ArrowRightLeft className="h-5 w-5 text-muted-foreground" />
+                </div>
                 
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -160,8 +165,7 @@ export function OnCallSwapApprovalCard({
                 <div className="flex gap-2">
                   <Button
                     size="sm"
-                    variant="outline"
-                    className="text-green-600 hover:bg-green-500/10"
+                    variant="soft-success"
                     onClick={() => handleApprove(request)}
                     disabled={processingId === request.id}
                   >
@@ -174,8 +178,7 @@ export function OnCallSwapApprovalCard({
                   </Button>
                   <Button
                     size="sm"
-                    variant="outline"
-                    className="text-red-600 hover:bg-red-500/10"
+                    variant="soft-destructive"
                     onClick={() => openRejectDialog(request)}
                     disabled={processingId === request.id}
                   >
@@ -235,9 +238,3 @@ export function OnCallSwapApprovalCard({
     </>
   );
 }
-
-
-
-
-
-

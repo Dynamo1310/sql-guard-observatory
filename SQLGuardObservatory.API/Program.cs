@@ -145,7 +145,11 @@ builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
 // Servicios de Guardias DBA (OnCall)
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IOnCallService, OnCallService>();
+builder.Services.AddScoped<IOnCallAlertService, OnCallAlertService>();
 builder.Services.AddScoped<ISmtpService, SmtpService>();
+
+// Servicio de background para notificaciones programadas
+builder.Services.AddHostedService<ScheduledNotificationService>();
 
 // Servicio de notificaciones de Microsoft Teams
 builder.Services.AddHttpClient("TeamsWebhook", client =>
@@ -200,6 +204,9 @@ builder.Services.AddScoped<ISystemCredentialService, SystemCredentialService>();
 // Security Groups - Grupos de seguridad para organizar usuarios
 builder.Services.AddScoped<IGroupService, GroupService>();
 
+// Admin Authorization Service - Permisos administrativos basados en roles
+builder.Services.AddScoped<IAdminAuthorizationService, AdminAuthorizationService>();
+
 // ========== COLLECTORS HEALTHSCORE ==========
 // HttpClient para obtener inventario de instancias
 builder.Services.AddHttpClient("InventoryApi", client =>
@@ -232,7 +239,8 @@ builder.Services.AddSingleton<CollectorOrchestrator>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<CollectorOrchestrator>());
 
 // Consolidador de HealthScore (Background Service)
-builder.Services.AddHostedService<HealthScoreConsolidator>();
+builder.Services.AddSingleton<HealthScoreConsolidator>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<HealthScoreConsolidator>());
 
 // Configurar CORS
 builder.Services.AddCors(options =>

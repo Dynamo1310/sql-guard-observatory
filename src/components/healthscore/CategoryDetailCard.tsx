@@ -28,29 +28,38 @@ export function CategoryDetailCard({ category, score, details, className }: Cate
   const Icon = iconMap[category.icon] || Database;
   
   const getScoreStatus = (s: number) => {
-    if (s >= 90) return { label: 'Excellent', color: 'text-green-600', bg: 'bg-green-500' };
-    if (s >= 75) return { label: 'Good', color: 'text-yellow-500', bg: 'bg-yellow-500' };
-    if (s >= 60) return { label: 'Fair', color: 'text-orange-500', bg: 'bg-orange-500' };
-    return { label: 'Poor', color: 'text-red-600', bg: 'bg-red-500' };
+    if (s >= 90) return { label: 'Excelente', color: 'text-success', bg: 'bg-success' };
+    if (s >= 75) return { label: 'Bueno', color: 'text-warning', bg: 'bg-warning' };
+    if (s >= 60) return { label: 'Regular', color: 'text-warning', bg: 'bg-warning' };
+    return { label: 'Crítico', color: 'text-destructive', bg: 'bg-destructive' };
   };
   
   const status = getScoreStatus(categoryScore);
 
   return (
     <Card className={cn(
-      'border',
-      category.borderColor,
-      category.bgColor,
+      'border transition-all duration-200 hover:shadow-sm',
+      categoryScore < 60 && 'border-destructive/20 bg-destructive/[0.02]',
+      categoryScore >= 60 && categoryScore < 75 && 'border-warning/20 bg-warning/[0.02]',
+      categoryScore >= 75 && categoryScore < 90 && 'border-warning/20 bg-warning/[0.02]',
+      categoryScore >= 90 && 'border-success/20 bg-success/[0.02]',
       className
     )}>
-      <CardHeader className="pb-2 pt-3 px-3">
+      <CardHeader className="pb-2 pt-3 px-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Icon className={cn('h-4 w-4', category.color)} />
-            <span className="truncate">{category.shortName}</span>
+            <div className={cn(
+              'p-1.5 rounded-md',
+              categoryScore >= 90 && 'bg-success/10',
+              categoryScore >= 60 && categoryScore < 90 && 'bg-warning/10',
+              categoryScore < 60 && 'bg-destructive/10',
+            )}>
+              <Icon className={cn('h-4 w-4', category.color)} />
+            </div>
+            <span className="truncate font-medium">{category.shortName}</span>
           </CardTitle>
           <div className="flex items-center gap-2">
-            <span className={cn('font-mono text-lg font-bold', status.color)}>
+            <span className={cn('font-mono text-xl font-bold', status.color)}>
               {categoryScore}
             </span>
             <span className="text-[10px] text-muted-foreground">/100</span>
@@ -60,19 +69,19 @@ export function CategoryDetailCard({ category, score, details, className }: Cate
         {/* Score progress bar */}
         <Progress 
           value={categoryScore} 
-          className={cn('h-1.5 mt-2', `[&>div]:${status.bg}`)}
+          className={cn('h-1.5 mt-2.5', `[&>div]:${status.bg}`)}
         />
         
         {/* Contribution */}
-        <div className="flex items-center justify-between mt-1.5 text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-between mt-2 text-[10px] text-muted-foreground">
           <span>Contribución: {contribution.toFixed(1)}/{category.weight}</span>
-          <Badge variant="outline" className={cn('text-[9px] px-1', status.color)}>
+          <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0 font-medium', status.color)}>
             {status.label}
           </Badge>
         </div>
       </CardHeader>
       
-      <CardContent className="pt-0 px-3 pb-3">
+      <CardContent className="pt-0 px-4 pb-3">
         {/* Category-specific details */}
         <CategoryDetails category={category} score={score} details={details} />
       </CardContent>
@@ -95,12 +104,12 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
   const renderMetric = (label: string, value: string | number | undefined, warning?: boolean, critical?: boolean) => {
     if (value === undefined || value === null) return null;
     return (
-      <div className="flex items-center justify-between text-[11px]">
+      <div className="flex items-center justify-between text-[11px] py-0.5">
         <span className="text-muted-foreground">{label}</span>
         <span className={cn(
           'font-mono',
-          critical && 'text-red-600 font-semibold',
-          warning && !critical && 'text-amber-500',
+          critical && 'text-destructive font-semibold',
+          warning && !critical && 'text-warning',
         )}>
           {value}
         </span>
@@ -111,7 +120,7 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
   switch (category.key) {
     case 'backups':
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 mt-2 pt-2 border-t border-border/30">
           {renderMetric('Full Backup', 
             details.backupsDetails?.fullBackupBreached ? 'Vencido' : 'OK',
             false,
@@ -131,10 +140,10 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
 
     case 'alwaysOn':
       if (!details.alwaysOnDetails?.alwaysOnEnabled) {
-        return <p className="text-xs text-muted-foreground">AlwaysOn no habilitado</p>;
+        return <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/30">AlwaysOn no habilitado</p>;
       }
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 mt-2 pt-2 border-t border-border/30">
           {renderMetric('Estado', details.alwaysOnDetails.alwaysOnWorstState)}
           {renderMetric('Sincronizadas',
             `${details.alwaysOnDetails.synchronizedCount}/${details.alwaysOnDetails.databaseCount}`
@@ -151,51 +160,35 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
         </div>
       );
 
-    case 'logChain':
+    case 'waits':
       return (
-        <div className="space-y-1">
-          {renderMetric('Cadenas rotas',
-            details.logChainDetails?.brokenChainCount ?? 0,
-            false,
-            (details.logChainDetails?.brokenChainCount ?? 0) > 0
+        <div className="space-y-1 mt-2 pt-2 border-t border-border/30">
+          {renderMetric('Bloqueados',
+            details.waitsDetails?.blockedSessionCount ?? 0,
+            (details.waitsDetails?.blockedSessionCount ?? 0) > 3,
+            (details.waitsDetails?.blockedSessionCount ?? 0) > 10
           )}
-          {renderMetric('Sin LOG backup',
-            details.logChainDetails?.fullDBsWithoutLogBackup ?? 0,
-            (details.logChainDetails?.fullDBsWithoutLogBackup ?? 0) > 0
+          {renderMetric('Max bloqueo',
+            `${details.waitsDetails?.maxBlockTimeSeconds ?? 0}s`,
+            (details.waitsDetails?.maxBlockTimeSeconds ?? 0) > 30,
+            (details.waitsDetails?.maxBlockTimeSeconds ?? 0) > 60
           )}
-          {details.logChainDetails?.maxHoursSinceLogBackup !== undefined && renderMetric(
-            'Máx horas',
-            `${details.logChainDetails.maxHoursSinceLogBackup.toFixed(1)}h`,
-            details.logChainDetails.maxHoursSinceLogBackup > 12,
-            details.logChainDetails.maxHoursSinceLogBackup > 24
+          {details.waitsDetails?.topWait1Type && renderMetric('Top Wait',
+            details.waitsDetails.topWait1Type,
+            false
+          )}
+          {renderMetric('CXPACKET',
+            `${((details.waitsDetails?.cxPacketWaitMs ?? 0) / 1000).toFixed(1)}s`,
+            (details.waitsDetails?.cxPacketWaitMs ?? 0) > 10000
           )}
         </div>
       );
 
-    case 'databaseStates':
-      return (
-        <div className="space-y-1">
-          {renderMetric('Offline',
-            details.databaseStatesDetails?.offlineCount ?? 0,
-            false,
-            (details.databaseStatesDetails?.offlineCount ?? 0) > 0
-          )}
-          {renderMetric('Suspect',
-            details.databaseStatesDetails?.suspectCount ?? 0,
-            false,
-            (details.databaseStatesDetails?.suspectCount ?? 0) > 0
-          )}
-          {renderMetric('Suspect Pages',
-            details.databaseStatesDetails?.suspectPageCount ?? 0,
-            false,
-            (details.databaseStatesDetails?.suspectPageCount ?? 0) > 0
-          )}
-        </div>
-      );
+    // NOTA: databaseStates fue eliminado del HealthScore
 
     case 'cpu':
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 mt-2 pt-2 border-t border-border/30">
           {renderMetric('SQL Process',
             `${details.cpuDetails?.sqlProcessUtilization ?? 0}%`,
             (details.cpuDetails?.sqlProcessUtilization ?? 0) > 60,
@@ -214,7 +207,7 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
 
     case 'memoria':
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 mt-2 pt-2 border-t border-border/30">
           {renderMetric('PLE',
             `${details.memoriaDetails?.pageLifeExpectancy ?? 0}s`,
             (details.memoriaDetails?.pageLifeExpectancy ?? 0) < 300,
@@ -238,7 +231,7 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
 
     case 'io':
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 mt-2 pt-2 border-t border-border/30">
           {renderMetric('Lectura',
             `${details.ioDetails?.avgReadLatencyMs?.toFixed(1) ?? 0}ms`,
             (details.ioDetails?.avgReadLatencyMs ?? 0) > 10,
@@ -257,7 +250,7 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
 
     case 'discos':
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 mt-2 pt-2 border-t border-border/30">
           {renderMetric('Peor volumen',
             `${details.discosDetails?.worstFreePct?.toFixed(1) ?? 0}%`,
             (details.discosDetails?.worstFreePct ?? 100) < 20,
@@ -272,25 +265,11 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
         </div>
       );
 
-    case 'erroresCriticos':
-      return (
-        <div className="space-y-1">
-          {renderMetric('Sev 20+ (24h)',
-            details.erroresCriticosDetails?.severity20PlusCount ?? 0,
-            (details.erroresCriticosDetails?.severity20PlusCount ?? 0) > 0,
-            (details.erroresCriticosDetails?.severity20PlusCount ?? 0) > 10
-          )}
-          {renderMetric('Última hora',
-            details.erroresCriticosDetails?.severity20PlusLast1h ?? 0,
-            false,
-            (details.erroresCriticosDetails?.severity20PlusLast1h ?? 0) > 0
-          )}
-        </div>
-      );
+    // NOTA: erroresCriticos fue eliminado del HealthScore
 
     case 'maintenance':
       return (
-        <div className="space-y-1">
+        <div className="space-y-1 mt-2 pt-2 border-t border-border/30">
           {renderMetric('CHECKDB',
             details.maintenanceDetails?.checkdbOk ? 'OK' : 'Vencido',
             false,
@@ -303,49 +282,9 @@ function CategoryDetails({ category, score, details }: CategoryDetailsProps) {
         </div>
       );
 
-    case 'configuracionTempdb':
-      return (
-        <div className="space-y-1">
-          {renderMetric('TempDB Score',
-            details.configuracionTempdbDetails?.tempDBContentionScore ?? 0,
-            (details.configuracionTempdbDetails?.tempDBContentionScore ?? 100) < 70,
-            (details.configuracionTempdbDetails?.tempDBContentionScore ?? 100) < 40
-          )}
-          {renderMetric('Archivos',
-            details.configuracionTempdbDetails?.tempDBFileCount ?? 0
-          )}
-          {renderMetric('Mismo tamaño',
-            details.configuracionTempdbDetails?.tempDBAllSameSize ? 'Sí' : 'No',
-            !details.configuracionTempdbDetails?.tempDBAllSameSize
-          )}
-        </div>
-      );
-
-    case 'autogrowth':
-      return (
-        <div className="space-y-1">
-          {renderMetric('Eventos (24h)',
-            details.autogrowthDetails?.autogrowthEventsLast24h ?? 0,
-            (details.autogrowthDetails?.autogrowthEventsLast24h ?? 0) > 20,
-            (details.autogrowthDetails?.autogrowthEventsLast24h ?? 0) > 50
-          )}
-          {renderMetric('Cerca límite',
-            details.autogrowthDetails?.filesNearLimit ?? 0,
-            (details.autogrowthDetails?.filesNearLimit ?? 0) > 0,
-            (details.autogrowthDetails?.filesNearLimit ?? 0) > 0
-          )}
-          {renderMetric('Growth malo',
-            details.autogrowthDetails?.filesWithBadGrowth ?? 0,
-            (details.autogrowthDetails?.filesWithBadGrowth ?? 0) > 0
-          )}
-        </div>
-      );
+    // NOTA: configuracionTempdb y autogrowth fueron eliminados del HealthScore
 
     default:
-      return <p className="text-xs text-muted-foreground">Sin detalles disponibles</p>;
+      return <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/30">Sin detalles disponibles</p>;
   }
 }
-
-
-
-

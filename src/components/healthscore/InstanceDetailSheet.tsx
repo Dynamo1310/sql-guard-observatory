@@ -49,34 +49,36 @@ export function InstanceDetailSheet({
 
   const getAmbienteBadge = () => {
     if (isProd) {
-      return <Badge className="text-xs px-2 py-0.5 bg-rose-600 text-white border-0">PRODUCCIÓN</Badge>;
+      return <Badge className="text-xs px-2 py-0.5 bg-destructive text-destructive-foreground border-0 font-medium">PRODUCCIÓN</Badge>;
     }
     if (getAmbientePriority(score.ambiente) === 1) {
-      return <Badge className="text-xs px-2 py-0.5 bg-violet-600 text-white border-0">TESTING</Badge>;
+      return <Badge className="text-xs px-2 py-0.5 bg-primary text-primary-foreground border-0 font-medium">TESTING</Badge>;
     }
-    return <Badge variant="outline" className="text-xs px-2 py-0.5">{score.ambiente || 'DESARROLLO'}</Badge>;
+    return <Badge variant="outline" className="text-xs px-2 py-0.5 font-medium">{score.ambiente || 'DESARROLLO'}</Badge>;
   };
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl p-0 flex flex-col">
         {/* Header */}
-        <SheetHeader className="p-4 pb-0 flex-shrink-0">
+        <SheetHeader className="p-5 pb-0 flex-shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <Server className="h-5 w-5 text-muted-foreground" />
+                <div className="p-2 rounded-lg bg-muted/50">
+                  <Server className="h-5 w-5 text-muted-foreground" />
+                </div>
                 <SheetTitle className="font-mono text-lg truncate">
                   {score.instanceName}
                 </SheetTitle>
               </div>
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {getAmbienteBadge()}
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs font-medium">
                   {score.hostingSite || 'N/A'}
                 </Badge>
                 {score.sqlVersion && (
-                  <Badge variant="outline" className="text-xs flex items-center gap-1">
+                  <Badge variant="outline" className="text-xs flex items-center gap-1 font-medium">
                     <Database className="h-3 w-3" />
                     {score.sqlVersion}
                   </Badge>
@@ -107,26 +109,28 @@ export function InstanceDetailSheet({
               Ver Tendencias
             </Button>
             {onRefresh && (
-              <Button onClick={onRefresh} variant="outline" size="sm" disabled={isLoading}>
+              <Button onClick={onRefresh} variant="outline" size="icon-sm" disabled={isLoading}>
                 <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
               </Button>
             )}
           </div>
 
           {/* Last update */}
-          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-3 pb-2 border-b border-border/30">
             <Clock className="h-3 w-3" />
             Actualizado: {formatDateUTC3(score.generatedAtUtc)}
           </div>
         </SheetHeader>
 
         {/* Content */}
-        <ScrollArea className="flex-1 px-4">
+        <ScrollArea className="flex-1 px-5">
           <div className="py-4 space-y-6">
             {/* Radar Chart */}
-            <div className="bg-card rounded-lg border p-4">
-              <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                <Database className="h-4 w-4" />
+            <div className="bg-muted/20 rounded-xl border border-border/30 p-4">
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-primary/10">
+                  <Database className="h-4 w-4 text-primary" />
+                </div>
                 Distribución de Score
               </h3>
               <ScoreRadarChart score={score} />
@@ -134,23 +138,23 @@ export function InstanceDetailSheet({
 
             {/* Suggested Actions */}
             {details && (
-              <div className="bg-amber-500/5 border border-amber-500/30 rounded-lg p-4">
+              <div className="bg-warning/5 border border-warning/20 rounded-xl p-4">
                 <SuggestedActions details={details} maxItems={5} />
               </div>
             )}
 
             {/* Category Details Tabs */}
             <Tabs defaultValue="availability" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-4">
-                <TabsTrigger value="availability" className="text-xs">
+              <TabsList className="grid w-full grid-cols-3 mb-4 bg-muted/30 p-1 rounded-lg">
+                <TabsTrigger value="availability" className="text-xs rounded-md">
                   <Database className="h-3.5 w-3.5 mr-1.5" />
                   Availability
                 </TabsTrigger>
-                <TabsTrigger value="performance" className="text-xs">
+                <TabsTrigger value="performance" className="text-xs rounded-md">
                   <Cpu className="h-3.5 w-3.5 mr-1.5" />
                   Performance
                 </TabsTrigger>
-                <TabsTrigger value="maintenance" className="text-xs">
+                <TabsTrigger value="maintenance" className="text-xs rounded-md">
                   <Wrench className="h-3.5 w-3.5 mr-1.5" />
                   Maintenance
                 </TabsTrigger>
@@ -196,16 +200,16 @@ export function InstanceDetailSheet({
             {/* TempDB IO Diagnosis */}
             {score.tempDBIODiagnosis && (
               <div className={cn(
-                'rounded-lg border p-3',
-                score.tempDBIOSeverity === 'CRITICAL' ? 'bg-red-500/10 border-red-500/30' :
-                score.tempDBIOSeverity === 'HIGH' ? 'bg-orange-500/10 border-orange-500/30' :
-                score.tempDBIOSeverity === 'MEDIUM' ? 'bg-yellow-500/10 border-yellow-500/30' :
-                'bg-blue-500/10 border-blue-500/30'
+                'rounded-xl border p-4',
+                score.tempDBIOSeverity === 'CRITICAL' ? 'bg-destructive/5 border-destructive/20' :
+                score.tempDBIOSeverity === 'HIGH' ? 'bg-warning/5 border-warning/20' :
+                score.tempDBIOSeverity === 'MEDIUM' ? 'bg-warning/5 border-warning/20' :
+                'bg-info/5 border-info/20'
               )}>
-                <h4 className="text-xs font-semibold mb-1">Diagnóstico TempDB I/O</h4>
+                <h4 className="text-xs font-semibold mb-1.5">Diagnóstico TempDB I/O</h4>
                 <p className="text-xs text-muted-foreground">{score.tempDBIODiagnosis}</p>
                 {score.tempDBIOSuggestion && (
-                  <p className="text-xs mt-1 font-medium">{score.tempDBIOSuggestion}</p>
+                  <p className="text-xs mt-2 font-medium">{score.tempDBIOSuggestion}</p>
                 )}
               </div>
             )}

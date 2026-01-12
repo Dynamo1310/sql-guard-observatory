@@ -92,7 +92,7 @@ Permisos del usuario: { permissions: [] }
 Ejecuta esta consulta en **SQL Server Management Studio**:
 
 ```sql
-USE [SQLGuardObservatoryAuth];
+USE [AppSQLNova];
 GO
 
 -- Verificar que la tabla existe

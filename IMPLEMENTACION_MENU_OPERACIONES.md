@@ -94,7 +94,7 @@ La vista de **Configuración de Servidores Operacionales** solo es accesible par
 
 ```sql
 -- Ejecutar en SQL Server Management Studio
-USE [SQLGuardObservatoryAuth];
+USE [AppSQLNova];
 GO
 
 -- Ejecutar el script
@@ -171,6 +171,7 @@ Copy-Item -Path .\dist\* -Destination C:\inetpub\wwwroot\SQLNova -Recurse -Force
 - Los usuarios de escalamiento (`IsOnCallEscalation`) pueden acceder a la configuración aunque no sean Admin
 - El permiso `OperationsConfig` se verifica tanto en frontend (sidebar) como en backend (controller)
 - Se mantiene auditoría de todos los cambios para trazabilidad
+
 
 
 

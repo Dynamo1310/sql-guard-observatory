@@ -15,6 +15,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<OnCallActivation> OnCallActivations { get; set; }
     public DbSet<OnCallAlertRule> OnCallAlertRules { get; set; }
     public DbSet<OnCallAlertRecipient> OnCallAlertRecipients { get; set; }
+    public DbSet<OnCallConfig> OnCallConfig { get; set; }
+    public DbSet<OnCallHoliday> OnCallHolidays { get; set; }
+    public DbSet<OnCallEscalation> OnCallEscalations { get; set; }
+    public DbSet<OnCallDayOverride> OnCallDayOverrides { get; set; }
+    public DbSet<OnCallEmailTemplate> OnCallEmailTemplates { get; set; }
+    public DbSet<OnCallActivationCategory> OnCallActivationCategories { get; set; }
+    public DbSet<OnCallScheduleBatch> OnCallScheduleBatches { get; set; }
     public DbSet<SmtpSettingsEntity> SmtpSettings { get; set; }
     public DbSet<NotificationLog> NotificationLogs { get; set; }
     
@@ -67,14 +74,38 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<GroupPermission> GroupPermissions { get; set; } = null!;
     public DbSet<ADGroupSync> ADGroupSyncs { get; set; } = null!;
     
+    // Admin Group Assignments - Asignaciones de grupos a admins
+    public DbSet<AdminGroupAssignment> AdminGroupAssignments { get; set; } = null!;
+    
+    // Admin Roles - Sistema de roles personalizables
+    public DbSet<AdminRole> AdminRoles { get; set; } = null!;
+    public DbSet<AdminRoleCapability> AdminRoleCapabilities { get; set; } = null!;
+    public DbSet<AdminRoleAssignableRole> AdminRoleAssignableRoles { get; set; } = null!;
+    
     // Menu Badges - Indicadores de menús nuevos
     public DbSet<MenuBadge> MenuBadges { get; set; } = null!;
+
+    // Inventory Cache - Caché de inventario SQL Server
+    public DbSet<SqlServerInstanceCache> SqlServerInstancesCache { get; set; } = null!;
+    public DbSet<SqlServerDatabaseCache> SqlServerDatabasesCache { get; set; } = null!;
+    public DbSet<InventoryCacheMetadata> InventoryCacheMetadata { get; set; } = null!;
+    
+    // Inventory Cache - PostgreSQL
+    public DbSet<PostgreSqlInstanceCache> PostgreSqlInstancesCache { get; set; } = null!;
+    public DbSet<PostgreSqlDatabaseCache> PostgreSqlDatabasesCache { get; set; } = null!;
+    
+    // Inventory Cache - Redis
+    public DbSet<RedisInstanceCache> RedisInstancesCache { get; set; } = null!;
+    
+    // Inventory Cache - DocumentDB
+    public DbSet<DocumentDbInstanceCache> DocumentDbInstancesCache { get; set; } = null!;
 
     // Collector Configuration - HealthScore Collectors
     public DbSet<CollectorConfig> CollectorConfigs { get; set; } = null!;
     public DbSet<CollectorThreshold> CollectorThresholds { get; set; } = null!;
     public DbSet<SqlVersionQuery> SqlVersionQueries { get; set; } = null!;
     public DbSet<CollectorExecutionLog> CollectorExecutionLogs { get; set; } = null!;
+    public DbSet<CollectorException> CollectorExceptions { get; set; } = null!;
 
     // Health Score v3.0 FINAL - 12 Categorías (métricas de instancias)
     public DbSet<InstanceHealthScore> InstanceHealthScores { get; set; } = null!;
@@ -193,6 +224,19 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany()
                 .HasForeignKey(a => a.CreatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // OnCallEscalation: usuarios de escalamiento con color y teléfono
+        builder.Entity<OnCallEscalation>(entity =>
+        {
+            entity.ToTable("OnCallEscalations");
+            entity.HasIndex(e => e.UserId).IsUnique();
+            entity.HasIndex(e => e.EscalationOrder);
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // OnCallAlertRule: reglas de alertas
@@ -643,6 +687,99 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(s => s.UpdatedByUser)
                 .WithMany()
                 .HasForeignKey(s => s.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // =============================================
+        // Admin Group Assignments - Asignaciones a Admins
+        // =============================================
+        
+        builder.Entity<AdminGroupAssignment>(entity =>
+        {
+            entity.ToTable("AdminGroupAssignments");
+            entity.HasIndex(a => a.UserId);
+            entity.HasIndex(a => a.GroupId);
+            entity.HasIndex(a => new { a.UserId, a.GroupId }).IsUnique();
+
+            entity.HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.Group)
+                .WithMany()
+                .HasForeignKey(a => a.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.AssignedByUser)
+                .WithMany()
+                .HasForeignKey(a => a.AssignedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(a => a.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(a => a.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // =============================================
+        // Admin Roles - Sistema de roles personalizables
+        // =============================================
+        
+        builder.Entity<AdminRole>(entity =>
+        {
+            entity.ToTable("AdminRoles");
+            entity.HasIndex(r => r.Name).IsUnique().HasFilter("[IsActive] = 1");
+            entity.HasIndex(r => r.Priority);
+
+            entity.Property(r => r.Name).HasMaxLength(100).IsRequired();
+            entity.Property(r => r.Description).HasMaxLength(500);
+            entity.Property(r => r.Color).HasMaxLength(20);
+            entity.Property(r => r.Icon).HasMaxLength(50);
+
+            entity.HasOne(r => r.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(r => r.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(r => r.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(r => r.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasMany(r => r.Capabilities)
+                .WithOne(c => c.Role)
+                .HasForeignKey(c => c.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(r => r.Users)
+                .WithOne(u => u.AdminRole)
+                .HasForeignKey(u => u.AdminRoleId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<AdminRoleCapability>(entity =>
+        {
+            entity.ToTable("AdminRoleCapabilities");
+            entity.HasIndex(c => new { c.RoleId, c.CapabilityKey }).IsUnique();
+            entity.HasIndex(c => c.RoleId);
+
+            entity.Property(c => c.CapabilityKey).HasMaxLength(100).IsRequired();
+        });
+
+        builder.Entity<AdminRoleAssignableRole>(entity =>
+        {
+            entity.ToTable("AdminRoleAssignableRoles");
+            entity.HasIndex(a => new { a.RoleId, a.AssignableRoleId }).IsUnique();
+
+            entity.HasOne(a => a.Role)
+                .WithMany(r => r.AssignableRoles)
+                .HasForeignKey(a => a.RoleId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(a => a.AssignableRole)
+                .WithMany()
+                .HasForeignKey(a => a.AssignableRoleId)
                 .OnDelete(DeleteBehavior.NoAction);
         });
 

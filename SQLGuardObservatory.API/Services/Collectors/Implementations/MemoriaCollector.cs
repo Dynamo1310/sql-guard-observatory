@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
@@ -7,14 +7,15 @@ using System.Data;
 namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 
 /// <summary>
-/// Collector de métricas de Memoria
-/// Métricas: PLE, Memory Grants, Stolen Memory, Buffer Cache
+/// Collector de métricas de Memoria (v3.1 mejorado)
+/// Métricas básicas: PLE, Memory Grants, Stolen Memory, Buffer Cache
+/// Métricas de Memory Clerks: top clerk consumiendo memoria
+/// Métricas de Plan Cache: tamaño y conteo de planes
+/// Métricas de Memory Pressure: RESOURCE_SEMAPHORE waits
 /// Peso: 8%
 /// </summary>
 public class MemoriaCollector : CollectorBase<MemoriaCollector.MemoriaMetrics>
 {
-    private readonly ApplicationDbContext _context;
-
     public override string CollectorName => "Memoria";
     public override string DisplayName => "Memoria";
 
@@ -23,10 +24,9 @@ public class MemoriaCollector : CollectorBase<MemoriaCollector.MemoriaMetrics>
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        ApplicationDbContext context) 
-        : base(logger, configService, connectionFactory, instanceProvider)
+        IServiceScopeFactory scopeFactory) 
+        : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
-        _context = context;
     }
 
     protected override async Task<MemoriaMetrics> CollectFromInstanceAsync(
@@ -59,10 +59,35 @@ public class MemoriaCollector : CollectorBase<MemoriaCollector.MemoriaMetrics>
                 result.MemoryGrantsActive = GetInt(dataSet.Tables[2].Rows[0], "GrantsActive");
             }
 
-            // ResultSet 4: Max Server Memory (skip sys_info)
+            // ResultSet 4: System Info (skip)
+            // ResultSet 5: Max Server Memory
             if (dataSet.Tables.Count >= 5 && dataSet.Tables[4].Rows.Count > 0)
             {
                 result.MaxServerMemoryMB = GetInt(dataSet.Tables[4].Rows[0], "MaxServerMemoryMB");
+            }
+            
+            // ResultSet 6: Top Memory Clerk
+            if (dataSet.Tables.Count >= 6 && dataSet.Tables[5].Rows.Count > 0)
+            {
+                var row = dataSet.Tables[5].Rows[0];
+                result.TopMemoryClerk = GetString(row, "ClerkType") ?? "";
+                result.TopMemoryClerkMB = GetInt(row, "SizeMB");
+            }
+            
+            // ResultSet 7: Plan Cache Metrics
+            if (dataSet.Tables.Count >= 7 && dataSet.Tables[6].Rows.Count > 0)
+            {
+                var row = dataSet.Tables[6].Rows[0];
+                result.PlanCacheCount = GetInt(row, "PlanCount");
+                result.PlanCacheSizeMB = GetInt(row, "SizeMB");
+            }
+            
+            // ResultSet 8: Memory Pressure (RESOURCE_SEMAPHORE)
+            if (dataSet.Tables.Count >= 8 && dataSet.Tables[7].Rows.Count > 0)
+            {
+                var row = dataSet.Tables[7].Rows[0];
+                result.ResourceSemaphoreWaitMs = GetLong(row, "WaitTimeMs");
+                result.ResourceSemaphoreWaitCount = GetLong(row, "WaitingTasksCount");
             }
 
             // Calcular PLETarget y BufferPoolSize
@@ -73,11 +98,12 @@ public class MemoriaCollector : CollectorBase<MemoriaCollector.MemoriaMetrics>
                 result.PLETarget = (int)(bufferPoolGB * 300); // 300 segundos por GB
             }
 
-            // Determinar memory pressure
+            // Determinar memory pressure (mejorado con RESOURCE_SEMAPHORE)
             if (result.PLETarget > 0)
             {
                 result.MemoryPressure = result.PageLifeExpectancy < (result.PLETarget * 0.5m) || 
-                                        result.MemoryGrantsPending > 10;
+                                        result.MemoryGrantsPending > 10 ||
+                                        result.ResourceSemaphoreWaitCount > 0;
             }
         }
         catch (Exception ex)
@@ -187,6 +213,7 @@ public class MemoriaCollector : CollectorBase<MemoriaCollector.MemoriaMetrics>
             HostingSite = instance.HostingSite,
             SqlVersion = instance.SqlVersionString,
             CollectedAtUtc = DateTime.Now,
+            // Métricas básicas
             PageLifeExpectancy = data.PageLifeExpectancy,
             BufferCacheHitRatio = data.BufferCacheHitRatio,
             TotalServerMemoryMB = data.TotalServerMemoryMB,
@@ -197,11 +224,23 @@ public class MemoriaCollector : CollectorBase<MemoriaCollector.MemoriaMetrics>
             MemoryGrantsActive = data.MemoryGrantsActive,
             PLETarget = data.PLETarget,
             MemoryPressure = data.MemoryPressure,
-            StolenServerMemoryMB = data.StolenServerMemoryMB
+            StolenServerMemoryMB = data.StolenServerMemoryMB,
+            // Memory Clerks
+            TopMemoryClerk = data.TopMemoryClerk,
+            TopMemoryClerkMB = data.TopMemoryClerkMB,
+            // Plan Cache
+            PlanCacheSizeMB = data.PlanCacheSizeMB,
+            PlanCacheCount = data.PlanCacheCount,
+            // Memory Pressure
+            ResourceSemaphoreWaitMs = data.ResourceSemaphoreWaitMs,
+            ResourceSemaphoreWaitCount = data.ResourceSemaphoreWaitCount
         };
 
-        _context.InstanceHealthMemoria.Add(entity);
-        await _context.SaveChangesAsync(ct);
+        await SaveWithScopedContextAsync(async context =>
+        {
+            context.InstanceHealthMemoria.Add(entity);
+            await context.SaveChangesAsync(ct);
+        }, ct);
     }
 
     protected override string GetDefaultQuery(int sqlMajorVersion)
@@ -217,6 +256,23 @@ public class MemoriaCollector : CollectorBase<MemoriaCollector.MemoriaMetrics>
                     committed_kb / 1024 AS CommittedMemoryMB,
                     committed_target_kb / 1024 AS CommittedTargetMB
                 FROM sys.dm_os_sys_info;";
+
+        // pages_kb solo existe en SQL 2012+, usar pages para versiones anteriores
+        var memoryClerksQuery = sqlMajorVersion >= 11
+            ? @"-- Top Memory Clerk (qué está consumiendo memoria) - SQL 2012+
+SELECT TOP 1
+    type AS ClerkType,
+    SUM(pages_kb) / 1024 AS SizeMB
+FROM sys.dm_os_memory_clerks WITH (NOLOCK)
+GROUP BY type
+ORDER BY SUM(pages_kb) DESC;"
+            : @"-- Top Memory Clerk (qué está consumiendo memoria) - SQL 2008
+SELECT TOP 1
+    type AS ClerkType,
+    SUM(single_pages_kb + multi_pages_kb) / 1024 AS SizeMB
+FROM sys.dm_os_memory_clerks WITH (NOLOCK)
+GROUP BY type
+ORDER BY SUM(single_pages_kb + multi_pages_kb) DESC;";
 
         return $@"
 -- Memory counters
@@ -244,7 +300,22 @@ WHERE grant_time IS NOT NULL;
 -- Max Server Memory configurado
 SELECT CAST(value AS INT) AS MaxServerMemoryMB
 FROM sys.configurations WITH (NOLOCK)
-WHERE name = 'max server memory (MB)';";
+WHERE name = 'max server memory (MB)';
+
+{memoryClerksQuery}
+
+-- Plan Cache Metrics (usando BIGINT para evitar overflow)
+SELECT 
+    COUNT(*) AS PlanCount,
+    CAST(ISNULL(SUM(CAST(size_in_bytes AS BIGINT)) / 1024 / 1024, 0) AS INT) AS SizeMB
+FROM sys.dm_exec_cached_plans WITH (NOLOCK);
+
+-- Memory Pressure Indicator (RESOURCE_SEMAPHORE waits)
+SELECT 
+    ISNULL(wait_time_ms, 0) AS WaitTimeMs,
+    ISNULL(waiting_tasks_count, 0) AS WaitingTasksCount
+FROM sys.dm_os_wait_stats WITH (NOLOCK)
+WHERE wait_type = 'RESOURCE_SEMAPHORE';";
     }
 
     protected override Dictionary<string, object?> GetMetricsFromResult(MemoriaMetrics data)
@@ -254,12 +325,17 @@ WHERE name = 'max server memory (MB)';";
             ["PLE"] = data.PageLifeExpectancy,
             ["PLETarget"] = data.PLETarget,
             ["GrantsPending"] = data.MemoryGrantsPending,
-            ["MemoryPressure"] = data.MemoryPressure
+            ["MemoryPressure"] = data.MemoryPressure,
+            ["TopClerk"] = data.TopMemoryClerk,
+            ["TopClerkMB"] = data.TopMemoryClerkMB,
+            ["PlanCacheMB"] = data.PlanCacheSizeMB,
+            ["ResourceSemaphoreMs"] = data.ResourceSemaphoreWaitMs
         };
     }
 
     public class MemoriaMetrics
     {
+        // Métricas básicas
         public int PageLifeExpectancy { get; set; }
         public decimal BufferCacheHitRatio { get; set; } = 100.0m;
         public int TotalServerMemoryMB { get; set; }
@@ -271,6 +347,18 @@ WHERE name = 'max server memory (MB)';";
         public int PLETarget { get; set; }
         public bool MemoryPressure { get; set; }
         public int StolenServerMemoryMB { get; set; }
+        
+        // Métricas de Memory Clerks
+        public string TopMemoryClerk { get; set; } = "";
+        public int TopMemoryClerkMB { get; set; }
+        
+        // Métricas de Plan Cache
+        public int PlanCacheSizeMB { get; set; }
+        public int PlanCacheCount { get; set; }
+        
+        // Métricas de Memory Pressure (RESOURCE_SEMAPHORE)
+        public long ResourceSemaphoreWaitMs { get; set; }
+        public long ResourceSemaphoreWaitCount { get; set; }
     }
 }
 

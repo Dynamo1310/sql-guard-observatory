@@ -26,20 +26,20 @@ export function InstanceCard({ score, onClick, isUpdating, className }: Instance
 
   const getStatusBorder = (status: string) => {
     switch (status) {
-      case 'Healthy': return 'border-green-500/30 hover:border-green-500/50';
-      case 'Warning': return 'border-yellow-500/30 hover:border-yellow-500/50';
-      case 'Risk': return 'border-orange-500/30 hover:border-orange-500/50';
-      case 'Critical': return 'border-red-500/40 hover:border-red-500/60';
-      default: return 'border-border';
+      case 'Healthy': return 'border-success/20 hover:border-success/40';
+      case 'Warning': return 'border-warning/20 hover:border-warning/40';
+      case 'Risk': return 'border-warning/20 hover:border-warning/40';
+      case 'Critical': return 'border-destructive/20 hover:border-destructive/40';
+      default: return 'border-border/50';
     }
   };
 
   const getStatusBg = (status: string) => {
     switch (status) {
-      case 'Healthy': return 'bg-green-500/5';
-      case 'Warning': return 'bg-yellow-500/5';
-      case 'Risk': return 'bg-orange-500/5';
-      case 'Critical': return 'bg-red-500/10';
+      case 'Healthy': return 'bg-success/[0.02]';
+      case 'Warning': return 'bg-warning/[0.02]';
+      case 'Risk': return 'bg-warning/[0.02]';
+      case 'Critical': return 'bg-destructive/[0.03]';
       default: return '';
     }
   };
@@ -47,20 +47,20 @@ export function InstanceCard({ score, onClick, isUpdating, className }: Instance
   const getAmbienteBadge = () => {
     if (isProd) {
       return (
-        <Badge className="text-[9px] px-1.5 py-0 bg-rose-600 text-white border-0">
+        <Badge className="text-[9px] px-1.5 py-0 bg-destructive text-destructive-foreground border-0 font-medium">
           PROD
         </Badge>
       );
     }
     if (getAmbientePriority(score.ambiente) === 1) {
       return (
-        <Badge className="text-[9px] px-1.5 py-0 bg-violet-600 text-white border-0">
+        <Badge className="text-[9px] px-1.5 py-0 bg-primary text-primary-foreground border-0 font-medium">
           TEST
         </Badge>
       );
     }
     return (
-      <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">
+      <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground font-medium">
         {score.ambiente || 'DEV'}
       </Badge>
     );
@@ -72,11 +72,10 @@ export function InstanceCard({ score, onClick, isUpdating, className }: Instance
       className={cn(
         'relative overflow-hidden cursor-pointer',
         'transition-all duration-200',
-        'hover:shadow-lg hover:-translate-y-0.5',
-        'border',
+        'hover:shadow-md hover:-translate-y-0.5',
         getStatusBorder(score.healthStatus),
         getStatusBg(score.healthStatus),
-        isUpdating && 'ring-2 ring-blue-500/50',
+        isUpdating && 'ring-2 ring-primary/50',
         className
       )}
     >
@@ -95,7 +94,7 @@ export function InstanceCard({ score, onClick, isUpdating, className }: Instance
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               {getAmbienteBadge()}
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium">
                 {score.hostingSite || 'N/A'}
               </Badge>
             </div>
@@ -112,27 +111,26 @@ export function InstanceCard({ score, onClick, isUpdating, className }: Instance
               <div
                 key={cat.key}
                 className={cn(
-                  'flex items-center gap-2 px-2 py-1 rounded text-xs',
-                  'bg-muted/50 border',
-                  cat.borderColor
+                  'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs',
+                  'bg-muted/30 border border-border/30'
                 )}
               >
                 <TrendingDown className={cn('h-3 w-3 flex-shrink-0', cat.color)} />
-                <span className={cn('flex-shrink-0 font-medium', cat.color)}>
+                <span className={cn('flex-shrink-0 font-medium text-foreground/80')}>
                   {cat.shortName}
                 </span>
-                <div className="flex-1 h-1.5 bg-background/50 rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-muted/50 rounded-full overflow-hidden">
                   <div
                     className={cn(
-                      'h-full rounded-full',
-                      catScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                      'h-full rounded-full transition-all',
+                      catScore >= 60 ? 'bg-warning' : 'bg-destructive'
                     )}
                     style={{ width: `${catScore}%` }}
                   />
                 </div>
                 <span className={cn(
                   'font-mono text-[10px] font-bold',
-                  catScore < 60 ? 'text-red-500' : 'text-yellow-600'
+                  catScore < 60 ? 'text-destructive' : 'text-warning'
                 )}>
                   {catScore}
                 </span>
@@ -143,14 +141,14 @@ export function InstanceCard({ score, onClick, isUpdating, className }: Instance
         
         {/* Healthy indicator */}
         {problemCategories.length === 0 && score.healthScore >= 90 && (
-          <div className="text-xs text-green-600 flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-full bg-green-500" />
+          <div className="text-xs text-success flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-success/5 border border-success/10">
+            <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
             Todas las categorías saludables
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-2 border-t">
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-2 border-t border-border/30">
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {formatRelativeTime(score.generatedAtUtc)}
@@ -185,10 +183,10 @@ export function ScoreCircle({ score, size = 'md', className }: ScoreCircleProps)
   const strokeDashoffset = circumference - (score / 100) * circumference;
 
   const getStrokeColor = (score: number): string => {
-    if (score >= 90) return '#16a34a';
-    if (score >= 75) return '#eab308';
-    if (score >= 60) return '#f97316';
-    return '#dc2626';
+    if (score >= 90) return 'hsl(var(--success))';
+    if (score >= 75) return 'hsl(var(--warning))';
+    if (score >= 60) return 'hsl(24 95% 53%)';
+    return 'hsl(var(--destructive))';
   };
 
   const viewBoxSize = (config.radius + config.strokeWidth) * 2;
@@ -206,7 +204,7 @@ export function ScoreCircle({ score, size = 'md', className }: ScoreCircleProps)
           fill="none"
           stroke="currentColor"
           strokeWidth={config.strokeWidth}
-          className="text-muted/20"
+          className="text-muted/30"
         />
         <circle
           cx={config.radius + config.strokeWidth}
@@ -218,6 +216,7 @@ export function ScoreCircle({ score, size = 'md', className }: ScoreCircleProps)
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
+          className="transition-all duration-500"
         />
       </svg>
       

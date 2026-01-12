@@ -10,16 +10,16 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, children, className }: StatusBadgeProps) {
-  const statusStyles = {
-    success: 'bg-success/10 text-success border-success/30',
-    warning: 'bg-warning/10 text-warning border-warning/30',
-    critical: 'bg-destructive/10 text-destructive border-destructive/30',
-    info: 'bg-info/10 text-info border-info/30',
-    running: 'bg-primary/10 text-primary border-primary/30',
+  const statusVariants: Record<Status, "soft-success" | "soft-warning" | "soft-destructive" | "soft-info" | "soft-primary"> = {
+    success: 'soft-success',
+    warning: 'soft-warning',
+    critical: 'soft-destructive',
+    info: 'soft-info',
+    running: 'soft-primary',
   };
 
   return (
-    <Badge variant="outline" className={cn(statusStyles[status], 'font-medium', className)}>
+    <Badge variant={statusVariants[status]} className={cn('font-medium', className)}>
       {children}
     </Badge>
   );

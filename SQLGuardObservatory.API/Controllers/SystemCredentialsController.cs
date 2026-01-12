@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.Services;
 using System.Security.Claims;
 
@@ -11,6 +12,7 @@ namespace SQLGuardObservatory.API.Controllers;
 [ApiController]
 [Route("api/system-credentials")]
 [Authorize]
+[ViewPermission("SystemCredentials")]
 public class SystemCredentialsController : ControllerBase
 {
     private readonly ISystemCredentialService _systemCredentialService;
@@ -69,9 +71,11 @@ public class SystemCredentialsController : ControllerBase
     }
 
     /// <summary>
-    /// Crea una nueva credencial de sistema
+    /// Crea una nueva credencial de sistema.
+    /// Requiere capacidad System.ManageCredentials.
     /// </summary>
     [HttpPost]
+    [RequireCapability("System.ManageCredentials")]
     public async Task<ActionResult<SystemCredentialDto>> Create([FromBody] CreateSystemCredentialRequest request)
     {
         if (!await HasPermissionAsync())
@@ -92,9 +96,11 @@ public class SystemCredentialsController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza una credencial de sistema
+    /// Actualiza una credencial de sistema.
+    /// Requiere capacidad System.ManageCredentials.
     /// </summary>
     [HttpPut("{id}")]
+    [RequireCapability("System.ManageCredentials")]
     public async Task<ActionResult> Update(int id, [FromBody] UpdateSystemCredentialRequest request)
     {
         if (!await HasPermissionAsync())
@@ -108,9 +114,11 @@ public class SystemCredentialsController : ControllerBase
     }
 
     /// <summary>
-    /// Elimina una credencial de sistema
+    /// Elimina una credencial de sistema.
+    /// Requiere capacidad System.ManageCredentials.
     /// </summary>
     [HttpDelete("{id}")]
+    [RequireCapability("System.ManageCredentials")]
     public async Task<ActionResult> Delete(int id)
     {
         if (!await HasPermissionAsync())
@@ -124,9 +132,11 @@ public class SystemCredentialsController : ControllerBase
     }
 
     /// <summary>
-    /// Agrega una asignación a una credencial
+    /// Agrega una asignación a una credencial.
+    /// Requiere capacidad System.ManageCredentials.
     /// </summary>
     [HttpPost("{id}/assignments")]
+    [RequireCapability("System.ManageCredentials")]
     public async Task<ActionResult<SystemCredentialAssignmentDto>> AddAssignment(
         int id, 
         [FromBody] AddSystemCredentialAssignmentRequest request)
@@ -147,9 +157,11 @@ public class SystemCredentialsController : ControllerBase
     }
 
     /// <summary>
-    /// Elimina una asignación de una credencial
+    /// Elimina una asignación de una credencial.
+    /// Requiere capacidad System.ManageCredentials.
     /// </summary>
     [HttpDelete("{id}/assignments/{assignmentId}")]
+    [RequireCapability("System.ManageCredentials")]
     public async Task<ActionResult> RemoveAssignment(int id, int assignmentId)
     {
         if (!await HasPermissionAsync())

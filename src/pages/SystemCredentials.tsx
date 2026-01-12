@@ -3,9 +3,12 @@ import {
   Key, Plus, Pencil, Trash2, Server, Tag, RefreshCw, 
   Shield, CheckCircle, XCircle, Play, ChevronDown, ChevronUp,
   Globe, Layers, Code, Search, X, Cloud, Check, CheckSquare, Square,
-  AlertTriangle, Eye, EyeOff, Copy, Loader2, History
+  AlertTriangle, Eye, EyeOff, Copy, Loader2, History, Lock
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Capabilities } from '@/lib/capabilities';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -94,6 +97,9 @@ function groupServersByEnvironment(servers: AvailableServerDto[]) {
 }
 
 export default function SystemCredentials() {
+  const { hasCapability } = useAuth();
+  const canManageCredentials = hasCapability(Capabilities.SystemManageCredentials);
+  
   const [credentials, setCredentials] = useState<SystemCredentialDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -524,22 +530,62 @@ export default function SystemCredentials() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-28" />
+            <Skeleton className="h-10 w-36" />
+          </div>
+        </div>
+
+        {/* Info card skeleton */}
+        <Card className="border-border/50 bg-muted/20">
+          <CardContent className="py-4">
+            <Skeleton className="h-12 w-full" />
+          </CardContent>
+        </Card>
+
+        {/* Credentials list skeleton */}
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <Card key={i}>
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-10 w-10 rounded-lg" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-4 w-64" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-8 w-8" />
+                  <Skeleton className="h-8 w-8" />
+                  <Skeleton className="h-8 w-8" />
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Shield className="h-8 w-8 text-violet-500" />
+            <Shield className="h-8 w-8" />
             Credenciales de Sistema
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground">
             Administra las credenciales que SQL Nova usa para conectarse a servidores
           </p>
         </div>
@@ -553,15 +599,22 @@ export default function SystemCredentials() {
             <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nueva Credencial
-          </Button>
+          {canManageCredentials ? (
+            <Button onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva Credencial
+            </Button>
+          ) : (
+            <Badge variant="outline" className="py-2 px-3">
+              <Lock className="h-3 w-3 mr-1" />
+              Solo lectura
+            </Badge>
+          )}
         </div>
       </div>
 
       {/* Info Card */}
-      <Card className="border-violet-200 bg-violet-50/50 dark:border-violet-800 dark:bg-violet-950/20">
+      <Card className="border-border/50 bg-muted/20">
         <CardContent className="py-4">
           <p className="text-sm text-muted-foreground">
             <strong>¿Cómo funciona?</strong> Las credenciales de sistema se asignan a servidores por diferentes criterios 
@@ -580,10 +633,12 @@ export default function SystemCredentials() {
             <p className="text-muted-foreground mb-4">
               Crea tu primera credencial para que SQL Nova pueda conectarse a servidores SQL.
             </p>
-            <Button onClick={() => setShowCreateModal(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Crear primera credencial
-            </Button>
+            {canManageCredentials && (
+              <Button onClick={() => setShowCreateModal(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Crear primera credencial
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -593,8 +648,8 @@ export default function SystemCredentials() {
               <Collapsible open={expandedCredentials.has(credential.id)}>
                 <div className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className={`p-2 rounded-lg ${credential.isActive ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
-                      <Key className={`h-5 w-5 ${credential.isActive ? 'text-green-600' : 'text-gray-400'}`} />
+                    <div className={`p-2 rounded-lg ${credential.isActive ? 'bg-success/10' : 'bg-muted'}`}>
+                      <Key className={`h-5 w-5 ${credential.isActive ? 'text-success' : 'text-muted-foreground'}`} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -627,35 +682,39 @@ export default function SystemCredentials() {
                     >
                       <Play className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedCredential(credential);
-                        setEditFormData({
-                          name: credential.name,
-                          description: credential.description,
-                          username: credential.username,
-                          domain: credential.domain,
-                          isActive: credential.isActive
-                        });
-                        // Determinar tipo basado en si hay dominio
-                        setEditCredentialType(credential.domain ? 'WindowsAD' : 'SqlAuth');
-                        setShowEditModal(true);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedCredential(credential);
-                        setShowDeleteDialog(true);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    {canManageCredentials && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCredential(credential);
+                            setEditFormData({
+                              name: credential.name,
+                              description: credential.description,
+                              username: credential.username,
+                              domain: credential.domain,
+                              isActive: credential.isActive
+                            });
+                            // Determinar tipo basado en si hay dominio
+                            setEditCredentialType(credential.domain ? 'WindowsAD' : 'SqlAuth');
+                            setShowEditModal(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCredential(credential);
+                            setShowDeleteDialog(true);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </>
+                    )}
                     <CollapsibleTrigger asChild>
                       <Button variant="ghost" size="sm" onClick={() => toggleExpanded(credential.id)}>
                         {expandedCredentials.has(credential.id) ? (
@@ -774,13 +833,15 @@ export default function SystemCredentials() {
                               </TableCell>
                               <TableCell>{assignment.priority}</TableCell>
                               <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleRemoveAssignment(credential.id, assignment.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
+                                {canManageCredentials && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveAssignment(credential.id, assignment.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -909,8 +970,8 @@ export default function SystemCredentials() {
             </div>
 
             {/* Info: Credencial de sistema */}
-            <div className="flex flex-row items-center gap-3 rounded-lg border p-4 bg-violet-50/50 dark:bg-violet-950/20 border-violet-200">
-              <Shield className="h-5 w-5 text-violet-500 flex-shrink-0" />
+            <div className="flex flex-row items-center gap-3 rounded-lg border p-4 bg-muted/20 border-border/50">
+              <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0" />
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">Credencial de sistema</p>
                 <p className="text-xs text-muted-foreground">
@@ -1072,8 +1133,8 @@ export default function SystemCredentials() {
                                       )}
                                     </div>
                                     <div className="flex items-center gap-1 flex-shrink-0">
-                                      {server.isAws && <Cloud className="h-3.5 w-3.5 text-orange-500" title="AWS" />}
-                                      {server.isDmz && <Shield className="h-3.5 w-3.5 text-red-500" title="DMZ" />}
+                                      {server.isAws && <Cloud className="h-3.5 w-3.5 text-muted-foreground" title="AWS" />}
+                                      {server.isDmz && <Shield className="h-3.5 w-3.5 text-destructive" title="DMZ" />}
                                     </div>
                                   </div>
                                 );
@@ -1205,8 +1266,8 @@ export default function SystemCredentials() {
             </div>
 
             {/* Info: Credencial de sistema */}
-            <div className="flex flex-row items-center gap-3 rounded-lg border p-4 bg-violet-50/50 dark:bg-violet-950/20 border-violet-200">
-              <Shield className="h-5 w-5 text-violet-500 flex-shrink-0" />
+            <div className="flex flex-row items-center gap-3 rounded-lg border p-4 bg-muted/20 border-border/50">
+              <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0" />
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">Credencial de sistema</p>
                 <p className="text-xs text-muted-foreground">
@@ -1400,7 +1461,7 @@ export default function SystemCredentials() {
                                         <p className="text-sm font-medium truncate" title={server.fullServerName}>
                                           {server.fullServerName}
                                           {isAlreadyAssigned && (
-                                            <span className="ml-2 text-xs text-orange-500">(ya asignado)</span>
+                                            <span className="ml-2 text-xs text-warning">(ya asignado)</span>
                                           )}
                                         </p>
                                         {server.hostingSite && (
@@ -1411,10 +1472,10 @@ export default function SystemCredentials() {
                                       </div>
                                       <div className="flex items-center gap-1 flex-shrink-0">
                                         {server.isAws && (
-                                          <Cloud className="h-3.5 w-3.5 text-orange-500" title="AWS" />
+                                          <Cloud className="h-3.5 w-3.5 text-muted-foreground" title="AWS" />
                                         )}
                                         {server.isDmz && (
-                                          <Shield className="h-3.5 w-3.5 text-red-500" title="DMZ" />
+                                          <Shield className="h-3.5 w-3.5 text-destructive" title="DMZ" />
                                         )}
                                       </div>
                                     </div>
@@ -1501,12 +1562,12 @@ export default function SystemCredentials() {
               
               if (serverAssignments.length === 0) {
                 return (
-                  <div className="p-4 rounded-lg bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800">
-                    <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                  <div className="p-4 rounded-lg bg-warning/10 border border-warning/30">
+                    <div className="flex items-center gap-2 text-warning">
                       <AlertTriangle className="h-5 w-5" />
                       <span className="font-medium">Sin servidores vinculados</span>
                     </div>
-                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
+                    <p className="text-sm text-muted-foreground mt-2">
                       Esta credencial no tiene servidores asignados. Agrega una asignación de tipo "Server" primero.
                     </p>
                   </div>
@@ -1552,12 +1613,12 @@ export default function SystemCredentials() {
             
             {/* Resultado de la prueba */}
             {testResult && (
-              <div className={`p-4 rounded-lg ${testResult.success ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+              <div className={`p-4 rounded-lg ${testResult.success ? 'bg-success/10 border border-success/30' : 'bg-destructive/10 border border-destructive/30'}`}>
                 <div className="flex items-center gap-2 mb-2">
                   {testResult.success ? (
-                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <CheckCircle className="h-5 w-5 text-success" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-red-600" />
+                    <XCircle className="h-5 w-5 text-destructive" />
                   )}
                   <span className="font-medium">
                     {testResult.success ? 'Conexión exitosa' : 'Conexión fallida'}
@@ -1566,7 +1627,7 @@ export default function SystemCredentials() {
                 {testResult.success ? (
                   <p className="text-sm text-muted-foreground">{testResult.sqlVersion}</p>
                 ) : (
-                  <p className="text-sm text-red-600 break-words">{testResult.errorMessage}</p>
+                  <p className="text-sm text-destructive break-words">{testResult.errorMessage}</p>
                 )}
               </div>
             )}

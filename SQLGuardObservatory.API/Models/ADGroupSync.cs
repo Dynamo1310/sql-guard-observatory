@@ -72,3 +72,6 @@ public class ADGroupSync
     public ApplicationUser? UpdatedByUser { get; set; }
 }
 
+
+
+

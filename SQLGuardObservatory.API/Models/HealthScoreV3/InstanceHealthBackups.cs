@@ -24,11 +24,14 @@ public class InstanceHealthBackups
     
     public DateTime CollectedAtUtc { get; set; }
     
-    // Métricas de Backups (solo las que existen en la tabla real)
+    // Métricas de Backups
     public DateTime? LastFullBackup { get; set; }
     public DateTime? LastLogBackup { get; set; }
     
     public bool FullBackupBreached { get; set; }
     public bool LogBackupBreached { get; set; }
+    
+    // Detalles de backup por DB (como en PowerShell)
+    public string? BackupDetails { get; set; }
 }
 

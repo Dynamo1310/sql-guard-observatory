@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, Users, Shield, Key, Search, RefreshCw,
-  Edit2, Trash2, UserPlus, UserX, Crown, Eye, Settings,
+  Edit2, Trash2, UserPlus, UserX, Crown, Settings,
   Grid, List, FolderLock, Share2, MoreVertical, Lock
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -70,11 +70,10 @@ import { toast } from 'sonner';
 // Helper para iconos de rol
 function getRoleIcon(role: string) {
   switch (role) {
-    case GROUP_ROLES.OWNER: return <Crown className="h-4 w-4 text-amber-500" />;
-    case GROUP_ROLES.ADMIN: return <Shield className="h-4 w-4 text-blue-500" />;
-    case GROUP_ROLES.MEMBER: return <Key className="h-4 w-4 text-green-500" />;
-    case GROUP_ROLES.VIEWER: return <Eye className="h-4 w-4 text-gray-500" />;
-    default: return <Users className="h-4 w-4" />;
+    case GROUP_ROLES.OWNER: return <Crown className="h-4 w-4 text-foreground" />;
+    case GROUP_ROLES.ADMIN: return <Shield className="h-4 w-4 text-muted-foreground" />;
+    case GROUP_ROLES.MEMBER: return <Key className="h-4 w-4 text-muted-foreground" />;
+    default: return <Users className="h-4 w-4 text-muted-foreground" />;
   }
 }
 
@@ -303,16 +302,55 @@ export default function VaultGroupDetail() {
   if (isLoading) {
     return (
       <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center gap-4">
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <div className="space-y-2">
-            <Skeleton className="h-6 w-48" />
-            <Skeleton className="h-4 w-32" />
+        {/* Header skeleton */}
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-10" />
+            <Skeleton className="h-12 w-12 rounded-lg" />
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-48" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-10" />
+            <Skeleton className="h-10 w-10" />
           </div>
         </div>
-        <Skeleton className="h-12 w-full" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-48" />)}
+
+        {/* Stats skeleton */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2].map(i => (
+            <Card key={i}>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-5" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-6 w-8" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Tabs skeleton */}
+        <Skeleton className="h-10 w-full max-w-md" />
+
+        {/* Content skeleton */}
+        <div className="space-y-4">
+          <div className="flex gap-4">
+            <Skeleton className="h-10 flex-1" />
+            <Skeleton className="h-10 w-20" />
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-10 w-36" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <Skeleton key={i} className="h-48" />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -353,7 +391,7 @@ export default function VaultGroupDetail() {
             <FolderLock className="h-6 w-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
               {group.name}
               <Badge variant={getRoleBadgeVariant(group.userRole)}>
                 {getRoleIcon(group.userRole)}
@@ -367,12 +405,12 @@ export default function VaultGroupDetail() {
         </div>
         <div className="flex items-center gap-2">
           <Button 
-            variant="outline" 
-            size="icon"
+            variant="outline"
             onClick={() => loadData(false)}
             disabled={isRefreshing}
           >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Actualizar
           </Button>
           {canManageGroup && (
             <DropdownMenu>
@@ -397,7 +435,7 @@ export default function VaultGroupDetail() {
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
-              <Key className="h-5 w-5 text-primary" />
+              <Key className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="text-2xl font-bold">{credentials.length}</p>
                 <p className="text-sm text-muted-foreground">Credenciales</p>
@@ -408,7 +446,7 @@ export default function VaultGroupDetail() {
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
+              <Users className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="text-2xl font-bold">{group.membersCount}</p>
                 <p className="text-sm text-muted-foreground">Miembros</p>
@@ -559,7 +597,6 @@ export default function VaultGroupDetail() {
                         <SelectContent>
                           <SelectItem value={GROUP_ROLES.ADMIN}>Admin</SelectItem>
                           <SelectItem value={GROUP_ROLES.MEMBER}>Member</SelectItem>
-                          <SelectItem value={GROUP_ROLES.VIEWER}>Viewer</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
@@ -708,12 +745,6 @@ export default function VaultGroupDetail() {
                     <div className="flex items-center gap-2">
                       {getRoleIcon(GROUP_ROLES.MEMBER)}
                       <span>Member - Puede ver y revelar credenciales</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value={GROUP_ROLES.VIEWER}>
-                    <div className="flex items-center gap-2">
-                      {getRoleIcon(GROUP_ROLES.VIEWER)}
-                      <span>Viewer - Solo puede ver credenciales</span>
                     </div>
                   </SelectItem>
                 </SelectContent>

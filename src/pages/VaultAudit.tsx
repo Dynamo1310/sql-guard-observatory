@@ -189,68 +189,62 @@ export default function VaultAudit() {
       {/* Estadísticas */}
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total eventos
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total eventos</CardTitle>
+            <History className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-amber-200 dark:border-amber-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Eye className="h-3 w-3" /> Revelados
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{stats.passwordReveals}</div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-purple-200 dark:border-purple-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Copy className="h-3 w-3" /> Copiados
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{stats.passwordCopies}</div>
+            <div className="text-2xl font-bold text-primary">{stats.total}</div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Shield className="h-3 w-3" /> Vault
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Revelados</CardTitle>
+            <Eye className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.vaultAccess}</div>
+            <div className="text-2xl font-bold text-warning">{stats.passwordReveals}</div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Server className="h-3 w-3" /> Sistema
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Copiados</CardTitle>
+            <Copy className="h-4 w-4 text-info" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.systemAccess}</div>
+            <div className="text-2xl font-bold text-info">{stats.passwordCopies}</div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Usuarios activos
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Vault</CardTitle>
+            <Shield className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.uniqueUsers}</div>
+            <div className="text-2xl font-bold text-emerald-500">{stats.vaultAccess}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Sistema</CardTitle>
+            <Server className="h-4 w-4 text-violet-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-violet-500">{stats.systemAccess}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Usuarios activos</CardTitle>
+            <History className="h-4 w-4 text-cyan-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-cyan-500">{stats.uniqueUsers}</div>
           </CardContent>
         </Card>
       </div>
@@ -383,8 +377,8 @@ export default function VaultAudit() {
                           </TableCell>
                           <TableCell>
                             <Badge 
-                              variant={log.accessType === 'Reveal' ? 'destructive' : 'outline'}
-                              className={log.accessType === 'Copy' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' : ''}
+                              variant="outline"
+                              className={log.accessType === 'Reveal' ? 'bg-warning/10 text-warning border-warning/30' : 'bg-muted text-muted-foreground border-border/50'}
                             >
                               {log.accessType === 'Reveal' ? (
                                 <><Eye className="h-3 w-3 mr-1" /> Revelado</>

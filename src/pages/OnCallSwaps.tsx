@@ -4,6 +4,7 @@ import { ArrowRightLeft, Check, X, Clock, History, Filter, RefreshCw, Mail, Cale
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -34,6 +35,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { onCallApi, OnCallSwapRequestDto } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { cn } from '@/lib/utils';
 
 export default function OnCallSwaps() {
   const navigate = useNavigate();
@@ -91,17 +93,17 @@ export default function OnCallSwaps() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Pending':
-        return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30">
+        return <Badge variant="soft-warning">
           <Clock className="h-3 w-3 mr-1" />
           Pendiente
         </Badge>;
       case 'Approved':
-        return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+        return <Badge variant="soft-success">
           <Check className="h-3 w-3 mr-1" />
           Aprobado
         </Badge>;
       case 'Rejected':
-        return <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30">
+        return <Badge variant="soft-destructive">
           <X className="h-3 w-3 mr-1" />
           Rechazado
         </Badge>;
@@ -202,14 +204,66 @@ export default function OnCallSwaps() {
     (req.requesterId === user?.id || req.requesterDomainUser?.toUpperCase() === user?.domainUser?.toUpperCase())
   ).length;
 
+  const approvedCount = swapRequests.filter(r => r.status === 'Approved').length;
+  const rejectedCount = swapRequests.filter(r => r.status === 'Rejected').length;
+
   const canApproveOrReject = (request: OnCallSwapRequestDto) => {
-    // Only the target user can approve/reject
     return request.targetUserId === user?.id || 
       request.targetDomainUser?.toUpperCase() === user?.domainUser?.toUpperCase();
   };
 
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-10" />
+            <div>
+              <Skeleton className="h-8 w-64 mb-2" />
+              <Skeleton className="h-4 w-80" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+
+        {/* KPIs Skeleton */}
+        <div className="grid gap-4 md:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-3 w-28" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Table Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-10 w-full mb-4" />
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="container py-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -217,8 +271,8 @@ export default function OnCallSwaps() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <ArrowRightLeft className="h-6 w-6 text-cyan-500" />
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <ArrowRightLeft className="h-8 w-8" />
               Intercambios de Guardia
             </h1>
             <p className="text-muted-foreground">
@@ -227,16 +281,16 @@ export default function OnCallSwaps() {
           </div>
         </div>
         <Button onClick={fetchSwapRequests} variant="outline" disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
           Actualizar
         </Button>
       </div>
 
       {/* Alert for pending requests */}
       {pendingForMe > 0 && (
-        <Alert className="border-amber-500/50 bg-amber-500/10">
-          <Mail className="h-4 w-4 text-amber-600" />
-          <AlertTitle className="text-amber-600">Solicitudes pendientes</AlertTitle>
+        <Alert variant="warning">
+          <Mail className="h-4 w-4" />
+          <AlertTitle>Solicitudes pendientes</AlertTitle>
           <AlertDescription>
             Tenés {pendingForMe} solicitud{pendingForMe > 1 ? 'es' : ''} de intercambio esperando tu aprobación.
           </AlertDescription>
@@ -248,44 +302,45 @@ export default function OnCallSwaps() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pendientes para mí</CardTitle>
-            <Clock className="h-4 w-4 text-amber-500" />
+            <Clock className={cn('h-4 w-4', pendingForMe > 0 ? 'text-warning' : 'text-muted-foreground')} />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendingForMe}</div>
+            <div className={cn('text-2xl font-bold', pendingForMe > 0 ? 'text-warning' : 'text-muted-foreground')}>
+              {pendingForMe}
+            </div>
             <p className="text-xs text-muted-foreground">Esperando mi aprobación</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Mis solicitudes</CardTitle>
-            <ArrowRightLeft className="h-4 w-4 text-blue-500" />
+            <ArrowRightLeft className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{myPendingRequests}</div>
+            <div className="text-2xl font-bold text-primary">{myPendingRequests}</div>
             <p className="text-xs text-muted-foreground">Solicitudes que creé pendientes</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Aprobadas</CardTitle>
             <Check className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {swapRequests.filter(r => r.status === 'Approved').length}
-            </div>
+            <div className="text-2xl font-bold text-emerald-500">{approvedCount}</div>
             <p className="text-xs text-muted-foreground">Total histórico</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Rechazadas</CardTitle>
-            <X className="h-4 w-4 text-rose-500" />
+            <X className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {swapRequests.filter(r => r.status === 'Rejected').length}
-            </div>
+            <div className="text-2xl font-bold text-red-500">{rejectedCount}</div>
             <p className="text-xs text-muted-foreground">Total histórico</p>
           </CardContent>
         </Card>
@@ -296,7 +351,10 @@ export default function OnCallSwaps() {
         <CardHeader>
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <CardTitle>Solicitudes de Intercambio</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <ArrowRightLeft className="h-5 w-5 text-primary" />
+                Solicitudes de Intercambio
+              </CardTitle>
               <CardDescription>
                 Lista de todas las solicitudes de intercambio de guardia
               </CardDescription>
@@ -323,7 +381,7 @@ export default function OnCallSwaps() {
                 <Clock className="h-4 w-4 mr-2" />
                 Pendientes
                 {pendingForMe > 0 && (
-                  <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-amber-500 text-white text-xs flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-foreground text-background text-xs flex items-center justify-center">
                     {pendingForMe}
                   </span>
                 )}
@@ -338,32 +396,26 @@ export default function OnCallSwaps() {
               </TabsTrigger>
             </TabsList>
 
-            <div className="rounded-md border">
+            <div className="max-h-[500px] overflow-auto rounded-md border">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background">
                   <TableRow>
-                    <TableHead>Solicitante</TableHead>
-                    <TableHead>Semana</TableHead>
-                    <TableHead>Intercambiar con</TableHead>
-                    <TableHead>Motivo</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
+                    <TableHead className="text-sm">Solicitante</TableHead>
+                    <TableHead className="text-sm">Semana</TableHead>
+                    <TableHead className="text-sm">Intercambiar con</TableHead>
+                    <TableHead className="text-sm">Motivo</TableHead>
+                    <TableHead className="text-sm">Estado</TableHead>
+                    <TableHead className="text-sm">Fecha</TableHead>
+                    <TableHead className="text-sm text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? (
+                  {filteredRequests.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        <RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                        <p className="text-muted-foreground mt-2">Cargando solicitudes...</p>
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredRequests.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        <ArrowRightLeft className="h-12 w-12 mx-auto text-muted-foreground/50" />
-                        <p className="text-muted-foreground mt-2">
+                      <TableCell colSpan={7} className="text-center py-12">
+                        <ArrowRightLeft className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-lg font-semibold mb-2">Sin solicitudes</p>
+                        <p className="text-muted-foreground">
                           {activeTab === 'pending' 
                             ? 'No hay solicitudes pendientes'
                             : activeTab === 'mine'
@@ -374,11 +426,9 @@ export default function OnCallSwaps() {
                     </TableRow>
                   ) : (
                     filteredRequests.map((request) => (
-                      <TableRow key={request.id} className={
-                        request.status === 'Pending' && canApproveOrReject(request)
-                          ? 'bg-amber-500/5'
-                          : ''
-                      }>
+                      <TableRow key={request.id} className={cn(
+                        request.status === 'Pending' && canApproveOrReject(request) && 'bg-warning/5'
+                      )}>
                         <TableCell>
                           <div className="font-medium">{request.requesterDisplayName}</div>
                           <div className="text-xs text-muted-foreground">{request.requesterDomainUser}</div>
@@ -421,7 +471,7 @@ export default function OnCallSwaps() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  className="hover:bg-emerald-500/10 hover:text-emerald-500 hover:border-emerald-500/30"
                                   onClick={() => openApproveDialog(request)}
                                   disabled={processing === request.id}
                                 >
@@ -430,7 +480,7 @@ export default function OnCallSwaps() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                  className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
                                   onClick={() => openRejectDialog(request)}
                                   disabled={processing === request.id}
                                 >
@@ -523,7 +573,6 @@ export default function OnCallSwaps() {
               <>
                 <Button
                   variant="outline"
-                  className="text-rose-600 hover:text-rose-700"
                   onClick={() => {
                     setShowDetailDialog(false);
                     openRejectDialog(selectedRequest);
@@ -533,7 +582,6 @@ export default function OnCallSwaps() {
                   Rechazar
                 </Button>
                 <Button
-                  className="bg-emerald-600 hover:bg-emerald-700"
                   onClick={() => {
                     setShowDetailDialog(false);
                     openApproveDialog(selectedRequest);
@@ -559,9 +607,9 @@ export default function OnCallSwaps() {
           </DialogHeader>
           {selectedRequest && (
             <div className="space-y-4">
-              <Alert className="border-emerald-500/50 bg-emerald-500/10">
-                <Check className="h-4 w-4 text-emerald-600" />
-                <AlertTitle className="text-emerald-600">Confirmar aprobación</AlertTitle>
+              <Alert variant="success">
+                <Check className="h-4 w-4" />
+                <AlertTitle>Confirmar aprobación</AlertTitle>
                 <AlertDescription>
                   <strong>{selectedRequest.requesterDisplayName}</strong> tomará tu guardia de la semana{' '}
                   <strong>{getWeekNumber(selectedRequest.originalWeekStartDate)}</strong> ({formatDate(selectedRequest.originalWeekStartDate)}) y vos tomarás la suya.
@@ -574,7 +622,6 @@ export default function OnCallSwaps() {
               Cancelar
             </Button>
             <Button
-              className="bg-emerald-600 hover:bg-emerald-700"
               onClick={handleApprove}
               disabled={processing !== null}
             >
@@ -600,9 +647,9 @@ export default function OnCallSwaps() {
           </DialogHeader>
           {selectedRequest && (
             <div className="space-y-4">
-              <Alert className="border-rose-500/50 bg-rose-500/10">
-                <X className="h-4 w-4 text-rose-600" />
-                <AlertTitle className="text-rose-600">Rechazar solicitud</AlertTitle>
+              <Alert variant="destructive">
+                <X className="h-4 w-4" />
+                <AlertTitle>Rechazar solicitud</AlertTitle>
                 <AlertDescription>
                   La solicitud de <strong>{selectedRequest.requesterDisplayName}</strong> para intercambiar 
                   la guardia de la semana <strong>{getWeekNumber(selectedRequest.originalWeekStartDate)}</strong> ({formatDate(selectedRequest.originalWeekStartDate)}) será rechazada.
@@ -641,4 +688,3 @@ export default function OnCallSwaps() {
     </div>
   );
 }
-

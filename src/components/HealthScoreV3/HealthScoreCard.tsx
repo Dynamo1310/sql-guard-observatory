@@ -18,66 +18,55 @@ interface CategoryInfo {
   color: string;
 }
 
+// 8 categorías activas del HealthScore V3
 const categories: Record<string, CategoryInfo> = {
   backups: {
     name: 'Backups (RPO/RTO)',
     icon: '🗄️',
-    weight: 18,
-    color: 'text-blue-600',
+    weight: 23,
+    color: 'text-foreground',
   },
   alwaysOn: {
     name: 'AlwaysOn (AG)',
     icon: '♻️',
-    weight: 14,
-    color: 'text-green-600',
-  },
-  conectividad: {
-    name: 'Conectividad',
-    icon: '🌐',
-    weight: 10,
-    color: 'text-purple-600',
-  },
-  erroresCriticos: {
-    name: 'Errores Críticos',
-    icon: '🚨',
-    weight: 7,
-    color: 'text-red-600',
+    weight: 17,
+    color: 'text-foreground',
   },
   cpu: {
     name: 'CPU',
     icon: '⚙️',
-    weight: 10,
-    color: 'text-orange-600',
-  },
-  io: {
-    name: 'IO (Latencia/IOPS)',
-    icon: '💽',
-    weight: 10,
-    color: 'text-indigo-600',
-  },
-  discos: {
-    name: 'Espacio en Discos',
-    icon: '🧱',
-    weight: 8,
-    color: 'text-yellow-600',
+    weight: 12,
+    color: 'text-foreground',
   },
   memoria: {
     name: 'Memoria (PLE/Grants)',
     icon: '🧠',
-    weight: 7,
-    color: 'text-pink-600',
+    weight: 10,
+    color: 'text-foreground',
+  },
+  io: {
+    name: 'IO (Latencia/IOPS)',
+    icon: '💽',
+    weight: 13,
+    color: 'text-foreground',
+  },
+  discos: {
+    name: 'Espacio en Discos',
+    icon: '🧱',
+    weight: 9,
+    color: 'text-foreground',
+  },
+  waits: {
+    name: 'Wait Statistics',
+    icon: '⏱️',
+    weight: 10,
+    color: 'text-foreground',
   },
   mantenimientos: {
     name: 'Mantenimientos',
     icon: '🧹',
     weight: 6,
-    color: 'text-teal-600',
-  },
-  configuracion: {
-    name: 'Configuración & TempDB',
-    icon: '🧩',
-    weight: 10,
-    color: 'text-cyan-600',
+    color: 'text-foreground',
   },
 };
 
@@ -87,23 +76,22 @@ const HealthScoreCard: React.FC<HealthScoreCardProps> = ({ score, onClick }) => 
   const statusLabel = healthScoreV3Service.getHealthStatusLabel(score.healthScore);
 
   const getScoreColor = (value: number): string => {
-    if (value >= 85) return 'bg-green-500';
-    if (value >= 75) return 'bg-yellow-500';
-    if (value >= 65) return 'bg-orange-500';
-    return 'bg-red-500';
+    if (value >= 85) return 'bg-success';
+    if (value >= 75) return 'bg-warning';
+    if (value >= 65) return 'bg-warning/70';
+    return 'bg-destructive';
   };
 
+  // 8 categorías activas
   const categoryScores = [
     { key: 'backups', value: score.backupsScore },
     { key: 'alwaysOn', value: score.alwaysOnScore },
-    { key: 'conectividad', value: score.conectividadScore },
-    { key: 'erroresCriticos', value: score.erroresCriticosScore },
     { key: 'cpu', value: score.cpuScore },
+    { key: 'memoria', value: score.memoriaScore },
     { key: 'io', value: score.ioScore },
     { key: 'discos', value: score.discosScore },
-    { key: 'memoria', value: score.memoriaScore },
+    { key: 'waits', value: score.waitsScore },
     { key: 'mantenimientos', value: score.mantenimientosScore },
-    { key: 'configuracion', value: score.configuracionTempdbScore },
   ];
 
   return (
@@ -139,12 +127,12 @@ const HealthScoreCard: React.FC<HealthScoreCardProps> = ({ score, onClick }) => 
             <Badge
               className={`mt-1 ${
                 statusColor === 'green'
-                  ? 'bg-green-100 text-green-800'
+                  ? 'bg-success/10 text-success'
                   : statusColor === 'yellow'
-                  ? 'bg-yellow-100 text-yellow-800'
+                  ? 'bg-warning/10 text-warning'
                   : statusColor === 'orange'
-                  ? 'bg-orange-100 text-orange-800'
-                  : 'bg-red-100 text-red-800'
+                  ? 'bg-warning/10 text-warning'
+                  : 'bg-destructive/10 text-destructive'
               }`}
             >
               {statusLabel}

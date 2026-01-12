@@ -1050,7 +1050,8 @@ public class VaultService : IVaultService
                 Permission = BitmaskToPermissionString(gs.PermissionBitMask),
                 SharedByUserId = gs.SharedByUserId,
                 SharedByUserName = gs.SharedByUser?.DisplayName ?? gs.SharedByUser?.UserName,
-                SharedAt = gs.SharedAt
+                SharedAt = gs.SharedAt,
+                AllowReshare = gs.AllowReshare
             }).ToList(),
             UserShares = c.UserShares.Select(us => new CredentialUserShareDto
             {
@@ -1063,7 +1064,8 @@ public class VaultService : IVaultService
                 Permission = BitmaskToPermissionString(us.PermissionBitMask),
                 SharedByUserId = us.SharedByUserId,
                 SharedByUserName = us.SharedByUser?.DisplayName ?? us.SharedByUser?.UserName,
-                SharedAt = us.SharedAt
+                SharedAt = us.SharedAt,
+                AllowReshare = us.AllowReshare
             }).ToList(),
             CurrentUserPermission = GetUserPermissionForCredential(c, currentUserId)
         };
@@ -1129,7 +1131,41 @@ public class VaultService : IVaultService
         dto.CanDelete = _permissionBitMaskService.HasPermission(permissions, IPermissionBitMaskService.DeleteCredential);
         dto.CanViewAudit = await _permissionBitMaskService.CanViewAuditAsync(userId, dto.Id);
         
+        // Calcular CanReshare: es owner, o tiene AllowReshare en su share
+        dto.CanReshare = await CanUserReshareCredentialAsync(dto.Id, userId);
+        
         return dto;
+    }
+    
+    /// <summary>
+    /// Verifica si el usuario puede re-compartir una credencial
+    /// </summary>
+    private async Task<bool> CanUserReshareCredentialAsync(int credentialId, string userId)
+    {
+        var credential = await _context.Credentials
+            .Include(c => c.UserShares)
+            .Include(c => c.GroupShares)
+            .FirstOrDefaultAsync(c => c.Id == credentialId);
+            
+        if (credential == null) return false;
+        
+        // El owner siempre puede re-compartir
+        if (credential.OwnerUserId == userId) return true;
+        
+        // Verificar si tiene AllowReshare en un UserShare directo
+        var userShare = credential.UserShares.FirstOrDefault(us => us.UserId == userId);
+        if (userShare?.AllowReshare == true) return true;
+        
+        // Verificar si tiene AllowReshare en algún GroupShare donde es miembro
+        var userGroupIds = await _context.CredentialGroupMembers
+            .Where(cgm => cgm.UserId == userId)
+            .Select(cgm => cgm.GroupId)
+            .ToListAsync();
+            
+        var hasGroupReshare = credential.GroupShares
+            .Any(gs => userGroupIds.Contains(gs.GroupId) && gs.AllowReshare);
+            
+        return hasGroupReshare;
     }
 
     /// <summary>
@@ -1491,7 +1527,7 @@ public class VaultService : IVaultService
         return await EnrichListWithPermissionsAsync(dtos, userId);
     }
 
-    public async Task<bool> AddCredentialToGroupAsync(int groupId, int credentialId, string permission, string userId, string? userName, string? ipAddress, string? userAgent)
+    public async Task<bool> AddCredentialToGroupAsync(int groupId, int credentialId, string permission, bool allowReshare, string userId, string? userName, string? ipAddress, string? userAgent)
     {
         // Verificar que el grupo existe
         var group = await _context.CredentialGroups
@@ -1510,13 +1546,14 @@ public class VaultService : IVaultService
         // Verificar que la credencial existe y pertenece al usuario o puede compartirla
         var credential = await _context.Credentials
             .Include(c => c.GroupShares)
+            .Include(c => c.UserShares)
             .FirstOrDefaultAsync(c => c.Id == credentialId && !c.IsDeleted);
 
         if (credential == null)
             return false;
 
-        // Solo el owner de la credencial puede compartirla con grupos
-        if (credential.OwnerUserId != userId)
+        // Verificar que el usuario puede compartir la credencial (owner o tiene AllowReshare)
+        if (!await CanUserShareCredentialAsync(credential, userId))
             return false;
 
         // Verificar que no está ya compartida con el grupo
@@ -1530,7 +1567,8 @@ public class VaultService : IVaultService
             GroupId = groupId,
             SharedByUserId = userId,
             PermissionBitMask = PermissionStringToBitmask(permission),
-            SharedAt = LocalClockAR.Now
+            SharedAt = LocalClockAR.Now,
+            AllowReshare = allowReshare
         };
 
         _context.CredentialGroupShares.Add(share);
@@ -1718,7 +1756,8 @@ public class VaultService : IVaultService
                         GroupId = groupId,
                         SharedByUserId = userId,
                         PermissionBitMask = newBitmask,
-                        SharedAt = LocalClockAR.Now
+                        SharedAt = LocalClockAR.Now,
+                        AllowReshare = request.AllowReshare
                     };
                     _context.CredentialGroupShares.Add(share);
                     changes.Add($"Compartida con grupo {groupId}");
@@ -1759,7 +1798,8 @@ public class VaultService : IVaultService
                         UserId = targetUserId,
                         SharedByUserId = userId,
                         PermissionBitMask = userNewBitmask,
-                        SharedAt = LocalClockAR.Now
+                        SharedAt = LocalClockAR.Now,
+                        AllowReshare = request.AllowReshare
                     };
                     _context.CredentialUserShares.Add(share);
                     changes.Add($"Compartida con usuario {targetUserId}");
@@ -1953,6 +1993,7 @@ public class VaultService : IVaultService
                 CanShare = enrichedDto.CanShare,
                 CanDelete = enrichedDto.CanDelete,
                 CanViewAudit = enrichedDto.CanViewAudit,
+                CanReshare = enrichedDto.CanReshare,
                 // Campos específicos de SharedWithMe
                 SharedByUserId = userShare.SharedByUserId,
                 SharedByUserName = userShare.SharedByUser?.DisplayName ?? userShare.SharedByUser?.UserName,
@@ -1969,7 +2010,24 @@ public class VaultService : IVaultService
         if (credential.OwnerUserId == userId)
             return true;
 
-        // Verificar si es admin en algún grupo donde está compartida la credencial
+        // Verificar si tiene AllowReshare en un UserShare directo
+        var userShare = credential.UserShares.FirstOrDefault(us => us.UserId == userId);
+        if (userShare?.AllowReshare == true)
+            return true;
+
+        // Verificar si tiene AllowReshare en algún GroupShare donde es miembro
+        foreach (var groupShare in credential.GroupShares)
+        {
+            if (groupShare.AllowReshare)
+            {
+                var isMember = await _context.CredentialGroupMembers
+                    .AnyAsync(m => m.GroupId == groupShare.GroupId && m.UserId == userId);
+                if (isMember)
+                    return true;
+            }
+        }
+
+        // Verificar si es admin en algún grupo donde está compartida la credencial (permiso legacy)
         foreach (var groupShare in credential.GroupShares)
         {
             // ShareCredential (64) indica permiso Admin

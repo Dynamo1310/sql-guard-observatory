@@ -10,24 +10,22 @@ namespace SQLGuardObservatory.API.Services;
 public class OverviewSummaryAlertService : IOverviewSummaryAlertService
 {
     private readonly ApplicationDbContext _appContext;
-    private readonly SQLNovaDbContext _sqlNovaContext;
     private readonly ISmtpService _smtpService;
     private readonly ILogger<OverviewSummaryAlertService> _logger;
-    private readonly string _sqlNovaConnectionString;
+    private readonly string _appDbConnectionString;
 
     public OverviewSummaryAlertService(
         ApplicationDbContext appContext,
-        SQLNovaDbContext sqlNovaContext,
         ISmtpService smtpService,
         IConfiguration configuration,
         ILogger<OverviewSummaryAlertService> logger)
     {
         _appContext = appContext;
-        _sqlNovaContext = sqlNovaContext;
         _smtpService = smtpService;
         _logger = logger;
-        _sqlNovaConnectionString = configuration.GetConnectionString("SQLNova") 
-            ?? throw new InvalidOperationException("SQLNova connection string not configured");
+        // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+        _appDbConnectionString = configuration.GetConnectionString("ApplicationDb") 
+            ?? throw new InvalidOperationException("ApplicationDb connection string not configured");
     }
 
     #region Configuration
@@ -148,10 +146,21 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
         
         if (schedule == null) return false;
 
+        // Desvincular los registros del historial antes de eliminar el schedule
+        var historyRecords = await _appContext.Set<OverviewSummaryAlertHistory>()
+            .Where(h => h.ScheduleId == scheduleId)
+            .ToListAsync();
+        
+        foreach (var record in historyRecords)
+        {
+            record.ScheduleId = null;
+        }
+
         _appContext.Set<OverviewSummaryAlertSchedule>().Remove(schedule);
         await _appContext.SaveChangesAsync();
         
-        _logger.LogInformation("Schedule eliminado: Id={Id}", scheduleId);
+        _logger.LogInformation("Schedule eliminado: Id={Id}, registros de historial desvinculados: {Count}", 
+            scheduleId, historyRecords.Count);
         return true;
     }
 
@@ -315,13 +324,12 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
 
         var results = new List<HealthScoreSummary>();
 
-        using var connection = _sqlNovaContext.Database.GetDbConnection();
+        // Usar SqlConnection directa para no interferir con la conexión del DbContext
+        await using var connection = new SqlConnection(_appDbConnectionString);
         await connection.OpenAsync();
 
-        using var command = connection.CreateCommand();
-        command.CommandText = query;
-
-        using var reader = await command.ExecuteReaderAsync();
+        await using var command = new SqlCommand(query, connection);
+        await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
             results.Add(new HealthScoreSummary
@@ -359,6 +367,7 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
     /// <summary>
     /// Obtiene el mantenimiento atrasado de producción en UNA SOLA consulta
     /// Criterio: CheckdbOk=false O IndexOptimizeOk=false
+    /// RESPETA las excepciones configuradas en CollectorExceptions
     /// </summary>
     private async Task<List<MaintenanceOverdueSummary>> GetMaintenanceOverdueAsync(List<string> productionInstances)
     {
@@ -367,7 +376,31 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
         
         try
         {
-            // Obtener TODOS los registros de mantenimiento de producción en una sola consulta
+            // 1. Cargar excepciones activas para Maintenance
+            var checkdbExceptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var indexOptimizeExceptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            var exceptions = await _appContext.Set<Models.Collectors.CollectorException>()
+                .AsNoTracking()
+                .Where(e => e.CollectorName == "Maintenance" && e.IsActive)
+                .ToListAsync();
+            
+            foreach (var ex in exceptions)
+            {
+                if (ex.ExceptionType.Equals("CHECKDB", StringComparison.OrdinalIgnoreCase))
+                {
+                    checkdbExceptions.Add(ex.ServerName);
+                }
+                else if (ex.ExceptionType.Equals("IndexOptimize", StringComparison.OrdinalIgnoreCase))
+                {
+                    indexOptimizeExceptions.Add(ex.ServerName);
+                }
+            }
+            
+            _logger.LogDebug("Excepciones cargadas para Overview: CHECKDB={CheckdbCount} ({Checkdb}), IndexOptimize={IndexCount}",
+                checkdbExceptions.Count, string.Join(", ", checkdbExceptions), indexOptimizeExceptions.Count);
+
+            // 2. Obtener TODOS los registros de mantenimiento de producción en una sola consulta
             var query = @"
                 WITH LatestMaintenance AS (
                     SELECT 
@@ -384,7 +417,7 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
                 WHERE rn = 1 AND (CheckdbOk = 0 OR IndexOptimizeOk = 0)";
 
             // Crear conexión nueva con la cadena de conexión guardada
-            await using var connection = new SqlConnection(_sqlNovaConnectionString);
+            await using var connection = new SqlConnection(_appDbConnectionString);
             await connection.OpenAsync();
 
             await using var command = new SqlCommand(query, connection);
@@ -403,8 +436,32 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
                     continue;
                 }
                 
-                var checkdbVencido = !checkdbOk;
-                var indexOptimizeVencido = !indexOptimizeOk;
+                // 3. Verificar excepciones (soporta hostname, shortname, FQDN)
+                var hostname = instanceName.Split('\\')[0];
+                var shortName = hostname.Split('.')[0];
+                
+                var isCheckdbExcepted = checkdbExceptions.Contains(instanceName)
+                                     || checkdbExceptions.Contains(hostname)
+                                     || checkdbExceptions.Contains(shortName);
+                
+                var isIndexOptimizeExcepted = indexOptimizeExceptions.Contains(instanceName)
+                                           || indexOptimizeExceptions.Contains(hostname)
+                                           || indexOptimizeExceptions.Contains(shortName);
+                
+                // Aplicar excepciones: si está exceptuado, considerarlo OK
+                var checkdbVencido = !checkdbOk && !isCheckdbExcepted;
+                var indexOptimizeVencido = !indexOptimizeOk && !isIndexOptimizeExcepted;
+                
+                // Si ambos están OK (o exceptuados), no hay problema que reportar
+                if (!checkdbVencido && !indexOptimizeVencido)
+                {
+                    if (isCheckdbExcepted || isIndexOptimizeExcepted)
+                    {
+                        _logger.LogDebug("✅ {Instance} omitido del reporte Overview (excepciones aplicadas: CHECKDB={C}, IndexOptimize={I})",
+                            instanceName, isCheckdbExcepted, isIndexOptimizeExcepted);
+                    }
+                    continue;
+                }
                 
                 string tipo;
                 if (checkdbVencido && indexOptimizeVencido)
@@ -444,7 +501,9 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
 
     /// <summary>
     /// Obtiene los discos críticos de producción directamente de la BD
-    /// Criterio: Ambiente=Produccion Y (IsAlerted=true O RealFreePct <= 10)
+    /// Criterio v3.4: Usa el campo IsAlerted del JSON que ya incluye:
+    /// - Discos con growth + espacio real <= 10%
+    /// - Discos de LOGS con growth + % físico < 10% (aunque tengan espacio interno)
     /// </summary>
     private async Task<List<CriticalDiskSummary>> GetCriticalDisksAsync()
     {
@@ -453,7 +512,6 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
         try
         {
             // Consulta directa a la tabla de discos - obtener los más recientes por instancia
-            // y filtrar los críticos (producción + IsAlerted o <10% espacio)
             var query = @"
                 WITH LatestDiscos AS (
                     SELECT 
@@ -468,8 +526,8 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
                 FROM LatestDiscos
                 WHERE rn = 1";
 
-            // Crear conexión nueva con la cadena de conexión guardada
-            await using var connection = new SqlConnection(_sqlNovaConnectionString);
+            // Crear conexión nueva con la cadena de conexión guardada (SQLGuardObservatoryAuth)
+            await using var connection = new SqlConnection(_appDbConnectionString);
             await connection.OpenAsync();
 
             await using var command = new SqlCommand(query, connection);
@@ -490,19 +548,25 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
                         {
                             foreach (var vol in volumes)
                             {
-                                var realFreePct = vol.RealFreePct ?? vol.FreePct ?? 100;
+                                var freePct = vol.FreePct ?? 100;  // % físico libre
+                                var freeGB = vol.FreeGB ?? 0;      // GB físicos libres
                                 var isAlerted = vol.IsAlerted ?? false;
                                 
-                                // Disco crítico si IsAlerted=true O RealFreePct <= 10
-                                if (isAlerted || realFreePct <= 10)
+                                // v3.4: Usar IsAlerted del JSON que ya tiene toda la lógica:
+                                // - Growth + espacio real <= 10%
+                                // - Discos de LOGS con growth + % físico < 10%
+                                if (isAlerted)
                                 {
                                     results.Add(new CriticalDiskSummary
                                     {
                                         InstanceName = instanceName,
                                         Drive = vol.MountPoint ?? vol.VolumeName ?? "N/A",
-                                        RealPorcentajeLibre = (decimal)realFreePct,
-                                        RealLibreGB = (decimal)(vol.RealFreeGB ?? vol.FreeGB ?? 0)
+                                        RealPorcentajeLibre = (decimal)freePct,  // Usar % físico
+                                        RealLibreGB = (decimal)freeGB            // Usar GB físicos
                                     });
+                                    
+                                    _logger.LogDebug("Disco crítico detectado (IsAlerted=true): {Instance} {Drive}: {Pct:F1}% libre físico",
+                                        instanceName, vol.MountPoint, freePct);
                                 }
                             }
                         }
@@ -708,23 +772,11 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
 
     private string GenerateEmailSubject(OverviewSummaryDataDto data)
     {
-        var status = data.CriticalCount > 0 ? "⚠️" : data.WarningCount > 0 ? "🟡" : "✅";
-        return $"{status} Resumen SQLNova: Score {data.AverageHealthScore}/100 | {data.TotalInstances} instancias | {DateTime.Now:dd/MM/yyyy HH:mm}";
+        return $"📊 Resumen SQLNova: {data.TotalInstances} instancias producción on premise | {DateTime.Now:dd/MM/yyyy HH:mm}";
     }
 
     private string GenerateEmailBody(OverviewSummaryDataDto data)
     {
-        var statusColor = data.AverageHealthScore >= 90 ? "#22c55e" 
-            : data.AverageHealthScore >= 70 ? "#eab308" 
-            : "#ef4444";
-
-        var criticalInstancesHtml = data.CriticalInstances.Count > 0
-            ? string.Join("", data.CriticalInstances.Select(i => 
-                $"<tr><td style='padding: 8px; border-bottom: 1px solid #eee;'>{i.InstanceName}</td>" +
-                $"<td style='padding: 8px; border-bottom: 1px solid #eee; text-align: center; color: #ef4444; font-weight: bold;'>{i.HealthScore}</td>" +
-                $"<td style='padding: 8px; border-bottom: 1px solid #eee;'>{string.Join(", ", i.Issues)}</td></tr>"))
-            : "<tr><td colspan='3' style='padding: 12px; text-align: center; color: #22c55e;'>✅ No hay instancias críticas</td></tr>";
-
         var backupIssuesHtml = data.BackupIssues.Count > 0
             ? string.Join("", data.BackupIssues.Select(b => 
                 $"<li><strong>{b.InstanceName}</strong>: {string.Join(", ", b.Issues)}</li>"))
@@ -747,55 +799,12 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
     <meta charset='UTF-8'>
 </head>
 <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;'>
-    <div style='background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); padding: 30px; border-radius: 10px 10px 0 0;'>
-        <h1 style='color: white; margin: 0; font-size: 24px;'>📊 Resumen SQLNova</h1>
-        <p style='color: rgba(255,255,255,0.8); margin: 5px 0 0 0;'>Estado de la plataforma productiva</p>
+    <div style='background: linear-gradient(135deg, #e0e7ff 0%, #dbeafe 100%); padding: 30px; border-radius: 10px 10px 0 0; border-bottom: 3px solid #2563eb;'>
+        <h1 style='color: #1e3a5f; margin: 0; font-size: 24px;'>📊 Resumen SQLNova</h1>
+        <p style='color: #475569; margin: 5px 0 0 0;'>Estado de la plataforma productiva - {data.TotalInstances} instancias producción on premise</p>
     </div>
     
     <div style='background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0;'>
-        <!-- Health Score Principal -->
-        <div style='text-align: center; padding: 20px; background: white; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
-            <div style='font-size: 48px; font-weight: bold; color: {statusColor};'>{data.AverageHealthScore}</div>
-            <div style='font-size: 14px; color: #666;'>Health Score Promedio</div>
-        </div>
-
-        <!-- KPIs -->
-        <div style='display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;'>
-            <div style='flex: 1; min-width: 120px; background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #22c55e;'>
-                <div style='font-size: 24px; font-weight: bold; color: #22c55e;'>{data.HealthyCount}</div>
-                <div style='font-size: 12px; color: #666;'>Healthy</div>
-            </div>
-            <div style='flex: 1; min-width: 120px; background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #eab308;'>
-                <div style='font-size: 24px; font-weight: bold; color: #eab308;'>{data.WarningCount}</div>
-                <div style='font-size: 12px; color: #666;'>Warning</div>
-            </div>
-            <div style='flex: 1; min-width: 120px; background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #ef4444;'>
-                <div style='font-size: 24px; font-weight: bold; color: #ef4444;'>{data.RiskCount}</div>
-                <div style='font-size: 12px; color: #666;'>Risk</div>
-            </div>
-            <div style='flex: 1; min-width: 120px; background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #7c3aed;'>
-                <div style='font-size: 24px; font-weight: bold; color: #7c3aed;'>{data.TotalInstances}</div>
-                <div style='font-size: 12px; color: #666;'>Total</div>
-            </div>
-        </div>
-
-        <!-- Instancias Críticas -->
-        <div style='background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px;'>
-            <h3 style='margin: 0 0 10px 0; color: #ef4444;'>🚨 Instancias Críticas (Score &lt; 60)</h3>
-            <table style='width: 100%; border-collapse: collapse;'>
-                <thead>
-                    <tr style='background: #f1f5f9;'>
-                        <th style='padding: 8px; text-align: left;'>Instancia</th>
-                        <th style='padding: 8px; text-align: center;'>Score</th>
-                        <th style='padding: 8px; text-align: left;'>Problemas</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {criticalInstancesHtml}
-                </tbody>
-            </table>
-        </div>
-
         <!-- Backups Atrasados -->
         <div style='background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px;'>
             <h3 style='margin: 0 0 10px 0; color: #f59e0b;'>💾 Backups Atrasados ({data.BackupsOverdue})</h3>

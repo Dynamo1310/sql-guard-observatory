@@ -47,24 +47,24 @@ export function PriorityAlerts({ alerts, onAlertClick, className, maxVisible = 6
     switch (severity) {
       case 'critical':
         return {
-          bg: 'bg-red-500/10 hover:bg-red-500/20',
-          border: 'border-red-500/30',
-          text: 'text-red-500',
-          badge: 'bg-red-500 text-white',
+          bg: 'bg-destructive/5 hover:bg-destructive/10',
+          border: 'border-destructive/20',
+          text: 'text-destructive',
+          badge: 'bg-destructive text-destructive-foreground',
         };
       case 'high':
         return {
-          bg: 'bg-orange-500/10 hover:bg-orange-500/20',
-          border: 'border-orange-500/30',
-          text: 'text-orange-500',
-          badge: 'bg-orange-500 text-white',
+          bg: 'bg-warning/5 hover:bg-warning/10',
+          border: 'border-warning/20',
+          text: 'text-warning',
+          badge: 'bg-warning text-warning-foreground',
         };
       default:
         return {
-          bg: 'bg-amber-500/10 hover:bg-amber-500/20',
-          border: 'border-amber-500/30',
-          text: 'text-amber-500',
-          badge: 'bg-amber-500 text-white',
+          bg: 'bg-warning/5 hover:bg-warning/10',
+          border: 'border-warning/20',
+          text: 'text-warning',
+          badge: 'bg-warning text-warning-foreground',
         };
     }
   };
@@ -73,20 +73,20 @@ export function PriorityAlerts({ alerts, onAlertClick, className, maxVisible = 6
     const priority = getAmbientePriority(ambiente);
     if (priority === 0) {
       return (
-        <Badge className="text-[9px] px-1.5 py-0 bg-rose-600 text-white border-0">
+        <Badge className="text-[9px] px-1.5 py-0 bg-destructive text-destructive-foreground border-0 font-medium">
           PROD
         </Badge>
       );
     }
     if (priority === 1) {
       return (
-        <Badge className="text-[9px] px-1.5 py-0 bg-violet-600 text-white border-0">
+        <Badge className="text-[9px] px-1.5 py-0 bg-primary text-primary-foreground border-0 font-medium">
           TEST
         </Badge>
       );
     }
     return (
-      <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">
+      <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground font-medium">
         DEV
       </Badge>
     );
@@ -94,25 +94,25 @@ export function PriorityAlerts({ alerts, onAlertClick, className, maxVisible = 6
 
   return (
     <Card className={cn(
-      'border-2',
-      criticalCount > 0 ? 'border-red-500/40 bg-red-500/5' :
-      highCount > 0 ? 'border-orange-500/40 bg-orange-500/5' :
-      'border-amber-500/40 bg-amber-500/5',
+      'border transition-all duration-200',
+      criticalCount > 0 ? 'border-destructive/30 bg-destructive/[0.02]' :
+      highCount > 0 ? 'border-warning/30 bg-warning/[0.02]' :
+      'border-warning/30 bg-warning/[0.02]',
       className
     )}>
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <CollapsibleTrigger asChild>
-          <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-accent/5 transition-colors">
+          <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent/5 transition-colors rounded-t-xl">
             <div className="flex items-center gap-3">
               <div className={cn(
                 'p-2 rounded-lg',
-                criticalCount > 0 ? 'bg-red-500/20' :
-                highCount > 0 ? 'bg-orange-500/20' : 'bg-amber-500/20'
+                criticalCount > 0 ? 'bg-destructive/10' :
+                highCount > 0 ? 'bg-warning/10' : 'bg-warning/10'
               )}>
                 <Zap className={cn(
                   'h-5 w-5',
-                  criticalCount > 0 ? 'text-red-500' :
-                  highCount > 0 ? 'text-orange-500' : 'text-amber-500'
+                  criticalCount > 0 ? 'text-destructive' :
+                  highCount > 0 ? 'text-warning' : 'text-warning'
                 )} />
               </div>
               <div>
@@ -122,26 +122,26 @@ export function PriorityAlerts({ alerts, onAlertClick, className, maxVisible = 6
                     {alerts.length}
                   </Badge>
                   {prodAlerts > 0 && (
-                    <Badge className="text-[10px] bg-rose-600 text-white border-0">
+                    <Badge className="text-[10px] bg-destructive text-destructive-foreground border-0">
                       {prodAlerts} en PROD
                     </Badge>
                   )}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {criticalCount > 0 && <span className="text-red-500 font-medium">{criticalCount} críticas</span>}
+                  {criticalCount > 0 && <span className="text-destructive font-medium">{criticalCount} críticas</span>}
                   {criticalCount > 0 && highCount > 0 && ' · '}
-                  {highCount > 0 && <span className="text-orange-500 font-medium">{highCount} urgentes</span>}
+                  {highCount > 0 && <span className="text-warning font-medium">{highCount} urgentes</span>}
                 </p>
               </div>
             </div>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+            <Button variant="ghost" size="icon-sm" className="h-8 w-8">
               {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
           </div>
         </CollapsibleTrigger>
         
         <CollapsibleContent>
-          <CardContent className="pt-0 pb-3">
+          <CardContent className="pt-0 pb-4 px-4">
             <div className="space-y-2">
               {visibleAlerts.map((alert, idx) => {
                 const styles = getSeverityStyles(alert.severity);
@@ -150,8 +150,8 @@ export function PriorityAlerts({ alerts, onAlertClick, className, maxVisible = 6
                     key={`${alert.instanceName}-${idx}`}
                     onClick={() => onAlertClick(alert.instanceName)}
                     className={cn(
-                      'w-full flex items-center gap-3 p-2.5 rounded-lg border transition-colors',
-                      'text-left group',
+                      'w-full flex items-center gap-3 p-3 rounded-lg border transition-all duration-200',
+                      'text-left group hover:-translate-y-0.5 hover:shadow-sm',
                       styles.bg,
                       styles.border
                     )}
@@ -166,11 +166,11 @@ export function PriorityAlerts({ alerts, onAlertClick, className, maxVisible = 6
                         <Badge className={cn('text-[10px] px-1.5 py-0', styles.badge)}>
                           {alert.healthScore}
                         </Badge>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
                           {alert.category}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      <p className="text-xs text-muted-foreground truncate mt-1">
                         {alert.message}
                       </p>
                     </div>
@@ -180,7 +180,7 @@ export function PriorityAlerts({ alerts, onAlertClick, className, maxVisible = 6
               })}
               
               {hasMore && (
-                <p className="text-xs text-center text-muted-foreground pt-1">
+                <p className="text-xs text-center text-muted-foreground pt-2">
                   + {sortedAlerts.length - maxVisible} alertas más
                 </p>
               )}
@@ -240,22 +240,7 @@ export function generatePriorityAlerts(
       });
     }
     
-    // Check Database States
-    if (details.databaseStatesDetails) {
-      const problematic = 
-        (details.databaseStatesDetails.offlineCount || 0) +
-        (details.databaseStatesDetails.suspectCount || 0) +
-        (details.databaseStatesDetails.emergencyCount || 0);
-      
-      if (problematic > 0) {
-        alerts.push({
-          ...baseAlert,
-          message: `${problematic} base(s) en estado crítico`,
-          severity: 'critical',
-          category: 'DB States',
-        });
-      }
-    }
+    // NOTA: Database States fue eliminado del HealthScore
     
     // Check CPU
     if (details.cpuDetails?.sqlProcessUtilization > 90) {
@@ -277,15 +262,7 @@ export function generatePriorityAlerts(
       });
     }
     
-    // Check Critical Errors
-    if (details.erroresCriticosDetails?.severity20PlusLast1h > 0) {
-      alerts.push({
-        ...baseAlert,
-        message: `${details.erroresCriticosDetails.severity20PlusLast1h} error(es) crítico(s) en última hora`,
-        severity: 'critical',
-        category: 'Errores',
-      });
-    }
+    // NOTA: ErroresCriticos fue eliminado del HealthScore
     
     // Check Memory
     if (details.memoriaDetails?.pageLifeExpectancy < 100) {

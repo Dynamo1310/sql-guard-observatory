@@ -100,9 +100,9 @@ export function UpdateSecretButton({
             </DialogDescription>
           </DialogHeader>
 
-          <Alert className="border-amber-500 bg-amber-50">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800">
+          <Alert className="border-warning/50 bg-warning/10">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            <AlertDescription className="text-warning-foreground">
               <strong>IMPORTANTE:</strong> Esto NO cambia la contraseña en el servidor destino.
               Solo actualiza lo almacenado en el Vault.
               <br />
@@ -134,10 +134,10 @@ export function UpdateSecretButton({
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Repetí la contraseña"
                 autoComplete="new-password"
-                className={confirmPassword && !passwordsMatch ? 'border-red-500' : ''}
+                className={confirmPassword && !passwordsMatch ? 'border-destructive' : ''}
               />
               {confirmPassword && !passwordsMatch && (
-                <p className="text-sm text-red-500">Las contraseñas no coinciden</p>
+                <p className="text-sm text-destructive">Las contraseñas no coinciden</p>
               )}
             </div>
           </div>

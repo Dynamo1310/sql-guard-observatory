@@ -98,16 +98,16 @@ export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }:
   };
 
   const getAreaColor = (freePct: number) => {
-    if (freePct >= 20) return '#22c55e'; // green
-    if (freePct >= 10) return '#eab308'; // yellow
-    return '#ef4444'; // red
+    if (freePct >= 20) return 'hsl(var(--foreground))';
+    if (freePct >= 10) return 'hsl(var(--warning))';
+    return 'hsl(var(--destructive))';
   };
 
   if (loading) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </Card>
     );
@@ -115,8 +115,8 @@ export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }:
 
   if (error) {
     return (
-      <Card className="p-6 border-red-200 bg-red-50">
-        <div className="text-red-700">Error: {error}</div>
+      <Card className="p-6 border-destructive/50 bg-destructive/5">
+        <div className="text-destructive">Error: {error}</div>
       </Card>
     );
   }
@@ -124,7 +124,7 @@ export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }:
   if (data.length === 0) {
     return (
       <Card className="p-6">
-        <div className="text-center text-gray-500">No hay datos disponibles</div>
+        <div className="text-center text-muted-foreground">No hay datos disponibles</div>
       </Card>
     );
   }
@@ -175,16 +175,16 @@ export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }:
     }
   }
 
-  // Colores para cada volumen
+  // Colores para cada volumen - Paleta Azul
   const volumeColors = [
-    '#ef4444', // red
-    '#3b82f6', // blue
-    '#22c55e', // green
-    '#8b5cf6', // purple
-    '#f97316', // orange
-    '#ec4899', // pink
-    '#06b6d4', // cyan
-    '#84cc16'  // lime
+    '#1d4ed8',
+    '#2563eb',
+    '#3b82f6',
+    '#60a5fa',
+    '#93c5fd',
+    '#bfdbfe',
+    '#1e40af',
+    '#1e3a8a'
   ];
 
   return (
@@ -193,16 +193,16 @@ export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }:
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold flex items-center gap-2">
-              <HardDrive className="h-5 w-5" />
+              <HardDrive className="h-5 w-5 text-muted-foreground" />
               Espacio en Disco - Últimas {hours}h
             </h3>
-            <p className="text-sm text-gray-500">{instanceName}</p>
+            <p className="text-sm text-muted-foreground">{instanceName}</p>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold" style={{ color: getAreaColor(latestFreePct) }}>
               {latestFreePct.toFixed(1)}%
             </div>
-            <div className="text-xs text-gray-500">Espacio libre actual</div>
+            <div className="text-xs text-muted-foreground">Espacio libre actual</div>
           </div>
         </div>
 
@@ -226,19 +226,19 @@ export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }:
                 if (active && payload && payload.length) {
                   const data = payload[0].payload;
                   return (
-                    <div className="bg-white border rounded-lg shadow-lg p-3 max-w-xs">
-                      <p className="text-sm font-semibold mb-2">{data.fullTimestamp}</p>
+                    <div className="bg-card border border-border rounded-lg shadow-lg p-3 max-w-xs">
+                      <p className="text-sm font-semibold mb-2 text-foreground">{data.fullTimestamp}</p>
                       <div className="space-y-1">
                         {Array.from(allVolumeKeys).map((key) => {
                           const value = data[key];
                           if (value !== undefined) {
                             return (
-                              <p key={key} className="text-xs">
+                              <p key={key} className="text-xs text-foreground">
                                 <span className="font-medium">{key}: </span>
                                 <span className={`font-bold ${
-                                  value < 10 ? 'text-red-600' : 
-                                  value < 20 ? 'text-yellow-600' : 
-                                  'text-green-600'
+                                  value < 10 ? 'text-destructive' : 
+                                  value < 20 ? 'text-warning' : 
+                                  'text-foreground'
                                 }`}>
                                   {value}%
                                 </span>
@@ -300,20 +300,20 @@ export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }:
                     <div 
                       key={vol.MountPoint} 
                       className={`p-2 rounded border ${
-                        isCritical ? 'bg-red-50 border-red-200' :
-                        isWarning ? 'bg-yellow-50 border-yellow-200' :
-                        'bg-gray-50 border-gray-200'
+                        isCritical ? 'bg-destructive/5 border-destructive/20' :
+                        isWarning ? 'bg-warning/5 border-warning/20' :
+                        'bg-muted/50 border-border/50'
                       }`}
                     >
-                      <div className="font-semibold text-gray-700 truncate text-[10px]" title={vol.MountPoint}>{vol.MountPoint}</div>
+                      <div className="font-semibold text-muted-foreground truncate text-[10px]" title={vol.MountPoint}>{vol.MountPoint}</div>
                       <div className={`font-bold text-sm ${
-                        isCritical ? 'text-red-700' :
-                        isWarning ? 'text-yellow-700' :
-                        'text-gray-600'
+                        isCritical ? 'text-destructive' :
+                        isWarning ? 'text-warning' :
+                        'text-foreground'
                       }`}>
                         {vol.FreePct.toFixed(1)}%
                       </div>
-                      <div className="text-gray-500 text-[10px]">{vol.FreeGB.toFixed(0)}GB</div>
+                      <div className="text-muted-foreground text-[10px]">{vol.FreeGB.toFixed(0)}GB</div>
                     </div>
                   );
                 })}
@@ -323,7 +323,7 @@ export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }:
               {hiddenCount > 0 && (
                 <button
                   onClick={() => setShowAllVolumes(!showAllVolumes)}
-                  className="w-full py-2 px-4 text-sm text-blue-600 hover:bg-blue-50 rounded border border-blue-200 transition-colors"
+                  className="w-full py-2 px-4 text-sm text-foreground hover:bg-muted/50 rounded border border-border transition-colors"
                 >
                   {showAllVolumes ? (
                     <>Ocultar {hiddenCount} volúmenes OK</>
@@ -338,11 +338,11 @@ export function DiskTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }:
 
         {/* Alertas */}
         {latestFreePct < 20 && (
-          <div className={`p-3 rounded-lg ${latestFreePct < 10 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+          <div className={`p-3 rounded-lg border ${latestFreePct < 10 ? 'bg-destructive/5 border-destructive/20 text-destructive' : 'bg-warning/5 border-warning/20 text-warning'}`}>
             <p className="text-sm font-semibold">
               {latestFreePct < 10 ? '⚠️ Alerta Crítica' : '⚠️ Advertencia'}
             </p>
-            <p className="text-xs">
+            <p className="text-xs opacity-80">
               El disco más lleno tiene {latestFreePct.toFixed(1)}% libre. Considerar limpieza o expansión.
             </p>
           </div>

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
 
@@ -8,7 +9,8 @@ namespace SQLGuardObservatory.API.Controllers;
 
 [ApiController]
 [Route("api/smtp")]
-[Authorize(Roles = "Admin,SuperAdmin")]
+[Authorize]
+[ViewPermission("ConfigSMTP")]
 public class SmtpController : ControllerBase
 {
     private readonly ISmtpService _smtpService;
@@ -46,9 +48,11 @@ public class SmtpController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza la configuración SMTP
+    /// Actualiza la configuración SMTP.
+    /// Requiere capacidad System.ConfigureSMTP.
     /// </summary>
     [HttpPut("settings")]
+    [RequireCapability("System.ConfigureSMTP")]
     public async Task<ActionResult<SmtpSettingsDto>> UpdateSettings([FromBody] UpdateSmtpSettingsRequest request)
     {
         try
@@ -69,9 +73,11 @@ public class SmtpController : ControllerBase
     }
 
     /// <summary>
-    /// Prueba la conexión SMTP enviando un email de prueba
+    /// Prueba la conexión SMTP enviando un email de prueba.
+    /// Requiere capacidad System.ConfigureSMTP.
     /// </summary>
     [HttpPost("test")]
+    [RequireCapability("System.ConfigureSMTP")]
     public async Task<ActionResult> TestConnection([FromBody] TestSmtpRequest request)
     {
         try

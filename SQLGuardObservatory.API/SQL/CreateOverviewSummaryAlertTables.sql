@@ -122,7 +122,7 @@ GO
 -- 5. Agregar permisos para la nueva alerta
 -- Ejecutar en la base de datos de autenticación
 -- =============================================
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- Permiso para SuperAdmin

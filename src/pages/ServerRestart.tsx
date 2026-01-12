@@ -19,12 +19,15 @@ import {
   RotateCcw,
   X,
   ChevronDown,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -59,12 +62,12 @@ import {
 import { useServerRestartStream } from '@/hooks/useServerRestartStream';
 import { cn } from '@/lib/utils';
 
-// Colores para el terminal
+// Colores para el terminal (monocromáticos excepto estados críticos)
 const OUTPUT_COLORS: Record<string, string> = {
-  info: 'text-sky-400',
-  error: 'text-red-400',
-  warning: 'text-amber-400',
-  success: 'text-emerald-400',
+  info: 'text-slate-400',
+  error: 'text-destructive',
+  warning: 'text-warning',
+  success: 'text-slate-200',
 };
 
 export default function ServerRestart() {
@@ -274,288 +277,433 @@ export default function ServerRestart() {
       case 'Pending':
         return <Badge variant="secondary" className="text-xs"><Clock className="w-3 h-3 mr-1" />Pendiente</Badge>;
       case 'Running':
-        return <Badge className="text-xs bg-blue-500"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Ejecutando</Badge>;
+        return <Badge className="text-xs bg-foreground text-background"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Ejecutando</Badge>;
       case 'Completed':
-        return <Badge className="text-xs bg-emerald-500"><CheckCircle2 className="w-3 h-3 mr-1" />Completado</Badge>;
+        return <Badge className="text-xs bg-success text-success-foreground"><CheckCircle2 className="w-3 h-3 mr-1" />Completado</Badge>;
       case 'Failed':
         return <Badge variant="destructive" className="text-xs"><XCircle className="w-3 h-3 mr-1" />Fallido</Badge>;
       case 'Cancelled':
-        return <Badge variant="outline" className="text-xs text-amber-500 border-amber-500"><AlertTriangle className="w-3 h-3 mr-1" />Cancelado</Badge>;
+        return <Badge variant="outline" className="text-xs text-warning border-warning"><AlertTriangle className="w-3 h-3 mr-1" />Cancelado</Badge>;
       default:
         return <Badge variant="outline" className="text-xs">{status}</Badge>;
     }
   };
 
-  // Obtener color del ambiente
+  // Obtener color del ambiente (monocromático excepto producción)
   const getAmbienteColor = (ambiente?: string) => {
     const amb = ambiente?.toLowerCase();
     if (amb === 'produccion' || amb === 'production' || amb === 'prod') {
-      return 'bg-red-500/10 text-red-500 border-red-500/20';
+      return 'bg-destructive/10 text-destructive border-destructive/20';
     }
-    if (amb === 'qa' || amb === 'testing' || amb === 'test') {
-      return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
-    }
-    if (amb === 'desarrollo' || amb === 'development' || amb === 'dev') {
-      return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-    }
-    return 'bg-slate-500/10 text-slate-500 border-slate-500/20';
+    return 'bg-muted text-foreground border-border/50';
   };
 
-  return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="shrink-0 border-b bg-card px-6 py-4">
+  // Estadísticas calculadas
+  const stats = useMemo(() => {
+    const connected = servers.filter(s => s.isConnected).length;
+    const disconnected = servers.length - connected;
+    const production = servers.filter(s => {
+      const amb = s.ambiente?.toLowerCase();
+      return amb === 'produccion' || amb === 'production' || amb === 'prod';
+    }).length;
+    const alwaysOn = servers.filter(s => s.isAlwaysOn).length;
+    return { total: servers.length, connected, disconnected, production, alwaysOn };
+  }, [servers]);
+
+  // Loading skeleton
+  if (loading && servers.length === 0) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-orange-500/10">
-              <RotateCcw className="w-5 h-5 text-orange-500" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold">Reinicio de Servidores SQL</h1>
-              <p className="text-sm text-muted-foreground">
-                Selecciona servidores y monitorea el proceso en tiempo real
-              </p>
-            </div>
+          <div>
+            <Skeleton className="h-9 w-80 mb-2" />
+            <Skeleton className="h-5 w-64" />
           </div>
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-28" />
+          </div>
+        </div>
+
+        {/* KPI Cards skeleton */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          {[...Array(5)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-3 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Main content skeleton */}
+        <div className="grid grid-cols-2 gap-6">
+          <Card className="h-[600px]">
+            <CardHeader>
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-64" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-9 w-full" />
+              <div className="flex gap-2">
+                <Skeleton className="h-9 flex-1" />
+                <Skeleton className="h-9 flex-1" />
+              </div>
+              {[...Array(8)].map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </CardContent>
+          </Card>
+          <Card className="h-[600px] bg-[#0d1117]">
+            <CardHeader className="border-b border-[#30363d]">
+              <Skeleton className="h-5 w-24" />
+            </CardHeader>
+            <CardContent className="p-4 space-y-2">
+              {[...Array(10)].map((_, i) => (
+                <Skeleton key={i} className="h-4 w-full bg-[#30363d]" />
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <RotateCcw className="h-8 w-8" />
+            Reinicio de Servidores SQL
+          </h1>
+          <p className="text-muted-foreground">
+            Selecciona servidores y monitorea el proceso en tiempo real
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          {/* Estado de conexión SignalR */}
+          <Badge variant="outline" className={cn(
+            "gap-1",
+            isConnected ? 'text-emerald-500 border-emerald-500/30' : 'text-muted-foreground'
+          )}>
+            {isConnected ? (
+              <><Wifi className="h-3 w-3" /> Conectado</>
+            ) : (
+              <><WifiOff className="h-3 w-3" /> Desconectado</>
+            )}
+          </Badge>
           
-          <div className="flex items-center gap-3">
-            {/* Estado de conexión */}
-            <div className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
-              isConnected 
-                ? "bg-emerald-500/10 text-emerald-500" 
-                : "bg-red-500/10 text-red-500"
-            )}>
-              <div className={cn("w-1.5 h-1.5 rounded-full", isConnected ? "bg-emerald-500" : "bg-red-500")} />
-              {isConnected ? 'Conectado' : 'Desconectado'}
-            </div>
-            
-            {/* Historial */}
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="sm" onClick={loadHistory}>
-                  <History className="w-4 h-4 mr-2" />
-                  Historial
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="w-[400px] sm:w-[450px]">
-                <SheetHeader>
-                  <SheetTitle>Historial de Reinicios</SheetTitle>
-                  <SheetDescription>
-                    Últimas tareas de reinicio ejecutadas
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="mt-6">
-                  {loadingHistory ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          {/* Historial */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" onClick={loadHistory}>
+                <History className="w-4 h-4 mr-2" />
+                Historial
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-[400px] sm:w-[450px]">
+              <SheetHeader>
+                <SheetTitle>Historial de Reinicios</SheetTitle>
+                <SheetDescription>
+                  Últimas tareas de reinicio ejecutadas
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-6">
+                {loadingHistory ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : taskHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-lg font-semibold mb-2">Sin historial</p>
+                    <p className="text-muted-foreground">
+                      No hay tareas de reinicio registradas
+                    </p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[calc(100vh-180px)]">
+                    <div className="space-y-3 pr-4">
+                      {taskHistory.map(task => (
+                        <Card key={task.taskId} className="p-4">
+                          <div className="flex items-start justify-between gap-2">
+                            {renderTaskStatus(task.status)}
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(task.startedAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="mt-3 space-y-1">
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                              <Server className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>{task.serverCount} servidor(es)</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>{new Date(task.startedAt).toLocaleTimeString()}</span>
+                              {task.durationSeconds && (
+                                <span>• {formatDuration(task.durationSeconds)}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-3 flex gap-2">
+                            <Badge variant="outline" className="text-xs bg-success/10 text-success">
+                              ✓ {task.successCount}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive">
+                              ✗ {task.failureCount}
+                            </Badge>
+                          </div>
+                        </Card>
+                      ))}
                     </div>
-                  ) : taskHistory.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No hay historial disponible
-                    </div>
-                  ) : (
-                    <ScrollArea className="h-[calc(100vh-180px)]">
-                      <div className="space-y-3 pr-4">
-                        {taskHistory.map(task => (
-                          <Card key={task.taskId} className="p-4">
-                            <div className="flex items-start justify-between gap-2">
-                              {renderTaskStatus(task.status)}
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(task.startedAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <div className="mt-3 space-y-1">
-                              <div className="flex items-center gap-2 text-sm">
-                                <Server className="w-3.5 h-3.5 text-muted-foreground" />
-                                <span>{task.serverCount} servidor(es)</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Clock className="w-3.5 h-3.5" />
-                                <span>{new Date(task.startedAt).toLocaleTimeString()}</span>
-                                {task.durationSeconds && (
-                                  <span>• {formatDuration(task.durationSeconds)}</span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="mt-3 flex gap-2">
-                              <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-500">
-                                ✓ {task.successCount}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs bg-red-500/10 text-red-500">
-                                ✗ {task.failureCount}
-                              </Badge>
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </div>
-              </SheetContent>
-            </Sheet>
-            
-            {/* Actualizar */}
-            <Button variant="outline" size="sm" onClick={loadServers} disabled={loading}>
-              <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
-              Actualizar
-            </Button>
-          </div>
+                  </ScrollArea>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
+          
+          {/* Actualizar */}
+          <Button variant="outline" onClick={loadServers} disabled={loading}>
+            <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+            Actualizar
+          </Button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex min-h-0">
-        {/* Panel izquierdo - Lista de servidores */}
-        <div className="w-1/2 max-w-2xl border-r flex flex-col bg-card/50">
-          {/* Filtros */}
-          <div className="shrink-0 p-4 space-y-3 border-b">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar servidor..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 h-9"
-              />
-            </div>
-            
-            <div className="flex gap-2">
-              <Select value={filterAmbiente} onValueChange={setFilterAmbiente}>
-                <SelectTrigger className="h-9 flex-1">
-                  <SelectValue placeholder="Ambiente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los ambientes</SelectItem>
-                  {availableAmbientes.map(amb => (
-                    <SelectItem key={amb} value={amb.toLowerCase()}>{amb}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="h-9 flex-1">
-                  <SelectValue placeholder="Tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="standalone">Standalone</SelectItem>
-                  <SelectItem value="alwayson">AlwaysOn</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                {selectedServers.size} de {filteredServers.length} seleccionados
-              </span>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAllFiltered}>
-                  Seleccionar todo
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={deselectAll}>
-                  Limpiar
-                </Button>
-              </div>
-            </div>
-          </div>
+      {/* KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Servidores</CardTitle>
+            <Server className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">Disponibles para reinicio</p>
+          </CardContent>
+        </Card>
 
-          {/* Lista de servidores */}
-          <ScrollArea className="flex-1">
-            {loading ? (
-              <div className="flex items-center justify-center h-40">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Conectados</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-500">{stats.connected}</div>
+            <p className="text-xs text-muted-foreground">Online y accesibles</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Desconectados</CardTitle>
+            <XCircle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-500">{stats.disconnected}</div>
+            <p className="text-xs text-muted-foreground">Sin conexión</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Producción</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-warning" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-warning">{stats.production}</div>
+            <p className="text-xs text-muted-foreground">Ambiente crítico</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">AlwaysOn</CardTitle>
+            <RefreshCw className="h-4 w-4 text-cyan-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-cyan-500">{stats.alwaysOn}</div>
+            <p className="text-xs text-muted-foreground">Alta disponibilidad</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content - Two panels */}
+      <div className="grid grid-cols-2 gap-6 min-h-0" style={{ height: 'calc(100vh - 380px)' }}>
+        {/* Panel izquierdo - Lista de servidores */}
+        <Card className="flex flex-col overflow-hidden">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <Server className="h-5 w-5 text-primary" />
+              Seleccionar Servidores
+            </CardTitle>
+            <CardDescription>
+              Elige los servidores que deseas reiniciar
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col min-h-0 pt-0">
+            {/* Filtros */}
+            <div className="space-y-3 pb-3 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar servidor..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 h-9"
+                />
               </div>
-            ) : filteredServers.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Server className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                <p>No se encontraron servidores</p>
+              
+              <div className="flex gap-2">
+                <Select value={filterAmbiente} onValueChange={setFilterAmbiente}>
+                  <SelectTrigger className="h-9 flex-1">
+                    <SelectValue placeholder="Ambiente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los ambientes</SelectItem>
+                    {availableAmbientes.map(amb => (
+                      <SelectItem key={amb} value={amb.toLowerCase()}>{amb}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="h-9 flex-1">
+                    <SelectValue placeholder="Tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="standalone">Standalone</SelectItem>
+                    <SelectItem value="alwayson">AlwaysOn</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            ) : (
-              <div className="p-2">
-                {filteredServers.map(server => (
-                  <div
-                    key={server.serverName}
-                    onClick={() => toggleServer(server.serverName)}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all mb-1",
-                      "hover:bg-accent/50",
-                      selectedServers.has(server.serverName) && "bg-primary/5 ring-1 ring-primary/20"
-                    )}
-                  >
-                    <Checkbox
-                      checked={selectedServers.has(server.serverName)}
-                      onCheckedChange={() => toggleServer(server.serverName)}
-                      className="shrink-0"
-                    />
-                    
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{server.serverName}</span>
-                        {server.isConnected ? (
-                          <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Conectado" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" title="Desconectado" />
+              
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  {selectedServers.size} de {filteredServers.length} seleccionados
+                </span>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAllFiltered}>
+                    Seleccionar todo
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={deselectAll}>
+                    Limpiar
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de servidores */}
+            <div className="flex-1 overflow-auto mt-3">
+              {loading ? (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredServers.length === 0 ? (
+                <div className="text-center py-12">
+                  <Server className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg font-semibold mb-2">Sin servidores</p>
+                  <p className="text-muted-foreground">
+                    No se encontraron servidores con los filtros actuales
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredServers.map(server => (
+                    <div
+                      key={server.serverName}
+                      onClick={() => toggleServer(server.serverName)}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all",
+                        "hover:bg-accent/50",
+                        selectedServers.has(server.serverName) && "bg-primary/5 ring-1 ring-primary/20"
+                      )}
+                    >
+                      <Checkbox
+                        checked={selectedServers.has(server.serverName)}
+                        onCheckedChange={() => toggleServer(server.serverName)}
+                        className="shrink-0"
+                      />
+                      
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium truncate">{server.serverName}</span>
+                          {server.isConnected ? (
+                            <div className="w-2 h-2 rounded-full bg-success shrink-0" title="Conectado" />
+                          ) : (
+                            <div className="w-2 h-2 rounded-full bg-destructive shrink-0" title="Desconectado" />
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate mt-0.5">
+                          {server.majorVersion} {server.edition && `• ${server.edition}`}
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <Badge 
+                          variant="outline" 
+                          className={cn("text-[10px] px-1.5 py-0", getAmbienteColor(server.ambiente))}
+                        >
+                          {server.ambiente || 'N/A'}
+                        </Badge>
+                        {server.isAlwaysOn && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-muted text-foreground border-border/50">
+                            AG
+                          </Badge>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground truncate mt-0.5">
-                        {server.majorVersion} {server.edition && `• ${server.edition}`}
-                      </div>
                     </div>
-                    
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <Badge 
-                        variant="outline" 
-                        className={cn("text-[10px] px-1.5 py-0", getAmbienteColor(server.ambiente))}
-                      >
-                        {server.ambiente || 'N/A'}
-                      </Badge>
-                      {server.isAlwaysOn && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-500/10 text-purple-500 border-purple-500/20">
-                          AG
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-
-          {/* Botón de acción */}
-          <div className="shrink-0 p-4 border-t bg-card">
-            <Button
-              className="w-full h-10"
-              onClick={handleStartRestart}
-              disabled={selectedServers.size === 0 || isStreaming || starting}
-            >
-              {starting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Iniciando...
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Reiniciar {selectedServers.size > 0 && `(${selectedServers.size})`}
-                </>
+                  ))}
+                </div>
               )}
-            </Button>
-          </div>
-        </div>
+            </div>
+
+            {/* Botón de acción */}
+            <div className="pt-3 border-t mt-3">
+              <Button
+                className="w-full h-10"
+                onClick={handleStartRestart}
+                disabled={selectedServers.size === 0 || isStreaming || starting}
+              >
+                {starting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Iniciando...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 mr-2" />
+                    Reiniciar {selectedServers.size > 0 && `(${selectedServers.size})`}
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Panel derecho - Terminal */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[#0d1117]">
+        <Card className="flex flex-col overflow-hidden bg-[#0d1117] border-[#30363d]">
           {/* Header del terminal */}
-          <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-[#30363d]">
+          <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-[#161b22] border-b border-[#30363d]">
             <div className="flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-emerald-400" />
+              <Terminal className="w-4 h-4 text-slate-300" />
               <span className="text-sm font-medium text-slate-200">Terminal</span>
               {isStreaming && (
-                <span className="flex items-center gap-1 text-xs text-emerald-400">
+                <Badge variant="outline" className="gap-1 text-emerald-400 border-emerald-400/30 bg-emerald-500/10">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   En vivo
-                </span>
+                </Badge>
               )}
             </div>
             
@@ -583,7 +731,7 @@ export default function ServerRestart() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                  className="h-7 w-7 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                   onClick={handleCancelTask}
                   title="Cancelar"
                 >
@@ -613,7 +761,7 @@ export default function ServerRestart() {
               </div>
               <div className="h-1 bg-[#30363d] rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-emerald-500 transition-all duration-300 ease-out"
+                  className="h-full bg-primary transition-all duration-300 ease-out"
                   style={{ width: `${progress.percentComplete}%` }}
                 />
               </div>
@@ -628,7 +776,7 @@ export default function ServerRestart() {
             {outputLines.length === 0 && !isStreaming ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-500">
                 <Terminal className="w-16 h-16 mb-4 opacity-30" />
-                <p className="text-sm">Esperando ejecución...</p>
+                <p className="text-sm font-medium">Esperando ejecución...</p>
                 <p className="text-xs mt-1 text-slate-600">
                   El output aparecerá aquí en tiempo real
                 </p>
@@ -648,7 +796,7 @@ export default function ServerRestart() {
                 {isStreaming && (
                   <div className="flex gap-3">
                     <span className="text-slate-600 text-xs shrink-0 w-20" />
-                    <span className="inline-block w-2 h-4 bg-emerald-400 animate-pulse" />
+                    <span className="inline-block w-2 h-4 bg-muted-foreground animate-pulse" />
                   </div>
                 )}
               </div>
@@ -659,17 +807,17 @@ export default function ServerRestart() {
           {completed && (
             <div className={cn(
               "shrink-0 px-4 py-3 border-t",
-              completed.status === 'Completed' ? "bg-emerald-500/10 border-emerald-500/20" :
-              completed.status === 'Failed' ? "bg-red-500/10 border-red-500/20" :
-              "bg-amber-500/10 border-amber-500/20"
+              completed.status === 'Completed' ? "bg-success/10 border-success/20" :
+              completed.status === 'Failed' ? "bg-destructive/10 border-destructive/20" :
+              "bg-warning/10 border-warning/20"
             )}>
               <div className="flex items-center gap-3">
                 {completed.status === 'Completed' ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
                 ) : completed.status === 'Failed' ? (
-                  <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                  <XCircle className="w-5 h-5 text-destructive shrink-0" />
                 ) : (
-                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                  <AlertTriangle className="w-5 h-5 text-warning shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-200">
@@ -688,7 +836,7 @@ export default function ServerRestart() {
               </div>
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Modal de confirmación */}
@@ -696,7 +844,7 @@ export default function ServerRestart() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <AlertTriangle className="w-5 h-5 text-warning" />
               Confirmar Reinicio
             </DialogTitle>
             <DialogDescription>

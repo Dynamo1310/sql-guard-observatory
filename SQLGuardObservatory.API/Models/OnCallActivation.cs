@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using SQLGuardObservatory.API.Helpers;
 
 namespace SQLGuardObservatory.API.Models;
 
@@ -84,6 +85,19 @@ public class OnCallActivation
     public string? InstanceName { get; set; }
 
     /// <summary>
+    /// URL del ticket de Service Desk (opcional)
+    /// </summary>
+    [MaxLength(500)]
+    public string? ServiceDeskUrl { get; set; }
+
+    /// <summary>
+    /// Estado de la activación: Pending (Pendiente) o Resolved (Resuelto)
+    /// </summary>
+    [Required]
+    [MaxLength(20)]
+    public string Status { get; set; } = "Pending"; // Pending, Resolved
+
+    /// <summary>
     /// Usuario que registró la activación
     /// </summary>
     [Required]
@@ -93,10 +107,11 @@ public class OnCallActivation
     [ForeignKey(nameof(CreatedByUserId))]
     public virtual ApplicationUser CreatedByUser { get; set; } = null!;
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = LocalClockAR.Now;
 
     public DateTime? UpdatedAt { get; set; }
 }
+
 
 
 

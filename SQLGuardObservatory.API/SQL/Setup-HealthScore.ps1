@@ -8,7 +8,7 @@ param(
     [string]$SqlServerData = "SSPR17MON-01",
     [string]$SqlServerAuth = "localhost",
     [string]$DatabaseData = "SQLNova",
-    [string]$DatabaseAuth = "SQLGuardObservatoryAuth"
+    [string]$DatabaseAuth = "AppSQLNova"
 )
 
 $ErrorActionPreference = "Stop"

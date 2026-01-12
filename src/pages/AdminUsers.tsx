@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Users, Plus, Pencil, Trash2, UserPlus, Search, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Users, Plus, Pencil, Trash2, UserPlus, Search, Loader2, Shield, ShieldCheck, Eye, Lock, Upload, RefreshCw } from 'lucide-react';
+import { Capabilities } from '@/lib/capabilities';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,113 +37,149 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { authApi, groupsApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto } from '@/services/api';
+import { authApi, groupsApi, adminRolesApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto, AdminRoleSimpleDto } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
+import { UserAvatar } from '@/components/UserAvatar';
 import type { UserWithGroups, UserGroupMembership } from '@/types';
 
-// Tipo extendido para usuarios con grupos
+// Tipo extendido para usuarios con grupos (hereda profilePhotoUrl de UserDto)
 interface UserDtoWithGroups extends UserDto {
   groups?: UserGroupMembership[];
 }
 
 export default function AdminUsers() {
-  const { user: currentUser, isSuperAdmin } = useAuth();
+  const { user: currentUser, isSuperAdmin, isReader, canCreateUsers, canDeleteUsers, assignableRoles, canAssignRole, hasCapability } = useAuth();
+  
+  // Capacidades específicas
+  const canEditUsers = hasCapability(Capabilities.UsersEdit);
+  const canImportFromAD = hasCapability(Capabilities.UsersImportFromAD);
+  const canAssignRoles = hasCapability(Capabilities.UsersAssignRoles);
   const [users, setUsers] = useState<UserDtoWithGroups[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserDto | null>(null);
+  
+  // Available roles from API
+  const [availableRoles, setAvailableRoles] = useState<AdminRoleSimpleDto[]>([]);
   
   // AD Import states
   const [showImportAdDialog, setShowImportAdDialog] = useState(false);
   const [adGroupName, setAdGroupName] = useState('GSCORP\\SQL_admins');
   const [adGroupMembers, setAdGroupMembers] = useState<ActiveDirectoryUserDto[]>([]);
   const [selectedAdUsers, setSelectedAdUsers] = useState<Set<string>>(new Set());
-  const [importRole, setImportRole] = useState<'SuperAdmin' | 'Admin' | 'Reader'>('Admin');
   const [searchingAdGroup, setSearchingAdGroup] = useState(false);
   const [importingUsers, setImportingUsers] = useState(false);
+  const [importRoleId, setImportRoleId] = useState<number | undefined>(undefined);
+  
+  // Photo upload states
+  const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Form states
   const [formData, setFormData] = useState({
     domainUser: '',
     displayName: '',
     email: '',
-    role: 'Reader' as 'SuperAdmin' | 'Admin' | 'Reader',
+    roleId: undefined as number | undefined,
     active: true
   });
+  
+  // Fetch available roles from API
+  const fetchAvailableRoles = async () => {
+    try {
+      const roles = await adminRolesApi.getAssignableRoles();
+      setAvailableRoles(roles);
+      // Set default role to Reader or first available
+      const readerRole = roles.find(r => r.name === 'Reader');
+      if (readerRole && !formData.roleId) {
+        setFormData(prev => ({ ...prev, roleId: readerRole.id }));
+        setImportRoleId(readerRole.id);
+      } else if (roles.length > 0 && !formData.roleId) {
+        setFormData(prev => ({ ...prev, roleId: roles[roles.length - 1].id }));
+        setImportRoleId(roles[roles.length - 1].id);
+      }
+    } catch (err) {
+      console.error('Error fetching roles:', err);
+      // Fallback to assignableRoles from context
+      setAvailableRoles(assignableRoles);
+    }
+  };
 
   useEffect(() => {
     fetchUsers();
+    fetchAvailableRoles();
   }, []);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
+      setIsRefreshing(true);
+      // Obtener usuarios con sus datos completos (incluyendo foto de perfil)
+      const allUsers = await authApi.getUsers();
+      
       // Intentar obtener usuarios con sus grupos
       try {
         const usersWithGroups = await groupsApi.getUsersWithGroups();
-        setUsers(usersWithGroups.map(u => ({
-          id: u.id,
-          domainUser: u.domainUser,
-          displayName: u.displayName,
-          email: u.email,
-          role: u.role,
-          active: u.active,
-          createdAt: u.createdAt,
-          groups: u.groups,
-        })));
+        // Combinar la información de grupos con los datos completos de usuarios
+        setUsers(usersWithGroups.map(u => {
+          const fullUser = allUsers.find(au => au.id === u.id);
+          return {
+            id: u.id,
+            domainUser: u.domainUser,
+            displayName: u.displayName,
+            email: u.email,
+            role: u.role,
+            roleId: fullUser?.roleId,
+            roleColor: fullUser?.roleColor,
+            roleIcon: fullUser?.roleIcon,
+            active: u.active,
+            createdAt: u.createdAt,
+            groups: u.groups,
+            profilePhotoUrl: fullUser?.profilePhotoUrl,
+            hasProfilePhoto: fullUser?.hasProfilePhoto,
+            profilePhotoSource: fullUser?.profilePhotoSource,
+            lastLoginAt: fullUser?.lastLoginAt,
+          };
+        }));
       } catch {
         // Fallback a endpoint original si el nuevo falla
-        const data = await authApi.getUsers();
-        setUsers(data);
+        setUsers(allUsers);
       }
     } catch (err: any) {
       toast.error('Error al cargar usuarios: ' + err.message);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   // Verificar si el usuario actual puede editar a otro usuario
   const canEditUser = (targetUser: UserDto): boolean => {
+    // Reader no puede editar
+    if (isReader) return false;
+    
     // SuperAdmin puede editar a todos
     if (isSuperAdmin) return true;
     
-    // Admin puede editarse a sí mismo (solo nombre y estado, no rol)
-    if (currentUser?.domainUser === targetUser.domainUser) {
-      return true;
-    }
-    
-    // Admin no puede editar a un SuperAdmin
-    if (targetUser.role === 'SuperAdmin') {
-      return false;
-    }
+    // Admin no puede editar SuperAdmins
+    if (targetUser.role === 'SuperAdmin') return false;
     
     return true;
   };
 
-  // Verificar si se está editando el propio perfil
-  const isEditingOwnProfile = (targetUser: UserDto): boolean => {
-    return !isSuperAdmin && currentUser?.domainUser === targetUser.domainUser;
-  };
-
   // Verificar si el usuario actual puede eliminar a otro usuario
-  const canDeleteUser = (targetUser: UserDto): boolean => {
-    // SuperAdmin puede eliminar a todos (excepto TB03260 que se valida en backend)
-    if (isSuperAdmin) return true;
+  const canDeleteUserLocal = (targetUser: UserDto): boolean => {
+    // Solo SuperAdmin puede eliminar
+    if (!canDeleteUsers) return false;
     
-    // Admin no puede eliminarse a sí mismo
+    // No puede eliminarse a sí mismo
     if (currentUser?.domainUser === targetUser.domainUser) {
       return false;
     }
-    
-    // Admin no puede eliminar a un SuperAdmin
-    if (targetUser.role === 'SuperAdmin') {
-      return false;
-    }
-    
     return true;
   };
 
@@ -151,16 +189,21 @@ export default function AdminUsers() {
       return;
     }
 
+    if (!formData.roleId) {
+      toast.error('Debes seleccionar un rol');
+      return;
+    }
+
     try {
       const request: CreateUserRequest = {
         domainUser: formData.domainUser,
         displayName: formData.displayName,
         email: formData.email || undefined,
-        role: formData.role
+        roleId: formData.roleId
       };
 
       await authApi.createUser(request);
-      toast.success('Usuario agregado a la lista blanca exitosamente');
+      toast.success('Usuario agregado exitosamente. Recuerda agregarlo a un grupo para darle permisos de vistas.');
       setShowCreateDialog(false);
       resetForm();
       fetchUsers();
@@ -172,31 +215,16 @@ export default function AdminUsers() {
   const handleUpdateUser = async () => {
     if (!selectedUser) return;
 
-    // Verificar permisos
-    if (!canEditUser(selectedUser)) {
-      toast.error('No tienes permisos para editar este usuario');
-      return;
-    }
-
     try {
       const request: UpdateUserRequest = {
         displayName: formData.displayName,
         email: formData.email || undefined,
-        role: formData.role,
+        roleId: formData.roleId,
         active: formData.active
       };
 
       await authApi.updateUser(selectedUser.id, request);
-      
-      // Si se cambió el rol del usuario, mostrar mensaje informativo
-      const roleChanged = selectedUser.role !== formData.role;
-      if (roleChanged) {
-        toast.success('Usuario actualizado exitosamente', {
-          description: 'El usuario deberá cerrar sesión para que los cambios surtan efecto'
-        });
-      } else {
-        toast.success('Usuario actualizado exitosamente');
-      }
+      toast.success('Usuario actualizado exitosamente');
       
       setShowEditDialog(false);
       setSelectedUser(null);
@@ -211,7 +239,7 @@ export default function AdminUsers() {
     if (!selectedUser) return;
 
     // Verificar permisos
-    if (!canDeleteUser(selectedUser)) {
+    if (!canDeleteUserLocal(selectedUser)) {
       toast.error('No tienes permisos para eliminar este usuario');
       return;
     }
@@ -228,18 +256,12 @@ export default function AdminUsers() {
   };
 
   const openEditDialog = (user: UserDto) => {
-    // Verificar permisos antes de abrir el diálogo
-    if (!canEditUser(user)) {
-      toast.error('No tienes permisos para editar este usuario');
-      return;
-    }
-
     setSelectedUser(user);
     setFormData({
       domainUser: user.domainUser,
       displayName: user.displayName,
       email: user.email || '',
-      role: user.role as 'SuperAdmin' | 'Admin' | 'Reader',
+      roleId: user.roleId || availableRoles.find(r => r.name === user.role)?.id,
       active: user.active
     });
     setShowEditDialog(true);
@@ -247,7 +269,7 @@ export default function AdminUsers() {
 
   const openDeleteDialog = (user: UserDto) => {
     // Verificar permisos antes de abrir el diálogo
-    if (!canDeleteUser(user)) {
+    if (!canDeleteUserLocal(user)) {
       toast.error('No tienes permisos para eliminar este usuario');
       return;
     }
@@ -308,15 +330,24 @@ export default function AdminUsers() {
       return;
     }
 
+    if (!importRoleId) {
+      toast.error('Selecciona un rol para los usuarios importados');
+      return;
+    }
+
+    // Get role name from roleId for the API (maintains backwards compatibility)
+    const selectedRole = availableRoles.find(r => r.id === importRoleId);
+    const roleName = selectedRole?.name || 'Reader';
+
     setImportingUsers(true);
     try {
       const response = await authApi.importFromAdGroup({
         groupName: adGroupName,
         selectedUsernames: Array.from(selectedAdUsers),
-        defaultRole: importRole
+        defaultRole: roleName
       });
 
-      toast.success(response.message);
+      toast.success(response.message + ' Recuerda agregarlos a un grupo para darles permisos de vistas.');
       
       if (response.errors.length > 0) {
         console.error('Errores durante la importación:', response.errors);
@@ -330,7 +361,9 @@ export default function AdminUsers() {
       setAdGroupMembers([]);
       setSelectedAdUsers(new Set());
       setAdGroupName('GSCORP\\SQL_admins');
-      setImportRole('Admin');
+      // Reset to Reader role
+      const readerRole = availableRoles.find(r => r.name === 'Reader');
+      setImportRoleId(readerRole?.id || availableRoles[availableRoles.length - 1]?.id);
     } catch (error: any) {
       toast.error(error.message || 'Error al importar usuarios');
     } finally {
@@ -339,97 +372,243 @@ export default function AdminUsers() {
   };
 
   const resetForm = () => {
+    const readerRole = availableRoles.find(r => r.name === 'Reader');
     setFormData({
       domainUser: '',
       displayName: '',
       email: '',
-      role: 'Reader' as 'SuperAdmin' | 'Admin' | 'Reader',
+      roleId: readerRole?.id || availableRoles[availableRoles.length - 1]?.id,
       active: true
     });
   };
 
-  // Obtener opciones de roles disponibles según el usuario actual
-  const getAvailableRoles = () => {
-    if (isSuperAdmin) {
-      // SuperAdmin puede asignar cualquier rol
-      return [
-        { value: 'Reader', label: 'Reader (Solo lectura)' },
-        { value: 'Admin', label: 'Admin (Gestión de usuarios)' },
-        { value: 'SuperAdmin', label: 'SuperAdmin (Acceso total)' }
-      ];
-    } else {
-      // Admin solo puede asignar Reader y Admin
-      return [
-        { value: 'Reader', label: 'Reader (Solo lectura)' },
-        { value: 'Admin', label: 'Admin (Gestión de usuarios)' }
-      ];
+  // Subir foto de perfil para un usuario
+  const handleUploadUserPhoto = async (userId: string, file: File) => {
+    // Validar tipo de archivo
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Tipo de archivo no permitido. Use JPG, PNG, GIF o WebP.');
+      return;
+    }
+
+    // Validar tamaño (máximo 5MB para mejor calidad)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('El archivo es demasiado grande. Máximo 5MB.');
+      return;
+    }
+
+    setUploadingUserPhoto(true);
+    try {
+      const response = await authApi.uploadUserPhoto(userId, file);
+      
+      if (response.success) {
+        toast.success('Foto de perfil actualizada');
+        // Recargar usuarios para ver la foto actualizada
+        await fetchUsers();
+      } else {
+        toast.error(response.message || 'Error al subir la foto');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Error al subir foto de perfil');
+    } finally {
+      setUploadingUserPhoto(false);
+      // Limpiar el input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Eliminar foto de perfil de un usuario
+  const handleDeleteUserPhoto = async (userId: string) => {
+    try {
+      await authApi.deleteUserPhoto(userId);
+      toast.success('Foto de perfil eliminada');
+      // Recargar usuarios
+      await fetchUsers();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al eliminar foto de perfil');
     }
   };
 
   const activeUsers = users.filter(u => u.active).length;
-  const superAdminUsers = users.filter(u => u.role === 'SuperAdmin').length;
-  const adminUsers = users.filter(u => u.role === 'Admin').length;
-  const readerUsers = users.filter(u => u.role === 'Reader').length;
+  const usersWithGroups = users.filter(u => u.groups && u.groups.length > 0).length;
+  const usersWithoutGroups = users.filter(u => !u.groups || u.groups.length === 0).length;
+  const superAdmins = users.filter(u => u.role === 'SuperAdmin').length;
+  const admins = users.filter(u => u.role === 'Admin').length;
+  const readers = users.filter(u => u.role === 'Reader').length;
+  
+  // Helper para formatear tiempo relativo
+  const formatRelativeTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Ahora';
+    if (diffMins < 60) return `Hace ${diffMins} min`;
+    if (diffHours < 24) return `Hace ${diffHours}h`;
+    if (diffDays < 7) return `Hace ${diffDays}d`;
+    if (diffDays < 30) return `Hace ${Math.floor(diffDays / 7)} sem`;
+    return date.toLocaleDateString('es-ES');
+  };
+
+  // Helper para obtener el badge del rol
+  const getRoleBadge = (user: UserDtoWithGroups) => {
+    const IconComponent = user.role === 'SuperAdmin' ? ShieldCheck : user.role === 'Admin' ? Shield : Eye;
+    const bgColor = user.roleColor || (user.role === 'SuperAdmin' ? '#8b5cf6' : user.role === 'Admin' ? '#3b82f6' : '#6b7280');
+    
+    return (
+      <Badge 
+        variant="default" 
+        style={{ backgroundColor: bgColor }}
+        className="hover:opacity-90"
+      >
+        <IconComponent className="h-3 w-3 mr-1" />
+        {user.role}
+      </Badge>
+    );
+  };
+
+  // Helper para obtener icono del rol
+  const getRoleIcon = (roleName: string) => {
+    if (roleName === 'SuperAdmin') return ShieldCheck;
+    if (roleName === 'Admin') return Shield;
+    return Eye;
+  };
 
   const { sortedData, requestSort, getSortIndicator } = useTableSort(users);
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">Cargando usuarios...</div>
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-72" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-10" />
+            <Skeleton className="h-10 w-48" />
+            <Skeleton className="h-10 w-36" />
+          </div>
         </div>
+
+        {/* KPIs skeleton */}
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <Skeleton className="h-4 w-16 mb-2" />
+                <Skeleton className="h-8 w-12" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Table skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-40" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[...Array(8)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Administración de Usuarios</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">Gestión de accesos y roles del sistema</p>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Users className="h-8 w-8" />
+            Administración de Usuarios
+          </h1>
+          <p className="text-muted-foreground">
+            Gestión de usuarios del sistema. Los roles definen capacidades administrativas, los grupos definen permisos de vistas.
+          </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button onClick={() => setShowImportAdDialog(true)} variant="outline" className="w-full sm:w-auto">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Importar desde Grupo AD
+          <Button
+            variant="outline"
+            onClick={() => fetchUsers(false)}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Actualizar
           </Button>
-          <Button onClick={() => setShowCreateDialog(true)} className="w-full sm:w-auto">
-            <Plus className="mr-2 h-4 w-4" />
-            Agregar Usuario
-          </Button>
+          {canImportFromAD && (
+            <Button onClick={() => setShowImportAdDialog(true)} variant="outline" className="w-full sm:w-auto">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Importar desde Grupo AD
+            </Button>
+          )}
+          {canCreateUsers && (
+            <Button onClick={() => setShowCreateDialog(true)} className="w-full sm:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              Agregar Usuario
+            </Button>
+          )}
+          {!canCreateUsers && !canImportFromAD && (
+            <Badge variant="outline" className="py-2 px-3">
+              <Lock className="h-3 w-3 mr-1" />
+              Solo lectura
+            </Badge>
+          )}
         </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <KPICard
-          title="Usuarios Activos"
-          value={activeUsers}
+          title="Total"
+          value={users.length}
           icon={Users}
           variant="default"
         />
         <KPICard
-          title="Super Admins"
-          value={superAdminUsers}
-          icon={Users}
+          title="SuperAdmins"
+          value={superAdmins}
+          icon={ShieldCheck}
           variant="default"
         />
         <KPICard
-          title="Administradores"
-          value={adminUsers}
-          icon={Users}
+          title="Admins"
+          value={admins}
+          icon={Shield}
           variant="default"
         />
         <KPICard
-          title="Lectores"
-          value={readerUsers}
-          icon={Users}
+          title="Readers"
+          value={readers}
+          icon={Eye}
           variant="default"
+        />
+        <KPICard
+          title="Con Grupos"
+          value={usersWithGroups}
+          icon={Users}
+          variant="success"
+        />
+        <KPICard
+          title="Sin Grupos"
+          value={usersWithoutGroups}
+          icon={Users}
+          variant={usersWithoutGroups > 0 ? "warning" : "default"}
         />
       </div>
 
-      <Card className="gradient-card shadow-card">
+      <Card>
         <CardHeader>
           <CardTitle>Listado de Usuarios</CardTitle>
         </CardHeader>
@@ -470,24 +649,32 @@ export default function AdminUsers() {
                 >
                   Fecha Alta {getSortIndicator('createdAt')}
                 </TableHead>
+                <TableHead 
+                  className="text-xs cursor-pointer hover:bg-accent"
+                  onClick={() => requestSort('lastLoginAt')}
+                >
+                  Última Conexión {getSortIndicator('lastLoginAt')}
+                </TableHead>
                 <TableHead className="text-xs text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedData.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell className="font-mono text-xs py-2">{user.domainUser}</TableCell>
+                  <TableCell className="py-2">
+                    <div className="flex items-center gap-2">
+                      <UserAvatar
+                        photoUrl={user.profilePhotoUrl}
+                        displayName={user.displayName}
+                        domainUser={user.domainUser}
+                        size="sm"
+                      />
+                      <span className="font-mono text-xs">{user.domainUser}</span>
+                    </div>
+                  </TableCell>
                   <TableCell className="font-medium text-xs py-2">{user.displayName}</TableCell>
                   <TableCell className="py-2">
-                    <Badge 
-                      variant="outline" 
-                      className={
-                        user.role === 'SuperAdmin' ? 'border-purple-500 text-purple-500 text-xs' :
-                        user.role === 'Admin' ? 'border-primary text-primary text-xs' : 'text-xs'
-                      }
-                    >
-                      {user.role === 'SuperAdmin' ? 'Super Admin' : user.role}
-                    </Badge>
+                    {getRoleBadge(user)}
                   </TableCell>
                   <TableCell className="py-2">
                     <div className="flex flex-wrap gap-1 max-w-[200px]">
@@ -523,30 +710,43 @@ export default function AdminUsers() {
                   <TableCell className="font-mono text-xs py-2">
                     {new Date(user.createdAt).toLocaleDateString('es-ES')}
                   </TableCell>
+                  <TableCell className="font-mono text-xs py-2">
+                    {user.lastLoginAt ? (
+                      <span title={new Date(user.lastLoginAt).toLocaleString('es-ES')}>
+                        {formatRelativeTime(user.lastLoginAt)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Nunca</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right py-2">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDialog(user)}
-                        disabled={!canEditUser(user)}
-                        title={!canEditUser(user) ? 'No tienes permisos para editar este usuario' : ''}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteDialog(user)}
-                        disabled={!canDeleteUser(user) || user.domainUser === 'TB03260'}
-                        title={
-                          user.domainUser === 'TB03260' ? 'No se puede eliminar el SuperAdmin principal' :
-                          !canDeleteUser(user) ? 'No tienes permisos para eliminar este usuario' : ''
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {!isReader && (
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditDialog(user)}
+                          disabled={!canEditUser(user)}
+                          title={!canEditUser(user) ? 'No tienes permisos para editar este usuario' : ''}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        {canDeleteUsers && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDeleteDialog(user)}
+                            disabled={!canDeleteUserLocal(user) || user.domainUser === 'TB03260'}
+                            title={
+                              user.domainUser === 'TB03260' ? 'No se puede eliminar el SuperAdmin principal' :
+                              !canDeleteUserLocal(user) ? 'No tienes permisos para eliminar este usuario' : ''
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -600,25 +800,36 @@ export default function AdminUsers() {
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role">Rol</Label>
+              <Label htmlFor="role">Rol (Capacidad Administrativa)</Label>
               <Select
-                value={formData.role}
-                onValueChange={(value: 'SuperAdmin' | 'Admin' | 'Reader') => setFormData({ ...formData, role: value })}
+                value={formData.roleId?.toString() || ''}
+                onValueChange={(value) => setFormData({ ...formData, roleId: parseInt(value) })}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Seleccionar rol" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getAvailableRoles().map(role => (
-                    <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
-                  ))}
+                  {availableRoles.map((role) => {
+                    const IconComponent = getRoleIcon(role.name);
+                    return (
+                      <SelectItem key={role.id} value={role.id.toString()}>
+                        <div className="flex items-center gap-2">
+                          <IconComponent className="h-4 w-4" style={{ color: role.color }} />
+                          {role.name}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
-              {!isSuperAdmin && (
-                <p className="text-xs text-muted-foreground">
-                  Solo puedes asignar roles Reader y Admin
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                El rol define las capacidades administrativas del usuario.
+              </p>
+            </div>
+            <div className="bg-muted/50 p-3 rounded-md border border-border">
+              <p className="text-sm text-muted-foreground">
+                <strong className="text-foreground">Nota:</strong> El rol define qué puede administrar el usuario. Para definir qué vistas puede ver, agrégalo a un grupo después de crearlo.
+              </p>
             </div>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -642,6 +853,64 @@ export default function AdminUsers() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Avatar y sincronización de foto */}
+            <div className="flex items-center gap-4 p-3 bg-accent/30 rounded-lg">
+              <UserAvatar
+                photoUrl={selectedUser?.profilePhotoUrl}
+                displayName={selectedUser?.displayName}
+                domainUser={selectedUser?.domainUser}
+                size="lg"
+              />
+              <div className="flex-1">
+                <p className="text-sm font-medium">{selectedUser?.displayName}</p>
+                <p className="text-xs text-muted-foreground">{selectedUser?.domainUser}</p>
+                <div className="flex gap-2 mt-2">
+                  {/* Input oculto para seleccionar archivo */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file && selectedUser) {
+                        handleUploadUserPhoto(selectedUser.id, file);
+                      }
+                    }}
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="hidden"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingUserPhoto}
+                  >
+                    {uploadingUserPhoto ? (
+                      <>
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        Subiendo...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-3 w-3" />
+                        Subir Foto
+                      </>
+                    )}
+                  </Button>
+                  {selectedUser?.hasProfilePhoto && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => selectedUser && handleDeleteUserPhoto(selectedUser.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-3 w-3" />
+                      Eliminar Foto
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Usuario</Label>
               <Input value={formData.domainUser} disabled />
@@ -668,43 +937,37 @@ export default function AdminUsers() {
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-role">Rol</Label>
+              <Label htmlFor="edit-role">Rol (Capacidad Administrativa)</Label>
               <Select
-                value={formData.role}
-                onValueChange={(value: 'SuperAdmin' | 'Admin' | 'Reader') => setFormData({ ...formData, role: value })}
-                disabled={selectedUser && isEditingOwnProfile(selectedUser)}
+                value={formData.roleId?.toString() || ''}
+                onValueChange={(value) => setFormData({ ...formData, roleId: parseInt(value) })}
+                disabled={selectedUser?.role === 'SuperAdmin' && !isSuperAdmin}
               >
-                <SelectTrigger 
-                  title={selectedUser && isEditingOwnProfile(selectedUser) ? 'No puedes cambiar tu propio rol' : ''}
-                >
-                  <SelectValue />
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar rol" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getAvailableRoles().map(role => (
-                    <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
-                  ))}
+                  {availableRoles.map((role) => {
+                    const IconComponent = getRoleIcon(role.name);
+                    return (
+                      <SelectItem key={role.id} value={role.id.toString()}>
+                        <div className="flex items-center gap-2">
+                          <IconComponent className="h-4 w-4" style={{ color: role.color }} />
+                          {role.name}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
-              {selectedUser && isEditingOwnProfile(selectedUser) && (
-                <p className="text-xs text-muted-foreground">
-                  No puedes modificar tu propio rol por seguridad
-                </p>
-              )}
-              {!isSuperAdmin && selectedUser && !isEditingOwnProfile(selectedUser) && (
-                <p className="text-xs text-muted-foreground">
-                  Solo puedes asignar roles Reader y Admin
-                </p>
-              )}
             </div>
             <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="edit-active"
                 checked={formData.active}
-                onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                className="h-4 w-4"
+                onCheckedChange={(checked) => setFormData({ ...formData, active: checked === true })}
               />
-              <Label htmlFor="edit-active">Usuario activo</Label>
+              <Label htmlFor="edit-active" className="cursor-pointer">Usuario activo</Label>
             </div>
             <p className="text-xs text-muted-foreground">
               Este usuario se autentica con su cuenta de Windows del dominio gscorp.ad.
@@ -835,38 +1098,48 @@ export default function AdminUsers() {
                   </div>
                 </div>
 
-                {/* Selector de rol por defecto */}
+                {/* Selección de rol */}
                 <div className="space-y-2">
-                  <Label htmlFor="importRole">Rol por Defecto</Label>
+                  <Label>Rol a asignar</Label>
                   <Select
-                    value={importRole}
-                    onValueChange={(value: 'SuperAdmin' | 'Admin' | 'Reader') => setImportRole(value)}
+                    value={importRoleId?.toString() || ''}
+                    onValueChange={(value) => setImportRoleId(parseInt(value))}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getAvailableRoles().map(role => (
-                        <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
-                      ))}
+                      {availableRoles.map((role) => {
+                        const IconComponent = getRoleIcon(role.name);
+                        return (
+                          <SelectItem key={role.id} value={role.id.toString()}>
+                            <div className="flex items-center gap-2">
+                              <IconComponent className="h-4 w-4" style={{ color: role.color }} />
+                              {role.name}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Todos los usuarios importados tendrán este rol. Podrás cambiarlo individualmente después.
-                    {!isSuperAdmin && ' (Solo puedes asignar Reader y Admin)'}
-                  </p>
                 </div>
 
                 {/* Información de importación */}
                 <div className="bg-accent/50 p-3 rounded-md">
                   <p className="text-sm">
-                    <strong>{selectedAdUsers.size}</strong> de <strong>{adGroupMembers.length}</strong> usuarios seleccionados para importar
+                    <strong>{selectedAdUsers.size}</strong> de <strong>{adGroupMembers.length}</strong> usuarios seleccionados para importar con rol <strong>{availableRoles.find(r => r.id === importRoleId)?.name || 'Reader'}</strong>
                   </p>
                   {selectedAdUsers.size > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">
                       Los usuarios ya existentes en la base de datos serán omitidos.
                     </p>
                   )}
+                </div>
+                
+                <div className="bg-muted/50 p-3 rounded-md border border-border">
+                  <p className="text-sm text-muted-foreground">
+                    <strong className="text-foreground">Nota:</strong> Después de importar, agrega los usuarios a un grupo para asignarles permisos de vistas.
+                  </p>
                 </div>
               </>
             )}

@@ -68,10 +68,10 @@ export default function CollectorActivity() {
   }
 
   return (
-    <Card className="gradient-card shadow-card">
+    <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm flex items-center gap-2">
-          <Activity className="h-4 w-4 text-blue-500" />
+          <Activity className="h-4 w-4 text-muted-foreground" />
           Actividad de Collectors
         </CardTitle>
       </CardHeader>
@@ -80,14 +80,14 @@ export default function CollectorActivity() {
           <div
             key={activity.name}
             className={`flex items-center justify-between p-2 rounded-md transition-colors ${
-              activity.isRecent ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-accent/50'
+              activity.isRecent ? 'bg-foreground/5 border border-foreground/10' : 'bg-muted/50'
             }`}
           >
             <div className="flex items-center gap-2">
               {getCollectorIcon(activity.name)}
               <span className="text-xs font-medium">{activity.name}</span>
               {activity.isRecent && (
-                <Badge variant="outline" className="text-xs bg-blue-500/20 text-blue-700 border-blue-500/40">
+                <Badge variant="outline" className="text-xs bg-foreground/5 text-foreground border-foreground/20">
                   <Activity className="h-2 w-2 mr-1 animate-pulse" />
                   Actualizando
                 </Badge>

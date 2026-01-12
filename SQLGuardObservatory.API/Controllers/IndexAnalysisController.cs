@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
 
@@ -11,6 +12,7 @@ namespace SQLGuardObservatory.API.Controllers;
 [ApiController]
 [Route("api/index-analysis")]
 [Authorize]
+[ViewPermission("Indexes")]
 public class IndexAnalysisController : ControllerBase
 {
     private readonly IIndexAnalysisService _indexService;

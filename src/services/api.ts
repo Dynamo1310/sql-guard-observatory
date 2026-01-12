@@ -61,6 +61,10 @@ export interface LoginResponse {
   allowed: boolean;
   roles: string[];
   isOnCallEscalation: boolean;
+  /** URL de la foto de perfil (data:image/...) */
+  profilePhotoUrl?: string | null;
+  /** Indica si el usuario tiene foto de perfil */
+  hasProfilePhoto?: boolean;
 }
 
 export interface UserDto {
@@ -69,21 +73,34 @@ export interface UserDto {
   displayName: string;
   email?: string;
   role: string;
+  roleId?: number;
+  roleColor?: string;
+  roleIcon?: string;
   active: boolean;
+  /** URL de la foto de perfil */
+  profilePhotoUrl?: string | null;
+  /** Indica si el usuario tiene foto de perfil */
+  hasProfilePhoto?: boolean;
+  /** Origen de la foto: AD, Manual, None */
+  profilePhotoSource?: string;
   createdAt: string;
+  /** Fecha y hora de la última conexión */
+  lastLoginAt?: string | null;
 }
 
 export interface CreateUserRequest {
   domainUser: string;
   displayName: string;
   email?: string;
-  role: string;
+  role?: string;
+  roleId?: number;
 }
 
 export interface UpdateUserRequest {
   displayName: string;
   email?: string;
-  role: string;
+  role?: string;
+  roleId?: number;
   active: boolean;
 }
 
@@ -118,6 +135,25 @@ export interface ImportUsersFromGroupResponse {
   errors: string[];
 }
 
+// =============================================
+// Tipos de Foto de Perfil
+// =============================================
+
+export interface ProfilePhotoResponse {
+  photoUrl?: string | null;
+  hasPhoto: boolean;
+  source?: string;
+}
+
+export interface ProfilePhotoSyncResponse {
+  success: boolean;
+  message: string;
+  photoBase64?: string | null;
+  source?: string;
+  updatedAt?: string;
+}
+
+
 export const authApi = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const response = await fetch(`${API_URL}/api/auth/login`, {
@@ -139,6 +175,8 @@ export const authApi = {
         email: data.email,
         roles: data.roles,
         isOnCallEscalation: data.isOnCallEscalation,
+        profilePhotoUrl: data.profilePhotoUrl,
+        hasProfilePhoto: data.hasProfilePhoto,
       }));
     }
     
@@ -162,6 +200,8 @@ export const authApi = {
         email: data.email,
         roles: data.roles,
         isOnCallEscalation: data.isOnCallEscalation,
+        profilePhotoUrl: data.profilePhotoUrl,
+        hasProfilePhoto: data.hasProfilePhoto,
       }));
     }
     
@@ -264,6 +304,72 @@ export const authApi = {
       body: JSON.stringify(request),
     });
     return handleResponse<ImportUsersFromGroupResponse>(response);
+  },
+
+  // =============================================
+  // Foto de Perfil
+  // =============================================
+
+  /**
+   * Obtiene la foto de perfil del usuario actual
+   */
+  async getMyPhoto(): Promise<ProfilePhotoResponse> {
+    const response = await fetch(`${API_URL}/api/auth/me/photo`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ProfilePhotoResponse>(response);
+  },
+
+  /**
+   * Sube la foto de perfil del usuario actual
+   */
+  async uploadMyPhoto(file: File): Promise<ProfilePhotoSyncResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch(`${API_URL}/api/auth/me/photo/upload`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+      body: formData,
+    });
+    return handleResponse<ProfilePhotoSyncResponse>(response);
+  },
+
+  /**
+   * Sube la foto de perfil de un usuario específico
+   */
+  async uploadUserPhoto(userId: string, file: File): Promise<ProfilePhotoSyncResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch(`${API_URL}/api/auth/users/${userId}/photo/upload`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+      body: formData,
+    });
+    return handleResponse<ProfilePhotoSyncResponse>(response);
+  },
+
+  /**
+   * Elimina la foto de perfil del usuario actual
+   */
+  async deleteMyPhoto(): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/auth/me/photo`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  /**
+   * Elimina la foto de perfil de un usuario específico
+   */
+  async deleteUserPhoto(userId: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/auth/users/${userId}/photo`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
   },
 };
 
@@ -446,15 +552,11 @@ export const disksApi = {
 };
 
 // ==================== PERMISSIONS API ====================
-
-export interface RolePermissionDto {
-  role: string;
-  permissions: Record<string, boolean>;
-}
+// Los permisos ahora se manejan solo mediante grupos de seguridad
 
 export interface AvailableViewsDto {
   views: ViewInfo[];
-  roles: string[];
+  roles: string[]; // Deprecado - ya no se usan roles para permisos
 }
 
 export interface ViewInfo {
@@ -465,36 +567,6 @@ export interface ViewInfo {
 }
 
 export const permissionsApi = {
-  async getAllPermissions(): Promise<RolePermissionDto[]> {
-    const response = await fetch(`${API_URL}/api/permissions`, {
-      headers: {
-        ...getAuthHeader(),
-      },
-    });
-    return handleResponse<RolePermissionDto[]>(response);
-  },
-
-  async getRolePermissions(role: string): Promise<RolePermissionDto> {
-    const response = await fetch(`${API_URL}/api/permissions/${role}`, {
-      headers: {
-        ...getAuthHeader(),
-      },
-    });
-    return handleResponse<RolePermissionDto>(response);
-  },
-
-  async updateRolePermissions(role: string, permissions: Record<string, boolean>): Promise<void> {
-    const response = await fetch(`${API_URL}/api/permissions/${role}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeader(),
-      },
-      body: JSON.stringify({ role, permissions }),
-    });
-    return handleResponse<void>(response);
-  },
-
   async getAvailableViews(): Promise<AvailableViewsDto> {
     const response = await fetch(`${API_URL}/api/permissions/available`, {
       headers: {
@@ -511,6 +583,386 @@ export const permissionsApi = {
       },
     });
     return handleResponse<{ permissions: string[] }>(response);
+  },
+};
+
+// ==================== ADMIN ASSIGNMENTS API ====================
+
+export interface UserAuthorizationInfoDto {
+  userId: string;
+  role: string;
+  isSuperAdmin: boolean;
+  isAdmin: boolean;
+  isReader: boolean;
+  canCreateUsers: boolean;
+  canDeleteUsers: boolean;
+  canCreateGroups: boolean;
+  manageableGroupIds: number[];
+  permissions: string[];
+}
+
+export interface AssignedGroupDto {
+  assignmentId: number;
+  groupId: number;
+  groupName: string;
+  groupColor?: string;
+  groupIcon?: string;
+  memberCount: number;
+  canEdit: boolean;
+  canDelete: boolean;
+  canManageMembers: boolean;
+  canManagePermissions: boolean;
+}
+
+export interface UserAdminAssignmentsDto {
+  userId: string;
+  userDisplayName: string;
+  userRole?: string;
+  assignedGroups: AssignedGroupDto[];
+}
+
+export interface GroupAdminDto {
+  assignmentId: number;
+  userId: string;
+  userDisplayName: string;
+  userEmail?: string;
+  canEdit: boolean;
+  canDelete: boolean;
+  canManageMembers: boolean;
+  canManagePermissions: boolean;
+  assignedByDisplayName?: string;
+  createdAt: string;
+}
+
+export interface GroupAdminsDto {
+  groupId: number;
+  groupName: string;
+  admins: GroupAdminDto[];
+}
+
+export interface GroupAssignmentRequest {
+  groupId: number;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canManageMembers?: boolean;
+  canManagePermissions?: boolean;
+}
+
+export interface AdminAssignmentRequest {
+  userId: string;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canManageMembers?: boolean;
+  canManagePermissions?: boolean;
+}
+
+export interface AvailableAdminDto {
+  userId: string;
+  displayName: string;
+  email?: string;
+  role: string;
+  isAlreadyAssigned: boolean;
+}
+
+export interface AvailableGroupForAssignmentDto {
+  groupId: number;
+  groupName: string;
+  groupColor?: string;
+  groupIcon?: string;
+  isAlreadyAssigned: boolean;
+}
+
+export interface GroupPermissionsCheckDto {
+  canManage: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canManageMembers: boolean;
+  canManagePermissions: boolean;
+}
+
+export const adminAssignmentsApi = {
+  // Información de autorización del usuario actual
+  async getMyAuthorization(): Promise<UserAuthorizationInfoDto> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/my-authorization`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<UserAuthorizationInfoDto>(response);
+  },
+
+  // Asignaciones por usuario
+  async getUserAssignments(userId: string): Promise<UserAdminAssignmentsDto> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/user/${userId}`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<UserAdminAssignmentsDto>(response);
+  },
+
+  async updateUserAssignments(userId: string, assignments: GroupAssignmentRequest[]): Promise<void> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/user/${userId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ assignments }),
+    });
+    return handleResponse<void>(response);
+  },
+
+  async addGroupToUser(userId: string, groupId: number, permissions?: Partial<GroupAssignmentRequest>): Promise<void> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/user/${userId}/group/${groupId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(permissions || {}),
+    });
+    return handleResponse<void>(response);
+  },
+
+  async removeGroupFromUser(userId: string, groupId: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/user/${userId}/group/${groupId}`, {
+      method: 'DELETE',
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Error al remover asignación' }));
+      throw new Error(error.message);
+    }
+  },
+
+  // Asignaciones por grupo
+  async getGroupAdmins(groupId: number): Promise<GroupAdminsDto> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/group/${groupId}`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<GroupAdminsDto>(response);
+  },
+
+  async updateGroupAdmins(groupId: number, admins: AdminAssignmentRequest[]): Promise<void> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/group/${groupId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ admins }),
+    });
+    return handleResponse<void>(response);
+  },
+
+  // Usuarios/grupos disponibles
+  async getAvailableAdminsForGroup(groupId: number): Promise<AvailableAdminDto[]> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/group/${groupId}/available-admins`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<AvailableAdminDto[]>(response);
+  },
+
+  async getAvailableGroupsForUser(userId: string): Promise<AvailableGroupForAssignmentDto[]> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/user/${userId}/available-groups`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<AvailableGroupForAssignmentDto[]>(response);
+  },
+
+  // Verificaciones de permisos
+  async canManageGroup(groupId: number): Promise<GroupPermissionsCheckDto> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/can-manage-group/${groupId}`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<GroupPermissionsCheckDto>(response);
+  },
+
+  async canModifyUser(targetUserId: string): Promise<{ canModify: boolean }> {
+    const response = await fetch(`${API_URL}/api/admin-assignments/can-modify-user/${targetUserId}`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<{ canModify: boolean }>(response);
+  },
+};
+
+// ==================== ADMIN ROLES API ====================
+
+export interface AdminRoleDto {
+  id: number;
+  name: string;
+  description?: string;
+  color: string;
+  icon: string;
+  priority: number;
+  isSystem: boolean;
+  isActive: boolean;
+  usersCount: number;
+  enabledCapabilities: string[];
+  assignableRoleIds: number[];
+  createdAt?: string;
+  updatedAt?: string;
+  createdByUserName?: string;
+}
+
+export interface AdminRoleSimpleDto {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  priority: number;
+}
+
+export interface CreateAdminRoleRequest {
+  name: string;
+  description?: string;
+  color: string;
+  icon: string;
+  priority: number;
+  enabledCapabilities: string[];
+  assignableRoleIds: number[];
+}
+
+export interface UpdateAdminRoleRequest {
+  name?: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  priority?: number;
+  isActive?: boolean;
+  enabledCapabilities?: string[];
+  assignableRoleIds?: number[];
+}
+
+export interface CapabilityDto {
+  key: string;
+  name: string;
+  description: string;
+  category: string;
+  isEnabled: boolean;
+}
+
+export interface CapabilityCategoryDto {
+  category: string;
+  capabilities: CapabilityDto[];
+}
+
+export interface UserAuthorizationDto {
+  userId: string;
+  roleId?: number;
+  roleName: string;
+  roleColor: string;
+  roleIcon: string;
+  rolePriority: number;
+  capabilities: string[];
+  assignableRoles: AdminRoleDto[];
+  manageableGroupIds: number[];
+  isSuperAdmin: boolean;
+  isAdmin: boolean;
+  isReader: boolean;
+  canCreateUsers: boolean;
+  canDeleteUsers: boolean;
+  canCreateGroups: boolean;
+}
+
+export const adminRolesApi = {
+  // Obtener todos los roles
+  async getRoles(): Promise<AdminRoleDto[]> {
+    const response = await fetch(`${API_URL}/api/admin/roles`, {
+      headers: getAuthHeader(),
+    });
+    return handleResponse<AdminRoleDto[]>(response);
+  },
+
+  // Obtener un rol por ID
+  async getRole(id: number): Promise<AdminRoleDto> {
+    const response = await fetch(`${API_URL}/api/admin/roles/${id}`, {
+      headers: getAuthHeader(),
+    });
+    return handleResponse<AdminRoleDto>(response);
+  },
+
+  // Obtener roles que el usuario actual puede asignar
+  async getAssignableRoles(): Promise<AdminRoleSimpleDto[]> {
+    const response = await fetch(`${API_URL}/api/admin/roles/assignable`, {
+      headers: getAuthHeader(),
+    });
+    return handleResponse<AdminRoleSimpleDto[]>(response);
+  },
+
+  // Obtener todas las capacidades disponibles
+  async getCapabilities(): Promise<CapabilityCategoryDto[]> {
+    const response = await fetch(`${API_URL}/api/admin/roles/capabilities`, {
+      headers: getAuthHeader(),
+    });
+    return handleResponse<CapabilityCategoryDto[]>(response);
+  },
+
+  // Crear un nuevo rol
+  async createRole(request: CreateAdminRoleRequest): Promise<AdminRoleDto> {
+    const response = await fetch(`${API_URL}/api/admin/roles`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<AdminRoleDto>(response);
+  },
+
+  // Actualizar un rol
+  async updateRole(id: number, request: UpdateAdminRoleRequest): Promise<AdminRoleDto> {
+    const response = await fetch(`${API_URL}/api/admin/roles/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<AdminRoleDto>(response);
+  },
+
+  // Eliminar un rol
+  async deleteRole(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/admin/roles/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Error al eliminar rol' }));
+      throw new Error(error.message);
+    }
+  },
+
+  // Obtener información de autorización del usuario actual
+  async getMyAuthorization(): Promise<UserAuthorizationDto> {
+    const response = await fetch(`${API_URL}/api/admin/roles/my-authorization`, {
+      headers: getAuthHeader(),
+    });
+    return handleResponse<UserAuthorizationDto>(response);
+  },
+
+  // Obtener usuarios de un rol
+  async getRoleUsers(roleId: number): Promise<{ id: string; userName: string; displayName: string; email?: string; isActive: boolean }[]> {
+    const response = await fetch(`${API_URL}/api/admin/roles/${roleId}/users`, {
+      headers: getAuthHeader(),
+    });
+    return handleResponse<{ id: string; userName: string; displayName: string; email?: string; isActive: boolean }[]>(response);
   },
 };
 
@@ -871,35 +1323,34 @@ export interface HealthScoreV3Dto {
   healthStatus: 'Healthy' | 'Warning' | 'Risk' | 'Critical';
   generatedAtUtc: string;
   
-  // Scores por categoría (cada uno sobre 100) - 12 CATEGORÍAS
-  // TAB 1: Availability & DR (40%)
+  // Scores por categoria (cada uno sobre 100) - 12 CATEGORIAS
+  // TAB 1: Availability & DR (35%)
   score_Backups?: number;           // 18%
   score_AlwaysOn?: number;          // 14%
-  score_LogChain?: number;          // 5%
   score_DatabaseStates?: number;    // 3%
   
-  // TAB 2: Performance (35%)
+  // TAB 2: Performance (43%)
   score_CPU?: number;               // 10%
   score_Memoria?: number;           // 8%
   score_IO?: number;                // 10%
   score_Discos?: number;            // 7%
+  score_Waits?: number;             // 8%
   
-  // TAB 3: Maintenance & Config (25%)
+  // TAB 3: Maintenance & Config (22%)
   score_ErroresCriticos?: number;   // 7%
   score_Maintenance?: number;       // 5%
-  score_ConfiguracionTempdb?: number; // 8%
+  score_ConfiguracionTempdb?: number; // 5%
   score_Autogrowth?: number;        // 5%
   
-  // Diagnóstico Inteligente de I/O para TempDB (v3.1)
+  // Diagnostico Inteligente de I/O para TempDB (v3.1)
   tempDBIODiagnosis?: string;
   tempDBIOSuggestion?: string;
   tempDBIOSeverity?: string;
   
-  // Contribuciones ponderadas (0-peso máximo)
+  // Contribuciones ponderadas (0-peso maximo)
   // TAB 1: Availability & DR
   backupsContribution?: number;           // Max: 18
   alwaysOnContribution?: number;          // Max: 14
-  logChainContribution?: number;          // Max: 5
   databaseStatesContribution?: number;    // Max: 3
   
   // TAB 2: Performance
@@ -907,11 +1358,12 @@ export interface HealthScoreV3Dto {
   memoriaContribution?: number;           // Max: 8
   ioContribution?: number;                // Max: 10
   discosContribution?: number;            // Max: 7
+  waitsContribution?: number;             // Max: 8
   
   // TAB 3: Maintenance & Config
   erroresCriticosContribution?: number;   // Max: 7
   mantenimientosContribution?: number;    // Max: 5
-  configuracionTempdbContribution?: number; // Max: 8
+  configuracionTempdbContribution?: number; // Max: 5
   autogrowthContribution?: number;        // Max: 5
 }
 
@@ -1076,16 +1528,6 @@ export interface ConfiguracionTempdbDetails {
   configDetails?: string;
 }
 
-export interface LogChainDetails {
-  id: number;
-  instanceName: string;
-  collectedAtUtc: string;
-  brokenChainCount: number;
-  fullDBsWithoutLogBackup: number;
-  maxHoursSinceLogBackup: number;
-  logChainDetails?: string;  // JSON
-}
-
 export interface DatabaseStatesDetails {
   id: number;
   instanceName: string;
@@ -1164,7 +1606,6 @@ export interface HealthScoreV3DetailDto extends HealthScoreV3Dto {
   // TAB 1: Availability & DR
   backupsDetails?: BackupsDetails;
   alwaysOnDetails?: AlwaysOnDetails;
-  logChainDetails?: LogChainDetails;
   databaseStatesDetails?: DatabaseStatesDetails;
   
   // TAB 2: Performance
@@ -1255,6 +1696,9 @@ export interface OnCallOperatorDto {
   rotationOrder: number;
   isActive: boolean;
   createdAt: string;
+  profilePhotoUrl?: string | null;
+  colorCode?: string;
+  phoneNumber?: string;
 }
 
 export interface OnCallScheduleDto {
@@ -1298,6 +1742,8 @@ export interface OnCallCurrentDto {
   domainUser: string;
   displayName: string;
   email?: string;
+  phoneNumber?: string;
+  colorCode?: string;
   weekStartDate: string;
   weekEndDate: string;
   weekNumber: number;
@@ -1306,11 +1752,14 @@ export interface OnCallCurrentDto {
 }
 
 export interface EscalationUserDto {
+  id: number;
   userId: string;
   domainUser: string;
   displayName: string;
   email?: string;
   order: number;
+  colorCode?: string;
+  phoneNumber?: string;
 }
 
 export interface WhitelistUserDto {
@@ -1320,6 +1769,7 @@ export interface WhitelistUserDto {
   email?: string;
   isOperator: boolean;
   isEscalation: boolean;
+  profilePhotoUrl?: string | null;
 }
 
 export interface MonthCalendarDto {
@@ -1383,6 +1833,76 @@ export interface RejectSwapRequestDto {
   reason: string;
 }
 
+// ==================== CONFIG DTOs ====================
+
+export interface OnCallConfigDto {
+  requiresApproval: boolean;
+  approverId?: string;
+  approverDisplayName?: string;
+  approverGroupId?: number;
+  approverGroupName?: string;
+  /** Días mínimos de anticipación para que operadores soliciten intercambios */
+  minDaysForSwapRequest: number;
+  /** Días mínimos de anticipación para que escalamiento modifique guardias */
+  minDaysForEscalationModify: number;
+  updatedAt?: string;
+  updatedByDisplayName?: string;
+}
+
+export interface UpdateOnCallConfigRequest {
+  requiresApproval: boolean;
+  approverId?: string;
+  approverGroupId?: number;
+  /** Días mínimos de anticipación para que operadores soliciten intercambios */
+  minDaysForSwapRequest: number;
+  /** Días mínimos de anticipación para que escalamiento modifique guardias */
+  minDaysForEscalationModify: number;
+}
+
+// ==================== HOLIDAY DTOs ====================
+
+export interface OnCallHolidayDto {
+  id: number;
+  date: string;
+  name: string;
+  isRecurring: boolean;
+  createdAt: string;
+  createdByDisplayName?: string;
+}
+
+export interface CreateHolidayRequest {
+  date: string;
+  name: string;
+  isRecurring: boolean;
+}
+
+export interface OnCallDayOverrideDto {
+  id: number;
+  date: string;
+  originalUserId: string;
+  originalDisplayName: string;
+  coverUserId: string;
+  coverDisplayName: string;
+  coverPhoneNumber?: string;
+  coverColorCode?: string;
+  reason?: string;
+  createdAt: string;
+  createdByDisplayName: string;
+  isActive: boolean;
+}
+
+export interface CreateDayOverrideRequest {
+  date: string;
+  coverUserId: string;
+  reason?: string;
+}
+
+export interface UpdateHolidayRequest {
+  date: string;
+  name: string;
+  isRecurring: boolean;
+}
+
 export const onCallApi = {
   // Operators
   async getOperators(): Promise<OnCallOperatorDto[]> {
@@ -1392,13 +1912,31 @@ export const onCallApi = {
     return handleResponse<OnCallOperatorDto[]>(response);
   },
 
-  async addOperator(userId: string): Promise<OnCallOperatorDto> {
+  async addOperator(userId: string, colorCode?: string, phoneNumber?: string): Promise<OnCallOperatorDto> {
     const response = await fetch(`${API_URL}/api/oncall/operators`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ userId, colorCode, phoneNumber }),
     });
     return handleResponse<OnCallOperatorDto>(response);
+  },
+
+  async updateOperatorColor(id: number, colorCode: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/operators/${id}/color`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ colorCode }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async updateOperatorPhone(id: number, phoneNumber?: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/operators/${id}/phone`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ phoneNumber }),
+    });
+    return handleResponse<{ message: string }>(response);
   },
 
   async removeOperator(id: number): Promise<void> {
@@ -1479,6 +2017,13 @@ export const onCallApi = {
     return handleResponse<OnCallScheduleDto>(response);
   },
 
+  async getUserSchedules(userId: string): Promise<OnCallScheduleDto[]> {
+    const response = await fetch(`${API_URL}/api/oncall/schedule/user/${userId}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallScheduleDto[]>(response);
+  },
+
   // Swap Requests
   async getSwapRequests(): Promise<OnCallSwapRequestDto[]> {
     const response = await fetch(`${API_URL}/api/oncall/swap-requests`, {
@@ -1536,11 +2081,20 @@ export const onCallApi = {
     return handleResponse<EscalationUserDto[]>(response);
   },
 
-  async addEscalationUser(userId: string): Promise<{ message: string }> {
+  async addEscalationUser(userId: string, colorCode?: string, phoneNumber?: string): Promise<EscalationUserDto> {
     const response = await fetch(`${API_URL}/api/oncall/escalation-users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ userId, colorCode, phoneNumber }),
+    });
+    return handleResponse<EscalationUserDto>(response);
+  },
+
+  async updateEscalationUser(id: number, colorCode?: string, phoneNumber?: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/escalation-users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ colorCode, phoneNumber }),
     });
     return handleResponse<{ message: string }>(response);
   },
@@ -1561,7 +2115,129 @@ export const onCallApi = {
     });
     return handleResponse<{ message: string }>(response);
   },
+
+  // Configuration
+  async getConfig(): Promise<OnCallConfigDto> {
+    const response = await fetch(`${API_URL}/api/oncall/config`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallConfigDto>(response);
+  },
+
+  async updateConfig(data: UpdateOnCallConfigRequest): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  // Holidays
+  async getHolidays(): Promise<OnCallHolidayDto[]> {
+    const response = await fetch(`${API_URL}/api/oncall/holidays`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallHolidayDto[]>(response);
+  },
+
+  async createHoliday(data: CreateHolidayRequest): Promise<OnCallHolidayDto> {
+    const response = await fetch(`${API_URL}/api/oncall/holidays`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OnCallHolidayDto>(response);
+  },
+
+  async updateHoliday(id: number, data: UpdateHolidayRequest): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/holidays/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async deleteHoliday(id: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/holidays/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  // Day Overrides (Coberturas por día - solo Team Escalamiento)
+  async getDayOverrides(startDate?: string, endDate?: string): Promise<OnCallDayOverrideDto[]> {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    
+    const url = `${API_URL}/api/oncall/day-overrides${params.toString() ? `?${params.toString()}` : ''}`;
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallDayOverrideDto[]>(response);
+  },
+
+  async createDayOverride(data: CreateDayOverrideRequest): Promise<OnCallDayOverrideDto> {
+    const response = await fetch(`${API_URL}/api/oncall/day-overrides`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OnCallDayOverrideDto>(response);
+  },
+
+  async deleteDayOverride(id: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/day-overrides/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  // Schedule Batches (Aprobación de calendarios)
+  async getPendingBatches(): Promise<OnCallScheduleBatchDto[]> {
+    const response = await fetch(`${API_URL}/api/oncall/batches/pending`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallScheduleBatchDto[]>(response);
+  },
+
+  async approveBatch(id: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/batches/${id}/approve`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async rejectBatch(id: number, reason: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/batches/${id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ reason }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
 };
+
+// ==================== SCHEDULE BATCH DTO ====================
+
+export interface OnCallScheduleBatchDto {
+  id: number;
+  startDate: string;
+  endDate: string;
+  weeksGenerated: number;
+  status: 'PendingApproval' | 'Approved' | 'Rejected';
+  generatedByDisplayName: string;
+  generatedAt: string;
+  approverDisplayName?: string;
+  approvedAt?: string;
+  approvedByDisplayName?: string;
+  rejectionReason?: string;
+}
 
 // ==================== SMTP SETTINGS API ====================
 
@@ -1636,6 +2312,8 @@ export interface OnCallActivationDto {
   description?: string;
   resolution?: string;
   instanceName?: string;
+  serviceDeskUrl?: string;
+  status: 'Pending' | 'Resolved';
   createdByDisplayName: string;
   createdAt: string;
 }
@@ -1651,9 +2329,12 @@ export interface CreateActivationRequest {
   description?: string;
   resolution?: string;
   instanceName?: string;
+  serviceDeskUrl?: string;
+  status?: 'Pending' | 'Resolved';
 }
 
 export interface UpdateActivationRequest {
+  activatedAt?: string;
   resolvedAt?: string;
   durationMinutes?: number;
   category?: string;
@@ -1662,6 +2343,8 @@ export interface UpdateActivationRequest {
   description?: string;
   resolution?: string;
   instanceName?: string;
+  serviceDeskUrl?: string;
+  status?: 'Pending' | 'Resolved';
 }
 
 export interface ActivationSummaryDto {
@@ -1676,8 +2359,83 @@ export interface ActivationSummaryDto {
   byOperator: Record<string, number>;
 }
 
-export const activationCategories = ['Database', 'Performance', 'Connectivity', 'Backup', 'Security', 'Other'];
+// Categorías por defecto (fallback si no se cargan desde el backend)
+export const defaultActivationCategories = ['Backups', 'Conectividad', 'Rendimiento', 'Espacio en Disco', 'Seguridad', 'Otro'];
+export const activationCategories = defaultActivationCategories; // Para compatibilidad
 export const activationSeverities = ['Low', 'Medium', 'High', 'Critical'];
+
+// ==================== ACTIVATION CATEGORIES API ====================
+
+export interface ActivationCategoryDto {
+  id: number;
+  name: string;
+  icon?: string;
+  isDefault: boolean;
+  isActive: boolean;
+  order: number;
+  createdAt: string;
+  createdByDisplayName?: string;
+}
+
+export interface CreateActivationCategoryRequest {
+  name: string;
+  icon?: string;
+}
+
+export interface UpdateActivationCategoryRequest {
+  name: string;
+  icon?: string;
+  isActive: boolean;
+}
+
+export const activationCategoriesApi = {
+  async getAll(): Promise<ActivationCategoryDto[]> {
+    const response = await fetch(`${API_URL}/api/activations/categories`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ActivationCategoryDto[]>(response);
+  },
+
+  async getActive(): Promise<ActivationCategoryDto[]> {
+    const categories = await this.getAll();
+    return categories.filter(c => c.isActive).sort((a, b) => a.order - b.order);
+  },
+
+  async create(data: CreateActivationCategoryRequest): Promise<ActivationCategoryDto> {
+    const response = await fetch(`${API_URL}/api/activations/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<ActivationCategoryDto>(response);
+  },
+
+  async update(id: number, data: UpdateActivationCategoryRequest): Promise<ActivationCategoryDto> {
+    const response = await fetch(`${API_URL}/api/activations/categories/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<ActivationCategoryDto>(response);
+  },
+
+  async delete(id: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/activations/categories/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async reorder(categoryIds: number[]): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/activations/categories/reorder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ categoryIds }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+};
 
 export const activationsApi = {
   async getAll(startDate?: string, endDate?: string): Promise<OnCallActivationDto[]> {
@@ -1752,6 +2510,7 @@ export interface OnCallAlertRuleDto {
   alertType: string;
   conditionDays?: number;
   isEnabled: boolean;
+  attachExcel: boolean;
   createdByDisplayName: string;
   createdAt: string;
   updatedAt?: string;
@@ -1763,6 +2522,7 @@ export interface CreateAlertRuleRequest {
   description?: string;
   alertType: string;
   conditionDays?: number;
+  attachExcel?: boolean;
   recipients: { email: string; name?: string }[];
 }
 
@@ -1771,6 +2531,7 @@ export interface UpdateAlertRuleRequest {
   description?: string;
   conditionDays?: number;
   isEnabled?: boolean;
+  attachExcel?: boolean;
 }
 
 export const alertTypes = [
@@ -1852,6 +2613,138 @@ export const alertsApi = {
   },
 };
 
+// ==================== EMAIL TEMPLATES API ====================
+
+export interface OnCallEmailTemplateDto {
+  id: number;
+  alertType: string;
+  name: string;
+  subject: string;
+  body: string;
+  attachExcel: boolean;
+  isEnabled: boolean;
+  isDefault: boolean;
+  isScheduled: boolean;
+  scheduleCron?: string;
+  scheduleDescription?: string;
+  recipients?: string;
+  createdAt: string;
+  createdByDisplayName?: string;
+  updatedAt?: string;
+  updatedByDisplayName?: string;
+}
+
+export interface CreateEmailTemplateRequest {
+  alertType: string;
+  name: string;
+  subject: string;
+  body: string;
+  attachExcel: boolean;
+  isScheduled: boolean;
+  scheduleCron?: string;
+  scheduleDescription?: string;
+  recipients?: string;
+  isEnabled?: boolean;
+}
+
+export interface UpdateEmailTemplateRequest {
+  name: string;
+  subject: string;
+  body: string;
+  attachExcel: boolean;
+  isEnabled: boolean;
+  isScheduled: boolean;
+  scheduleCron?: string;
+  scheduleDescription?: string;
+  recipients?: string;
+}
+
+export interface PlaceholderDto {
+  key: string;
+  description: string;
+  example: string;
+}
+
+export interface EmailTemplatePlaceholderInfo {
+  alertType: string;
+  alertTypeName: string;
+  placeholders: PlaceholderDto[];
+}
+
+export const emailTemplatesApi = {
+  async getAll(): Promise<OnCallEmailTemplateDto[]> {
+    const response = await fetch(`${API_URL}/api/oncall/email-templates`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallEmailTemplateDto[]>(response);
+  },
+
+  async getById(id: number): Promise<OnCallEmailTemplateDto> {
+    const response = await fetch(`${API_URL}/api/oncall/email-templates/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OnCallEmailTemplateDto>(response);
+  },
+
+  async getPlaceholders(): Promise<EmailTemplatePlaceholderInfo[]> {
+    const response = await fetch(`${API_URL}/api/oncall/email-templates/placeholders`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<EmailTemplatePlaceholderInfo[]>(response);
+  },
+
+  async create(data: CreateEmailTemplateRequest): Promise<OnCallEmailTemplateDto> {
+    const response = await fetch(`${API_URL}/api/oncall/email-templates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OnCallEmailTemplateDto>(response);
+  },
+
+  async update(id: number, data: UpdateEmailTemplateRequest): Promise<OnCallEmailTemplateDto> {
+    const response = await fetch(`${API_URL}/api/oncall/email-templates/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OnCallEmailTemplateDto>(response);
+  },
+
+  async delete(id: number): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/email-templates/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async sendWeeklyNotification(): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/notifications/weekly/send`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async sendPreWeekNotification(): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/notifications/preweek/send`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async sendTestEmail(templateId: number, testEmail: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/api/oncall/notifications/test/${templateId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ testEmail }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+};
+
 // ==================== INVENTORY API ====================
 
 export interface InventoryInstanceDto {
@@ -1879,6 +2772,32 @@ export const inventoryApi = {
       headers: { ...getAuthHeader() },
     });
     return handleResponse<InventoryInstanceDto[]>(response);
+  },
+  
+  async getSqlServerInstances(
+    page: number = 1, 
+    pageSize: number = 1000, 
+    search?: string,
+    ambiente?: string
+  ): Promise<SqlServerInstancesResponse> {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('pageSize', pageSize.toString());
+    if (search) params.append('search', search);
+    if (ambiente) params.append('ambiente', ambiente);
+    
+    const response = await fetch(`${API_URL}/api/inventoryproxy/sqlserver/instances?${params.toString()}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<SqlServerInstancesResponse>(response);
+  },
+  
+  async refreshSqlServerInstances(): Promise<SqlServerInstancesResponse> {
+    const response = await fetch(`${API_URL}/api/inventoryproxy/sqlserver/instances/refresh`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<SqlServerInstancesResponse>(response);
   },
 };
 
@@ -2844,6 +3763,10 @@ export interface PatchComplianceConfigDto {
   requiredCU?: string;
   requiredKB?: string;
   description?: string;
+  // Configuración específica para AWS (solo aplica para SQL 2017+)
+  awsRequiredBuild?: string;
+  awsRequiredCU?: string;
+  awsRequiredKB?: string;
   isActive: boolean;
   updatedAt?: string;
   updatedBy?: string;
@@ -3553,6 +4476,125 @@ export const groupsApi = {
     return handleResponse<UserGroupMembership[]>(response);
   },
 };
+
+// ==================== LOGS API ====================
+
+export interface LogFileDto {
+  name: string;
+  size: string;
+  sizeBytes: number;
+  lastModified: string;
+  path: string;
+  isActive: boolean;
+  isServiceLog: boolean;
+  canOperate: boolean;
+}
+
+export interface LogListResponse {
+  success: boolean;
+  files: LogFileDto[];
+  totalFiles: number;
+}
+
+export interface LogContentResponse {
+  success: boolean;
+  fileName: string;
+  content: string;
+  lines: number;
+}
+
+export interface LogActionResponse {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+export const logsApi = {
+  async list(): Promise<LogListResponse> {
+    const response = await fetch(`${API_URL}/api/logs/list`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<LogListResponse>(response);
+  },
+
+  async getContent(fileName: string): Promise<LogContentResponse> {
+    const response = await fetch(`${API_URL}/api/logs/content/${encodeURIComponent(fileName)}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<LogContentResponse>(response);
+  },
+
+  async clear(fileName: string): Promise<LogActionResponse> {
+    const response = await fetch(`${API_URL}/api/logs/clear/${encodeURIComponent(fileName)}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<LogActionResponse>(response);
+  },
+
+  async delete(fileName: string): Promise<LogActionResponse> {
+    const response = await fetch(`${API_URL}/api/logs/delete/${encodeURIComponent(fileName)}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<LogActionResponse>(response);
+  },
+
+  async clearAll(): Promise<LogActionResponse> {
+    const response = await fetch(`${API_URL}/api/logs/clear-all`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<LogActionResponse>(response);
+  },
+
+  async purge(daysOld: number = 30): Promise<LogActionResponse> {
+    const response = await fetch(`${API_URL}/api/logs/purge?daysOld=${daysOld}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<LogActionResponse>(response);
+  },
+};
+
+// ==================== INVENTORY PROXY API ====================
+
+export interface SqlServerInstanceDto {
+  id: number;
+  ServerName: string;
+  local_net_address: string;
+  NombreInstancia: string;
+  MajorVersion: string;
+  ProductLevel: string;
+  Edition: string;
+  ProductUpdateLevel: string;
+  ProductVersion: string;
+  ProductUpdateReference: string;
+  Collation: string;
+  AlwaysOn: string;
+  hostingSite: string;
+  hostingType: string;
+  ambiente: string;
+}
+
+export interface InventoryCacheInfo {
+  lastUpdatedAt?: string;
+  updatedByUserName?: string;
+  recordCount?: number;
+}
+
+export interface InventoryPagination {
+  page: number;
+  pageSize: number;
+  totalRecords: number;
+  totalPages: number;
+}
+
+export interface SqlServerInstancesResponse {
+  data: SqlServerInstanceDto[];
+  cacheInfo: InventoryCacheInfo;
+  pagination: InventoryPagination;
+}
 
 // ==================== HELPER FUNCTIONS ====================
 

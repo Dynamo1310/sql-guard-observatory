@@ -51,6 +51,12 @@ public class PatchComplianceConfigDto
     public string? RequiredCU { get; set; }
     public string? RequiredKB { get; set; }
     public string? Description { get; set; }
+    
+    // Configuración específica para AWS (solo aplica para SQL 2017+)
+    public string? AwsRequiredBuild { get; set; }
+    public string? AwsRequiredCU { get; set; }
+    public string? AwsRequiredKB { get; set; }
+    
     public bool IsActive { get; set; } = true;
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }

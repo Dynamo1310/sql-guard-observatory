@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using SQLGuardObservatory.API.Helpers;
 
 namespace SQLGuardObservatory.API.Models;
 
@@ -43,7 +44,7 @@ public class OnCallSchedule
     [ForeignKey(nameof(ModifiedByUserId))]
     public virtual ApplicationUser? ModifiedByUser { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = LocalClockAR.Now;
 
     public DateTime? UpdatedAt { get; set; }
 
@@ -56,7 +57,16 @@ public class OnCallSchedule
     /// Año de la guardia
     /// </summary>
     public int Year { get; set; }
+
+    /// <summary>
+    /// ID del lote de generación (para aprobación)
+    /// </summary>
+    public int? BatchId { get; set; }
+
+    [ForeignKey(nameof(BatchId))]
+    public virtual OnCallScheduleBatch? Batch { get; set; }
 }
+
 
 
 

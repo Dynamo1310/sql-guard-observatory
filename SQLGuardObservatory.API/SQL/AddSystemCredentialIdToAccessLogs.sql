@@ -6,7 +6,7 @@
 -- =============================================
 
 -- IMPORTANTE: Cambiar el nombre de la base de datos según tu entorno
-USE [SQLGuardObservatoryAuth];
+USE [AppSQLNova];
 GO
 
 SET NOCOUNT ON;

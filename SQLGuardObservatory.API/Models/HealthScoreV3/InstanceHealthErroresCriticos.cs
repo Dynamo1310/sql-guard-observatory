@@ -29,5 +29,11 @@ public class InstanceHealthErroresCriticos
     public int Severity20PlusLast1h { get; set; }
     public DateTime? MostRecentError { get; set; }
     public string? ErrorDetails { get; set; }
+    
+    // v3.1: Errores categorizados
+    public int IOErrorCount { get; set; }       // Errores 823, 824, 825 (I/O, corrupción)
+    public int DeadlockCount { get; set; }      // Errores 1205 (deadlocks)
+    public int LogFullCount { get; set; }       // Errores 9002 (log lleno)
+    public int CorruptionCount { get; set; }    // Errores de corrupción detectados
 }
 

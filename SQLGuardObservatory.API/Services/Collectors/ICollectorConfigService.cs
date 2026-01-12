@@ -76,5 +76,37 @@ public interface ICollectorConfigService
     /// Actualiza las métricas de última ejecución en la configuración
     /// </summary>
     Task UpdateLastExecutionAsync(string collectorName, DateTime executionTime, long durationMs, int instancesProcessed, string? error = null, CancellationToken ct = default);
+    
+    // === EXCEPCIONES DE COLLECTORS ===
+    
+    /// <summary>
+    /// Obtiene todas las excepciones de un collector
+    /// </summary>
+    Task<List<CollectorException>> GetExceptionsAsync(string collectorName, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Obtiene todas las excepciones activas de un collector
+    /// </summary>
+    Task<List<CollectorException>> GetActiveExceptionsAsync(string collectorName, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Agrega una nueva excepción
+    /// </summary>
+    Task<CollectorException> AddExceptionAsync(CollectorException exception, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Elimina una excepción por ID
+    /// </summary>
+    Task<bool> RemoveExceptionAsync(int exceptionId, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Verifica si un servidor está exceptuado para un tipo específico
+    /// </summary>
+    Task<bool> IsExceptedAsync(string collectorName, string exceptionType, string serverName, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Obtiene las excepciones activas para un servidor específico
+    /// </summary>
+    Task<List<CollectorException>> GetExceptionsForServerAsync(string collectorName, string serverName, CancellationToken ct = default);
 }
 

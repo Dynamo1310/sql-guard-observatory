@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using SQLGuardObservatory.API.Data;
 using System.Text.Json;
 
 namespace SQLGuardObservatory.API.Services.Collectors;
@@ -11,7 +9,6 @@ public class InstanceProvider : IInstanceProvider
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
-    private readonly ApplicationDbContext _context;
     private readonly ILogger<InstanceProvider> _logger;
     
     // Cache de instancias con TTL de 5 minutos
@@ -22,12 +19,10 @@ public class InstanceProvider : IInstanceProvider
     public InstanceProvider(
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        ApplicationDbContext context,
         ILogger<InstanceProvider> logger)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
-        _context = context;
         _logger = logger;
     }
 

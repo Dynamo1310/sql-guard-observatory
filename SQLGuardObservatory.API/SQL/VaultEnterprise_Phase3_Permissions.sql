@@ -1,7 +1,7 @@
 -- =============================================
 -- Script: VaultEnterprise_Phase3_Permissions.sql
 -- Description: Fase 3 - Modelo de permisos robusto con bitmask
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 -- 
@@ -18,7 +18,7 @@
 -- 4. Reporte: generar lista de usuarios con RevealSecret para revisión periódica
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='

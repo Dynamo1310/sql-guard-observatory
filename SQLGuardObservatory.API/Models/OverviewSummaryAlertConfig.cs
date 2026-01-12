@@ -127,3 +127,6 @@ public class OverviewSummaryAlertHistory
     public virtual OverviewSummaryAlertSchedule? Schedule { get; set; }
 }
 
+
+
+

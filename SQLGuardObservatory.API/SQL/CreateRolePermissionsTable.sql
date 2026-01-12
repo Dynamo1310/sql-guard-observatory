@@ -1,6 +1,6 @@
--- Script para crear la tabla RolePermissions en la base de datos SQLGuardObservatoryAuth
+-- Script para crear la tabla RolePermissions en la base de datos AppSQLNova
 
-USE [SQLGuardObservatoryAuth];
+USE [AppSQLNova];
 GO
 
 -- Crear la tabla RolePermissions

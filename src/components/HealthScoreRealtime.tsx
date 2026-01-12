@@ -152,13 +152,13 @@ export function HealthScoreRealtime() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Healthy':
-        return 'bg-green-500/20 text-green-700 border-green-500/30';
+        return 'bg-success/20 text-success border-success/30';
       case 'Warning':
-        return 'bg-yellow-500/20 text-yellow-700 border-yellow-500/30';
+        return 'bg-warning/20 text-warning border-warning/30';
       case 'Critical':
-        return 'bg-red-500/20 text-red-700 border-red-500/30';
+        return 'bg-destructive/20 text-destructive border-destructive/30';
       default:
-        return 'bg-gray-500/20 text-gray-700 border-gray-500/30';
+        return 'bg-muted/20 text-muted-foreground border-border/30';
     }
   };
 
@@ -194,8 +194,8 @@ export function HealthScoreRealtime() {
 
   if (error && !data) {
     return (
-      <Card className="p-6 border-red-200 bg-red-50">
-        <div className="flex items-center gap-2 text-red-700">
+      <Card className="p-6 border-destructive/20 bg-destructive/5">
+        <div className="flex items-center gap-2 text-destructive">
           <AlertCircle className="h-5 w-5" />
           <span>Error: {error}</span>
         </div>
@@ -213,7 +213,7 @@ export function HealthScoreRealtime() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Activity className="h-6 w-6 text-blue-500" />
+            <Activity className="h-6 w-6 text-primary" />
             Health Score en Tiempo Real
           </h2>
           
@@ -240,23 +240,23 @@ export function HealthScoreRealtime() {
       {/* Resumen por estado */}
       <div className="grid grid-cols-4 gap-4">
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Total Instancias</div>
+          <div className="text-sm text-muted-foreground">Total Instancias</div>
           <div className="text-3xl font-bold">{data?.count || 0}</div>
         </Card>
         
-        <Card className="p-4 border-green-200 bg-green-50">
-          <div className="text-sm text-green-600">Healthy</div>
-          <div className="text-3xl font-bold text-green-700">{healthyCount}</div>
+        <Card className="p-4 border-success/20 bg-success/5">
+          <div className="text-sm text-success">Healthy</div>
+          <div className="text-3xl font-bold text-success">{healthyCount}</div>
         </Card>
         
-        <Card className="p-4 border-yellow-200 bg-yellow-50">
-          <div className="text-sm text-yellow-600">Warning</div>
-          <div className="text-3xl font-bold text-yellow-700">{warningCount}</div>
+        <Card className="p-4 border-warning/20 bg-warning/5">
+          <div className="text-sm text-warning">Warning</div>
+          <div className="text-3xl font-bold text-warning">{warningCount}</div>
         </Card>
         
-        <Card className="p-4 border-red-200 bg-red-50">
-          <div className="text-sm text-red-600">Critical</div>
-          <div className="text-3xl font-bold text-red-700">{criticalCount}</div>
+        <Card className="p-4 border-destructive/20 bg-destructive/5">
+          <div className="text-sm text-destructive">Critical</div>
+          <div className="text-3xl font-bold text-destructive">{criticalCount}</div>
         </Card>
       </div>
 
@@ -268,7 +268,7 @@ export function HealthScoreRealtime() {
               {/* Header */}
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-gray-400" />
+                  <Database className="h-4 w-4 text-muted-foreground" />
                   <span className="font-semibold text-sm truncate">
                     {instance.instanceName}
                   </span>
@@ -283,34 +283,34 @@ export function HealthScoreRealtime() {
               <div className="space-y-2 text-xs">
                 {/* Conectividad */}
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Latencia:</span>
-                  <span className={instance.connectLatencyMs > 1000 ? 'text-red-600 font-semibold' : 'text-gray-700'}>
+                  <span className="text-muted-foreground">Latencia:</span>
+                  <span className={instance.connectLatencyMs > 1000 ? 'text-destructive font-semibold' : 'text-foreground'}>
                     {instance.connectLatencyMs}ms
                   </span>
                 </div>
 
                 {/* Disco */}
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500 flex items-center gap-1">
+                  <span className="text-muted-foreground flex items-center gap-1">
                     <HardDrive className="h-3 w-3" />
                     Disco:
                   </span>
-                  <span className={instance.worstFreePct < 10 ? 'text-red-600 font-semibold' : 'text-gray-700'}>
+                  <span className={instance.worstFreePct < 10 ? 'text-destructive font-semibold' : 'text-foreground'}>
                     {instance.worstFreePct.toFixed(1)}% libre
                   </span>
                 </div>
 
                 {/* Backups */}
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">FULL Backup:</span>
-                  <span className={instance.fullBackupBreached ? 'text-red-600 font-semibold' : 'text-gray-700'}>
+                  <span className="text-muted-foreground">FULL Backup:</span>
+                  <span className={instance.fullBackupBreached ? 'text-destructive font-semibold' : 'text-foreground'}>
                     {formatRelativeTime(instance.lastFullBackup)}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">LOG Backup:</span>
-                  <span className={instance.logBackupBreached ? 'text-red-600 font-semibold' : 'text-gray-700'}>
+                  <span className="text-muted-foreground">LOG Backup:</span>
+                  <span className={instance.logBackupBreached ? 'text-destructive font-semibold' : 'text-foreground'}>
                     {formatRelativeTime(instance.lastLogBackup)}
                   </span>
                 </div>
@@ -318,13 +318,13 @@ export function HealthScoreRealtime() {
                 {/* AlwaysOn */}
                 {instance.alwaysOnEnabled && (
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-500">AlwaysOn:</span>
+                    <span className="text-muted-foreground">AlwaysOn:</span>
                     <Badge 
                       variant="outline" 
                       className={
                         instance.alwaysOnWorstState === 'OK' 
-                          ? 'border-green-500 text-green-700' 
-                          : 'border-yellow-500 text-yellow-700'
+                          ? 'border-success text-success' 
+                          : 'border-warning text-warning'
                       }
                     >
                       {instance.alwaysOnWorstState}
@@ -334,7 +334,7 @@ export function HealthScoreRealtime() {
               </div>
 
               {/* Footer con timestamp */}
-              <div className="text-xs text-gray-400 pt-2 border-t">
+              <div className="text-xs text-muted-foreground pt-2 border-t">
                 Actualizado: {formatRelativeTime(instance.collectedAt.realTime)}
               </div>
             </div>
@@ -343,7 +343,7 @@ export function HealthScoreRealtime() {
       </div>
 
       {error && (
-        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700">
+        <div className="p-3 bg-warning/10 border border-warning/20 rounded-md text-sm text-warning">
           ⚠️ {error} (mostrando últimos datos disponibles)
         </div>
       )}

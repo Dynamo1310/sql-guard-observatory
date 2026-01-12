@@ -2,11 +2,11 @@
 -- Script: UpdateVaultSharingModel.sql
 -- Description: Actualiza el modelo de datos del Vault para soportar
 --              compartición múltiple estilo Passbolt
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- Date: December 2025
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- =============================================

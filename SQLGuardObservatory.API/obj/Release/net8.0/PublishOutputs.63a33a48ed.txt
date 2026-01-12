@@ -8,6 +8,10 @@ C:\Temp\Backend\SQLGuardObservatory.API.runtimeconfig.json
 C:\Temp\Backend\SQLGuardObservatory.API.pdb
 C:\Temp\Backend\Azure.Core.dll
 C:\Temp\Backend\Azure.Identity.dll
+C:\Temp\Backend\ClosedXML.dll
+C:\Temp\Backend\DocumentFormat.OpenXml.dll
+C:\Temp\Backend\ExcelNumberFormat.dll
+C:\Temp\Backend\Irony.dll
 C:\Temp\Backend\Microsoft.AspNetCore.Authentication.JwtBearer.dll
 C:\Temp\Backend\Microsoft.AspNetCore.Authentication.Negotiate.dll
 C:\Temp\Backend\Microsoft.AspNetCore.Connections.Abstractions.dll
@@ -65,6 +69,7 @@ C:\Temp\Backend\Serilog.Settings.Configuration.dll
 C:\Temp\Backend\Serilog.Sinks.Console.dll
 C:\Temp\Backend\Serilog.Sinks.Debug.dll
 C:\Temp\Backend\Serilog.Sinks.File.dll
+C:\Temp\Backend\SixLabors.Fonts.dll
 C:\Temp\Backend\Swashbuckle.AspNetCore.Swagger.dll
 C:\Temp\Backend\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\Temp\Backend\Swashbuckle.AspNetCore.SwaggerUI.dll
@@ -76,12 +81,14 @@ C:\Temp\Backend\System.DirectoryServices.dll
 C:\Temp\Backend\System.DirectoryServices.AccountManagement.dll
 C:\Temp\Backend\System.DirectoryServices.Protocols.dll
 C:\Temp\Backend\System.IdentityModel.Tokens.Jwt.dll
+C:\Temp\Backend\System.IO.Packaging.dll
 C:\Temp\Backend\System.Management.dll
 C:\Temp\Backend\System.Memory.Data.dll
 C:\Temp\Backend\System.Net.WebSockets.WebSocketProtocol.dll
 C:\Temp\Backend\System.Runtime.Caching.dll
 C:\Temp\Backend\System.Security.Cryptography.ProtectedData.dll
 C:\Temp\Backend\System.ServiceProcess.ServiceController.dll
+C:\Temp\Backend\XLParser.dll
 C:\Temp\Backend\runtimes\unix\lib\net6.0\Microsoft.Data.SqlClient.dll
 C:\Temp\Backend\runtimes\win\lib\net6.0\Microsoft.Data.SqlClient.dll
 C:\Temp\Backend\runtimes\win-arm\native\Microsoft.Data.SqlClient.SNI.dll

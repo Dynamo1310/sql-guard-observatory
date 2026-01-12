@@ -8,17 +8,21 @@ import {
   Search, 
   Shield,
   RefreshCw,
-  FolderSync
+  FolderSync,
+  Lock
 } from 'lucide-react';
+import { Capabilities } from '@/lib/capabilities';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useTableSort } from '@/hooks/use-table-sort';
 import {
   Dialog,
@@ -40,6 +44,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { groupsApi } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import type { SecurityGroup, CreateGroupRequest, UpdateGroupRequest } from '@/types';
 
 // Colores predefinidos para grupos
@@ -61,8 +66,14 @@ const GROUP_ICONS = [
 
 export default function AdminGroups() {
   const navigate = useNavigate();
+  const { isReader, canCreateGroups, canManageGroup, isSuperAdmin, hasCapability } = useAuth();
+  
+  // Capacidades específicas
+  const canEditGroups = hasCapability(Capabilities.GroupsEdit);
+  const canDeleteGroups = hasCapability(Capabilities.GroupsDelete);
   const [groups, setGroups] = useState<SecurityGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Dialogs
@@ -84,15 +95,17 @@ export default function AdminGroups() {
     fetchGroups();
   }, []);
 
-  const fetchGroups = async () => {
+  const fetchGroups = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
+      setIsRefreshing(true);
       const data = await groupsApi.getGroups();
       setGroups(data);
     } catch (err: any) {
       toast.error('Error al cargar grupos: ' + err.message);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -195,32 +208,79 @@ export default function AdminGroups() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">Cargando grupos...</div>
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-56" />
+            <Skeleton className="h-5 w-80" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-28" />
+            <Skeleton className="h-10 w-32" />
+          </div>
         </div>
+
+        {/* KPIs skeleton */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <Skeleton className="h-4 w-20 mb-2" />
+                <Skeleton className="h-8 w-12" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Search skeleton */}
+        <Skeleton className="h-10 w-64" />
+
+        {/* Table skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-40" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[...Array(6)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Grupos de Seguridad</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Users className="h-8 w-8" />
+            Grupos de Seguridad
+          </h1>
+          <p className="text-muted-foreground">
             Organiza usuarios por equipo y asigna permisos por grupo
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button variant="outline" onClick={fetchGroups} className="w-full sm:w-auto">
-            <RefreshCw className="mr-2 h-4 w-4" />
+          <Button 
+            variant="outline" 
+            onClick={() => fetchGroups(false)}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
-          <Button onClick={() => setShowCreateDialog(true)} className="w-full sm:w-auto">
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo Grupo
-          </Button>
+          {canCreateGroups && (
+            <Button onClick={() => setShowCreateDialog(true)} className="w-full sm:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo Grupo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -264,7 +324,7 @@ export default function AdminGroups() {
         </div>
       </div>
 
-      <Card className="gradient-card shadow-card">
+      <Card>
         <CardHeader>
           <CardTitle>Listado de Grupos</CardTitle>
         </CardHeader>
@@ -328,7 +388,7 @@ export default function AdminGroups() {
                   </TableCell>
                   <TableCell className="text-center py-2">
                     {group.hasADSync ? (
-                      <Badge variant="outline" className="border-green-500 text-green-500">
+                      <Badge variant="soft-success">
                         <FolderSync className="h-3 w-3 mr-1" />
                         Vinculado
                       </Badge>
@@ -342,22 +402,30 @@ export default function AdminGroups() {
                     </StatusBadge>
                   </TableCell>
                   <TableCell className="text-right py-2">
-                    <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDialog(group)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteDialog(group)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {!isReader && canManageGroup(group.id) && (
+                      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        {canEditGroups && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditDialog(group)}
+                            title="Editar grupo"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canDeleteGroups && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDeleteDialog(group)}
+                            title="Eliminar grupo"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -422,14 +490,12 @@ export default function AdminGroups() {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="isActive"
                 checked={formData.isActive}
-                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                className="h-4 w-4"
+                onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked === true })}
               />
-              <Label htmlFor="isActive">Grupo activo</Label>
+              <Label htmlFor="isActive" className="cursor-pointer">Grupo activo</Label>
             </div>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -494,14 +560,12 @@ export default function AdminGroups() {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="edit-isActive"
                 checked={formData.isActive}
-                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                className="h-4 w-4"
+                onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked === true })}
               />
-              <Label htmlFor="edit-isActive">Grupo activo</Label>
+              <Label htmlFor="edit-isActive" className="cursor-pointer">Grupo activo</Label>
             </div>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">

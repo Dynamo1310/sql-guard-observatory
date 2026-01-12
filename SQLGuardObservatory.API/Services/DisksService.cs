@@ -8,10 +8,10 @@ namespace SQLGuardObservatory.API.Services;
 
 public class DisksService : IDisksService
 {
-    private readonly SQLNovaDbContext _context;
+    private readonly ApplicationDbContext _context;
     private readonly ILogger<DisksService> _logger;
 
-    public DisksService(SQLNovaDbContext context, ILogger<DisksService> logger)
+    public DisksService(ApplicationDbContext context, ILogger<DisksService> logger)
     {
         _context = context;
         _logger = logger;
@@ -124,7 +124,9 @@ public class DisksService : IDisksService
                                 var isAlerted = vol.IsAlerted ?? false;
                                 
                                 // v3.3: Determinar estado basado en la lógica del script
-                                var diskEstado = GetEstadoV33(freePct, realFreePct, filesWithGrowth, isAlerted);
+                                var isLogDisk = vol.IsLogDisk ?? false;
+                                
+                                var diskEstado = GetEstadoV33(freePct, realFreePct, filesWithGrowth, isAlerted, isLogDisk);
 
                                 // Filtrar por estado si se especificó
                                 if (!string.IsNullOrWhiteSpace(estado) && diskEstado != estado)
@@ -309,18 +311,29 @@ public class DisksService : IDisksService
     }
 
     /// <summary>
-    /// v3.3: Determina el estado del disco según la lógica del script de relevamiento
+    /// v3.4: Determina el estado del disco según la lógica del script de relevamiento
     /// - Crítico: IsAlerted = true (tiene growth + espacio real <= 10%)
+    /// - Crítico: Disco con .ldf (logs) + growth + % físico libre < 10% (sin importar espacio interno)
     /// - Advertencia: Espacio real entre 10-20%
     /// - Saludable: Espacio real > 20%
     /// 
     /// NOTA: Un disco con <10% físico pero sin growth o con espacio interno
     /// NO se marca como crítico porque los archivos no van a crecer.
+    /// 
+    /// EXCEPCIÓN IMPORTANTE: Los discos que contienen archivos .ldf (logs) con growth
+    /// y % físico libre < 10% son SIEMPRE críticos aunque tengan espacio interno.
+    /// Esto es porque si se llena el disco de logs, la instancia queda INACCESIBLE.
     /// </summary>
-    private static string GetEstadoV33(decimal freePct, decimal realFreePct, int filesWithGrowth, bool isAlerted)
+    private static string GetEstadoV33(decimal freePct, decimal realFreePct, int filesWithGrowth, bool isAlerted, bool isLogDisk = false)
     {
         // Si está marcado como alertado por el script, es crítico
         if (isAlerted)
+            return "Critico";
+        
+        // v3.4: Discos con archivos .ldf (logs) + growth + % físico bajo (< 10%)
+        // Son SIEMPRE críticos aunque tengan espacio interno disponible
+        // porque si se llena el disco de logs, la instancia queda inaccesible
+        if (isLogDisk && filesWithGrowth > 0 && freePct < 10)
             return "Critico";
         
         // Si tiene archivos con growth y espacio real bajo, verificar

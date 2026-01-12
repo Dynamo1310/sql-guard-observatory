@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,10 @@ interface OnCallCalendarProps {
   loading: boolean;
   onMonthChange: (year: number, month: number) => void;
   onWeekClick?: (week: OnCallWeekDto) => void;
+  onDayClick?: (date: Date, isRightClick?: boolean) => void;
   currentUserId?: string;
+  /** Si true, el usuario es escalamiento y puede agregar activaciones en cualquier día */
+  isEscalation?: boolean;
 }
 
 const WEEKDAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
@@ -22,7 +25,9 @@ export function OnCallCalendar({
   loading, 
   onMonthChange,
   onWeekClick,
-  currentUserId 
+  onDayClick,
+  currentUserId,
+  isEscalation = false
 }: OnCallCalendarProps) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
@@ -46,6 +51,20 @@ export function OnCallCalendar({
     onMonthChange(today.getFullYear(), today.getMonth() + 1);
   };
 
+  const handleDayClick = (day: CalendarDayDto, isRightClick: boolean = false) => {
+    if (onDayClick && day.isCurrentMonth) {
+      const date = new Date(day.date);
+      onDayClick(date, isRightClick);
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, day: CalendarDayDto) => {
+    if (isEscalation && day.isCurrentMonth) {
+      e.preventDefault();
+      handleDayClick(day, true);
+    }
+  };
+
   const formatWeekDates = (startDate: string, endDate: string) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -63,7 +82,7 @@ export function OnCallCalendar({
   }
 
   return (
-    <Card className="gradient-card shadow-card">
+    <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
@@ -107,16 +126,19 @@ export function OnCallCalendar({
                 week.map((day, dayIndex) => {
                   const isMyGuard = day.onCallUserId === currentUserId;
                   const hasGuard = !!day.onCallUserId;
+                  const canAddActivation = isMyGuard || isEscalation;
                   
                   return (
                     <Tooltip key={`${weekIndex}-${dayIndex}`}>
                       <TooltipTrigger asChild>
                         <div
+                          onClick={() => handleDayClick(day)}
+                          onContextMenu={(e) => handleContextMenu(e, day)}
                           className={cn(
-                            "bg-card p-2 min-h-[60px] relative transition-colors",
+                            "bg-card p-2 min-h-[60px] relative transition-colors group",
                             !day.isCurrentMonth && "bg-muted/50 text-muted-foreground",
                             day.isToday && "ring-2 ring-primary ring-inset",
-                            hasGuard && "cursor-pointer hover:bg-accent/50"
+                            day.isCurrentMonth && "cursor-pointer hover:bg-accent/50"
                           )}
                           style={{
                             backgroundColor: hasGuard && day.colorCode 
@@ -162,17 +184,44 @@ export function OnCallCalendar({
                           {/* My guard badge */}
                           {isMyGuard && (
                             <div className="absolute top-1 right-1">
-                              <div className="w-2 h-2 bg-yellow-400 rounded-full" title="Tu guardia" />
+                              <div className="w-2 h-2 bg-foreground rounded-full" title="Tu guardia" />
+                            </div>
+                          )}
+
+                          {/* Add activation indicator on hover - solo si puede agregar */}
+                          {day.isCurrentMonth && onDayClick && canAddActivation && (
+                            <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="w-5 h-5 bg-primary/80 rounded-full flex items-center justify-center">
+                                <Plus className="h-3 w-3 text-primary-foreground" />
+                              </div>
                             </div>
                           )}
                         </div>
                       </TooltipTrigger>
-                      {hasGuard && (
-                        <TooltipContent>
-                          <p className="font-medium">{day.onCallDisplayName}</p>
-                          <p className="text-xs text-muted-foreground">Guardia DBA</p>
-                        </TooltipContent>
-                      )}
+                      <TooltipContent>
+                        {hasGuard ? (
+                          <>
+                            <p className="font-medium">{day.onCallDisplayName}</p>
+                            <p className="text-xs text-muted-foreground">Guardia DBA</p>
+                            {onDayClick && canAddActivation && (
+                              <p className="text-xs text-primary mt-1">Click para agregar activación</p>
+                            )}
+                            {onDayClick && !canAddActivation && (
+                              <p className="text-xs text-muted-foreground mt-1">Solo puedes agregar activaciones en tu guardia</p>
+                            )}
+                            {isEscalation && (
+                              <p className="text-xs text-amber-500 mt-1">Clic derecho para cobertura de día</p>
+                            )}
+                          </>
+                        ) : onDayClick && day.isCurrentMonth && canAddActivation ? (
+                          <>
+                            <p className="text-xs">Click para agregar activación</p>
+                            {isEscalation && (
+                              <p className="text-xs text-amber-500 mt-1">Clic derecho para cobertura de día</p>
+                            )}
+                          </>
+                        ) : null}
+                      </TooltipContent>
                     </Tooltip>
                   );
                 })
@@ -237,9 +286,3 @@ export function OnCallCalendar({
     </Card>
   );
 }
-
-
-
-
-
-

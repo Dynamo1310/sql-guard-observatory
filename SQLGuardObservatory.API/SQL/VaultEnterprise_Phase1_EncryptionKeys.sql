@@ -1,12 +1,12 @@
 -- =============================================
 -- Script: VaultEnterprise_Phase1_EncryptionKeys.sql
 -- Description: Fase 1 - Modelo de llaves con KeyId + KeyVersion + Purpose
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='

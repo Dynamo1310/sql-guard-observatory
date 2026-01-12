@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
 using System.Security.Claims;
@@ -8,15 +9,20 @@ namespace SQLGuardObservatory.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin,SuperAdmin")]
+[Authorize]
 public class GroupsController : ControllerBase
 {
     private readonly IGroupService _groupService;
+    private readonly IAdminAuthorizationService _authService;
     private readonly ILogger<GroupsController> _logger;
 
-    public GroupsController(IGroupService groupService, ILogger<GroupsController> logger)
+    public GroupsController(
+        IGroupService groupService, 
+        IAdminAuthorizationService authService,
+        ILogger<GroupsController> logger)
     {
         _groupService = groupService;
+        _authService = authService;
         _logger = logger;
     }
 
@@ -28,15 +34,29 @@ public class GroupsController : ControllerBase
     #region CRUD de Grupos
 
     /// <summary>
-    /// Obtiene todos los grupos de seguridad
+    /// Obtiene grupos de seguridad.
+    /// SuperAdmin: ve todos los grupos.
+    /// Admin: ve solo los grupos asignados.
+    /// Reader: ve todos (si tiene permiso de vista) pero sin opciones de modificación.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetGroups()
     {
         try
         {
-            var groups = await _groupService.GetAllGroupsAsync();
-            return Ok(groups);
+            var userId = GetCurrentUserId();
+            var role = await _authService.GetUserRoleAsync(userId);
+            
+            var allGroups = await _groupService.GetAllGroupsAsync();
+            
+            // Si es Admin, filtrar solo los grupos asignados
+            if (role == "Admin")
+            {
+                var manageableGroupIds = await _authService.GetManageableGroupIdsAsync(userId);
+                allGroups = allGroups.Where(g => manageableGroupIds.Contains(g.Id)).ToList();
+            }
+            
+            return Ok(allGroups);
         }
         catch (Exception ex)
         {
@@ -53,6 +73,19 @@ public class GroupsController : ControllerBase
     {
         try
         {
+            var userId = GetCurrentUserId();
+            var role = await _authService.GetUserRoleAsync(userId);
+            
+            // Si es Admin, verificar que tenga acceso al grupo
+            if (role == "Admin")
+            {
+                var canManage = await _authService.CanManageGroupAsync(userId, id);
+                if (!canManage)
+                {
+                    return Forbid();
+                }
+            }
+            
             var group = await _groupService.GetGroupByIdAsync(id);
             
             if (group == null)
@@ -70,19 +103,28 @@ public class GroupsController : ControllerBase
     }
 
     /// <summary>
-    /// Crea un nuevo grupo de seguridad
+    /// Crea un nuevo grupo de seguridad.
+    /// Requiere capacidad Groups.Create.
     /// </summary>
     [HttpPost]
+    [RequireCapability("Groups.Create")]
     public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequest request)
     {
         try
         {
+            var userId = GetCurrentUserId();
+            
+            // Verificar que es SuperAdmin
+            if (!await _authService.CanCreateGroupsAsync(userId))
+            {
+                return Forbid();
+            }
+            
             if (string.IsNullOrWhiteSpace(request.Name))
             {
                 return BadRequest(new { message = "El nombre del grupo es requerido" });
             }
 
-            var userId = GetCurrentUserId();
             var group = await _groupService.CreateGroupAsync(request, userId);
             
             if (group == null)
@@ -101,19 +143,29 @@ public class GroupsController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza un grupo existente
+    /// Actualiza un grupo existente.
+    /// SuperAdmin: puede editar cualquier grupo.
+    /// Admin: solo puede editar grupos asignados con permiso CanEdit.
+    /// Reader: no puede editar.
     /// </summary>
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateGroup(int id, [FromBody] UpdateGroupRequest request)
     {
         try
         {
+            var userId = GetCurrentUserId();
+            
+            // Verificar permisos de edición
+            if (!await _authService.CanEditGroupAsync(userId, id))
+            {
+                return Forbid();
+            }
+            
             if (string.IsNullOrWhiteSpace(request.Name))
             {
                 return BadRequest(new { message = "El nombre del grupo es requerido" });
             }
 
-            var userId = GetCurrentUserId();
             var group = await _groupService.UpdateGroupAsync(id, request, userId);
             
             if (group == null)
@@ -132,13 +184,24 @@ public class GroupsController : ControllerBase
     }
 
     /// <summary>
-    /// Elimina un grupo (soft delete)
+    /// Elimina un grupo (soft delete).
+    /// SuperAdmin: puede eliminar cualquier grupo.
+    /// Admin: solo puede eliminar grupos asignados con permiso CanDelete.
+    /// Reader: no puede eliminar.
     /// </summary>
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteGroup(int id)
     {
         try
         {
+            var userId = GetCurrentUserId();
+            
+            // Verificar permisos de eliminación
+            if (!await _authService.CanDeleteGroupAsync(userId, id))
+            {
+                return Forbid();
+            }
+            
             var result = await _groupService.DeleteGroupAsync(id);
             
             if (!result)
@@ -179,19 +242,27 @@ public class GroupsController : ControllerBase
     }
 
     /// <summary>
-    /// Agrega miembros a un grupo
+    /// Agrega miembros a un grupo.
+    /// Requiere permiso CanManageMembers.
     /// </summary>
     [HttpPost("{id}/members")]
     public async Task<IActionResult> AddMembers(int id, [FromBody] AddMembersRequest request)
     {
         try
         {
+            var userId = GetCurrentUserId();
+            
+            // Verificar permisos de gestión de miembros
+            if (!await _authService.CanManageGroupMembersAsync(userId, id))
+            {
+                return Forbid();
+            }
+            
             if (request.UserIds == null || !request.UserIds.Any())
             {
                 return BadRequest(new { message = "Debe especificar al menos un usuario" });
             }
 
-            var userId = GetCurrentUserId();
             var result = await _groupService.AddMembersAsync(id, request.UserIds, userId);
             
             if (!result)
@@ -211,13 +282,22 @@ public class GroupsController : ControllerBase
     }
 
     /// <summary>
-    /// Remueve un miembro del grupo
+    /// Remueve un miembro del grupo.
+    /// Requiere permiso CanManageMembers.
     /// </summary>
     [HttpDelete("{id}/members/{userId}")]
     public async Task<IActionResult> RemoveMember(int id, string userId)
     {
         try
         {
+            var currentUserId = GetCurrentUserId();
+            
+            // Verificar permisos de gestión de miembros
+            if (!await _authService.CanManageGroupMembersAsync(currentUserId, id))
+            {
+                return Forbid();
+            }
+            
             var result = await _groupService.RemoveMemberAsync(id, userId);
             
             if (!result)
@@ -283,13 +363,22 @@ public class GroupsController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza los permisos de un grupo
+    /// Actualiza los permisos de un grupo.
+    /// Requiere permiso CanManagePermissions.
     /// </summary>
     [HttpPut("{id}/permissions")]
     public async Task<IActionResult> UpdatePermissions(int id, [FromBody] UpdateGroupPermissionsRequest request)
     {
         try
         {
+            var userId = GetCurrentUserId();
+            
+            // Verificar permisos de gestión de permisos
+            if (!await _authService.CanManageGroupPermissionsAsync(userId, id))
+            {
+                return Forbid();
+            }
+            
             var result = await _groupService.UpdateGroupPermissionsAsync(id, request.Permissions);
             
             if (!result)
@@ -429,6 +518,7 @@ public class GroupsController : ControllerBase
     /// Obtiene todos los usuarios con sus grupos (para la página de usuarios)
     /// </summary>
     [HttpGet("users-with-groups")]
+    [ViewPermission("AdminUsers")]
     public async Task<IActionResult> GetUsersWithGroups()
     {
         try

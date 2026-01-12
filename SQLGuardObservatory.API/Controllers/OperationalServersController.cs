@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Models;
@@ -16,6 +17,7 @@ namespace SQLGuardObservatory.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
+[ViewPermission("OperationsConfig")]
 public class OperationalServersController : ControllerBase
 {
     private readonly ApplicationDbContext _context;

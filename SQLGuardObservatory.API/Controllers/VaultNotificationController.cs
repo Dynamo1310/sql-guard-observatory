@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.Services;
 using System.Security.Claims;
 
@@ -9,6 +10,7 @@ namespace SQLGuardObservatory.API.Controllers;
 /// Controlador para gestionar las preferencias de notificaciones del Vault
 /// </summary>
 [Authorize]
+[ViewPermission("VaultNotifications")]
 [ApiController]
 [Route("api/vault/notifications")]
 public class VaultNotificationController : ControllerBase

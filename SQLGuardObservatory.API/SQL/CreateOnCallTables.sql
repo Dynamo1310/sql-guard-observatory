@@ -1,10 +1,10 @@
 -- =============================================
 -- Script: CreateOnCallTables.sql
 -- Descripción: Crea las tablas para el sistema de guardias DBA
--- Base de datos: SQLGuardObservatoryAuth
+-- Base de datos: AppSQLNova
 -- =============================================
 
-USE SQLGuardObservatoryAuth;
+USE AppSQLNova;
 GO
 
 -- =============================================

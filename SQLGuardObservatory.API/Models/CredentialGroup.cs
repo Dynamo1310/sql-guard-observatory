@@ -91,11 +91,11 @@ public class CredentialGroupMember
     public string UserId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Rol del miembro: Owner, Admin, Member, Viewer
+    /// Rol del miembro: Owner, Admin, Member
     /// </summary>
     [Required]
     [MaxLength(20)]
-    public string Role { get; set; } = "Viewer";
+    public string Role { get; set; } = "Member";
 
     /// <summary>
     /// Si el usuario recibe notificaciones de cambios en el grupo
@@ -120,11 +120,12 @@ public class CredentialGroupMember
 
 /// <summary>
 /// Roles disponibles para miembros de grupos
+/// Simplificado: Owner (implícito al crear), Admin y Member
 /// </summary>
 public static class CredentialGroupRoles
 {
     /// <summary>
-    /// Propietario del grupo - control total
+    /// Propietario del grupo - control total (asignado automáticamente al creador)
     /// </summary>
     public const string Owner = "Owner";
     
@@ -137,11 +138,28 @@ public static class CredentialGroupRoles
     /// Miembro - puede ver y revelar credenciales
     /// </summary>
     public const string Member = "Member";
-    
+
     /// <summary>
-    /// Viewer - solo puede ver credenciales (no revelar passwords)
+    /// Roles válidos que pueden ser asignados (Owner es implícito)
     /// </summary>
-    public const string Viewer = "Viewer";
+    public static readonly string[] AssignableRoles = { Admin, Member };
+
+    /// <summary>
+    /// Todos los roles válidos incluyendo Owner
+    /// </summary>
+    public static readonly string[] AllRoles = { Owner, Admin, Member };
+
+    /// <summary>
+    /// Valida si un rol es válido para asignación manual
+    /// </summary>
+    public static bool IsValidAssignableRole(string role) => 
+        role == Admin || role == Member;
+
+    /// <summary>
+    /// Valida si un rol es válido (incluyendo Owner)
+    /// </summary>
+    public static bool IsValidRole(string role) => 
+        role == Owner || role == Admin || role == Member;
 
     public static bool CanManageMembers(string role) => 
         role == Owner || role == Admin;

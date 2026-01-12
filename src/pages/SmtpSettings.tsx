@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Mail, Server, Send, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Mail, Server, Send, Loader2, CheckCircle2, XCircle, Lock, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { smtpApi, SmtpSettingsDto, UpdateSmtpSettingsRequest } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SmtpSettings() {
+  const { hasCapability } = useAuth();
+  const canConfigureSMTP = hasCapability('System.ConfigureSMTP');
   const [settings, setSettings] = useState<SmtpSettingsDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -102,22 +106,62 @@ export default function SmtpSettings() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-5 w-96" />
+        </div>
+
+        {/* Content skeleton */}
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-4 w-64" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </CardContent>
+          </Card>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container max-w-4xl py-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          <Mail className="h-8 w-8 text-teal-500" />
-          Configuración SMTP
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Configura el servidor de correo para enviar notificaciones desde la aplicación
-        </p>
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Mail className="h-8 w-8" />
+            Configuración SMTP
+          </h1>
+          <p className="text-muted-foreground">
+            Configura el servidor de correo para enviar notificaciones desde la aplicación
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={loadSettings}
+          disabled={loading}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Actualizar
+        </Button>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -134,6 +178,15 @@ export default function SmtpSettings() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {!canConfigureSMTP && (
+                <Alert className="mb-4">
+                  <Lock className="h-4 w-4" />
+                  <AlertDescription>
+                    Solo lectura. No tienes permisos para modificar esta configuración.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               <div className="space-y-2">
                 <Label htmlFor="host">Servidor (Host)</Label>
                 <Input
@@ -141,6 +194,8 @@ export default function SmtpSettings() {
                   placeholder="smtp.ejemplo.com"
                   value={formData.host}
                   onChange={(e) => setFormData({ ...formData, host: e.target.value })}
+                  disabled={!canConfigureSMTP}
+                  className={!canConfigureSMTP ? 'bg-muted cursor-not-allowed' : ''}
                 />
               </div>
 
@@ -152,6 +207,8 @@ export default function SmtpSettings() {
                   placeholder="25"
                   value={formData.port}
                   onChange={(e) => setFormData({ ...formData, port: parseInt(e.target.value) || 25 })}
+                  disabled={!canConfigureSMTP}
+                  className={!canConfigureSMTP ? 'bg-muted cursor-not-allowed' : ''}
                 />
               </div>
 
@@ -163,19 +220,23 @@ export default function SmtpSettings() {
                   placeholder="notificaciones@empresa.com"
                   value={formData.fromEmail}
                   onChange={(e) => setFormData({ ...formData, fromEmail: e.target.value })}
+                  disabled={!canConfigureSMTP}
+                  className={!canConfigureSMTP ? 'bg-muted cursor-not-allowed' : ''}
                 />
               </div>
 
-              <Button type="submit" className="w-full mt-6" disabled={saving}>
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  'Guardar Configuración'
-                )}
-              </Button>
+              {canConfigureSMTP && (
+                <Button type="submit" className="w-full mt-6" disabled={saving}>
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    'Guardar Configuración'
+                  )}
+                </Button>
+              )}
             </form>
           </CardContent>
         </Card>
@@ -201,32 +262,41 @@ export default function SmtpSettings() {
                   placeholder="tu.email@empresa.com"
                   value={testEmail}
                   onChange={(e) => setTestEmail(e.target.value)}
+                  disabled={!canConfigureSMTP}
+                  className={!canConfigureSMTP ? 'bg-muted cursor-not-allowed' : ''}
                 />
               </div>
 
-              <Button
-                onClick={handleTest}
-                variant="outline"
-                className="w-full"
-                disabled={testing || !settings}
-              >
-                {testing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Enviando...
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-2 h-4 w-4" />
-                    Enviar Email de Prueba
-                  </>
-                )}
-              </Button>
+              {canConfigureSMTP ? (
+                <Button
+                  onClick={handleTest}
+                  variant="outline"
+                  className="w-full"
+                  disabled={testing || !settings}
+                >
+                  {testing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Enviar Email de Prueba
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-2">
+                  <Lock className="h-4 w-4 inline mr-1" />
+                  Necesitas permisos para probar la conexión
+                </div>
+              )}
 
               {testResult && (
                 <Alert variant={testResult.success ? 'default' : 'destructive'}>
                   {testResult.success ? (
-                    <CheckCircle2 className="h-4 w-4 text-teal-500" />
+                    <CheckCircle2 className="h-4 w-4 text-success" />
                   ) : (
                     <XCircle className="h-4 w-4" />
                   )}

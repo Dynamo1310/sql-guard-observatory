@@ -66,3 +66,6 @@ public class SecurityGroup
     public ADGroupSync? ADSync { get; set; }
 }
 
+
+
+

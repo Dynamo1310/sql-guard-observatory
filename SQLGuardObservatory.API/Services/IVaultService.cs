@@ -118,7 +118,7 @@ public interface IVaultService
     /// <summary>
     /// Agrega una credencial a un grupo (la comparte)
     /// </summary>
-    Task<bool> AddCredentialToGroupAsync(int groupId, int credentialId, string permission, string userId, string? userName, string? ipAddress, string? userAgent);
+    Task<bool> AddCredentialToGroupAsync(int groupId, int credentialId, string permission, bool allowReshare, string userId, string? userName, string? ipAddress, string? userAgent);
 
     /// <summary>
     /// Remueve una credencial de un grupo

@@ -3,7 +3,7 @@
 
 param(
     [string]$ServerName = "SSPR17MON-01",
-    [string]$DatabaseName = "SQLGuardObservatoryAuth",
+    [string]$DatabaseName = "AppSQLNova",
     [string]$SqlUser = "ScriptExec",
     [string]$SqlPassword = "susana.9",
     [string]$SqlScriptPath = "$PSScriptRoot\CreateRolePermissionsTable.sql"

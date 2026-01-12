@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
@@ -7,14 +7,15 @@ using System.Data;
 namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 
 /// <summary>
-/// Collector de métricas de CPU
-/// Métricas: P95 CPU, Runnable Tasks, Signal Waits
+/// Collector de métricas de CPU (v3.1 mejorado)
+/// Métricas básicas: P95 CPU, Avg CPU, Runnable Tasks, Pending I/O
+/// Métricas de Scheduler Pressure: Avg/Max runnable tasks por scheduler
+/// Métricas de Worker Threads: uso de worker threads, activos vs max
+/// Métricas de Signal Waits: % de tiempo esperando CPU (indica CPU pressure)
 /// Peso: 10%
 /// </summary>
 public class CPUCollector : CollectorBase<CPUCollector.CPUMetrics>
 {
-    private readonly ApplicationDbContext _context;
-
     public override string CollectorName => "CPU";
     public override string DisplayName => "CPU";
 
@@ -23,10 +24,9 @@ public class CPUCollector : CollectorBase<CPUCollector.CPUMetrics>
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        ApplicationDbContext context) 
-        : base(logger, configService, connectionFactory, instanceProvider)
+        IServiceScopeFactory scopeFactory) 
+        : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
-        _context = context;
     }
 
     protected override async Task<CPUMetrics> CollectFromInstanceAsync(
@@ -147,6 +147,38 @@ public class CPUCollector : CollectorBase<CPUCollector.CPUMetrics>
         {
             result.PendingDiskIOCount = GetInt(dataSet.Tables[2].Rows[0], "PendingDiskIO");
         }
+        
+        // ResultSet 4: Scheduler Pressure
+        if (dataSet.Tables.Count >= 4 && dataSet.Tables[3].Rows.Count > 0)
+        {
+            var row = dataSet.Tables[3].Rows[0];
+            result.AvgRunnableTasksPerScheduler = GetDecimal(row, "AvgRunnableTasks");
+            result.MaxRunnableTasksOnScheduler = GetInt(row, "MaxRunnableTasks");
+            result.SchedulerCount = GetInt(row, "SchedulerCount");
+        }
+        
+        // ResultSet 5: Worker Thread Usage
+        if (dataSet.Tables.Count >= 5 && dataSet.Tables[4].Rows.Count > 0)
+        {
+            var row = dataSet.Tables[4].Rows[0];
+            result.MaxWorkerCount = GetInt(row, "MaxWorkerCount");
+            result.ActiveWorkers = GetInt(row, "ActiveWorkers");
+            result.TotalWorkers = GetInt(row, "TotalWorkers");
+            
+            // Calcular porcentaje de uso de worker threads
+            if (result.MaxWorkerCount > 0)
+            {
+                result.WorkerThreadUsagePct = Math.Round((result.TotalWorkers * 100.0m) / result.MaxWorkerCount, 2);
+            }
+        }
+        
+        // ResultSet 6: Signal Waits (CPU pressure indicator)
+        if (dataSet.Tables.Count >= 6 && dataSet.Tables[5].Rows.Count > 0)
+        {
+            var row = dataSet.Tables[5].Rows[0];
+            result.TotalSignalWaitMs = GetLong(row, "TotalSignalWaitMs");
+            result.SignalWaitPct = GetDecimal(row, "SignalWaitPct");
+        }
     }
 
     protected override int CalculateScore(CPUMetrics data, List<CollectorThreshold> thresholds)
@@ -169,17 +201,33 @@ public class CPUCollector : CollectorBase<CPUCollector.CPUMetrics>
             HostingSite = instance.HostingSite,
             SqlVersion = instance.SqlVersionString,
             CollectedAtUtc = DateTime.Now,
+            // Métricas básicas
             SQLProcessUtilization = data.SQLProcessUtilization,
             SystemIdleProcess = data.SystemIdleProcess,
             OtherProcessUtilization = data.OtherProcessUtilization,
             RunnableTasks = data.RunnableTasks,
             PendingDiskIOCount = data.PendingDiskIOCount,
             AvgCPUPercentLast10Min = data.AvgCPUPercentLast10Min,
-            P95CPUPercent = data.P95CPUPercent
+            P95CPUPercent = data.P95CPUPercent,
+            // Scheduler Pressure
+            AvgRunnableTasksPerScheduler = data.AvgRunnableTasksPerScheduler,
+            MaxRunnableTasksOnScheduler = data.MaxRunnableTasksOnScheduler,
+            SchedulerCount = data.SchedulerCount,
+            // Worker Threads
+            MaxWorkerCount = data.MaxWorkerCount,
+            ActiveWorkers = data.ActiveWorkers,
+            TotalWorkers = data.TotalWorkers,
+            WorkerThreadUsagePct = data.WorkerThreadUsagePct,
+            // Signal Waits
+            SignalWaitPct = data.SignalWaitPct,
+            TotalSignalWaitMs = data.TotalSignalWaitMs
         };
 
-        _context.InstanceHealthCPU.Add(entity);
-        await _context.SaveChangesAsync(ct);
+        await SaveWithScopedContextAsync(async context =>
+        {
+            context.InstanceHealthCPU.Add(entity);
+            await context.SaveChangesAsync(ct);
+        }, ct);
     }
 
     protected override string GetDefaultQuery(int sqlMajorVersion)
@@ -245,7 +293,36 @@ WHERE status = 'VISIBLE ONLINE'
 -- Work queued (I/O pendiente)
 SELECT ISNULL(SUM(pending_disk_io_count), 0) AS PendingDiskIO
 FROM sys.dm_os_schedulers WITH (NOLOCK)
-WHERE scheduler_id < 255;";
+WHERE scheduler_id < 255;
+
+-- Scheduler Pressure (promedio de runnable_tasks por scheduler)
+SELECT 
+    CAST(AVG(CAST(runnable_tasks_count AS DECIMAL(10,2))) AS DECIMAL(10,2)) AS AvgRunnableTasks,
+    MAX(runnable_tasks_count) AS MaxRunnableTasks,
+    COUNT(*) AS SchedulerCount
+FROM sys.dm_os_schedulers WITH (NOLOCK)
+WHERE status = 'VISIBLE ONLINE' AND scheduler_id < 255;
+
+-- Worker Thread Usage
+SELECT 
+    si.max_workers_count AS MaxWorkerCount,
+    (SELECT COUNT(*) FROM sys.dm_os_workers WITH (NOLOCK) WHERE state = 'RUNNING') AS ActiveWorkers,
+    (SELECT COUNT(*) FROM sys.dm_os_workers WITH (NOLOCK)) AS TotalWorkers
+FROM sys.dm_os_sys_info si WITH (NOLOCK);
+
+-- Signal Waits (indica CPU pressure - % tiempo esperando CPU vs I/O)
+SELECT 
+    ISNULL(SUM(signal_wait_time_ms), 0) AS TotalSignalWaitMs,
+    ISNULL(SUM(wait_time_ms), 0) AS TotalWaitMs,
+    CASE WHEN SUM(wait_time_ms) > 0 
+         THEN CAST((SUM(signal_wait_time_ms) * 100.0 / SUM(wait_time_ms)) AS DECIMAL(5,2))
+         ELSE 0 END AS SignalWaitPct
+FROM sys.dm_os_wait_stats WITH (NOLOCK)
+WHERE wait_type NOT IN ('CLR_SEMAPHORE','LAZYWRITER_SLEEP','RESOURCE_QUEUE',
+    'SLEEP_TASK','SLEEP_SYSTEMTASK','WAITFOR','LOGMGR_QUEUE','CHECKPOINT_QUEUE',
+    'REQUEST_FOR_DEADLOCK_SEARCH','XE_TIMER_EVENT','BROKER_TO_FLUSH','BROKER_TASK_STOP',
+    'CLR_MANUAL_EVENT','CLR_AUTO_EVENT','DISPATCHER_QUEUE_SEMAPHORE','FT_IFTS_SCHEDULER_IDLE_WAIT',
+    'XE_DISPATCHER_WAIT','XE_DISPATCHER_JOIN','SQLTRACE_INCREMENTAL_FLUSH_SLEEP');";
     }
 
     protected override Dictionary<string, object?> GetMetricsFromResult(CPUMetrics data)
@@ -254,12 +331,16 @@ WHERE scheduler_id < 255;";
         {
             ["P95CPU"] = data.P95CPUPercent,
             ["AvgCPU"] = data.AvgCPUPercentLast10Min,
-            ["RunnableTasks"] = data.RunnableTasks
+            ["RunnableTasks"] = data.RunnableTasks,
+            ["AvgRunnablePerScheduler"] = data.AvgRunnableTasksPerScheduler,
+            ["WorkerThreadUsagePct"] = data.WorkerThreadUsagePct,
+            ["SignalWaitPct"] = data.SignalWaitPct
         };
     }
 
     public class CPUMetrics
     {
+        // Métricas básicas de CPU
         public int SQLProcessUtilization { get; set; }
         public int SystemIdleProcess { get; set; }
         public int OtherProcessUtilization { get; set; }
@@ -267,6 +348,21 @@ WHERE scheduler_id < 255;";
         public int PendingDiskIOCount { get; set; }
         public int AvgCPUPercentLast10Min { get; set; }
         public int P95CPUPercent { get; set; }
+        
+        // Métricas de Scheduler Pressure
+        public decimal AvgRunnableTasksPerScheduler { get; set; }
+        public int MaxRunnableTasksOnScheduler { get; set; }
+        public int SchedulerCount { get; set; }
+        
+        // Métricas de Worker Threads
+        public int MaxWorkerCount { get; set; }
+        public int ActiveWorkers { get; set; }
+        public int TotalWorkers { get; set; }
+        public decimal WorkerThreadUsagePct { get; set; }
+        
+        // Métricas de Signal Waits (indica CPU pressure)
+        public decimal SignalWaitPct { get; set; }
+        public long TotalSignalWaitMs { get; set; }
     }
 }
 

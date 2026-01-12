@@ -1,10 +1,10 @@
 -- =====================================================
 -- Tablas de Configuración de Collectors
 -- Para migración de collectors PowerShell a .NET Backend
--- Base de datos: SQLGuardObservatoryAuth
+-- Base de datos: AppSQLNova
 -- =====================================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- =====================================================
@@ -163,34 +163,29 @@ GO
 DELETE FROM dbo.CollectorConfig WHERE 1=1;
 GO
 
--- Tab 1: Availability & DR (40%)
+-- Tab 1: Availability & DR (35%) - Intervalos segun ChatGPT
 INSERT INTO dbo.CollectorConfig (CollectorName, DisplayName, Description, IsEnabled, IntervalSeconds, TimeoutSeconds, Weight, Category, ExecutionOrder)
 VALUES 
-    ('Backups', 'Backups', 'Estado de backups FULL y LOG', 1, 900, 60, 18.00, 'Availability', 1),
-    ('AlwaysOn', 'AlwaysOn', 'Estado de Availability Groups', 1, 300, 30, 14.00, 'Availability', 2),
-    ('LogChain', 'Log Chain', 'Integridad de la cadena de logs', 1, 300, 15, 5.00, 'Availability', 3),
-    ('DatabaseStates', 'Database States', 'Estados de bases de datos', 1, 300, 15, 3.00, 'Availability', 4);
+    ('Backups', 'Backups', 'Estado de backups FULL y LOG', 1, 900, 60, 18.00, 'Availability', 1),      -- 15m (umbrales en horas)
+    ('AlwaysOn', 'AlwaysOn', 'Estado de Availability Groups', 1, 300, 30, 14.00, 'Availability', 2),   -- 5m (deteccion rapida)
+    ('DatabaseStates', 'Database States', 'Estados de bases de datos', 1, 300, 15, 3.00, 'Availability', 3); -- 5m (eventos graves)
 
--- Tab 2: Performance (35%)
+-- Tab 2: Performance (43%) - Intervalos segun ChatGPT
 INSERT INTO dbo.CollectorConfig (CollectorName, DisplayName, Description, IsEnabled, IntervalSeconds, TimeoutSeconds, Weight, Category, ExecutionOrder)
 VALUES 
-    ('CPU', 'CPU', 'Uso de CPU y runnable tasks', 1, 300, 15, 10.00, 'Performance', 1),
-    ('Memoria', 'Memoria', 'Page Life Expectancy y Memory Grants', 1, 300, 15, 8.00, 'Performance', 2),
-    ('IO', 'IO', 'Latencia de disco e IOPS', 1, 300, 20, 10.00, 'Performance', 3),
-    ('Discos', 'Discos', 'Espacio libre en discos', 1, 300, 30, 7.00, 'Performance', 4);
+    ('CPU', 'CPU', 'Uso de CPU y runnable tasks', 1, 300, 15, 10.00, 'Performance', 1),                -- 5m (near real-time)
+    ('Memoria', 'Memoria', 'Page Life Expectancy y Memory Grants', 1, 300, 15, 8.00, 'Performance', 2), -- 5m (near real-time)
+    ('IO', 'IO', 'Latencia de disco e IOPS', 1, 300, 20, 10.00, 'Performance', 3),                     -- 5m (near real-time)
+    ('Discos', 'Discos', 'Espacio libre en discos', 1, 900, 30, 7.00, 'Performance', 4),               -- 15m (no cambia rapido)
+    ('Waits', 'Wait Statistics', 'Estadisticas de espera y bloqueos', 1, 300, 15, 8.00, 'Performance', 5); -- 5m (signal operativa)
 
--- Tab 3: Maintenance & Config (25%)
+-- Tab 3: Maintenance & Config (22%) - Intervalos segun ChatGPT
 INSERT INTO dbo.CollectorConfig (CollectorName, DisplayName, Description, IsEnabled, IntervalSeconds, TimeoutSeconds, Weight, Category, ExecutionOrder)
 VALUES 
-    ('ErroresCriticos', 'Errores Críticos', 'Errores severity 20+ y blocking', 1, 300, 15, 7.00, 'Maintenance', 1),
-    ('Maintenance', 'Mantenimientos', 'CHECKDB e IndexOptimize', 1, 900, 60, 5.00, 'Maintenance', 2),
-    ('ConfiguracionTempdb', 'Config TempDB', 'Configuración y contención de TempDB', 1, 300, 30, 8.00, 'Maintenance', 3),
-    ('Autogrowth', 'Autogrowth', 'Eventos de autogrowth y archivos cerca del límite', 1, 300, 30, 5.00, 'Maintenance', 4);
-
--- Collector auxiliar (sin peso directo)
-INSERT INTO dbo.CollectorConfig (CollectorName, DisplayName, Description, IsEnabled, IntervalSeconds, TimeoutSeconds, Weight, Category, ExecutionOrder)
-VALUES 
-    ('Waits', 'Wait Statistics', 'Estadísticas de espera para otros collectors', 1, 300, 15, 0.00, 'Auxiliary', 0);
+    ('ErroresCriticos', 'Errores Criticos', 'Errores severity 20+ y blocking', 1, 600, 15, 7.00, 'Maintenance', 1), -- 10m (reducir carga)
+    ('Maintenance', 'Mantenimientos', 'CHECKDB e IndexOptimize', 1, 3600, 60, 5.00, 'Maintenance', 2),              -- 60m (cambia lento)
+    ('ConfiguracionTempdb', 'Config TempDB', 'Configuracion y contencion de TempDB', 1, 300, 30, 5.00, 'Maintenance', 3), -- 5m (para contention)
+    ('Autogrowth', 'Autogrowth', 'Eventos de autogrowth y archivos cerca del limite', 1, 600, 30, 5.00, 'Maintenance', 4); -- 10m (tendencia)
 
 PRINT 'Configuración de collectors insertada';
 GO
@@ -203,25 +198,27 @@ GO
 DELETE FROM dbo.CollectorThresholds WHERE 1=1;
 GO
 
--- CPU Collector Thresholds
+-- CPU Collector Thresholds (ajustado segun ChatGPT: Runnable Tasks >5 warning, >10 critico)
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)
 VALUES
-    ('CPU', 'P95CPU_Optimal', 'P95 CPU Óptimo', 80, '<=', 100, 'Score', 'CPU P95 saludable (≤80%)', 80, 1, 'P95CPU'),
-    ('CPU', 'P95CPU_Warning', 'P95 CPU Advertencia', 90, '<=', 70, 'Score', 'CPU P95 requiere atención (81-90%)', 90, 2, 'P95CPU'),
-    ('CPU', 'P95CPU_Critical', 'P95 CPU Crítico', 90, '>', 40, 'Score', 'CPU P95 crítico (>90%)', 90, 3, 'P95CPU'),
-    ('CPU', 'RunnableTasks_Cap', 'Runnable Tasks Cap', 1, '>', 70, 'Cap', 'Cola de CPU detectada, cap a 70', 1, 10, 'Caps'),
-    ('CPU', 'CXPacket_High', 'CXPacket Alto', 15, '>', 50, 'Cap', 'Problemas de paralelismo, cap a 50', 15, 11, 'Caps');
+    ('CPU', 'P95CPU_Optimal', 'P95 CPU Optimo', 80, '<=', 100, 'Score', 'CPU P95 saludable (<=80%)', 80, 1, 'P95CPU'),
+    ('CPU', 'P95CPU_Warning', 'P95 CPU Advertencia', 90, '<=', 70, 'Score', 'CPU P95 requiere atencion (81-90%)', 90, 2, 'P95CPU'),
+    ('CPU', 'P95CPU_Critical', 'P95 CPU Critico', 90, '>', 40, 'Score', 'CPU P95 critico (>90%)', 90, 3, 'P95CPU'),
+    ('CPU', 'RunnableTasks_Cap', 'Runnable Tasks Warning', 5, '>', 70, 'Cap', 'Cola de CPU detectada (>5 tasks), cap a 70', 5, 10, 'Caps'),
+    ('CPU', 'RunnableTasks_Critical', 'Runnable Tasks Critico', 10, '>', 50, 'Cap', 'Cola de CPU severa (>10 tasks), cap a 50', 10, 11, 'Caps'),
+    ('CPU', 'CXPacket_High', 'CXPacket Alto', 15, '>', 50, 'Cap', 'Problemas de paralelismo, cap a 50', 15, 12, 'Caps');
 
--- Memoria Collector Thresholds
+-- Memoria Collector Thresholds (ajustado segun ChatGPT: agregar cap fuerte si Stolen >50%)
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)
 VALUES
-    ('Memoria', 'PLE_Ratio_Optimal', 'PLE Ratio Óptimo', 100, '>=', 100, 'Score', 'PLE >= 100% del target', 100, 1, 'PLE'),
+    ('Memoria', 'PLE_Ratio_Optimal', 'PLE Ratio Optimo', 100, '>=', 100, 'Score', 'PLE >= 100% del target', 100, 1, 'PLE'),
     ('Memoria', 'PLE_Ratio_Good', 'PLE Ratio Bueno', 70, '>=', 80, 'Score', 'PLE 70-99% del target', 70, 2, 'PLE'),
     ('Memoria', 'PLE_Ratio_Warning', 'PLE Ratio Advertencia', 50, '>=', 60, 'Score', 'PLE 50-69% del target', 50, 3, 'PLE'),
     ('Memoria', 'PLE_Ratio_Low', 'PLE Ratio Bajo', 30, '>=', 40, 'Score', 'PLE 30-49% del target', 30, 4, 'PLE'),
-    ('Memoria', 'PLE_Ratio_Critical', 'PLE Ratio Crítico', 30, '<', 20, 'Score', 'PLE < 30% del target', 30, 5, 'PLE'),
-    ('Memoria', 'MemoryGrants_Cap', 'Memory Grants Cap', 10, '>', 60, 'Cap', 'Más de 10 grants pending, cap a 60', 10, 10, 'Caps'),
-    ('Memoria', 'StolenMemory_High', 'Stolen Memory Alto', 30, '>', -30, 'Penalty', 'Más de 30% stolen memory, -30 pts', 30, 11, 'Caps');
+    ('Memoria', 'PLE_Ratio_Critical', 'PLE Ratio Critico', 30, '<', 20, 'Score', 'PLE < 30% del target', 30, 5, 'PLE'),
+    ('Memoria', 'MemoryGrants_Cap', 'Memory Grants Cap', 10, '>', 60, 'Cap', 'Mas de 10 grants pending, cap a 60', 10, 10, 'Caps'),
+    ('Memoria', 'StolenMemory_High', 'Stolen Memory Alto', 30, '>', -30, 'Penalty', 'Mas de 30% stolen memory, -30 pts', 30, 11, 'Caps'),
+    ('Memoria', 'StolenMemory_Critical', 'Stolen Memory Critico', 50, '>', 50, 'Cap', 'Mas del 50% stolen memory, cap a 50', 50, 12, 'Caps');
 
 -- IO Collector Thresholds
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)
@@ -241,24 +238,25 @@ VALUES
     ('Discos', 'FreeSpace_Low', 'Espacio Bajo', 5, '>=', 40, 'Score', 'Espacio libre 5-9%', 5, 4, 'FreeSpace'),
     ('Discos', 'FreeSpace_Critical', 'Espacio Crítico', 5, '<', 0, 'Score', 'Espacio libre <5%', 5, 5, 'FreeSpace');
 
--- Backups Collector Thresholds
+-- Backups Collector Thresholds (ajustado segun ChatGPT: Log Chain cap bajado a 40)
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)
 VALUES
-    ('Backups', 'FullBackup_Normal', 'Full Backup Normal', 24, '<=', 100, 'Score', 'Full backup en últimas 24h', 24, 1, 'FullBackup'),
-    ('Backups', 'FullBackup_DWH', 'Full Backup DWH', 168, '<=', 100, 'Score', 'Full backup DWH en últimos 7 días', 168, 2, 'FullBackup'),
+    ('Backups', 'FullBackup_Normal', 'Full Backup Normal', 24, '<=', 100, 'Score', 'Full backup en ultimas 24h', 24, 1, 'FullBackup'),
+    ('Backups', 'FullBackup_DWH', 'Full Backup DWH', 168, '<=', 100, 'Score', 'Full backup DWH en ultimos 7 dias', 168, 2, 'FullBackup'),
     ('Backups', 'FullBackup_Breach', 'Full Backup Vencido', 24, '>', 0, 'Score', 'Sin full backup reciente', 24, 3, 'FullBackup'),
-    ('Backups', 'LogBackup_Normal', 'Log Backup Normal', 2, '<=', 100, 'Score', 'Log backup en últimas 2h', 2, 1, 'LogBackup'),
+    ('Backups', 'LogBackup_Normal', 'Log Backup Normal', 2, '<=', 100, 'Score', 'Log backup en ultimas 2h', 2, 1, 'LogBackup'),
     ('Backups', 'LogBackup_Breach', 'Log Backup Vencido', 2, '>', 0, 'Score', 'Sin log backup reciente', 2, 2, 'LogBackup'),
-    ('Backups', 'LogChain_Broken', 'Log Chain Rota', 1, '>=', 60, 'Cap', 'Cadena de log rota, cap global a 60', 1, 10, 'Caps');
+    ('Backups', 'LogChain_Broken', 'Log Chain Rota', 1, '>=', 40, 'Cap', 'Cadena de log rota, cap global a 40 (ajustado)', 1, 10, 'Caps');
 
--- AlwaysOn Collector Thresholds
+-- AlwaysOn Collector Thresholds (ajustado segun ChatGPT: AG No Sync menos binario, por %)
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)
 VALUES
     ('AlwaysOn', 'AG_AllSynced', 'AG Todo Sincronizado', 100, '>=', 100, 'Score', 'Todas las DBs sincronizadas', 100, 1, 'AGState'),
     ('AlwaysOn', 'AG_SendQueue', 'AG Send Queue', 100000, '>', -30, 'Penalty', 'Send queue >100MB, -30 pts', 100000, 2, 'AGQueues'),
     ('AlwaysOn', 'AG_RedoQueue', 'AG Redo Queue', 100000, '>', -20, 'Penalty', 'Redo queue >100MB, -20 pts', 100000, 3, 'AGQueues'),
     ('AlwaysOn', 'AG_Suspended', 'AG Suspendido', 0, '>', 60, 'Cap', 'DBs suspendidas, score=0 cap=60', 0, 10, 'AGState'),
-    ('AlwaysOn', 'AG_NotSynced', 'AG No Sincronizado', 100, '<', 60, 'Cap', 'Algunas DBs no sync, score=50 cap=60', 100, 11, 'AGState');
+    ('AlwaysOn', 'AG_NotSynced', 'AG Parcialmente Sync', 80, '<', 80, 'Cap', 'Mas del 20% DBs no sync (async DR tolerado), cap a 80', 80, 11, 'AGState'),
+    ('AlwaysOn', 'AG_MostlyNotSynced', 'AG Mayoria No Sync', 50, '<', 60, 'Cap', 'Mas del 50% DBs no sync, cap a 60', 50, 12, 'AGState');
 
 -- DatabaseStates Collector Thresholds
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)
@@ -286,24 +284,25 @@ VALUES
     ('Maintenance', 'Checkdb_Stale', 'CHECKDB Atrasado', 30, '<=', 50, 'Score', 'CHECKDB en últimos 30 días', 30, 3, 'Checkdb'),
     ('Maintenance', 'Checkdb_Critical', 'CHECKDB Crítico', 30, '>', 0, 'Score', 'Sin CHECKDB en >30 días', 30, 4, 'Checkdb');
 
--- ConfiguracionTempdb Collector Thresholds
+-- ConfiguracionTempdb Collector Thresholds (ajustado segun ChatGPT: Write latency >30ms para SSD)
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)
 VALUES
     ('ConfiguracionTempdb', 'TempDB_FilesPerCPU', 'Files por CPU', 1, '>=', 20, 'Score', '1 file por CPU (hasta 8)', 1, 1, 'Config'),
-    ('ConfiguracionTempdb', 'TempDB_SameSize', 'Mismo Tamaño', 1, '=', 10, 'Score', 'Archivos del mismo tamaño', 1, 2, 'Config'),
-    ('ConfiguracionTempdb', 'TempDB_WriteLatency', 'Latencia Escritura', 50, '>', -40, 'Penalty', 'Write latency >50ms, -40 pts', 50, 3, 'Latency'),
-    ('ConfiguracionTempdb', 'TempDB_Contention', 'Contención', 5, '>', -30, 'Penalty', 'Contención >5%, -30 pts', 5, 4, 'Contention'),
-    ('ConfiguracionTempdb', 'MaxMemory_Optimal', 'Max Memory Óptimo', 70, '>=', 40, 'Score', 'Max memory 70-95% de RAM', 70, 10, 'Memory');
+    ('ConfiguracionTempdb', 'TempDB_SameSize', 'Mismo Tamano', 1, '=', 10, 'Score', 'Archivos del mismo tamano', 1, 2, 'Config'),
+    ('ConfiguracionTempdb', 'TempDB_WriteLatency', 'Latencia Escritura TempDB', 30, '>', -40, 'Penalty', 'Write latency >30ms (ajustado para SSD/NVMe), -40 pts', 30, 3, 'Latency'),
+    ('ConfiguracionTempdb', 'TempDB_Contention', 'Contencion', 5, '>', -30, 'Penalty', 'Contencion >5%, -30 pts', 5, 4, 'Contention'),
+    ('ConfiguracionTempdb', 'MaxMemory_Optimal', 'Max Memory Optimo', 70, '>=', 40, 'Score', 'Max memory 70-95% de RAM', 70, 10, 'Memory');
 
--- Autogrowth Collector Thresholds
+-- Autogrowth Collector Thresholds (ajustado segun ChatGPT: >85% warning, >95% score 0)
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)
 VALUES
-    ('Autogrowth', 'Autogrowth_Low', 'Autogrowth Bajo', 10, '<=', 100, 'Score', '≤10 eventos en 24h', 10, 1, 'Events'),
+    ('Autogrowth', 'Autogrowth_Low', 'Autogrowth Bajo', 10, '<=', 100, 'Score', '<=10 eventos en 24h', 10, 1, 'Events'),
     ('Autogrowth', 'Autogrowth_Moderate', 'Autogrowth Moderado', 50, '<=', 80, 'Score', '11-50 eventos en 24h', 50, 2, 'Events'),
     ('Autogrowth', 'Autogrowth_High', 'Autogrowth Alto', 100, '<=', 60, 'Score', '51-100 eventos en 24h', 100, 3, 'Events'),
     ('Autogrowth', 'Autogrowth_Excessive', 'Autogrowth Excesivo', 100, '>', 40, 'Score', '>100 eventos en 24h', 100, 4, 'Events'),
-    ('Autogrowth', 'FilesNearLimit_Any', 'Archivos Cerca Límite', 0, '>', -30, 'Penalty', 'Archivos cerca del máximo', 0, 10, 'Limits'),
-    ('Autogrowth', 'FilesAtLimit', 'Archivos al Límite', 90, '>', 50, 'Cap', '>90% del límite, score=0 cap=50', 90, 11, 'Limits');
+    ('Autogrowth', 'FilesNearLimit_Any', 'Archivos Cerca Limite', 0, '>', -30, 'Penalty', 'Archivos cerca del maximo', 0, 10, 'Limits'),
+    ('Autogrowth', 'FilesNearLimit_Warning', 'Archivos Cerca Limite Warning', 85, '>', 60, 'Cap', '85-95% del limite, cap a 60', 85, 11, 'Limits'),
+    ('Autogrowth', 'FilesAtLimit', 'Archivos al Limite Critico', 95, '>', 30, 'Cap', '>95% del limite = score 0, cap a 30 (critico)', 95, 12, 'Limits');
 
 PRINT 'Umbrales por defecto insertados';
 GO

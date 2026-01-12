@@ -36,9 +36,9 @@ interface CredentialSelectorProps {
 }
 
 const credentialTypeConfig = {
-  SqlAuth: { label: 'SQL Server', icon: Database, color: 'text-blue-600' },
-  WindowsAD: { label: 'Windows/AD', icon: Monitor, color: 'text-purple-600' },
-  Other: { label: 'Otro', icon: Key, color: 'text-gray-600' }
+  SqlAuth: { label: 'SQL Server', icon: Database, color: 'text-muted-foreground' },
+  WindowsAD: { label: 'Windows/AD', icon: Monitor, color: 'text-muted-foreground' },
+  Other: { label: 'Otro', icon: Key, color: 'text-muted-foreground' }
 };
 
 export function CredentialSelector({

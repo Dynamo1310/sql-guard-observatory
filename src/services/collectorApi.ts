@@ -94,6 +94,40 @@ export interface ExecuteCollectorResult {
   executionLogId: number | null;
 }
 
+export interface ConsolidatorExecuteResult {
+  success: boolean;
+  message: string;
+  durationMs: number | null;
+}
+
+export interface ConsolidatorStatus {
+  name: string;
+  displayName: string;
+  isEnabled: boolean;
+  intervalSeconds: number;
+  description: string;
+}
+
+// Tipos para excepciones de collectors
+export interface CollectorException {
+  id: number;
+  collectorName: string;
+  exceptionType: string;
+  serverName: string;
+  reason: string | null;
+  isActive: boolean;
+  createdAtUtc: string;
+  createdBy: string | null;
+  expiresAtUtc: string | null;
+}
+
+export interface CreateCollectorException {
+  exceptionType: string;
+  serverName: string;
+  reason?: string;
+  expiresAtUtc?: string;
+}
+
 // Helper para manejar respuestas
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -239,5 +273,80 @@ export const collectorApi = {
       },
     });
     return handleResponse<CollectorsSummary>(response);
+  },
+
+  // Ejecutar el consolidador de HealthScore manualmente
+  async executeConsolidator(): Promise<ConsolidatorExecuteResult> {
+    const response = await fetch(`${API_URL}/api/collectors/consolidator/execute`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+    });
+    return handleResponse<ConsolidatorExecuteResult>(response);
+  },
+
+  // Obtener estado del consolidador
+  async getConsolidatorStatus(): Promise<ConsolidatorStatus> {
+    const response = await fetch(`${API_URL}/api/collectors/consolidator/status`, {
+      headers: {
+        ...getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+    });
+    return handleResponse<ConsolidatorStatus>(response);
+  },
+
+  // === EXCEPCIONES DE COLLECTORS ===
+
+  // Obtener excepciones de un collector
+  async getExceptions(name: string): Promise<CollectorException[]> {
+    const response = await fetch(`${API_URL}/api/collectors/${name}/exceptions`, {
+      headers: {
+        ...getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+    });
+    return handleResponse<CollectorException[]>(response);
+  },
+
+  // Agregar una excepción
+  async addException(name: string, exception: CreateCollectorException): Promise<CollectorException> {
+    const response = await fetch(`${API_URL}/api/collectors/${name}/exceptions`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(exception),
+    });
+    return handleResponse<CollectorException>(response);
+  },
+
+  // Eliminar una excepción
+  async removeException(name: string, exceptionId: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/collectors/${name}/exceptions/${exceptionId}`, {
+      method: 'DELETE',
+      headers: {
+        ...getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Error al eliminar excepción' }));
+      throw new Error(error.message);
+    }
+  },
+
+  // Obtener tipos de excepción válidos para un collector
+  async getExceptionTypes(name: string): Promise<string[]> {
+    const response = await fetch(`${API_URL}/api/collectors/${name}/exception-types`, {
+      headers: {
+        ...getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+    });
+    return handleResponse<string[]>(response);
   },
 };

@@ -1,7 +1,7 @@
 -- =============================================
 -- Script: VaultEnterprise_Phase8_Cleanup.sql
 -- Description: Fase 8 - Limpieza de columnas legacy
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 --
@@ -14,7 +14,7 @@
 -- IMPORTANTE: NO ejecutar hasta que todos los gates estén cerrados
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='

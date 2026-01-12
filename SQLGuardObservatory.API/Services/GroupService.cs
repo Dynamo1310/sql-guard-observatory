@@ -64,6 +64,7 @@ public class GroupService : IGroupService
             .Where(g => g.Id == groupId && !g.IsDeleted)
             .Include(g => g.Members)
                 .ThenInclude(m => m.User)
+                    .ThenInclude(u => u!.AdminRole)
             .Include(g => g.Members)
                 .ThenInclude(m => m.AddedByUser)
             .Include(g => g.Permissions)
@@ -73,23 +74,23 @@ public class GroupService : IGroupService
 
         if (group == null) return null;
 
-        // Obtener roles de los miembros
+        // Obtener roles de los miembros usando AdminRole
         var memberDtos = new List<GroupMemberDto>();
         foreach (var member in group.Members)
         {
-            var userRoles = member.User != null 
-                ? await _userManager.GetRolesAsync(member.User) 
-                : new List<string>();
-            
             memberDtos.Add(new GroupMemberDto
             {
                 UserId = member.UserId,
                 DomainUser = member.User?.DomainUser ?? "",
                 DisplayName = member.User?.DisplayName ?? "",
                 Email = member.User?.Email,
-                Role = userRoles.FirstOrDefault(),
+                Role = member.User?.AdminRole?.Name ?? "Reader",
+                RoleId = member.User?.AdminRoleId,
+                RoleColor = member.User?.AdminRole?.Color,
+                RoleIcon = member.User?.AdminRole?.Icon,
                 AddedAt = member.AddedAt.ToString("yyyy-MM-ddTHH:mm:ssZ"),
-                AddedByUserName = member.AddedByUser?.DisplayName
+                AddedByUserName = member.AddedByUser?.DisplayName,
+                ProfilePhotoUrl = GetProfilePhotoUrl(member.User?.ProfilePhoto)
             });
         }
 
@@ -256,6 +257,7 @@ public class GroupService : IGroupService
         var members = await _context.UserGroups
             .Where(ug => ug.GroupId == groupId)
             .Include(ug => ug.User)
+                .ThenInclude(u => u!.AdminRole)
             .Include(ug => ug.AddedByUser)
             .OrderBy(ug => ug.User!.DisplayName)
             .ToListAsync();
@@ -265,20 +267,65 @@ public class GroupService : IGroupService
         {
             if (member.User == null) continue;
             
-            var userRoles = await _userManager.GetRolesAsync(member.User);
             result.Add(new GroupMemberDto
             {
                 UserId = member.UserId,
                 DomainUser = member.User.DomainUser ?? "",
                 DisplayName = member.User.DisplayName ?? "",
                 Email = member.User.Email,
-                Role = userRoles.FirstOrDefault(),
+                Role = member.User.AdminRole?.Name ?? "Reader",
+                RoleId = member.User.AdminRoleId,
+                RoleColor = member.User.AdminRole?.Color,
+                RoleIcon = member.User.AdminRole?.Icon,
                 AddedAt = member.AddedAt.ToString("yyyy-MM-ddTHH:mm:ssZ"),
-                AddedByUserName = member.AddedByUser?.DisplayName
+                AddedByUserName = member.AddedByUser?.DisplayName,
+                ProfilePhotoUrl = GetProfilePhotoUrl(member.User.ProfilePhoto)
             });
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Convierte bytes de imagen a URL data:image/...;base64,...
+    /// </summary>
+    private static string? GetProfilePhotoUrl(byte[]? photoBytes)
+    {
+        if (photoBytes == null || photoBytes.Length == 0)
+            return null;
+        
+        var mimeType = DetectImageMimeType(photoBytes);
+        return $"data:{mimeType};base64,{Convert.ToBase64String(photoBytes)}";
+    }
+
+    /// <summary>
+    /// Detecta el tipo MIME de una imagen basándose en sus bytes mágicos
+    /// </summary>
+    private static string DetectImageMimeType(byte[] imageBytes)
+    {
+        if (imageBytes.Length < 4)
+            return "image/jpeg";
+
+        // PNG: 89 50 4E 47
+        if (imageBytes[0] == 0x89 && imageBytes[1] == 0x50 && imageBytes[2] == 0x4E && imageBytes[3] == 0x47)
+            return "image/png";
+
+        // JPEG: FF D8 FF
+        if (imageBytes[0] == 0xFF && imageBytes[1] == 0xD8 && imageBytes[2] == 0xFF)
+            return "image/jpeg";
+
+        // GIF: 47 49 46 38
+        if (imageBytes[0] == 0x47 && imageBytes[1] == 0x49 && imageBytes[2] == 0x46 && imageBytes[3] == 0x38)
+            return "image/gif";
+
+        // WebP: 52 49 46 46 ... 57 45 42 50
+        if (imageBytes.Length >= 12 && 
+            imageBytes[0] == 0x52 && imageBytes[1] == 0x49 && imageBytes[2] == 0x46 && imageBytes[3] == 0x46 &&
+            imageBytes[8] == 0x57 && imageBytes[9] == 0x45 && imageBytes[10] == 0x42 && imageBytes[11] == 0x50)
+            return "image/webp";
+
+        // Default to JPEG
+        return "image/jpeg";
     }
 
     public async Task<bool> AddMembersAsync(int groupId, List<string> userIds, string addedByUserId)
@@ -337,7 +384,9 @@ public class GroupService : IGroupService
             .Select(ug => ug.UserId)
             .ToListAsync();
 
-        var users = await _userManager.Users
+        // Usar _context.Users con Include para cargar el AdminRole correctamente
+        var users = await _context.Users
+            .Include(u => u.AdminRole)
             .Where(u => u.IsActive)
             .OrderBy(u => u.DisplayName)
             .ToListAsync();
@@ -345,14 +394,16 @@ public class GroupService : IGroupService
         var result = new List<AvailableUserDto>();
         foreach (var user in users)
         {
-            var userRoles = await _userManager.GetRolesAsync(user);
             result.Add(new AvailableUserDto
             {
                 UserId = user.Id,
                 DomainUser = user.DomainUser ?? "",
                 DisplayName = user.DisplayName ?? "",
                 Email = user.Email,
-                Role = userRoles.FirstOrDefault(),
+                Role = user.AdminRole?.Name ?? "Reader",
+                RoleId = user.AdminRoleId,
+                RoleColor = user.AdminRole?.Color,
+                RoleIcon = user.AdminRole?.Icon,
                 IsAlreadyMember = memberIds.Contains(user.Id)
             });
         }
@@ -676,7 +727,9 @@ public class GroupService : IGroupService
 
     public async Task<List<UserWithGroupsDto>> GetUsersWithGroupsAsync()
     {
-        var users = await _userManager.Users
+        // Usar _context.Users con Include para cargar el AdminRole correctamente
+        var users = await _context.Users
+            .Include(u => u.AdminRole)
             .OrderBy(u => u.DisplayName)
             .ToListAsync();
 
@@ -684,7 +737,6 @@ public class GroupService : IGroupService
 
         foreach (var user in users)
         {
-            var roles = await _userManager.GetRolesAsync(user);
             var groups = await GetUserGroupsAsync(user.Id);
 
             result.Add(new UserWithGroupsDto
@@ -693,7 +745,10 @@ public class GroupService : IGroupService
                 DomainUser = user.DomainUser ?? "",
                 DisplayName = user.DisplayName ?? "",
                 Email = user.Email,
-                Role = roles.FirstOrDefault() ?? "Reader",
+                Role = user.AdminRole?.Name ?? "Reader",
+                RoleId = user.AdminRoleId,
+                RoleColor = user.AdminRole?.Color,
+                RoleIcon = user.AdminRole?.Icon,
                 Active = user.IsActive,
                 CreatedAt = user.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 Groups = groups

@@ -44,6 +44,11 @@ public class OnCallAlertRule
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
+    /// Indica si se debe adjuntar el Excel del calendario (solo para ScheduleGenerated)
+    /// </summary>
+    public bool AttachExcel { get; set; } = false;
+
+    /// <summary>
     /// Usuario que creó la regla
     /// </summary>
     [Required]
@@ -87,6 +92,9 @@ public class OnCallAlertRecipient
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+
+
 
 
 

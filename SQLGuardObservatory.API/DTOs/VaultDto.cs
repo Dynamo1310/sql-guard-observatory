@@ -124,6 +124,12 @@ public class CredentialDto
     /// Indica si el usuario puede ver audit logs (calculado por backend)
     /// </summary>
     public bool CanViewAudit { get; set; }
+    
+    /// <summary>
+    /// Indica si el usuario puede re-compartir esta credencial con otros usuarios/grupos
+    /// True si: es owner, o tiene AllowReshare=true en su share
+    /// </summary>
+    public bool CanReshare { get; set; }
 }
 
 /// <summary>
@@ -461,7 +467,7 @@ public class AddGroupMemberRequest
 
     [Required]
     [MaxLength(20)]
-    public string Role { get; set; } = "Viewer"; // Owner, Admin, Member, Viewer
+    public string Role { get; set; } = "Member"; // Admin, Member (Owner es implícito al crear grupo)
 
     public bool ReceiveNotifications { get; set; } = true;
 }
@@ -496,6 +502,11 @@ public class CredentialGroupShareDto
     public string SharedByUserId { get; set; } = string.Empty;
     public string? SharedByUserName { get; set; }
     public DateTime SharedAt { get; set; }
+    
+    /// <summary>
+    /// Si true, los miembros del grupo pueden re-compartir esta credencial
+    /// </summary>
+    public bool AllowReshare { get; set; }
 }
 
 /// <summary>
@@ -513,6 +524,11 @@ public class CredentialUserShareDto
     public string SharedByUserId { get; set; } = string.Empty;
     public string? SharedByUserName { get; set; }
     public DateTime SharedAt { get; set; }
+    
+    /// <summary>
+    /// Si true, el usuario puede re-compartir esta credencial
+    /// </summary>
+    public bool AllowReshare { get; set; }
 }
 
 /// <summary>
@@ -535,6 +551,11 @@ public class ShareCredentialRequest
     /// </summary>
     [MaxLength(20)]
     public string Permission { get; set; } = "View";
+    
+    /// <summary>
+    /// Si true, los destinatarios pueden re-compartir esta credencial con otros
+    /// </summary>
+    public bool AllowReshare { get; set; } = false;
 }
 
 /// <summary>
@@ -565,6 +586,11 @@ public class AddCredentialToGroupRequest
     /// </summary>
     [MaxLength(20)]
     public string Permission { get; set; } = "View";
+    
+    /// <summary>
+    /// Si true, los miembros del grupo pueden re-compartir esta credencial
+    /// </summary>
+    public bool AllowReshare { get; set; } = false;
 }
 
 /// <summary>

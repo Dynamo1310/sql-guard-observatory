@@ -2,23 +2,31 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Models;
+using SQLGuardObservatory.API.Services;
 
 namespace SQLGuardObservatory.API.Controllers;
 
 [ApiController]
 [Route("api/activations")]
 [Authorize]
+[ViewPermission("OnCallActivations")]
 public class ActivationsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
+    private readonly IOnCallAlertService _alertService;
     private readonly ILogger<ActivationsController> _logger;
 
-    public ActivationsController(ApplicationDbContext context, ILogger<ActivationsController> logger)
+    public ActivationsController(
+        ApplicationDbContext context,
+        IOnCallAlertService alertService,
+        ILogger<ActivationsController> logger)
     {
         _context = context;
+        _alertService = alertService;
         _logger = logger;
     }
 
@@ -79,6 +87,8 @@ public class ActivationsController : ControllerBase
                     Description = a.Description,
                     Resolution = a.Resolution,
                     InstanceName = a.InstanceName,
+                    ServiceDeskUrl = a.ServiceDeskUrl,
+                    Status = a.Status,
                     CreatedByDisplayName = a.CreatedByUser.DisplayName ?? a.CreatedByUser.DomainUser ?? "",
                     CreatedAt = a.CreatedAt
                 })
@@ -124,6 +134,8 @@ public class ActivationsController : ControllerBase
                     Description = a.Description,
                     Resolution = a.Resolution,
                     InstanceName = a.InstanceName,
+                    ServiceDeskUrl = a.ServiceDeskUrl,
+                    Status = a.Status,
                     CreatedByDisplayName = a.CreatedByUser.DisplayName ?? a.CreatedByUser.DomainUser ?? "",
                     CreatedAt = a.CreatedAt
                 })
@@ -169,6 +181,8 @@ public class ActivationsController : ControllerBase
                 Description = request.Description,
                 Resolution = request.Resolution,
                 InstanceName = request.InstanceName,
+                ServiceDeskUrl = request.ServiceDeskUrl,
+                Status = request.Status,
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.Now
             };
@@ -177,6 +191,16 @@ public class ActivationsController : ControllerBase
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Activación {Id} creada por {UserId}", activation.Id, userId);
+
+            // Disparar alertas configuradas por los usuarios
+            var operatorUser = await _context.Users.FindAsync(schedule.UserId);
+            await _alertService.TriggerActivationCreatedAlertsAsync(
+                operatorUser?.DisplayName ?? operatorUser?.DomainUser ?? "Usuario",
+                activation.ActivatedAt,
+                activation.Category,
+                activation.Severity,
+                activation.Title,
+                activation.InstanceName);
 
             return await GetById(activation.Id);
         }
@@ -222,6 +246,12 @@ public class ActivationsController : ControllerBase
             
             if (request.InstanceName != null)
                 activation.InstanceName = request.InstanceName;
+            
+            if (request.ServiceDeskUrl != null)
+                activation.ServiceDeskUrl = request.ServiceDeskUrl;
+            
+            if (!string.IsNullOrEmpty(request.Status))
+                activation.Status = request.Status;
 
             activation.UpdatedAt = DateTime.Now;
 
@@ -311,6 +341,203 @@ public class ActivationsController : ControllerBase
         {
             _logger.LogError(ex, "Error al obtener resumen de activaciones");
             return StatusCode(500, new { message = "Error al obtener resumen" });
+        }
+    }
+
+    // ==================== CATEGORIES ====================
+
+    /// <summary>
+    /// Obtiene todas las categorías de activación
+    /// </summary>
+    [HttpGet("categories")]
+    public async Task<ActionResult<List<ActivationCategoryDto>>> GetCategories()
+    {
+        try
+        {
+            var categories = await _context.OnCallActivationCategories
+                .Include(c => c.CreatedByUser)
+                .OrderBy(c => c.Order)
+                .Select(c => new ActivationCategoryDto
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    Icon = c.Icon,
+                    IsDefault = c.IsDefault,
+                    IsActive = c.IsActive,
+                    Order = c.Order,
+                    CreatedAt = c.CreatedAt,
+                    CreatedByDisplayName = c.CreatedByUser != null ? c.CreatedByUser.DisplayName : null
+                })
+                .ToListAsync();
+
+            return Ok(categories);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener categorías");
+            return StatusCode(500, new { message = "Error al obtener categorías" });
+        }
+    }
+
+    /// <summary>
+    /// Crea una nueva categoría
+    /// </summary>
+    [HttpPost("categories")]
+    public async Task<ActionResult<ActivationCategoryDto>> CreateCategory([FromBody] CreateActivationCategoryRequest request)
+    {
+        try
+        {
+            var userId = GetUserId();
+
+            // Obtener el máximo orden actual
+            var maxOrder = await _context.OnCallActivationCategories
+                .MaxAsync(c => (int?)c.Order) ?? 0;
+
+            var category = new OnCallActivationCategory
+            {
+                Name = request.Name,
+                Icon = request.Icon,
+                IsDefault = false,
+                IsActive = true,
+                Order = maxOrder + 1,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = userId
+            };
+
+            _context.OnCallActivationCategories.Add(category);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Categoría {Id} creada por {UserId}", category.Id, userId);
+
+            var dto = new ActivationCategoryDto
+            {
+                Id = category.Id,
+                Name = category.Name,
+                Icon = category.Icon,
+                IsDefault = category.IsDefault,
+                IsActive = category.IsActive,
+                Order = category.Order,
+                CreatedAt = category.CreatedAt
+            };
+
+            return Ok(dto);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al crear categoría");
+            return StatusCode(500, new { message = "Error al crear categoría" });
+        }
+    }
+
+    /// <summary>
+    /// Actualiza una categoría existente
+    /// </summary>
+    [HttpPut("categories/{id}")]
+    public async Task<ActionResult<ActivationCategoryDto>> UpdateCategory(int id, [FromBody] UpdateActivationCategoryRequest request)
+    {
+        try
+        {
+            var category = await _context.OnCallActivationCategories.FindAsync(id);
+            if (category == null)
+                return NotFound(new { message = "Categoría no encontrada" });
+
+            category.Name = request.Name;
+            category.Icon = request.Icon;
+            category.IsActive = request.IsActive;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Categoría {Id} actualizada", id);
+
+            return await GetCategoryById(id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar categoría {Id}", id);
+            return StatusCode(500, new { message = "Error al actualizar categoría" });
+        }
+    }
+
+    private async Task<ActionResult<ActivationCategoryDto>> GetCategoryById(int id)
+    {
+        var category = await _context.OnCallActivationCategories
+            .Include(c => c.CreatedByUser)
+            .Where(c => c.Id == id)
+            .Select(c => new ActivationCategoryDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Icon = c.Icon,
+                IsDefault = c.IsDefault,
+                IsActive = c.IsActive,
+                Order = c.Order,
+                CreatedAt = c.CreatedAt,
+                CreatedByDisplayName = c.CreatedByUser != null ? c.CreatedByUser.DisplayName : null
+            })
+            .FirstOrDefaultAsync();
+
+        if (category == null)
+            return NotFound(new { message = "Categoría no encontrada" });
+
+        return Ok(category);
+    }
+
+    /// <summary>
+    /// Elimina una categoría (solo si no es default)
+    /// </summary>
+    [HttpDelete("categories/{id}")]
+    public async Task<ActionResult> DeleteCategory(int id)
+    {
+        try
+        {
+            var category = await _context.OnCallActivationCategories.FindAsync(id);
+            if (category == null)
+                return NotFound(new { message = "Categoría no encontrada" });
+
+            if (category.IsDefault)
+                return BadRequest(new { message = "No se puede eliminar una categoría por defecto" });
+
+            _context.OnCallActivationCategories.Remove(category);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Categoría {Id} eliminada", id);
+
+            return Ok(new { message = "Categoría eliminada" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar categoría {Id}", id);
+            return StatusCode(500, new { message = "Error al eliminar categoría" });
+        }
+    }
+
+    /// <summary>
+    /// Reordena las categorías
+    /// </summary>
+    [HttpPost("categories/reorder")]
+    public async Task<ActionResult> ReorderCategories([FromBody] List<int> categoryIds)
+    {
+        try
+        {
+            for (int i = 0; i < categoryIds.Count; i++)
+            {
+                var category = await _context.OnCallActivationCategories.FindAsync(categoryIds[i]);
+                if (category != null)
+                {
+                    category.Order = i + 1;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Categorías reordenadas");
+
+            return Ok(new { message = "Categorías reordenadas" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al reordenar categorías");
+            return StatusCode(500, new { message = "Error al reordenar categorías" });
         }
     }
 }

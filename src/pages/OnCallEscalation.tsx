@@ -1,20 +1,26 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ShieldAlert, 
   Plus, 
   Trash2, 
   ArrowLeft,
-  Loader2,
   GripVertical,
   Save,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Users,
+  Palette,
+  Phone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { ColorPickerDialog, ColorPickerButton } from '@/components/ui/color-picker';
 import {
   Select,
   SelectContent,
@@ -35,6 +41,7 @@ import {
 import { toast } from 'sonner';
 import { onCallApi, EscalationUserDto, WhitelistUserDto } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { cn } from '@/lib/utils';
 
 export default function OnCallEscalation() {
   const navigate = useNavigate();
@@ -42,6 +49,9 @@ export default function OnCallEscalation() {
   const [escalationUsers, setEscalationUsers] = useState<EscalationUserDto[]>([]);
   const [whitelistUsers, setWhitelistUsers] = useState<WhitelistUserDto[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [selectedColor, setSelectedColor] = useState<string>('#f59e0b');
+  const [selectedPhone, setSelectedPhone] = useState<string>('');
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -49,6 +59,9 @@ export default function OnCallEscalation() {
   const [deleteConfirm, setDeleteConfirm] = useState<EscalationUserDto | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [isEscalation, setIsEscalation] = useState(false);
+  const [editingPhoneId, setEditingPhoneId] = useState<number | null>(null);
+  const [editingPhoneValue, setEditingPhoneValue] = useState<string>('');
+  const [updatingColorId, setUpdatingColorId] = useState<number | null>(null);
   
   // Drag and drop state
   const [draggedItem, setDraggedItem] = useState<EscalationUserDto | null>(null);
@@ -67,11 +80,9 @@ export default function OnCallEscalation() {
         onCallApi.getCurrentOnCall(),
       ]);
       
-      // Ya viene ordenado del backend por EscalationOrder
       setEscalationUsers(escalation);
       setWhitelistUsers(whitelist);
       
-      // Verificar si el usuario actual es escalamiento
       const isUserEscalation = currentOnCall.escalationUsers?.some(
         e => e.userId === user?.id || e.domainUser?.toUpperCase() === user?.domainUser?.toUpperCase()
       );
@@ -98,14 +109,44 @@ export default function OnCallEscalation() {
 
     try {
       setAdding(true);
-      await onCallApi.addEscalationUser(selectedUserId);
+      await onCallApi.addEscalationUser(selectedUserId, selectedColor, selectedPhone || undefined);
       toast.success('Usuario agregado a escalamiento');
       setSelectedUserId('');
+      setSelectedColor('#f59e0b');
+      setSelectedPhone('');
       await loadData();
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleColorChange = async (escalationId: number, newColor: string) => {
+    try {
+      setUpdatingColorId(escalationId);
+      await onCallApi.updateEscalationUser(escalationId, newColor, undefined);
+      setEscalationUsers(prev => prev.map(u => 
+        u.id === escalationId ? { ...u, colorCode: newColor } : u
+      ));
+      toast.success('Color actualizado');
+    } catch (err: any) {
+      toast.error('Error al actualizar color: ' + err.message);
+    } finally {
+      setUpdatingColorId(null);
+    }
+  };
+
+  const handlePhoneChange = async (escalationId: number, newPhone: string) => {
+    try {
+      await onCallApi.updateEscalationUser(escalationId, undefined, newPhone || undefined);
+      setEscalationUsers(prev => prev.map(u => 
+        u.id === escalationId ? { ...u, phoneNumber: newPhone || undefined } : u
+      ));
+      toast.success('Teléfono actualizado');
+      setEditingPhoneId(null);
+    } catch (err: any) {
+      toast.error('Error al actualizar teléfono: ' + err.message);
     }
   };
 
@@ -130,7 +171,6 @@ export default function OnCallEscalation() {
     setDraggedItem(user);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', index.toString());
-    // Add a slight delay to show the dragging state
     setTimeout(() => {
       (e.target as HTMLElement).style.opacity = '0.5';
     }, 0);
@@ -165,7 +205,6 @@ export default function OnCallEscalation() {
     const [removed] = newUsers.splice(dragIndex, 1);
     newUsers.splice(dropIndex, 0, removed);
     
-    // Update order numbers
     const updatedUsers = newUsers.map((user, idx) => ({
       ...user,
       order: idx + 1
@@ -196,14 +235,68 @@ export default function OnCallEscalation() {
 
   if (loading) {
     return (
-      <div className="container py-6 flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-10" />
+            <div>
+              <Skeleton className="h-8 w-64 mb-2" />
+              <Skeleton className="h-4 w-96" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+
+        {/* Alert Skeleton */}
+        <Skeleton className="h-16 w-full" />
+
+        {/* KPI Skeleton */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-4 w-4" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-12 mb-1" />
+            <Skeleton className="h-3 w-32" />
+          </CardContent>
+        </Card>
+
+        {/* Add Card Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-56" />
+            <Skeleton className="h-4 w-80" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4">
+              <Skeleton className="h-10 w-[300px]" />
+              <Skeleton className="h-10 w-24" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* List Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-56" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="container py-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -211,8 +304,8 @@ export default function OnCallEscalation() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <ShieldAlert className="h-6 w-6 text-amber-500" />
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <ShieldAlert className="h-8 w-8" />
               Guardia de Escalamiento
             </h1>
             <p className="text-muted-foreground">
@@ -228,7 +321,7 @@ export default function OnCallEscalation() {
               </Button>
               <Button onClick={handleSaveOrder} disabled={saving}>
                 {saving ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Save className="h-4 w-4 mr-2" />
                 )}
@@ -237,34 +330,49 @@ export default function OnCallEscalation() {
             </>
           )}
           <Button variant="outline" onClick={loadData} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
             Actualizar
           </Button>
         </div>
       </div>
 
       {/* Info Alert */}
-      <Alert className="border-amber-500/50 bg-amber-500/10">
-        <AlertTriangle className="h-4 w-4 text-amber-600" />
-        <AlertDescription className="text-amber-800 dark:text-amber-200">
+      <Alert className="border-warning/50 bg-warning/5">
+        <AlertTriangle className="h-4 w-4 text-warning" />
+        <AlertDescription className="text-foreground">
           Los usuarios de escalamiento pueden modificar cualquier guardia sin restricción de tiempo.
           {canManage ? ' Arrastrá y soltá para cambiar el orden de prioridad.' : ''}
         </AlertDescription>
       </Alert>
 
+      {/* KPI Card */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Usuarios de Escalamiento</CardTitle>
+          <ShieldAlert className="h-4 w-4 text-warning" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-warning">{escalationUsers.length}</div>
+          <p className="text-xs text-muted-foreground">con permisos especiales</p>
+        </CardContent>
+      </Card>
+
       {/* Add User - Solo si puede gestionar */}
       {canManage && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Agregar Usuario de Escalamiento</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-primary" />
+              Agregar Usuario de Escalamiento
+            </CardTitle>
             <CardDescription>
               Selecciona un usuario de la lista blanca para agregarlo como escalamiento
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="flex gap-4">
               <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger className="w-[300px]">
+                <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Seleccionar usuario..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -283,30 +391,77 @@ export default function OnCallEscalation() {
               </Select>
               <Button onClick={handleAdd} disabled={adding || !selectedUserId}>
                 {adding ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Plus className="h-4 w-4 mr-2" />
                 )}
                 Agregar
               </Button>
             </div>
+            
+            {/* Color y teléfono para nuevo usuario */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Color picker */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2 text-sm">
+                  <Palette className="h-4 w-4" />
+                  Color
+                </Label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowColorPicker(true)}
+                    className="w-10 h-10 rounded-lg cursor-pointer border-2 border-border hover:border-primary transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    style={{ backgroundColor: selectedColor }}
+                    title="Seleccionar color"
+                  />
+                  <span className="text-xs text-muted-foreground font-mono uppercase">{selectedColor}</span>
+                </div>
+              </div>
+
+              {/* Teléfono */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2 text-sm">
+                  <Phone className="h-4 w-4" />
+                  Teléfono
+                </Label>
+                <Input
+                  value={selectedPhone}
+                  onChange={(e) => setSelectedPhone(e.target.value)}
+                  placeholder="Ej: 11-2657-3198"
+                  className="font-mono"
+                />
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Dialog de color picker */}
+      <ColorPickerDialog
+        open={showColorPicker}
+        onOpenChange={setShowColorPicker}
+        color={selectedColor}
+        onColorChange={setSelectedColor}
+        title="Color del Usuario de Escalamiento"
+        description="Arrastrá el puntero sobre el cuadrado para seleccionar cualquier color de la gama RGB completa"
+      />
 
       {/* Escalation Users List */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Usuarios de Escalamiento</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-warning" />
+                Lista de Escalamiento
+              </CardTitle>
               <CardDescription>
                 {escalationUsers.length} usuario{escalationUsers.length !== 1 ? 's' : ''} con permisos de escalamiento
                 {canManage && ' • Arrastrá para reordenar'}
               </CardDescription>
             </div>
             {hasChanges && (
-              <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30">
+              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
                 Cambios sin guardar
               </Badge>
             )}
@@ -314,27 +469,29 @@ export default function OnCallEscalation() {
         </CardHeader>
         <CardContent>
           {escalationUsers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <ShieldAlert className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No hay usuarios de escalamiento configurados</p>
+            <div className="text-center py-12">
+              <ShieldAlert className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-lg font-semibold mb-2">Sin usuarios de escalamiento</p>
+              <p className="text-muted-foreground">No hay usuarios de escalamiento configurados</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {escalationUsers.map((user, index) => (
+              {escalationUsers.map((escUser, index) => (
                 <div
-                  key={user.userId}
+                  key={escUser.userId}
                   draggable={canManage}
-                  onDragStart={(e) => canManage && handleDragStart(e, user, index)}
+                  onDragStart={(e) => canManage && handleDragStart(e, escUser, index)}
                   onDragEnd={handleDragEnd}
                   onDragOver={(e) => canManage && handleDragOver(e, index)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => canManage && handleDrop(e, index)}
-                  className={`
-                    flex items-center gap-4 p-4 rounded-lg border transition-all
-                    ${canManage ? 'cursor-grab active:cursor-grabbing' : ''}
-                    ${dragOverIndex === index ? 'border-primary bg-primary/5 border-dashed' : 'bg-muted/30'}
-                    ${draggedItem?.userId === user.userId ? 'opacity-50' : ''}
-                  `}
+                  className={cn(
+                    'flex items-center gap-4 p-4 rounded-lg border transition-all',
+                    canManage && 'cursor-grab active:cursor-grabbing',
+                    dragOverIndex === index && 'border-primary bg-primary/5 border-dashed',
+                    draggedItem?.userId === escUser.userId && 'opacity-50',
+                    !dragOverIndex && !draggedItem && 'bg-muted/30 hover:bg-accent/50'
+                  )}
                 >
                   {canManage && (
                     <div className="text-muted-foreground hover:text-foreground">
@@ -342,32 +499,89 @@ export default function OnCallEscalation() {
                     </div>
                   )}
                   
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/20 text-amber-600 font-bold text-sm">
+                  <div 
+                    className="flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm text-white"
+                    style={{ backgroundColor: escUser.colorCode || '#f59e0b' }}
+                  >
                     {index + 1}
                   </div>
                   
-                  <div className="flex-1">
-                    <div className="font-medium">{user.displayName}</div>
-                    <div className="text-sm text-muted-foreground">{user.domainUser}</div>
-                    {user.email && (
-                      <div className="text-xs text-muted-foreground">{user.email}</div>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium">{escUser.displayName}</div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>{escUser.domainUser}</span>
+                      {escUser.phoneNumber && (
+                        <>
+                          <span>•</span>
+                          <span className="font-mono">{escUser.phoneNumber}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Edición de teléfono */}
+                  {canManage && (
+                    editingPhoneId === escUser.id ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          value={editingPhoneValue}
+                          onChange={(e) => setEditingPhoneValue(e.target.value)}
+                          placeholder="Teléfono"
+                          className="h-8 w-28 font-mono text-xs"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handlePhoneChange(escUser.id, editingPhoneValue);
+                            if (e.key === 'Escape') setEditingPhoneId(null);
+                          }}
+                          autoFocus
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handlePhoneChange(escUser.id, editingPhoneValue)}
+                        >
+                          <Save className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => {
+                          setEditingPhoneId(escUser.id);
+                          setEditingPhoneValue(escUser.phoneNumber || '');
+                        }}
+                        title="Editar teléfono"
+                      >
+                        <Phone className="h-4 w-4" />
+                      </Button>
+                    )
+                  )}
                   
-                  <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30">
-                    Escalamiento #{index + 1}
-                  </Badge>
+                  {/* Color picker */}
+                  {canManage && (
+                    <ColorPickerButton
+                      color={escUser.colorCode || '#f59e0b'}
+                      onChange={(newColor) => handleColorChange(escUser.id, newColor)}
+                      disabled={updatingColorId === escUser.id}
+                      className={updatingColorId === escUser.id ? 'animate-pulse' : ''}
+                      title={`Cambiar color de ${escUser.displayName}`}
+                      dialogTitle={`Color de ${escUser.displayName}`}
+                      dialogDescription="Arrastrá el puntero sobre el cuadrado para seleccionar cualquier color de la gama RGB completa"
+                    />
+                  )}
                   
                   {canManage && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setDeleteConfirm(user)}
-                      disabled={deletingId === user.userId}
+                      onClick={() => setDeleteConfirm(escUser)}
+                      disabled={deletingId === escUser.userId}
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
-                      {deletingId === user.userId ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                      {deletingId === escUser.userId ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
                       ) : (
                         <Trash2 className="h-4 w-4" />
                       )}

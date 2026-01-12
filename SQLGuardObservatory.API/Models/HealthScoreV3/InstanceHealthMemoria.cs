@@ -45,6 +45,40 @@ public class InstanceHealthMemoria
     /// </summary>
     public int StolenServerMemoryMB { get; set; }
     
+    // Métricas de Memory Clerks (v3.1)
+    /// <summary>
+    /// Tipo del memory clerk que más memoria consume
+    /// </summary>
+    [MaxLength(128)]
+    public string? TopMemoryClerk { get; set; }
+    
+    /// <summary>
+    /// MB consumidos por el top memory clerk
+    /// </summary>
+    public int TopMemoryClerkMB { get; set; }
+    
+    // Métricas de Plan Cache (v3.1)
+    /// <summary>
+    /// Tamaño total del plan cache en MB
+    /// </summary>
+    public int PlanCacheSizeMB { get; set; }
+    
+    /// <summary>
+    /// Número de planes en cache
+    /// </summary>
+    public int PlanCacheCount { get; set; }
+    
+    // Métricas de Memory Pressure (v3.1)
+    /// <summary>
+    /// Tiempo acumulado esperando memoria (RESOURCE_SEMAPHORE)
+    /// </summary>
+    public long ResourceSemaphoreWaitMs { get; set; }
+    
+    /// <summary>
+    /// Número de tareas esperando memoria
+    /// </summary>
+    public long ResourceSemaphoreWaitCount { get; set; }
+    
     /// <summary>
     /// Porcentaje de stolen memory respecto al buffer pool
     /// </summary>

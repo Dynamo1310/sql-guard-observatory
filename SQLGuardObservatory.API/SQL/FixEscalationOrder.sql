@@ -1,10 +1,10 @@
 -- =============================================
 -- Script: FixEscalationOrder.sql
 -- Descripción: Corrige la columna EscalationOrder
--- Base de datos: SQLGuardObservatoryAuth
+-- Base de datos: AppSQLNova
 -- =============================================
 
-USE SQLGuardObservatoryAuth;
+USE AppSQLNova;
 GO
 
 -- Verificar si la columna existe
@@ -37,6 +37,9 @@ FROM AspNetUsers
 WHERE IsOnCallEscalation = 1 OR EscalationOrder IS NOT NULL
 ORDER BY EscalationOrder;
 GO
+
+
+
 
 
 

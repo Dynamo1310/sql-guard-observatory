@@ -1,10 +1,10 @@
 -- ========================================
 -- Script: Agregar permisos de HealthScore
--- Base de datos: SQLGuardObservatoryAuth
+-- Base de datos: AppSQLNova
 -- Propósito: Agregar permisos para la vista HealthScore
 -- ========================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- Insertar permiso HealthScore para Admin si no existe

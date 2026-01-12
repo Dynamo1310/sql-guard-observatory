@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
 using System.Security.Claims;
@@ -10,6 +11,7 @@ namespace SQLGuardObservatory.API.Controllers;
 [ApiController]
 [Route("api/overview-alerts")]
 [Authorize]
+[ViewPermission("AlertaResumenOverview")]
 public class OverviewSummaryAlertsController : ControllerBase
 {
     private readonly IOverviewSummaryAlertService _alertService;
@@ -64,9 +66,11 @@ public class OverviewSummaryAlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza la configuración de alertas
+    /// Actualiza la configuración de alertas.
+    /// Requiere capacidad System.ConfigureAlerts.
     /// </summary>
     [HttpPut("config")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult<OverviewSummaryAlertConfigDto>> UpdateConfig([FromBody] UpdateOverviewSummaryAlertConfigRequest request)
     {
         try
@@ -85,9 +89,11 @@ public class OverviewSummaryAlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Agrega un nuevo horario de envío
+    /// Agrega un nuevo horario de envío.
+    /// Requiere capacidad System.ConfigureAlerts.
     /// </summary>
     [HttpPost("schedules")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult<OverviewSummaryAlertScheduleDto>> AddSchedule([FromBody] CreateOverviewSummaryAlertScheduleRequest request)
     {
         try
@@ -107,9 +113,11 @@ public class OverviewSummaryAlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza un horario existente
+    /// Actualiza un horario existente.
+    /// Requiere capacidad System.ConfigureAlerts.
     /// </summary>
     [HttpPut("schedules/{id}")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult<OverviewSummaryAlertScheduleDto>> UpdateSchedule(int id, [FromBody] UpdateOverviewSummaryAlertScheduleRequest request)
     {
         try
@@ -133,9 +141,11 @@ public class OverviewSummaryAlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Elimina un horario
+    /// Elimina un horario.
+    /// Requiere capacidad System.ConfigureAlerts.
     /// </summary>
     [HttpDelete("schedules/{id}")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult> DeleteSchedule(int id)
     {
         try
@@ -228,9 +238,11 @@ public class OverviewSummaryAlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Envía un email de prueba a todos los destinatarios configurados
+    /// Envía un email de prueba a todos los destinatarios configurados.
+    /// Requiere capacidad System.ConfigureAlerts.
     /// </summary>
     [HttpPost("test")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult<OverviewSummaryAlertResult>> SendTestEmail()
     {
         try
@@ -246,9 +258,11 @@ public class OverviewSummaryAlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Ejecuta el envío del resumen ahora (manual)
+    /// Ejecuta el envío del resumen ahora (manual).
+    /// Requiere capacidad System.ConfigureAlerts.
     /// </summary>
     [HttpPost("run")]
+    [RequireCapability("System.ConfigureAlerts")]
     public async Task<ActionResult<OverviewSummaryAlertResult>> RunNow()
     {
         try

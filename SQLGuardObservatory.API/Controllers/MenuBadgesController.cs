@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models;
 using System.Security.Claims;
@@ -9,6 +10,7 @@ namespace SQLGuardObservatory.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class MenuBadgesController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -17,21 +19,31 @@ public class MenuBadgesController : ControllerBase
     // Menús disponibles para configurar (organizados por categoría)
     private readonly Dictionary<string, (string DisplayName, string Category)> _availableMenus = new()
     {
-        // Observabilidad
+        // === OBSERVABILIDAD ===
         { "Overview", ("Overview", "Observabilidad") },
-        { "HealthScore", ("HealthScore", "Observabilidad") },
-        { "Jobs", ("Mantenimiento", "Observabilidad") },
-        { "Disks", ("Discos", "Observabilidad") },
-        { "Databases", ("Bases de Datos", "Observabilidad") },
-        { "Backups", ("Backups", "Observabilidad") },
-        { "Indexes", ("Índices", "Observabilidad") },
         
-        // Parcheos
-        { "PatchingMenu", ("📁 Parcheos (Menú)", "Parcheos") },
-        { "Patching", ("Parcheos - Dashboard", "Parcheos") },
-        { "PatchingConfig", ("Parcheos - Config", "Parcheos") },
+        // --- Observabilidad > Monitoreo ---
+        { "MonitoreoMenu", ("📁 Monitoreo (Menú)", "Observabilidad > Monitoreo") },
+        { "HealthScore", ("Monitoreo - HealthScore", "Observabilidad > Monitoreo") },
+        { "AdminCollectors", ("Monitoreo - Collectors", "Observabilidad > Monitoreo") },
         
-        // Guardias DBA
+        // --- Observabilidad > Infraestructura ---
+        { "InfraestructuraMenu", ("📁 Infraestructura (Menú)", "Observabilidad > Infraestructura") },
+        { "Disks", ("Infraestructura - Discos", "Observabilidad > Infraestructura") },
+        { "Databases", ("Infraestructura - Bases de Datos", "Observabilidad > Infraestructura") },
+        { "Backups", ("Infraestructura - Backups", "Observabilidad > Infraestructura") },
+        
+        // --- Observabilidad > Rendimiento ---
+        { "RendimientoMenu", ("📁 Rendimiento (Menú)", "Observabilidad > Rendimiento") },
+        { "Jobs", ("Rendimiento - Mantenimiento", "Observabilidad > Rendimiento") },
+        { "Indexes", ("Rendimiento - Índices", "Observabilidad > Rendimiento") },
+        
+        // --- Observabilidad > Parcheos ---
+        { "PatchingMenu", ("📁 Parcheos (Menú)", "Observabilidad > Parcheos") },
+        { "Patching", ("Parcheos - Dashboard", "Observabilidad > Parcheos") },
+        { "PatchingConfig", ("Parcheos - Config", "Observabilidad > Parcheos") },
+        
+        // === GUARDIAS DBA ===
         { "OnCall", ("📁 Guardias DBA (Menú)", "Guardias DBA") },
         { "OnCallDashboard", ("Guardias - Dashboard", "Guardias DBA") },
         { "OnCallPlanner", ("Guardias - Planificador", "Guardias DBA") },
@@ -42,28 +54,38 @@ public class MenuBadgesController : ControllerBase
         { "OnCallAlerts", ("Guardias - Alertas", "Guardias DBA") },
         { "OnCallReports", ("Guardias - Reportes", "Guardias DBA") },
         
-        // Operaciones
+        // === OPERACIONES ===
         { "OperationsMenu", ("📁 Operaciones (Menú)", "Operaciones") },
         { "ServerRestart", ("Operaciones - Reinicio", "Operaciones") },
         { "OperationsConfig", ("Operaciones - Config", "Operaciones") },
         
-        // Seguridad (Vault)
+        // === SEGURIDAD ===
         { "VaultMenu", ("📁 Vault DBA (Menú)", "Seguridad") },
         { "VaultDashboard", ("Vault - Dashboard", "Seguridad") },
         { "VaultCredentials", ("Vault - Grupos", "Seguridad") },
         { "VaultMyCredentials", ("Vault - Mis Credenciales", "Seguridad") },
         { "VaultNotifications", ("Vault - Notificaciones", "Seguridad") },
         { "VaultAudit", ("Vault - Auditoría", "Seguridad") },
+        { "SystemCredentials", ("Seguridad - Cred. Sistema", "Seguridad") },
         
-        // Administración
-        { "AdminUsers", ("Admin - Usuarios", "Administración") },
-        { "AdminGroups", ("Admin - Grupos", "Administración") },
-        { "AdminPermissions", ("Admin - Permisos", "Administración") },
-        { "ConfigSMTP", ("Admin - Config. SMTP", "Administración") },
-        { "SystemCredentials", ("Admin - Cred. Sistema", "Administración") },
-        { "AlertsMenu", ("📁 Alertas (Menú)", "Administración") },
-        { "AlertaServidoresCaidos", ("Alertas - Servidores Caídos", "Administración") },
-        { "AlertaResumenOverview", ("Alertas - Resumen Overview", "Administración") },
+        // === ADMINISTRACIÓN ===
+        // --- Administración > Control de Acceso ---
+        { "ControlAccesoMenu", ("📁 Control de Acceso (Menú)", "Administración > Control de Acceso") },
+        { "AdminUsers", ("Control de Acceso - Usuarios", "Administración > Control de Acceso") },
+        { "AdminGroups", ("Control de Acceso - Grupos", "Administración > Control de Acceso") },
+        { "AdminRoles", ("Control de Acceso - Roles", "Administración > Control de Acceso") },
+        
+        // --- Administración > Configuración ---
+        { "ConfiguracionMenu", ("📁 Configuración (Menú)", "Administración > Configuración") },
+        { "ConfigSMTP", ("Configuración - SMTP", "Administración > Configuración") },
+        { "AdminMenuBadges", ("Configuración - Etiquetas de Menú", "Administración > Configuración") },
+        
+        // --- Administración > Monitoreo Sistema ---
+        { "MonitoreoSistemaMenu", ("📁 Monitoreo Sistema (Menú)", "Administración > Monitoreo Sistema") },
+        { "AdminLogs", ("Monitoreo Sistema - Logs API", "Administración > Monitoreo Sistema") },
+        { "AlertsMenu", ("📁 Alertas (Menú)", "Administración > Monitoreo Sistema") },
+        { "AlertaServidoresCaidos", ("Alertas - Servidores Caídos", "Administración > Monitoreo Sistema") },
+        { "AlertaResumenOverview", ("Alertas - Resumen Overview", "Administración > Monitoreo Sistema") },
     };
 
     public MenuBadgesController(ApplicationDbContext context, ILogger<MenuBadgesController> logger)
@@ -76,7 +98,6 @@ public class MenuBadgesController : ControllerBase
     /// Obtiene todos los badges de menú (público - para mostrar en sidebar)
     /// </summary>
     [HttpGet]
-    [Authorize]
     public async Task<IActionResult> GetAllBadges()
     {
         try
@@ -113,10 +134,10 @@ public class MenuBadgesController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza un badge de menú (solo SuperAdmin)
+    /// Actualiza un badge de menú (requiere capacidad System.ManageMenuBadges)
     /// </summary>
     [HttpPut("{menuKey}")]
-    [Authorize(Roles = "SuperAdmin")]
+    [RequireCapability("System.ManageMenuBadges")]
     public async Task<IActionResult> UpdateBadge(string menuKey, [FromBody] UpdateMenuBadgeRequest request)
     {
         try
@@ -152,10 +173,10 @@ public class MenuBadgesController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza múltiples badges a la vez (solo SuperAdmin)
+    /// Actualiza múltiples badges a la vez (requiere capacidad System.ManageMenuBadges)
     /// </summary>
     [HttpPut]
-    [Authorize(Roles = "SuperAdmin")]
+    [RequireCapability("System.ManageMenuBadges")]
     public async Task<IActionResult> UpdateAllBadges([FromBody] List<UpdateMenuBadgeRequest> requests)
     {
         try

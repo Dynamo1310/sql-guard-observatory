@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Services;
@@ -13,6 +14,7 @@ namespace SQLGuardObservatory.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
+[ViewPermission("VaultMenu")]
 public class VaultController : ControllerBase
 {
     private readonly IVaultService _vaultService;
@@ -607,9 +609,10 @@ public class VaultController : ControllerBase
     {
         var userId = GetUserId();
         var permission = request?.Permission ?? "View";
+        var allowReshare = request?.AllowReshare ?? false;
         
         var result = await _vaultService.AddCredentialToGroupAsync(
-            groupId, credentialId, permission, userId, GetUserName(), GetIpAddress(), GetUserAgent());
+            groupId, credentialId, permission, allowReshare, userId, GetUserName(), GetIpAddress(), GetUserAgent());
 
         if (!result)
             return BadRequest("Error al agregar la credencial al grupo");

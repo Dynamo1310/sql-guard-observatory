@@ -127,9 +127,9 @@ export function UseCredentialButton({
             </DialogDescription>
           </DialogHeader>
 
-          <Alert className="border-blue-200 bg-blue-50">
-            <Server className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-blue-800">
+          <Alert className="border-info/50 bg-info/10">
+            <Server className="h-4 w-4 text-info" />
+            <AlertDescription className="text-info-foreground">
               La contraseña será usada internamente sin revelarse.
               Esta acción quedará registrada en el historial de auditoría.
             </AlertDescription>
@@ -137,12 +137,12 @@ export function UseCredentialButton({
 
           {result ? (
             <div className={`p-4 rounded-lg flex items-center gap-3 ${
-              result.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+              result.success ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
             }`}>
               {result.success ? (
-                <Check className="h-5 w-5 text-green-600" />
+                <Check className="h-5 w-5 text-success" />
               ) : (
-                <AlertCircle className="h-5 w-5 text-red-600" />
+                <AlertCircle className="h-5 w-5 text-destructive" />
               )}
               <span>{result.message}</span>
             </div>

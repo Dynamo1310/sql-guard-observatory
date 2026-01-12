@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
   Lock, Search, Plus, Grid, List, RefreshCw,
-  Database, Monitor, Key, AlertTriangle, X, Eye
+  Database, Monitor, Key, AlertTriangle, X, Eye, Share2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { CredentialCard, CredentialDialog, AuditLogTable } from '@/components/vault';
+import { CredentialCard, CredentialDialog, AuditLogTable, ShareCredentialDialog } from '@/components/vault';
 import { 
   vaultApi, 
   CredentialDto, 
@@ -64,6 +64,10 @@ export default function VaultMyCredentials() {
   const [auditSheetOpen, setAuditSheetOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState<CredentialAuditLogDto[]>([]);
   const [auditCredentialName, setAuditCredentialName] = useState('');
+  
+  // Share dialog
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [sharingCredential, setSharingCredential] = useState<CredentialDto | null>(null);
 
   const loadCredentials = async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -155,6 +159,11 @@ export default function VaultMyCredentials() {
     }
   };
 
+  const handleShare = (credential: CredentialDto) => {
+    setSharingCredential(credential);
+    setShareDialogOpen(true);
+  };
+
   const clearFilters = () => {
     setSearchTerm('');
     setTypeFilter('all');
@@ -185,7 +194,7 @@ export default function VaultMyCredentials() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Lock className="h-8 w-8 text-amber-500" />
+            <Lock className="h-8 w-8 text-foreground" />
             Mis Credenciales
           </h1>
           <p className="text-muted-foreground">
@@ -199,11 +208,11 @@ export default function VaultMyCredentials() {
       </div>
 
       {/* Info Card */}
-      <Card className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-200">
+      <Card className="bg-muted/50 border-border">
         <CardContent className="py-4">
           <div className="flex items-center gap-3">
-            <Eye className="h-5 w-5 text-amber-600" />
-            <p className="text-sm text-amber-800 dark:text-amber-200">
+            <Eye className="h-5 w-5 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
               Las credenciales privadas solo son visibles para ti. Nadie más en el equipo puede verlas.
             </p>
           </div>
@@ -321,6 +330,8 @@ export default function VaultMyCredentials() {
               onEdit={handleEdit}
               onDelete={handleDelete}
               onViewAudit={handleViewAudit}
+              onShare={handleShare}
+              variant={viewMode === 'list' ? 'compact' : 'default'}
             />
           ))}
         </div>
@@ -371,6 +382,14 @@ export default function VaultMyCredentials() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Dialog de compartir */}
+      <ShareCredentialDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        credential={sharingCredential}
+        onShared={() => loadCredentials(false)}
+      />
     </div>
   );
 }

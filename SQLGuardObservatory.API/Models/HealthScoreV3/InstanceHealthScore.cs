@@ -38,11 +38,12 @@ public class InstanceHealthScore
     public int LogChainScore { get; set; }          // 5%
     public int DatabaseStatesScore { get; set; }    // 3%
     
-    // TAB 2: Performance (35%)
+    // TAB 2: Performance (43%)
     public int CPUScore { get; set; }               // 10%
     public int MemoriaScore { get; set; }           // 8%
     public int IOScore { get; set; }                // 10%
     public int DiscosScore { get; set; }            // 7%
+    public int WaitsScore { get; set; }             // 8% (nuevo - reemplaza LogChain)
     
     // TAB 3: Maintenance & Config (25%)
     public int ErroresCriticosScore { get; set; }   // 7%
@@ -72,6 +73,7 @@ public class InstanceHealthScore
     public int MemoriaContribution { get; set; }           // Max: 8
     public int IOContribution { get; set; }                // Max: 10
     public int DiscosContribution { get; set; }            // Max: 7
+    public int WaitsContribution { get; set; }             // Max: 8 (nuevo)
     
     // TAB 3: Maintenance & Config
     public int ErroresCriticosContribution { get; set; }   // Max: 7

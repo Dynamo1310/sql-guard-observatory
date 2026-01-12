@@ -29,6 +29,8 @@ export interface CredentialGroupShareDto {
   sharedByUserId: string;
   sharedByUserName?: string;
   sharedAt: string;
+  /** Si true, los miembros del grupo pueden re-compartir esta credencial */
+  allowReshare: boolean;
 }
 
 export interface CredentialUserShareDto {
@@ -41,6 +43,8 @@ export interface CredentialUserShareDto {
   sharedByUserId: string;
   sharedByUserName?: string;
   sharedAt: string;
+  /** Si true, el usuario puede re-compartir esta credencial */
+  allowReshare: boolean;
 }
 
 export interface CredentialDto {
@@ -75,6 +79,8 @@ export interface CredentialDto {
   canShare: boolean;
   canDelete: boolean;
   canViewAudit: boolean;
+  /** Si true, el usuario puede re-compartir esta credencial con otros */
+  canReshare: boolean;
 }
 
 export interface SharedWithMeCredentialDto extends CredentialDto {
@@ -322,11 +328,17 @@ export interface VaultUserDto {
 }
 
 // Roles de grupo disponibles
+// Simplificado: Owner (implícito al crear), Admin y Member
 export const GROUP_ROLES = {
   OWNER: 'Owner',
   ADMIN: 'Admin',
-  MEMBER: 'Member',
-  VIEWER: 'Viewer'
+  MEMBER: 'Member'
+} as const;
+
+// Roles que pueden ser asignados manualmente (Owner es implícito)
+export const ASSIGNABLE_GROUP_ROLES = {
+  ADMIN: 'Admin',
+  MEMBER: 'Member'
 } as const;
 
 export type GroupRole = typeof GROUP_ROLES[keyof typeof GROUP_ROLES];
@@ -344,6 +356,8 @@ export interface ShareCredentialRequest {
   groupIds?: number[];
   userIds?: string[];
   permission: SharePermission;
+  /** Si true, los destinatarios pueden re-compartir esta credencial */
+  allowReshare?: boolean;
 }
 
 // =============================================

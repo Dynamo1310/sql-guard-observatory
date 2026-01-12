@@ -30,7 +30,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { CredentialCard, AuditLogTable } from '@/components/vault';
+import { CredentialCard, AuditLogTable, ShareCredentialDialog } from '@/components/vault';
 import { PasswordReveal } from '@/components/vault/PasswordReveal';
 import { 
   vaultApi, 
@@ -56,6 +56,10 @@ export default function VaultSharedWithMe() {
   const [auditSheetOpen, setAuditSheetOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState<CredentialAuditLogDto[]>([]);
   const [auditCredentialName, setAuditCredentialName] = useState('');
+
+  // Share dialog
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [sharingCredential, setSharingCredential] = useState<SharedWithMeCredentialDto | null>(null);
 
   const loadCredentials = async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -115,6 +119,11 @@ export default function VaultSharedWithMe() {
     }
   };
 
+  const handleShare = (credential: SharedWithMeCredentialDto) => {
+    setSharingCredential(credential);
+    setShareDialogOpen(true);
+  };
+
   // Stats
   const stats = useMemo(() => ({
     total: credentials.length,
@@ -131,10 +140,43 @@ export default function VaultSharedWithMe() {
   if (isLoading) {
     return (
       <div className="container mx-auto p-6 space-y-6">
-        <Skeleton className="h-8 w-64" />
+        {/* Header skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+        </div>
+        
+        {/* Stats skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map(i => (
+            <Card key={i}>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-lg" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-6 w-12" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        
+        {/* Filters skeleton */}
+        <div className="flex gap-4">
+          <Skeleton className="h-10 flex-1" />
+          <Skeleton className="h-10 w-40" />
+          <Skeleton className="h-10 w-20" />
+          <Skeleton className="h-10 w-10" />
+        </div>
+        
+        {/* Cards skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <Skeleton key={i} className="h-48" />
+            <Skeleton key={i} className="h-64" />
           ))}
         </div>
       </div>
@@ -146,36 +188,48 @@ export default function VaultSharedWithMe() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <UserPlus className="h-6 w-6" />
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Share2 className="h-8 w-8" />
             Compartidas Conmigo
           </h1>
           <p className="text-muted-foreground">
             Credenciales que otros usuarios han compartido directamente contigo
           </p>
         </div>
+        <Button
+          variant="outline"
+          onClick={() => loadCredentials(false)}
+          disabled={isRefreshing}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Actualizar
+        </Button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+        <Card className="transition-all duration-200 hover:shadow-md">
           <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Share2 className="h-5 w-5 text-primary" />
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-muted">
+                <Share2 className="h-5 w-5 text-muted-foreground" />
+              </div>
               <div>
-                <p className="text-2xl font-bold">{stats.total}</p>
+                <p className="text-2xl font-bold font-mono">{stats.total}</p>
                 <p className="text-sm text-muted-foreground">Compartidas conmigo</p>
               </div>
             </div>
           </CardContent>
         </Card>
         {stats.recentlyShared > 0 && (
-          <Card className="border-blue-500/50">
+          <Card className="transition-all duration-200 hover:shadow-md">
             <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-blue-500" />
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-muted">
+                  <Calendar className="h-5 w-5 text-muted-foreground" />
+                </div>
                 <div>
-                  <p className="text-2xl font-bold text-blue-500">{stats.recentlyShared}</p>
+                  <p className="text-2xl font-bold font-mono">{stats.recentlyShared}</p>
                   <p className="text-sm text-muted-foreground">Nuevas esta semana</p>
                 </div>
               </div>
@@ -183,12 +237,14 @@ export default function VaultSharedWithMe() {
           </Card>
         )}
         {stats.expired > 0 && (
-          <Card className="border-destructive/50">
+          <Card className="transition-all duration-200 hover:shadow-md border-destructive/30">
             <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-destructive" />
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-destructive/10">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                </div>
                 <div>
-                  <p className="text-2xl font-bold text-destructive">{stats.expired}</p>
+                  <p className="text-2xl font-bold font-mono text-destructive">{stats.expired}</p>
                   <p className="text-sm text-muted-foreground">Expiradas</p>
                 </div>
               </div>
@@ -235,14 +291,6 @@ export default function VaultSharedWithMe() {
             <List className="h-4 w-4" />
           </Button>
         </div>
-        <Button 
-          variant="outline" 
-          size="icon"
-          onClick={() => loadCredentials(false)}
-          disabled={isRefreshing}
-        >
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-        </Button>
       </div>
 
       {/* Lista de credenciales */}
@@ -275,6 +323,7 @@ export default function VaultSharedWithMe() {
               key={credential.id}
               credential={credential}
               onViewAudit={handleViewAudit}
+              onShare={credential.canReshare ? handleShare : undefined}
               variant={viewMode === 'list' ? 'compact' : 'default'}
             />
           ))}
@@ -295,6 +344,14 @@ export default function VaultSharedWithMe() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Dialog de compartir */}
+      <ShareCredentialDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        credential={sharingCredential}
+        onShared={() => loadCredentials(false)}
+      />
     </div>
   );
 }
@@ -303,10 +360,11 @@ export default function VaultSharedWithMe() {
 interface SharedCredentialCardProps {
   credential: SharedWithMeCredentialDto;
   onViewAudit?: (credential: SharedWithMeCredentialDto) => void;
+  onShare?: (credential: SharedWithMeCredentialDto) => void;
   variant?: 'default' | 'compact';
 }
 
-function SharedCredentialCard({ credential, onViewAudit, variant = 'default' }: SharedCredentialCardProps) {
+function SharedCredentialCard({ credential, onViewAudit, onShare, variant = 'default' }: SharedCredentialCardProps) {
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return null;
     try {
@@ -326,20 +384,20 @@ function SharedCredentialCard({ credential, onViewAudit, variant = 'default' }: 
   };
 
   const permissionConfig = {
-    View: { label: 'Ver', color: 'bg-gray-100 text-gray-700' },
-    Edit: { label: 'Editar', color: 'bg-blue-100 text-blue-700' },
-    Admin: { label: 'Admin', color: 'bg-amber-100 text-amber-700' }
+    View: { label: 'Ver', color: 'bg-muted text-muted-foreground' },
+    Edit: { label: 'Editar', color: 'bg-muted text-foreground' },
+    Admin: { label: 'Admin', color: 'bg-foreground/10 text-foreground' }
   };
 
   const perm = permissionConfig[credential.myPermission as keyof typeof permissionConfig] || permissionConfig.View;
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="hover:shadow-md transition-all duration-200">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold truncate">{credential.name}</h3>
-            <p className="text-sm text-muted-foreground truncate">
+            <p className="text-sm text-muted-foreground truncate font-mono text-xs">
               {credential.domain ? `${credential.domain}\\${credential.username}` : credential.username}
             </p>
           </div>
@@ -356,9 +414,9 @@ function SharedCredentialCard({ credential, onViewAudit, variant = 'default' }: 
         )}
 
         {/* Información de quién compartió */}
-        <div className="flex items-center gap-2 text-sm p-2 bg-muted/50 rounded-lg">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-medium text-primary">
+        <div className="flex items-center gap-2 text-sm p-2 bg-muted/30 rounded-lg border border-border/50">
+          <div className="w-8 h-8 rounded-full bg-foreground/5 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-medium text-foreground">
               {(credential.sharedByUserName || 'U').charAt(0).toUpperCase()}
             </span>
           </div>
@@ -389,6 +447,23 @@ function SharedCredentialCard({ credential, onViewAudit, variant = 'default' }: 
         {/* Acciones */}
         <div className="flex items-center gap-2 pt-2">
           <PasswordReveal credentialId={credential.id} />
+          {onShare && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onShare(credential)}
+                >
+                  <Share2 className="h-4 w-4 mr-1" />
+                  Compartir
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Re-compartir esta credencial
+              </TooltipContent>
+            </Tooltip>
+          )}
           {onViewAudit && (
             <Button
               variant="outline"
@@ -404,7 +479,7 @@ function SharedCredentialCard({ credential, onViewAudit, variant = 'default' }: 
         {credential.expiresAt && (
           <div className={`text-xs flex items-center gap-1 ${
             credential.isExpired ? 'text-destructive' : 
-            credential.isExpiringSoon ? 'text-amber-600' : 'text-muted-foreground'
+            credential.isExpiringSoon ? 'text-warning' : 'text-muted-foreground'
           }`}>
             <AlertTriangle className="h-3 w-3" />
             {credential.isExpired 

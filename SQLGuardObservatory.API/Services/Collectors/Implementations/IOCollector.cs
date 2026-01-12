@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
@@ -14,8 +15,6 @@ namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 /// </summary>
 public class IOCollector : CollectorBase<IOCollector.IOMetrics>
 {
-    private readonly ApplicationDbContext _context;
-
     public override string CollectorName => "IO";
     public override string DisplayName => "IO";
 
@@ -24,10 +23,9 @@ public class IOCollector : CollectorBase<IOCollector.IOMetrics>
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        ApplicationDbContext context) 
-        : base(logger, configService, connectionFactory, instanceProvider)
+        IServiceScopeFactory scopeFactory) 
+        : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
-        _context = context;
     }
 
     protected override async Task<IOMetrics> CollectFromInstanceAsync(
@@ -218,8 +216,11 @@ public class IOCollector : CollectorBase<IOCollector.IOMetrics>
             IODetails = ioByVolumeJson
         };
 
-        _context.InstanceHealthIO.Add(entity);
-        await _context.SaveChangesAsync(ct);
+        await SaveWithScopedContextAsync(async context =>
+        {
+            context.InstanceHealthIO.Add(entity);
+            await context.SaveChangesAsync(ct);
+        }, ct);
     }
 
     protected override string GetDefaultQuery(int sqlMajorVersion)

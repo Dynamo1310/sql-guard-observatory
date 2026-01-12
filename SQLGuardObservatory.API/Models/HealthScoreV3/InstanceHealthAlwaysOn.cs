@@ -39,5 +39,12 @@ public class InstanceHealthAlwaysOn
     public int MaxRedoQueueKB { get; set; }
     public int MaxSecondsBehind { get; set; }
     public string? AlwaysOnDetails { get; set; }
+    
+    // v3.1: Métricas de velocidad de replicación
+    public long MaxLogSendRateKBps { get; set; }      // KB/sec de envío de log
+    public long AvgLogSendRateKBps { get; set; }      // Promedio KB/sec
+    public long MaxRedoRateKBps { get; set; }         // KB/sec de redo
+    public long AvgRedoRateKBps { get; set; }         // Promedio KB/sec
+    public int MaxSecondsSinceLastHardened { get; set; } // Tiempo desde último log hardened
 }
 

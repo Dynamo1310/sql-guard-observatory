@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.Services;
 
 namespace SQLGuardObservatory.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "WhitelistOnly")]
+[Authorize]
+[ViewPermission("Disks")]
 public class DisksController : ControllerBase
 {
     private readonly IDisksService _disksService;

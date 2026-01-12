@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using System.Data;
 using System.Data.SqlClient;
 using System.Text.Json;
@@ -8,6 +10,8 @@ namespace SQLGuardObservatory.API.Controllers
     /// <summary>
     /// Controlador para métricas de Health Score en tiempo real
     /// </summary>
+    [Authorize]
+    [ViewPermission("HealthScore")]
     [ApiController]
     [Route("api/[controller]")]
     public class HealthScoreRealtimeController : ControllerBase
@@ -31,7 +35,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("DefaultConnection");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -127,7 +132,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("DefaultConnection");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -238,7 +244,8 @@ namespace SQLGuardObservatory.API.Controllers
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("DefaultConnection");
+                // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -300,7 +307,8 @@ namespace SQLGuardObservatory.API.Controllers
         // Método auxiliar para obtener datos (usado por SSE)
         private async Task<object> GetHealthScoresData()
         {
-            var connectionString = _configuration.GetConnectionString("DefaultConnection");
+            // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
+                var connectionString = _configuration.GetConnectionString("ApplicationDb");
             using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync();
 

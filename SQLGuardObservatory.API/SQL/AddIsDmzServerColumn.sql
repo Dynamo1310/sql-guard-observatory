@@ -1,7 +1,7 @@
 -- Script para agregar columna IsDmzServer a ServerPatchStatusCache
 -- SQL Guard Observatory - Patching Module
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- Agregar columna IsDmzServer
@@ -28,4 +28,7 @@ BEGIN
     PRINT 'Índice IX_ServerPatchStatusCache_IsDmzServer creado'
 END
 GO
+
+
+
 

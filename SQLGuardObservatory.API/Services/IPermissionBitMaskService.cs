@@ -64,3 +64,6 @@ public interface IPermissionBitMaskService
     Task<bool> CanViewAuditAsync(string userId, int credentialId);
 }
 
+
+
+

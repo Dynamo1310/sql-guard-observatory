@@ -95,10 +95,19 @@ public static class PermissionInitializer
             "OperationsConfig",
             "HealthScore",
             "Patching",
+            "ObsoleteInstances",
             "PatchingConfig",
             // Vault - permisos de administración
             "VaultAdmin",
-            "VaultAudit"
+            "VaultAudit",
+            // Inventario
+            "InventarioMenu",
+            "InventarioSqlServerInstances",
+            "InventarioSqlServerDatabases",
+            "InventarioPostgreSqlInstances",
+            "InventarioPostgreSqlDatabases",
+            "InventarioRedisInstances",
+            "InventarioDocumentDbInstances"
         };
 
         foreach (var view in superAdminOnlyViews)

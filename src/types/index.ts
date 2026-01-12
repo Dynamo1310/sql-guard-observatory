@@ -8,13 +8,21 @@ export interface User {
   allowed: boolean;
   roles: UserRole[];
   isOnCallEscalation?: boolean;
+  /** URL de la foto de perfil (data:image/... o null) */
+  profilePhotoUrl?: string | null;
+  /** Indica si el usuario tiene foto de perfil */
+  hasProfilePhoto?: boolean;
 }
+
+
 
 export interface AuthResponse {
   domainUser: string;
   displayName: string;
   allowed: boolean;
   roles: UserRole[];
+  profilePhotoUrl?: string | null;
+  hasProfilePhoto?: boolean;
 }
 
 export type Environment = "All" | "Prod" | "UAT" | "Dev";
@@ -356,6 +364,7 @@ export interface GroupMember {
   role?: string;
   addedAt: string;
   addedByUserName?: string;
+  profilePhotoUrl?: string | null;
 }
 
 export interface CreateGroupRequest {
@@ -427,6 +436,7 @@ export interface AvailableUser {
   email?: string;
   role?: string;
   isAlreadyMember: boolean;
+  profilePhotoUrl?: string | null;
 }
 
 export interface UserWithGroups {
@@ -438,4 +448,137 @@ export interface UserWithGroups {
   active: boolean;
   createdAt: string;
   groups: UserGroupMembership[];
+  /** URL de la foto de perfil */
+  profilePhotoUrl?: string | null;
+  /** Indica si el usuario tiene foto de perfil */
+  hasProfilePhoto?: boolean;
+  /** Origen de la foto: AD, Manual, None */
+  profilePhotoSource?: string;
+}
+
+// ==================== SQL SERVER INVENTORY TYPES ====================
+
+/**
+ * Instancia de SQL Server del inventario
+ * Fuente: GET /InventoryDBA/inventario/
+ */
+export interface SqlServerInstance {
+  id: number;
+  ServerName: string;
+  local_net_address: string;
+  NombreInstancia: string;
+  MajorVersion: string;
+  ProductLevel: string;
+  Edition: string;
+  ProductUpdateLevel: string;
+  ProductVersion: string;
+  ProductUpdateReference: string;
+  Collation: string;
+  AlwaysOn: 'Enabled' | 'Disabled';
+  hostingSite: string;
+  hostingType: string;
+  ambiente: string;
+}
+
+/**
+ * Base de datos de SQL Server del inventario
+ * Fuente: GET /InventoryDBA/inventarioDB/
+ */
+export interface SqlServerDatabase {
+  id: number;
+  ServerName: SqlServerInstance;
+  database_id: number;
+  dbName: string;
+  status: string;
+  stateDesc: string;
+  dataFiles: number;
+  data_MB: number;
+  userAccess: string;
+  recoveryModel: string;
+  compatibilityLevel: string;
+  creationDate: string;
+  collation: string;
+  fulltext: boolean;
+  autoClose: boolean;
+  readOnly: boolean;
+  autoShrink: boolean;
+  autoCreateStatistics: boolean;
+  autoUpdateStatistics: boolean;
+  timestamp: string;
+}
+
+// ==================== POSTGRESQL INVENTORY TYPES ====================
+
+/**
+ * Instancia de PostgreSQL del inventario
+ * Fuente: GET /InventoryDBA/inventarioPG/
+ */
+export interface PostgreSqlInstance {
+  id: number;
+  ServerName: string;
+  local_net_address: string;
+  NombreInstancia: string;
+  MajorVersion: string;
+  ProductLevel: string;
+  Edition: string;
+  ProductVersion: string;
+  AlwaysOn: string;
+  hostingSite: string;
+  hostingType: string;
+  ambiente: string;
+}
+
+/**
+ * Base de datos de PostgreSQL del inventario
+ * Fuente: GET /InventoryDBA/inventarioDBPG/
+ */
+export interface PostgreSqlDatabase {
+  id: number;
+  ServerName: PostgreSqlInstance;
+  database_id: number;
+  dbName: string;
+  status: string;
+  data_MB: number;
+  allowConnections: boolean;
+  databaseType: string;
+  encoding: string;
+  collation: string;
+  timestamp: string;
+}
+
+// ==================== REDIS INVENTORY TYPES ====================
+
+/**
+ * Instancia de Redis del inventario
+ * Fuente: GET /InventoryDBA/inventarioREDIS/
+ */
+export interface RedisInstance {
+  id: number;
+  ServerName: string;
+  Description: string;
+  ClusterModeEnabled: boolean;
+  NombreInstancia: string;
+  ProductVersion: string;
+  Engine: string;
+  hostingSite: string;
+  hostingType: string;
+  ambiente: string;
+}
+
+// ==================== DOCUMENTDB INVENTORY TYPES ====================
+
+/**
+ * Instancia de DocumentDB del inventario
+ * Fuente: GET /InventoryDBA/inventarioDOCDB/
+ */
+export interface DocumentDbInstance {
+  id: number;
+  ServerName: string;
+  ClusterModeEnabled: boolean;
+  NombreInstancia: string;
+  ProductVersion: string;
+  Engine: string;
+  hostingSite: string;
+  hostingType: string;
+  ambiente: string;
 }

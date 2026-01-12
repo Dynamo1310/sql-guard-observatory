@@ -1,11 +1,11 @@
 -- =============================================
 -- Script: AddIsTeamSharedColumn.sql
 -- Description: Agrega la columna IsTeamShared a Credentials
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- Date: December 2025
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- Verificar si la columna existe
@@ -111,4 +111,7 @@ PRINT '============================================='
 PRINT 'Script AddIsTeamSharedColumn.sql completado.'
 PRINT '============================================='
 GO
+
+
+
 

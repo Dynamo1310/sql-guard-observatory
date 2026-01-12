@@ -1,11 +1,12 @@
+/**
+ * Página de Análisis de Índices
+ */
 import { useState, useEffect, useMemo } from 'react';
 import { 
   ListTree, Database, Search, AlertTriangle, CheckCircle2, 
-  Copy, Download, RefreshCw, Server, Filter,
+  Copy, Download, RefreshCw, Server,
   TrendingUp, Trash2, AlertCircle, Ban, Layers
 } from 'lucide-react';
-import { KPICard } from '@/components/dashboard/KPICard';
-import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import { 
   Select, 
   SelectContent, 
@@ -126,11 +128,9 @@ export default function Indexes() {
       return;
     }
     try {
-      // Intentar con la API moderna primero
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
       } else {
-        // Fallback para contextos no seguros (HTTP)
         const textArea = document.createElement('textarea');
         textArea.value = text;
         textArea.style.position = 'fixed';
@@ -167,28 +167,77 @@ export default function Indexes() {
     a.click();
   };
 
+  // Get color for KPI
+  const getKpiColor = (value: number, thresholdWarning: number, thresholdCritical: number) => {
+    if (value >= thresholdCritical) return 'text-red-500';
+    if (value >= thresholdWarning) return 'text-warning';
+    return 'text-emerald-500';
+  };
 
+  // Loading State
+  if (isLoadingInstances) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+        </div>
+        
+        {/* Selector skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-4">
+              <Skeleton className="h-10 flex-1" />
+              <Skeleton className="h-10 w-40" />
+            </div>
+            <div className="flex gap-4">
+              <Skeleton className="h-10 flex-1" />
+              <Skeleton className="h-10 flex-1" />
+              <Skeleton className="h-10 w-32" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* Content skeleton */}
+        <Card>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center">
+              <Skeleton className="h-16 w-16 rounded-full" />
+              <Skeleton className="h-6 w-48 mt-4" />
+              <Skeleton className="h-4 w-64 mt-2" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 space-y-4">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-            <ListTree className="h-8 w-8 text-primary" />
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <ListTree className="h-8 w-8" />
             Análisis de Índices
           </h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">
+          <p className="text-muted-foreground">
             Análisis exhaustivo de índices: fragmentación, duplicados, sin uso, missing indexes y más
           </p>
         </div>
       </div>
 
       {/* Selectores */}
-      <Card className="gradient-card shadow-card">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Server className="h-5 w-5" />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5 text-primary" />
             Seleccionar Instancia y Base de Datos
           </CardTitle>
           <CardDescription>
@@ -197,42 +246,35 @@ export default function Indexes() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Filtros de búsqueda */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1">
-              <label className="text-sm font-medium mb-2 block">Buscar instancia</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Escribir nombre de instancia..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
+          <div className="flex flex-wrap gap-4">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar instancia..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
             </div>
-            <div className="w-full sm:w-48">
-              <label className="text-sm font-medium mb-2 block">Ambiente</label>
-              <Select value={selectedAmbiente} onValueChange={setSelectedAmbiente}>
-                <SelectTrigger>
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Filtrar por ambiente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos los ambientes</SelectItem>
-                  {ambientes.map((amb) => (
-                    <SelectItem key={amb} value={amb.toLowerCase()}>
-                      {amb}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            
+            <Select value={selectedAmbiente} onValueChange={setSelectedAmbiente}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Ambiente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                {ambientes.map((amb) => (
+                  <SelectItem key={amb} value={amb.toLowerCase()}>
+                    {amb}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Selectores de Instancia y Base de Datos */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Selector de Instancia */}
-            <div className="flex-1">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
               <label className="text-sm font-medium mb-2 block">
                 Instancia SQL Server 
                 <span className="text-muted-foreground ml-1">
@@ -242,15 +284,13 @@ export default function Indexes() {
               <Select
                 value={selectedInstance}
                 onValueChange={setSelectedInstance}
-                disabled={isLoadingInstances || filteredInstances.length === 0}
+                disabled={filteredInstances.length === 0}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={
-                    isLoadingInstances 
-                      ? "Cargando instancias..." 
-                      : filteredInstances.length === 0 
-                        ? "No hay instancias con ese filtro"
-                        : "Seleccionar instancia"
+                    filteredInstances.length === 0 
+                      ? "No hay instancias con ese filtro"
+                      : "Seleccionar instancia"
                   } />
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px]">
@@ -269,8 +309,7 @@ export default function Indexes() {
               </Select>
             </div>
 
-            {/* Selector de Base de Datos */}
-            <div className="flex-1">
+            <div className="flex-1 min-w-[200px]">
               <label className="text-sm font-medium mb-2 block">Base de Datos</label>
               <Select
                 value={selectedDatabase}
@@ -302,12 +341,10 @@ export default function Indexes() {
               </Select>
             </div>
 
-            {/* Botón de Análisis */}
             <div className="flex items-end">
               <Button 
                 onClick={runAnalysis} 
                 disabled={!selectedInstance || !selectedDatabase || isAnalyzing}
-                className="w-full sm:w-auto"
               >
                 {isAnalyzing ? (
                   <>
@@ -328,8 +365,8 @@ export default function Indexes() {
 
       {/* Loading State */}
       {isAnalyzing && (
-        <Card className="gradient-card shadow-card">
-          <CardContent className="py-8">
+        <Card>
+          <CardContent className="py-12">
             <div className="flex flex-col items-center justify-center space-y-4">
               <RefreshCw className="h-12 w-12 text-primary animate-spin" />
               <p className="text-lg font-medium">Analizando índices...</p>
@@ -345,59 +382,105 @@ export default function Indexes() {
       {analysis && !isAnalyzing && (
         <>
           {/* Resumen KPIs */}
-          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            <KPICard
-              title="Fragmentados"
-              value={analysis.summary.fragmentedCount}
-              icon={ListTree}
-              description={`>= 10% frag.`}
-              variant={analysis.summary.fragmentedCount > 10 ? 'warning' : 'default'}
-            />
-            <KPICard
-              title="Sin Uso"
-              value={analysis.summary.unusedCount}
-              icon={Trash2}
-              description="A eliminar"
-              variant={analysis.summary.unusedCount > 5 ? 'critical' : 'default'}
-            />
-            <KPICard
-              title="Duplicados"
-              value={analysis.summary.duplicateCount}
-              icon={Layers}
-              variant={analysis.summary.duplicateCount > 0 ? 'warning' : 'success'}
-            />
-            <KPICard
-              title="Faltantes"
-              value={analysis.summary.missingCount}
-              icon={TrendingUp}
-              variant={analysis.summary.missingCount > 5 ? 'warning' : 'default'}
-            />
-            <KPICard
-              title="Deshabilitados"
-              value={analysis.summary.disabledCount}
-              icon={Ban}
-              variant={analysis.summary.disabledCount > 0 ? 'warning' : 'success'}
-            />
-            <KPICard
-              title="Solapados"
-              value={analysis.summary.overlappingCount}
-              icon={Layers}
-              variant={analysis.summary.overlappingCount > 0 ? 'warning' : 'success'}
-            />
-            <KPICard
-              title="Espacio Perdido"
-              value={`${analysis.summary.wastedSpaceMB.toFixed(0)} MB`}
-              icon={AlertCircle}
-              variant={analysis.summary.wastedSpaceMB > 1000 ? 'critical' : 'default'}
-            />
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-7">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Fragmentados</CardTitle>
+                <ListTree className={`h-4 w-4 ${getKpiColor(analysis.summary.fragmentedCount, 5, 10)}`} />
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${getKpiColor(analysis.summary.fragmentedCount, 5, 10)}`}>
+                  {analysis.summary.fragmentedCount}
+                </div>
+                <p className="text-xs text-muted-foreground">&ge; 10% frag.</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Sin Uso</CardTitle>
+                <Trash2 className={`h-4 w-4 ${getKpiColor(analysis.summary.unusedCount, 3, 5)}`} />
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${getKpiColor(analysis.summary.unusedCount, 3, 5)}`}>
+                  {analysis.summary.unusedCount}
+                </div>
+                <p className="text-xs text-muted-foreground">A eliminar</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Duplicados</CardTitle>
+                <Layers className={`h-4 w-4 ${analysis.summary.duplicateCount > 0 ? 'text-warning' : 'text-emerald-500'}`} />
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${analysis.summary.duplicateCount > 0 ? 'text-warning' : 'text-emerald-500'}`}>
+                  {analysis.summary.duplicateCount}
+                </div>
+                <p className="text-xs text-muted-foreground">Redundantes</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Faltantes</CardTitle>
+                <TrendingUp className={`h-4 w-4 ${getKpiColor(analysis.summary.missingCount, 3, 5)}`} />
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${getKpiColor(analysis.summary.missingCount, 3, 5)}`}>
+                  {analysis.summary.missingCount}
+                </div>
+                <p className="text-xs text-muted-foreground">Sugeridos</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Deshabilitados</CardTitle>
+                <Ban className={`h-4 w-4 ${analysis.summary.disabledCount > 0 ? 'text-warning' : 'text-emerald-500'}`} />
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${analysis.summary.disabledCount > 0 ? 'text-warning' : 'text-emerald-500'}`}>
+                  {analysis.summary.disabledCount}
+                </div>
+                <p className="text-xs text-muted-foreground">Inactivos</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Solapados</CardTitle>
+                <Layers className={`h-4 w-4 ${analysis.summary.overlappingCount > 0 ? 'text-warning' : 'text-emerald-500'}`} />
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${analysis.summary.overlappingCount > 0 ? 'text-warning' : 'text-emerald-500'}`}>
+                  {analysis.summary.overlappingCount}
+                </div>
+                <p className="text-xs text-muted-foreground">Subconjuntos</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Espacio Perdido</CardTitle>
+                <AlertCircle className={`h-4 w-4 ${getKpiColor(analysis.summary.wastedSpaceMB, 500, 1000)}`} />
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${getKpiColor(analysis.summary.wastedSpaceMB, 500, 1000)}`}>
+                  {analysis.summary.wastedSpaceMB.toFixed(0)}
+                </div>
+                <p className="text-xs text-muted-foreground">MB</p>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Recomendaciones */}
           {analysis.summary.topRecommendations.length > 0 && (
-            <Card className="gradient-card shadow-card border-l-4 border-l-amber-500">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-warning" />
                   Recomendaciones Prioritarias
                 </CardTitle>
               </CardHeader>
@@ -405,7 +488,7 @@ export default function Indexes() {
                 <ul className="space-y-2">
                   {analysis.summary.topRecommendations.map((rec, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
-                      <span className="text-amber-500 font-bold">{i + 1}.</span>
+                      <span className="text-muted-foreground font-bold">{i + 1}.</span>
                       <span>{rec}</span>
                     </li>
                   ))}
@@ -415,7 +498,7 @@ export default function Indexes() {
           )}
 
           {/* Tabs de Análisis */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <div className="overflow-x-auto pb-2">
               <TabsList className="inline-flex h-auto min-w-full gap-1 p-1">
                 <TabsTrigger value="fragmented" className="text-xs whitespace-nowrap px-2 py-1.5">
@@ -444,10 +527,13 @@ export default function Indexes() {
 
             {/* Tab: Fragmentados */}
             <TabsContent value="fragmented">
-              <Card className="gradient-card shadow-card">
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Índices Fragmentados</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <ListTree className="h-5 w-5 text-warning" />
+                      Índices Fragmentados
+                    </CardTitle>
                     <CardDescription>
                       Índices con fragmentación &ge; 10%
                     </CardDescription>
@@ -462,53 +548,59 @@ export default function Indexes() {
                     Exportar
                   </Button>
                 </CardHeader>
-                <CardContent className="p-0 sm:p-6">
-                  {analysis.fragmentedIndexes.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                      <p>No hay índices fragmentados significativamente</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
+                <CardContent>
+                  <div className="max-h-[500px] overflow-auto">
+                    {analysis.fragmentedIndexes.length === 0 ? (
+                      <div className="text-center py-12">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Sin fragmentación significativa</h3>
+                        <p className="text-muted-foreground">
+                          No hay índices fragmentados significativamente.
+                        </p>
+                      </div>
+                    ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="text-xs min-w-[120px]">Tabla</TableHead>
-                            <TableHead className="text-xs min-w-[100px]">Índice</TableHead>
-                            <TableHead className="text-xs text-right">Frag %</TableHead>
-                            <TableHead className="text-xs text-right hidden sm:table-cell">Páginas</TableHead>
-                            <TableHead className="text-xs text-right">Tamaño</TableHead>
-                            <TableHead className="text-xs">Acción</TableHead>
-                            <TableHead className="text-xs w-10"></TableHead>
+                            <TableHead>Tabla</TableHead>
+                            <TableHead>Índice</TableHead>
+                            <TableHead className="text-right">Frag %</TableHead>
+                            <TableHead className="text-right">Páginas</TableHead>
+                            <TableHead className="text-right">Tamaño</TableHead>
+                            <TableHead>Acción</TableHead>
+                            <TableHead className="w-10"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {analysis.fragmentedIndexes.map((idx, i) => (
                             <TableRow key={i}>
-                              <TableCell className="font-mono text-xs p-2">
+                              <TableCell className="text-sm">
                                 <span className="text-muted-foreground">{idx.schemaName}.</span>{idx.tableName}
                               </TableCell>
-                              <TableCell className="font-mono text-xs font-medium p-2">
+                              <TableCell className="font-medium text-sm">
                                 {idx.indexName}
                                 {idx.isPrimaryKey && <Badge variant="outline" className="ml-1 text-[10px]">PK</Badge>}
                               </TableCell>
-                              <TableCell className={`text-right font-mono text-xs font-bold p-2 ${
-                                idx.fragmentationPct >= 30 ? 'text-red-500' : 'text-yellow-500'
-                              }`}>
+                              <TableCell className={cn('text-right font-bold text-sm', {
+                                'text-red-500': idx.fragmentationPct >= 30,
+                                'text-warning': idx.fragmentationPct < 30,
+                              })}>
                                 {idx.fragmentationPct.toFixed(1)}%
                               </TableCell>
-                              <TableCell className="text-right font-mono text-xs p-2 hidden sm:table-cell">
+                              <TableCell className="text-right text-sm text-muted-foreground">
                                 {idx.pageCount.toLocaleString()}
                               </TableCell>
-                              <TableCell className="text-right font-mono text-xs p-2">
+                              <TableCell className="text-right text-sm">
                                 {idx.sizeMB.toFixed(1)} MB
                               </TableCell>
-                              <TableCell className="p-2">
-                                <StatusBadge status={idx.suggestion === 'REBUILD' ? 'critical' : 'warning'}>
+                              <TableCell>
+                                <Badge variant={idx.suggestion === 'REBUILD' ? 'destructive' : 'outline'} className={cn(
+                                  idx.suggestion !== 'REBUILD' && 'bg-warning/10 text-warning border-warning/30'
+                                )}>
                                   {idx.suggestion}
-                                </StatusBadge>
+                                </Badge>
                               </TableCell>
-                              <TableCell className="p-2">
+                              <TableCell>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -525,18 +617,21 @@ export default function Indexes() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
             {/* Tab: Sin Uso */}
             <TabsContent value="unused">
-              <Card className="gradient-card shadow-card">
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Índices Sin Uso</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <Trash2 className="h-5 w-5 text-red-500" />
+                      Índices Sin Uso
+                    </CardTitle>
                     <CardDescription>
                       Índices que no han sido utilizados desde el último reinicio de SQL Server
                     </CardDescription>
@@ -551,46 +646,49 @@ export default function Indexes() {
                     Exportar
                   </Button>
                 </CardHeader>
-                <CardContent className="p-0 sm:p-6">
-                  {analysis.unusedIndexes.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                      <p>Todos los índices están siendo utilizados</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
+                <CardContent>
+                  <div className="max-h-[500px] overflow-auto">
+                    {analysis.unusedIndexes.length === 0 ? (
+                      <div className="text-center py-12">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Todos los índices están en uso</h3>
+                        <p className="text-muted-foreground">
+                          Todos los índices están siendo utilizados.
+                        </p>
+                      </div>
+                    ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="text-xs min-w-[120px]">Tabla</TableHead>
-                            <TableHead className="text-xs min-w-[100px]">Índice</TableHead>
-                            <TableHead className="text-xs text-right">Updates</TableHead>
-                            <TableHead className="text-xs text-right">Tamaño</TableHead>
-                            <TableHead className="text-xs">Severidad</TableHead>
-                            <TableHead className="text-xs w-10"></TableHead>
+                            <TableHead>Tabla</TableHead>
+                            <TableHead>Índice</TableHead>
+                            <TableHead className="text-right">Updates</TableHead>
+                            <TableHead className="text-right">Tamaño</TableHead>
+                            <TableHead>Severidad</TableHead>
+                            <TableHead className="w-10"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {analysis.unusedIndexes.map((idx, i) => (
                             <TableRow key={i}>
-                              <TableCell className="font-mono text-xs p-2">
+                              <TableCell className="text-sm">
                                 <span className="text-muted-foreground">{idx.schemaName}.</span>{idx.tableName}
                               </TableCell>
-                              <TableCell className="font-mono text-xs font-medium p-2">
-                                {idx.indexName}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-xs text-red-500 p-2">
+                              <TableCell className="font-medium text-sm">{idx.indexName}</TableCell>
+                              <TableCell className="text-right text-sm text-red-500">
                                 {idx.userUpdates.toLocaleString()}
                               </TableCell>
-                              <TableCell className="text-right font-mono text-xs p-2">
+                              <TableCell className="text-right text-sm">
                                 {idx.sizeMB.toFixed(1)} MB
                               </TableCell>
-                              <TableCell className="p-2">
-                                <StatusBadge status={idx.severity === 'Crítico' ? 'critical' : 'warning'}>
+                              <TableCell>
+                                <Badge variant={idx.severity === 'Crítico' ? 'destructive' : 'outline'} className={cn(
+                                  idx.severity !== 'Crítico' && 'bg-warning/10 text-warning border-warning/30'
+                                )}>
                                   {idx.severity}
-                                </StatusBadge>
+                                </Badge>
                               </TableCell>
-                              <TableCell className="p-2">
+                              <TableCell>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -604,18 +702,21 @@ export default function Indexes() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
             {/* Tab: Duplicados */}
             <TabsContent value="duplicate">
-              <Card className="gradient-card shadow-card">
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Índices Duplicados</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <Layers className="h-5 w-5 text-warning" />
+                      Índices Duplicados
+                    </CardTitle>
                     <CardDescription>
                       Índices con las mismas columnas clave que otros índices
                     </CardDescription>
@@ -630,46 +731,45 @@ export default function Indexes() {
                     Exportar
                   </Button>
                 </CardHeader>
-                <CardContent className="p-0 sm:p-6">
-                  {analysis.duplicateIndexes.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                      <p>No hay índices duplicados</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
+                <CardContent>
+                  <div className="max-h-[500px] overflow-auto">
+                    {analysis.duplicateIndexes.length === 0 ? (
+                      <div className="text-center py-12">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Sin duplicados</h3>
+                        <p className="text-muted-foreground">
+                          No hay índices duplicados.
+                        </p>
+                      </div>
+                    ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="text-xs min-w-[120px]">Tabla</TableHead>
-                            <TableHead className="text-xs min-w-[100px]">Índice</TableHead>
-                            <TableHead className="text-xs">Duplicado de</TableHead>
-                            <TableHead className="text-xs">Tipo</TableHead>
-                            <TableHead className="text-xs text-right">Tamaño</TableHead>
-                            <TableHead className="text-xs w-10"></TableHead>
+                            <TableHead>Tabla</TableHead>
+                            <TableHead>Índice</TableHead>
+                            <TableHead>Duplicado de</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead className="text-right">Tamaño</TableHead>
+                            <TableHead className="w-10"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {analysis.duplicateIndexes.map((idx, i) => (
                             <TableRow key={i}>
-                              <TableCell className="font-mono text-xs p-2">
+                              <TableCell className="text-sm">
                                 <span className="text-muted-foreground">{idx.schemaName}.</span>{idx.tableName}
                               </TableCell>
-                              <TableCell className="font-mono text-xs font-medium p-2">
-                                {idx.indexName}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs text-amber-500 p-2">
-                                {idx.duplicateOfIndex}
-                              </TableCell>
-                              <TableCell className="p-2">
+                              <TableCell className="font-medium text-sm">{idx.indexName}</TableCell>
+                              <TableCell className="text-sm text-warning">{idx.duplicateOfIndex}</TableCell>
+                              <TableCell>
                                 <Badge variant={idx.duplicateType === 'Exacto' ? 'destructive' : 'secondary'}>
                                   {idx.duplicateType}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-right font-mono text-xs p-2">
+                              <TableCell className="text-right text-sm">
                                 {idx.sizeMB.toFixed(1)} MB
                               </TableCell>
-                              <TableCell className="p-2">
+                              <TableCell>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -683,18 +783,21 @@ export default function Indexes() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
             {/* Tab: Missing Indexes */}
             <TabsContent value="missing">
-              <Card className="gradient-card shadow-card">
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Missing Indexes</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-emerald-500" />
+                      Missing Indexes
+                    </CardTitle>
                     <CardDescription>
                       Índices sugeridos por SQL Server basados en el uso de queries
                     </CardDescription>
@@ -709,45 +812,47 @@ export default function Indexes() {
                     Exportar
                   </Button>
                 </CardHeader>
-                <CardContent className="p-0 sm:p-6">
-                  {analysis.missingIndexes.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                      <p>No hay índices faltantes sugeridos</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
+                <CardContent>
+                  <div className="max-h-[500px] overflow-auto">
+                    {analysis.missingIndexes.length === 0 ? (
+                      <div className="text-center py-12">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Sin sugerencias</h3>
+                        <p className="text-muted-foreground">
+                          No hay índices faltantes sugeridos.
+                        </p>
+                      </div>
+                    ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="text-xs min-w-[120px]">Tabla</TableHead>
-                            <TableHead className="text-xs">Columnas</TableHead>
-                            <TableHead className="text-xs text-right">Mejora</TableHead>
-                            <TableHead className="text-xs">Severidad</TableHead>
-                            <TableHead className="text-xs w-10"></TableHead>
+                            <TableHead>Tabla</TableHead>
+                            <TableHead>Columnas</TableHead>
+                            <TableHead className="text-right">Mejora</TableHead>
+                            <TableHead>Severidad</TableHead>
+                            <TableHead className="w-10"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {analysis.missingIndexes.map((idx, i) => (
                             <TableRow key={i}>
-                              <TableCell className="font-mono text-xs p-2">
+                              <TableCell className="text-sm">
                                 <span className="text-muted-foreground">{idx.schemaName}.</span>{idx.tableName}
                               </TableCell>
-                              <TableCell className="text-xs p-2 max-w-[150px] truncate" title={`${idx.equalityColumns || ''}${idx.inequalityColumns ? ' | ' + idx.inequalityColumns : ''}`}>
+                              <TableCell className="text-sm max-w-[150px] truncate" title={`${idx.equalityColumns || ''}${idx.inequalityColumns ? ' | ' + idx.inequalityColumns : ''}`}>
                                 {idx.equalityColumns || idx.inequalityColumns || '-'}
                               </TableCell>
-                              <TableCell className="text-right font-mono text-xs font-bold text-green-500 p-2">
+                              <TableCell className="text-right text-sm font-bold text-emerald-500">
                                 {idx.improvementMeasure.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </TableCell>
-                              <TableCell className="p-2">
-                                <StatusBadge status={
-                                  idx.severity === 'Crítico' ? 'critical' : 
-                                  idx.severity === 'Advertencia' ? 'warning' : 'success'
-                                }>
+                              <TableCell>
+                                <Badge variant={idx.severity === 'Crítico' ? 'destructive' : 'outline'} className={cn(
+                                  idx.severity !== 'Crítico' && 'bg-warning/10 text-warning border-warning/30'
+                                )}>
                                   {idx.severity}
-                                </StatusBadge>
+                                </Badge>
                               </TableCell>
-                              <TableCell className="p-2">
+                              <TableCell>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -761,18 +866,21 @@ export default function Indexes() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
             {/* Tab: Deshabilitados */}
             <TabsContent value="disabled">
-              <Card className="gradient-card shadow-card">
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Índices Deshabilitados</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <Ban className="h-5 w-5 text-cyan-500" />
+                      Índices Deshabilitados
+                    </CardTitle>
                     <CardDescription>
                       Índices que están deshabilitados y no están siendo utilizados
                     </CardDescription>
@@ -787,35 +895,38 @@ export default function Indexes() {
                     Exportar
                   </Button>
                 </CardHeader>
-                <CardContent className="p-0 sm:p-6">
-                  {analysis.disabledIndexes.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                      <p>No hay índices deshabilitados</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
+                <CardContent>
+                  <div className="max-h-[500px] overflow-auto">
+                    {analysis.disabledIndexes.length === 0 ? (
+                      <div className="text-center py-12">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Sin deshabilitados</h3>
+                        <p className="text-muted-foreground">
+                          No hay índices deshabilitados.
+                        </p>
+                      </div>
+                    ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="text-xs min-w-[120px]">Tabla</TableHead>
-                            <TableHead className="text-xs min-w-[100px]">Índice</TableHead>
-                            <TableHead className="text-xs">Tipo</TableHead>
-                            <TableHead className="text-xs w-10"></TableHead>
+                            <TableHead>Tabla</TableHead>
+                            <TableHead>Índice</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead className="w-10"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {analysis.disabledIndexes.map((idx, i) => (
                             <TableRow key={i}>
-                              <TableCell className="font-mono text-xs p-2">
+                              <TableCell className="text-sm">
                                 <span className="text-muted-foreground">{idx.schemaName}.</span>{idx.tableName}
                               </TableCell>
-                              <TableCell className="font-mono text-xs font-medium p-2">
+                              <TableCell className="font-medium text-sm">
                                 {idx.indexName}
                                 {idx.isPrimaryKey && <Badge variant="outline" className="ml-1 text-[10px]">PK</Badge>}
                               </TableCell>
-                              <TableCell className="text-xs p-2">{idx.indexType}</TableCell>
-                              <TableCell className="p-2">
+                              <TableCell className="text-sm">{idx.indexType}</TableCell>
+                              <TableCell>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -829,18 +940,21 @@ export default function Indexes() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
             {/* Tab: Solapados */}
             <TabsContent value="overlapping">
-              <Card className="gradient-card shadow-card">
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Índices Solapados</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <Layers className="h-5 w-5 text-violet-500" />
+                      Índices Solapados
+                    </CardTitle>
                     <CardDescription>
                       Índices cuyas columnas clave son un subconjunto de otro índice
                     </CardDescription>
@@ -855,40 +969,39 @@ export default function Indexes() {
                     Exportar
                   </Button>
                 </CardHeader>
-                <CardContent className="p-0 sm:p-6">
-                  {analysis.overlappingIndexes.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                      <p>No hay índices solapados</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
+                <CardContent>
+                  <div className="max-h-[500px] overflow-auto">
+                    {analysis.overlappingIndexes.length === 0 ? (
+                      <div className="text-center py-12">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Sin solapados</h3>
+                        <p className="text-muted-foreground">
+                          No hay índices solapados.
+                        </p>
+                      </div>
+                    ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="text-xs min-w-[120px]">Tabla</TableHead>
-                            <TableHead className="text-xs min-w-[100px]">Índice</TableHead>
-                            <TableHead className="text-xs">Solapado por</TableHead>
-                            <TableHead className="text-xs text-right">Tamaño</TableHead>
-                            <TableHead className="text-xs w-10"></TableHead>
+                            <TableHead>Tabla</TableHead>
+                            <TableHead>Índice</TableHead>
+                            <TableHead>Solapado por</TableHead>
+                            <TableHead className="text-right">Tamaño</TableHead>
+                            <TableHead className="w-10"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {analysis.overlappingIndexes.map((idx, i) => (
                             <TableRow key={i}>
-                              <TableCell className="font-mono text-xs p-2">
+                              <TableCell className="text-sm">
                                 <span className="text-muted-foreground">{idx.schemaName}.</span>{idx.tableName}
                               </TableCell>
-                              <TableCell className="font-mono text-xs font-medium p-2">
-                                {idx.indexName}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs text-amber-500 p-2">
-                                {idx.overlappedByIndex}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-xs p-2">
+                              <TableCell className="font-medium text-sm">{idx.indexName}</TableCell>
+                              <TableCell className="text-sm text-warning">{idx.overlappedByIndex}</TableCell>
+                              <TableCell className="text-right text-sm">
                                 {idx.sizeMB.toFixed(1)} MB
                               </TableCell>
-                              <TableCell className="p-2">
+                              <TableCell>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -902,18 +1015,21 @@ export default function Indexes() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
             {/* Tab: Problemáticos */}
             <TabsContent value="bad">
-              <Card className="gradient-card shadow-card">
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Índices Problemáticos</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-red-500" />
+                      Índices Problemáticos
+                    </CardTitle>
                     <CardDescription>
                       Índices con problemas de diseño: muy anchos, demasiadas columnas, etc.
                     </CardDescription>
@@ -928,52 +1044,55 @@ export default function Indexes() {
                     Exportar
                   </Button>
                 </CardHeader>
-                <CardContent className="p-0 sm:p-6">
-                  {analysis.badIndexes.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                      <p>No hay índices con problemas de diseño</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
+                <CardContent>
+                  <div className="max-h-[500px] overflow-auto">
+                    {analysis.badIndexes.length === 0 ? (
+                      <div className="text-center py-12">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Sin problemas</h3>
+                        <p className="text-muted-foreground">
+                          No hay índices con problemas de diseño.
+                        </p>
+                      </div>
+                    ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="text-xs min-w-[120px]">Tabla</TableHead>
-                            <TableHead className="text-xs min-w-[100px]">Índice</TableHead>
-                            <TableHead className="text-xs">Problema</TableHead>
-                            <TableHead className="text-xs">Severidad</TableHead>
-                            <TableHead className="text-xs hidden sm:table-cell">Recomendación</TableHead>
+                            <TableHead>Tabla</TableHead>
+                            <TableHead>Índice</TableHead>
+                            <TableHead>Problema</TableHead>
+                            <TableHead>Severidad</TableHead>
+                            <TableHead>Recomendación</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {analysis.badIndexes.map((idx, i) => (
                             <TableRow key={i}>
-                              <TableCell className="font-mono text-xs p-2">
+                              <TableCell className="text-sm">
                                 <span className="text-muted-foreground">{idx.schemaName}.</span>{idx.tableName}
                               </TableCell>
-                              <TableCell className="font-mono text-xs font-medium p-2">
-                                {idx.indexName}
-                              </TableCell>
-                              <TableCell className="p-2">
+                              <TableCell className="font-medium text-sm">{idx.indexName}</TableCell>
+                              <TableCell>
                                 <Badge variant={idx.problem === 'Muy Ancho' ? 'destructive' : 'secondary'}>
                                   {idx.problem}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="p-2">
-                                <StatusBadge status={idx.severity === 'Crítico' ? 'critical' : 'warning'}>
+                              <TableCell>
+                                <Badge variant={idx.severity === 'Crítico' ? 'destructive' : 'outline'} className={cn(
+                                  idx.severity !== 'Crítico' && 'bg-warning/10 text-warning border-warning/30'
+                                )}>
                                   {idx.severity}
-                                </StatusBadge>
+                                </Badge>
                               </TableCell>
-                              <TableCell className="text-xs p-2 max-w-[200px] hidden sm:table-cell" title={idx.recommendation}>
+                              <TableCell className="text-sm max-w-[200px]" title={idx.recommendation}>
                                 {idx.recommendation}
                               </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -983,7 +1102,7 @@ export default function Indexes() {
 
       {/* Estado inicial (sin análisis) */}
       {!analysis && !isAnalyzing && (
-        <Card className="gradient-card shadow-card">
+        <Card>
           <CardContent className="py-12">
             <div className="flex flex-col items-center justify-center text-center space-y-4">
               <ListTree className="h-16 w-16 text-muted-foreground opacity-50" />

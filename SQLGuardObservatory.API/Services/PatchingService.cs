@@ -208,10 +208,13 @@ public class PatchingService : IPatchingService
         
         if (complianceConfigs.TryGetValue(dto.MajorVersion, out var config))
         {
-            dto.RequiredBuild = config.RequiredBuild;
-            dto.RequiredCU = config.RequiredCU ?? string.Empty;
+            // Determinar qué build requerido usar (AWS o principal)
+            var (requiredBuild, requiredCU) = GetEffectiveRequiredBuild(config, dto.HostingSite, dto.MajorVersion);
             
-            var complianceComparison = CompareVersions(dto.CurrentBuild, config.RequiredBuild);
+            dto.RequiredBuild = requiredBuild;
+            dto.RequiredCU = requiredCU;
+            
+            var complianceComparison = CompareVersions(dto.CurrentBuild, requiredBuild);
             
             if (complianceComparison >= 0)
             {
@@ -232,9 +235,50 @@ public class PatchingService : IPatchingService
             {
                 // No está en compliance
                 dto.PatchStatus = "NonCompliant";
-                dto.PendingCUsForCompliance = CalculatePendingCUs(dto.CurrentBuild, config.RequiredBuild, dto.MajorVersion);
+                dto.PendingCUsForCompliance = CalculatePendingCUs(dto.CurrentBuild, requiredBuild, dto.MajorVersion);
             }
         }
+    }
+    
+    /// <summary>
+    /// Determina el build requerido efectivo según el hosting y la versión de SQL Server.
+    /// Para SQL 2017+ en AWS, usa la configuración específica de AWS si está definida.
+    /// </summary>
+    private (string RequiredBuild, string RequiredCU) GetEffectiveRequiredBuild(
+        PatchComplianceConfig config, 
+        string hostingSite, 
+        string majorVersion)
+    {
+        // Verificar si debe usar configuración AWS:
+        // 1. El servidor está en AWS
+        // 2. La versión es 2017 o superior
+        // 3. Existe configuración AWS definida
+        var isAwsServer = string.Equals(hostingSite, "AWS", StringComparison.OrdinalIgnoreCase);
+        var isVersion2017OrLater = IsVersion2017OrLater(majorVersion);
+        var hasAwsConfig = !string.IsNullOrEmpty(config.AwsRequiredBuild);
+        
+        if (isAwsServer && isVersion2017OrLater && hasAwsConfig)
+        {
+            return (config.AwsRequiredBuild!, config.AwsRequiredCU ?? string.Empty);
+        }
+        
+        return (config.RequiredBuild, config.RequiredCU ?? string.Empty);
+    }
+    
+    /// <summary>
+    /// Verifica si la versión de SQL Server es 2017 o posterior
+    /// </summary>
+    private bool IsVersion2017OrLater(string majorVersion)
+    {
+        if (string.IsNullOrEmpty(majorVersion)) return false;
+        
+        // Extraer el año de la versión (ej: "2017", "2019", "2022")
+        if (int.TryParse(majorVersion.Replace(" R2", ""), out int versionYear))
+        {
+            return versionYear >= 2017;
+        }
+        
+        return false;
     }
 
     /// <summary>
@@ -517,10 +561,13 @@ public class PatchingService : IPatchingService
         // Determinar estado de compliance
         if (complianceConfig != null)
         {
-            result.RequiredBuild = complianceConfig.RequiredBuild;
-            result.RequiredCU = complianceConfig.RequiredCU ?? string.Empty;
+            // Determinar qué build requerido usar (AWS o principal)
+            var (requiredBuild, requiredCU) = GetEffectiveRequiredBuild(complianceConfig, result.HostingSite, result.MajorVersion);
             
-            var complianceComparison = CompareVersions(result.CurrentBuild, complianceConfig.RequiredBuild);
+            result.RequiredBuild = requiredBuild;
+            result.RequiredCU = requiredCU;
+            
+            var complianceComparison = CompareVersions(result.CurrentBuild, requiredBuild);
             
             if (complianceComparison >= 0)
             {
@@ -550,7 +597,7 @@ public class PatchingService : IPatchingService
             {
                 // No está en compliance
                 result.PatchStatus = "NonCompliant";
-                result.PendingCUsForCompliance = CalculatePendingCUs(result.CurrentBuild, complianceConfig.RequiredBuild, result.MajorVersion);
+                result.PendingCUsForCompliance = CalculatePendingCUs(result.CurrentBuild, requiredBuild, result.MajorVersion);
                 result.PendingCUsForLatest = !string.IsNullOrEmpty(result.LatestBuild) 
                     ? CalculatePendingCUs(result.CurrentBuild, result.LatestBuild, result.MajorVersion)
                     : result.PendingCUsForCompliance;
@@ -618,6 +665,9 @@ public class PatchingService : IPatchingService
             RequiredCU = c.RequiredCU,
             RequiredKB = c.RequiredKB,
             Description = c.Description,
+            AwsRequiredBuild = c.AwsRequiredBuild,
+            AwsRequiredCU = c.AwsRequiredCU,
+            AwsRequiredKB = c.AwsRequiredKB,
             IsActive = c.IsActive,
             UpdatedAt = c.UpdatedAt,
             UpdatedBy = c.UpdatedBy
@@ -645,6 +695,9 @@ public class PatchingService : IPatchingService
             RequiredCU = config.RequiredCU,
             RequiredKB = config.RequiredKB,
             Description = config.Description,
+            AwsRequiredBuild = config.AwsRequiredBuild,
+            AwsRequiredCU = config.AwsRequiredCU,
+            AwsRequiredKB = config.AwsRequiredKB,
             IsActive = config.IsActive,
             UpdatedAt = config.UpdatedAt,
             UpdatedBy = config.UpdatedBy
@@ -679,6 +732,14 @@ public class PatchingService : IPatchingService
         config.RequiredCU = dto.RequiredCU;
         config.RequiredKB = dto.RequiredKB;
         config.Description = dto.Description;
+        
+        // Campos AWS (solo para versiones 2017+)
+        config.AwsRequiredBuild = !string.IsNullOrEmpty(dto.AwsRequiredBuild) 
+            ? NormalizeVersionTo4Parts(dto.AwsRequiredBuild) 
+            : null;
+        config.AwsRequiredCU = dto.AwsRequiredCU;
+        config.AwsRequiredKB = dto.AwsRequiredKB;
+        
         config.IsActive = dto.IsActive;
         config.UpdatedAt = DateTime.Now;
         config.UpdatedBy = userId;
@@ -686,6 +747,9 @@ public class PatchingService : IPatchingService
         await _context.SaveChangesAsync();
         
         dto.Id = config.Id;
+        dto.AwsRequiredBuild = config.AwsRequiredBuild;
+        dto.AwsRequiredCU = config.AwsRequiredCU;
+        dto.AwsRequiredKB = config.AwsRequiredKB;
         dto.UpdatedAt = config.UpdatedAt;
         dto.UpdatedBy = config.UpdatedBy;
         

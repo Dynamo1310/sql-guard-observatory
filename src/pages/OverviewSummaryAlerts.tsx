@@ -13,13 +13,17 @@ import {
   RefreshCw,
   Send,
   Calendar,
-  Eye
+  Eye,
+  Lock
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Capabilities } from '@/lib/capabilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
@@ -51,6 +55,9 @@ const DAYS_OF_WEEK = [
 ];
 
 export default function OverviewSummaryAlerts() {
+  const { hasCapability } = useAuth();
+  const canConfigureAlerts = hasCapability(Capabilities.SystemConfigureAlerts);
+  
   const [config, setConfig] = useState<OverviewSummaryAlertConfigDto | null>(null);
   const [history, setHistory] = useState<OverviewSummaryAlertHistoryDto[]>([]);
   const [preview, setPreview] = useState<OverviewSummaryDataDto | null>(null);
@@ -296,38 +303,83 @@ export default function OverviewSummaryAlerts() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-80" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <Skeleton className="h-10 w-28" />
+        </div>
+
+        {/* Preview skeleton */}
+        <Card className="border-border/50 bg-muted/20">
+          <CardHeader className="pb-3">
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="text-center p-3 bg-background rounded-lg border">
+                  <Skeleton className="h-8 w-12 mx-auto mb-2" />
+                  <Skeleton className="h-4 w-20 mx-auto" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Config skeleton */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-24" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container max-w-7xl py-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Bell className="h-8 w-8 text-blue-500" />
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Bell className="h-8 w-8" />
             Resumen Overview Programado
           </h1>
-          <p className="text-muted-foreground mt-2">
+          <p className="text-muted-foreground">
             Envía automáticamente un resumen del estado de producción por email en los horarios configurados
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={loadConfig}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
-        </div>
+        <Button variant="outline" onClick={loadConfig}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Actualizar
+        </Button>
       </div>
 
       {/* Preview del estado actual */}
-      <Card className="border-blue-500/30 bg-blue-500/5">
+      <Card className="border-border/50 bg-muted/20">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
-            <Eye className="h-5 w-5" />
+            <Eye className="h-5 w-5 text-muted-foreground" />
             Vista Previa del Resumen
             {loadingPreview && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
           </CardTitle>
@@ -335,21 +387,21 @@ export default function OverviewSummaryAlerts() {
         <CardContent>
           {preview ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="text-center p-3 bg-background rounded-lg">
-                <div className="text-2xl font-bold text-primary">{preview.averageHealthScore}</div>
+              <div className="text-center p-3 bg-background rounded-lg border border-border/50">
+                <div className="text-2xl font-bold text-foreground">{preview.averageHealthScore}</div>
                 <div className="text-xs text-muted-foreground">Score Promedio</div>
               </div>
-              <div className="text-center p-3 bg-background rounded-lg">
-                <div className="text-2xl font-bold text-green-500">{preview.healthyCount}</div>
-                <div className="text-xs text-muted-foreground">Healthy</div>
+              <div className="text-center p-3 bg-background rounded-lg border border-border/50">
+                <div className="text-2xl font-bold text-foreground">{preview.healthyCount}</div>
+                <div className="text-xs text-muted-foreground flex items-center justify-center gap-1"><span className="w-2 h-2 rounded-full bg-success"></span>Healthy</div>
               </div>
-              <div className="text-center p-3 bg-background rounded-lg">
-                <div className="text-2xl font-bold text-yellow-500">{preview.warningCount}</div>
-                <div className="text-xs text-muted-foreground">Warning</div>
+              <div className="text-center p-3 bg-background rounded-lg border border-border/50">
+                <div className="text-2xl font-bold text-foreground">{preview.warningCount}</div>
+                <div className="text-xs text-muted-foreground flex items-center justify-center gap-1"><span className="w-2 h-2 rounded-full bg-warning"></span>Warning</div>
               </div>
-              <div className="text-center p-3 bg-background rounded-lg">
-                <div className="text-2xl font-bold text-red-500">{preview.criticalCount}</div>
-                <div className="text-xs text-muted-foreground">Críticas</div>
+              <div className="text-center p-3 bg-background rounded-lg border border-border/50">
+                <div className="text-2xl font-bold text-foreground">{preview.criticalCount}</div>
+                <div className="text-xs text-muted-foreground flex items-center justify-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive"></span>Críticas</div>
               </div>
             </div>
           ) : (
@@ -376,14 +428,23 @@ export default function OverviewSummaryAlerts() {
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                <Label htmlFor="enabled" className="text-sm">
-                  {isEnabled ? 'Activa' : 'Inactiva'}
-                </Label>
-                <Switch
-                  id="enabled"
-                  checked={isEnabled}
-                  onCheckedChange={handleToggle}
-                />
+                {canConfigureAlerts ? (
+                  <>
+                    <Label htmlFor="enabled" className="text-sm">
+                      {isEnabled ? 'Activa' : 'Inactiva'}
+                    </Label>
+                    <Switch
+                      id="enabled"
+                      checked={isEnabled}
+                      onCheckedChange={handleToggle}
+                    />
+                  </>
+                ) : (
+                  <Badge variant="outline">
+                    <Lock className="h-3 w-3 mr-1" />
+                    Solo lectura
+                  </Badge>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -396,6 +457,8 @@ export default function OverviewSummaryAlerts() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Alerta Resumen Overview"
+                  disabled={!canConfigureAlerts}
+                  className={!canConfigureAlerts ? 'bg-muted' : ''}
                 />
               </div>
 
@@ -406,6 +469,8 @@ export default function OverviewSummaryAlerts() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Descripción..."
+                  disabled={!canConfigureAlerts}
+                  className={!canConfigureAlerts ? 'bg-muted' : ''}
                 />
               </div>
             </div>
@@ -554,16 +619,25 @@ export default function OverviewSummaryAlerts() {
 
             <Separator />
 
-            <Button onClick={handleSave} disabled={saving} className="w-full">
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                'Guardar Configuración'
-              )}
-            </Button>
+            {canConfigureAlerts ? (
+              <Button onClick={handleSave} disabled={saving} className="w-full">
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  'Guardar Configuración'
+                )}
+              </Button>
+            ) : (
+              <Alert>
+                <Lock className="h-4 w-4" />
+                <AlertDescription>
+                  Solo lectura. No tienes permisos para modificar esta configuración.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
 
@@ -578,33 +652,42 @@ export default function OverviewSummaryAlerts() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button 
-                variant="outline" 
-                className="w-full justify-start" 
-                onClick={handleTest}
-                disabled={testing || recipients.length === 0}
-              >
-                {testing ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="mr-2 h-4 w-4" />
-                )}
-                Enviar Email de Prueba
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="w-full justify-start"
-                onClick={handleRunNow}
-                disabled={running || recipients.length === 0}
-              >
-                {running ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="mr-2 h-4 w-4" />
-                )}
-                Ejecutar Ahora
-              </Button>
+              {canConfigureAlerts ? (
+                <>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start" 
+                    onClick={handleTest}
+                    disabled={testing || recipients.length === 0}
+                  >
+                    {testing ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-4 w-4" />
+                    )}
+                    Enviar Email de Prueba
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={handleRunNow}
+                    disabled={running || recipients.length === 0}
+                  >
+                    {running ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="mr-2 h-4 w-4" />
+                    )}
+                    Ejecutar Ahora
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  <Lock className="h-4 w-4 inline mr-1" />
+                  Requiere permisos
+                </p>
+              )}
 
               {recipients.length === 0 && (
                 <Alert>
@@ -707,12 +790,12 @@ export default function OverviewSummaryAlerts() {
                     </TableCell>
                     <TableCell>
                       {h.success ? (
-                        <Badge variant="default" className="bg-green-500">
+                        <Badge variant="outline" className="bg-success/10 text-success border-success/30">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           Enviado
                         </Badge>
                       ) : (
-                        <Badge variant="destructive">
+                        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
                           <XCircle className="h-3 w-3 mr-1" />
                           Error
                         </Badge>

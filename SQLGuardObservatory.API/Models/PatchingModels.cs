@@ -51,6 +51,25 @@ public class PatchComplianceConfig
     public string? Description { get; set; }
     
     /// <summary>
+    /// Build mínimo requerido para servidores AWS (opcional, solo aplica para 2017+)
+    /// Si está vacío, se usa RequiredBuild
+    /// </summary>
+    [MaxLength(50)]
+    public string? AwsRequiredBuild { get; set; }
+    
+    /// <summary>
+    /// CU/SP requerido para servidores AWS
+    /// </summary>
+    [MaxLength(20)]
+    public string? AwsRequiredCU { get; set; }
+    
+    /// <summary>
+    /// Referencia KB del parche requerido para AWS
+    /// </summary>
+    [MaxLength(20)]
+    public string? AwsRequiredKB { get; set; }
+    
+    /// <summary>
     /// Si esta configuración está activa
     /// </summary>
     public bool IsActive { get; set; } = true;

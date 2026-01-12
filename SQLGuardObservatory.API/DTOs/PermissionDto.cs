@@ -1,21 +1,11 @@
 namespace SQLGuardObservatory.API.DTOs;
 
-public class RolePermissionDto
-{
-    public string Role { get; set; } = string.Empty;
-    public Dictionary<string, bool> Permissions { get; set; } = new();
-}
-
-public class UpdateRolePermissionsRequest
-{
-    public string Role { get; set; } = string.Empty;
-    public Dictionary<string, bool> Permissions { get; set; } = new();
-}
+// Los permisos ahora se manejan solo mediante grupos de seguridad
 
 public class AvailableViewsDto
 {
     public List<ViewInfo> Views { get; set; } = new();
-    public List<string> Roles { get; set; } = new();
+    public List<string> Roles { get; set; } = new(); // Deprecado - ya no se usan roles para permisos
 }
 
 public class ViewInfo
@@ -25,4 +15,3 @@ public class ViewInfo
     public string Description { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
 }
-

@@ -35,3 +35,6 @@ public class GroupPermission
     public DateTime? UpdatedAt { get; set; }
 }
 
+
+
+

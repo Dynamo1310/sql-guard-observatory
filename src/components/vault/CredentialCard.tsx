@@ -27,6 +27,7 @@ import { CredentialDto } from '@/services/vaultApi';
 import { PasswordReveal } from './PasswordReveal';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface CredentialCardProps {
   credential: CredentialDto;
@@ -44,17 +45,17 @@ const credentialTypeConfig = {
   SqlAuth: {
     label: 'SQL Server',
     icon: Database,
-    color: 'bg-blue-500/10 text-blue-600 border-blue-200'
+    color: 'bg-muted text-foreground border-border'
   },
   WindowsAD: {
     label: 'Windows/AD',
     icon: Monitor,
-    color: 'bg-purple-500/10 text-purple-600 border-purple-200'
+    color: 'bg-muted text-foreground border-border'
   },
   Other: {
     label: 'Otro',
     icon: Key,
-    color: 'bg-gray-500/10 text-gray-600 border-gray-200'
+    color: 'bg-muted text-muted-foreground border-border'
   }
 };
 
@@ -87,14 +88,14 @@ export function CredentialCard({
   const getExpirationStatus = () => {
     if (credential.isExpired) {
       return {
-        variant: 'destructive' as const,
+        variant: 'soft-destructive' as const,
         label: 'Expirada',
         icon: AlertTriangle
       };
     }
     if (credential.isExpiringSoon) {
       return {
-        variant: 'warning' as const,
+        variant: 'soft-warning' as const,
         label: 'Por expirar',
         icon: AlertTriangle
       };
@@ -105,11 +106,11 @@ export function CredentialCard({
   const expirationStatus = getExpirationStatus();
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className={`p-2 rounded-lg ${typeConfig.color}`}>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className={cn('p-2.5 rounded-lg border', typeConfig.color)}>
               <TypeIcon className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
@@ -118,21 +119,21 @@ export function CredentialCard({
                 {credential.isPrivate ? (
                   <Tooltip>
                     <TooltipTrigger>
-                      <Lock className="h-3.5 w-3.5 text-amber-500" />
+                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
                     </TooltipTrigger>
                     <TooltipContent>Credencial privada</TooltipContent>
                   </Tooltip>
                 ) : credential.isTeamShared ? (
                   <Tooltip>
                     <TooltipTrigger>
-                      <Users className="h-3.5 w-3.5 text-blue-500" />
+                      <Users className="h-3.5 w-3.5 text-muted-foreground" />
                     </TooltipTrigger>
                     <TooltipContent>Compartida con todo el equipo</TooltipContent>
                   </Tooltip>
                 ) : (
                   <Tooltip>
                     <TooltipTrigger>
-                      <Share2 className="h-3.5 w-3.5 text-green-500" />
+                      <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
                     </TooltipTrigger>
                     <TooltipContent>Compartida selectivamente</TooltipContent>
                   </Tooltip>
@@ -144,14 +145,13 @@ export function CredentialCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
-            <Badge variant="outline" className={typeConfig.color}>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" className={cn('font-medium', typeConfig.color)}>
               {typeConfig.label}
             </Badge>
             
             {expirationStatus && (
-              <Badge variant={expirationStatus.variant === 'warning' ? 'outline' : expirationStatus.variant} 
-                className={expirationStatus.variant === 'warning' ? 'border-amber-300 bg-amber-50 text-amber-700' : ''}>
+              <Badge variant={expirationStatus.variant}>
                 <expirationStatus.icon className="h-3 w-3 mr-1" />
                 {expirationStatus.label}
               </Badge>
@@ -160,7 +160,7 @@ export function CredentialCard({
             {showActions && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button variant="ghost" size="icon-sm" className="h-8 w-8">
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -227,14 +227,14 @@ export function CredentialCard({
 
       <CardContent className="space-y-3">
         {/* Password reveal - Solo si tiene permiso */}
-        <div className="flex items-center justify-between gap-2 p-2 bg-muted/50 rounded-lg">
+        <div className="flex items-center justify-between gap-2 p-3 bg-muted/30 rounded-lg border border-border/30">
           <span className="text-sm font-medium text-muted-foreground">Contraseña:</span>
           {canReveal ? (
             <PasswordReveal credentialId={credential.id} />
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <ShieldAlert className="h-4 w-4" />
                   <span>Sin permiso para revelar</span>
                 </div>
@@ -256,15 +256,15 @@ export function CredentialCard({
 
         {/* Servidores asociados */}
         {credential.servers.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {credential.servers.slice(0, 3).map((server) => (
-              <Badge key={server.id} variant="secondary" className="text-xs">
+              <Badge key={server.id} variant="secondary" className="text-xs font-medium">
                 <Server className="h-3 w-3 mr-1" />
                 {server.fullServerName}
               </Badge>
             ))}
             {credential.servers.length > 3 && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs font-medium">
                 +{credential.servers.length - 3} más
               </Badge>
             )}
@@ -272,14 +272,14 @@ export function CredentialCard({
         )}
 
         {/* Metadatos */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/30">
+          <div className="flex items-center gap-1.5">
             <User className="h-3 w-3" />
             <span>{credential.ownerDisplayName || 'Sin propietario'}</span>
           </div>
           
           {credential.expiresAt && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <Calendar className="h-3 w-3" />
               <span>Expira: {formatDate(credential.expiresAt)}</span>
             </div>
@@ -297,4 +297,3 @@ export function CredentialCard({
 }
 
 export default CredentialCard;
-

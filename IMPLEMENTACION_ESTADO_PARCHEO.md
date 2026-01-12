@@ -170,7 +170,7 @@ Restart-Service "SQLGuardObservatory" -Force
 
 ```powershell
 # Ejecutar script SQL
-sqlcmd -S asprbm-nov-01 -d SQLGuardObservatoryAuth -i "SQL\CreatePatchingTables.sql"
+sqlcmd -S asprbm-nov-01 -d AppSQLNova -i "SQL\CreatePatchingTables.sql"
 ```
 
 ### 3. Frontend

@@ -248,13 +248,13 @@ export default function VaultCredentials() {
               <SelectContent>
                 <SelectItem value="all">Todos los estados</SelectItem>
                 <SelectItem value="expired">
-                  <div className="flex items-center gap-2 text-red-600">
+                  <div className="flex items-center gap-2 text-destructive">
                     <AlertTriangle className="h-4 w-4" />
                     Expiradas
                   </div>
                 </SelectItem>
                 <SelectItem value="expiring">
-                  <div className="flex items-center gap-2 text-amber-600">
+                  <div className="flex items-center gap-2 text-warning">
                     <AlertTriangle className="h-4 w-4" />
                     Por expirar
                   </div>

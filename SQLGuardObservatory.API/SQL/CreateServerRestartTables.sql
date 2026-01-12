@@ -4,7 +4,7 @@
 -- Fecha: 2025
 -- ============================================
 
-USE [SQLGuardObservatoryAuth];
+USE [AppSQLNova];
 GO
 
 -- Tabla principal de tareas de reinicio

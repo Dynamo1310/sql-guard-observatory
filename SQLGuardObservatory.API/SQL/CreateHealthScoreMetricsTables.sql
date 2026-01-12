@@ -1,11 +1,11 @@
 -- =============================================
 -- Script: CreateHealthScoreMetricsTables.sql
 -- Descripción: Crea las tablas de métricas de HealthScore v3.0
---              Migradas desde SQLNova a SQLGuardObservatoryAuth
--- Base de datos: SQLGuardObservatoryAuth
+--              Migradas desde SQLNova a AppSQLNova
+-- Base de datos: AppSQLNova
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- =============================================
@@ -880,59 +880,59 @@ GO
 -- =============================================
 /*
 -- Migrar InstanceHealth_Score
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_Score]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_Score]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_Score];
 
 -- Migrar InstanceHealth_AlwaysOn
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_AlwaysOn]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_AlwaysOn]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_AlwaysOn];
 
 -- Migrar InstanceHealth_Autogrowth
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_Autogrowth]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_Autogrowth]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_Autogrowth];
 
 -- Migrar InstanceHealth_Backups
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_Backups]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_Backups]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_Backups];
 
 -- Migrar InstanceHealth_ConfiguracionTempdb
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_ConfiguracionTempdb]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_ConfiguracionTempdb]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_ConfiguracionTempdb];
 
 -- Migrar InstanceHealth_CPU
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_CPU]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_CPU]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_CPU];
 
 -- Migrar InstanceHealth_DatabaseStates
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_DatabaseStates]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_DatabaseStates]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_DatabaseStates];
 
 -- Migrar InstanceHealth_Discos
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_Discos]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_Discos]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_Discos];
 
 -- Migrar InstanceHealth_ErroresCriticos
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_ErroresCriticos]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_ErroresCriticos]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_ErroresCriticos];
 
 -- Migrar InstanceHealth_IO
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_IO]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_IO]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_IO];
 
 -- Migrar InstanceHealth_LogChain
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_LogChain]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_LogChain]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_LogChain];
 
 -- Migrar InstanceHealth_Maintenance
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_Maintenance]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_Maintenance]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_Maintenance];
 
 -- Migrar InstanceHealth_Memoria
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_Memoria]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_Memoria]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_Memoria];
 
 -- Migrar InstanceHealth_Waits
-INSERT INTO [SQLGuardObservatoryAuth].[dbo].[InstanceHealth_Waits]
+INSERT INTO [AppSQLNova].[dbo].[InstanceHealth_Waits]
 SELECT * FROM [SQLNova].[dbo].[InstanceHealth_Waits];
 */
 

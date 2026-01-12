@@ -48,6 +48,15 @@ public class InstanceHealthConfiguracionTempdb
     public int TempDBContentionScore { get; set; }
     public int TempDBVersionStoreMB { get; set; }
     
+    // Contención Delta (v3.1 - tiempo real)
+    public long TempDBPageLatchDeltaMs { get; set; }
+    public int TempDBPageLatchDeltaCount { get; set; }
+    
+    // Version Store detallado (v3.1)
+    public int TempDBUserObjectsMB { get; set; }
+    public int TempDBInternalObjectsMB { get; set; }
+    public int TempDBActiveVersionStoreTx { get; set; }
+    
     // TempDB - Configuración
     public int TempDBAvgFileSizeMB { get; set; }
     public int TempDBMinFileSizeMB { get; set; }

@@ -1,7 +1,7 @@
 -- =============================================
 -- Script: VaultEnterprise_Recertification_RevealPermissions.sql
 -- Description: Gate de Recertificación - Permisos Reveal
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 --
@@ -9,7 +9,7 @@
 -- La migración NO se considera COMPLETA hasta que Security apruebe
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='

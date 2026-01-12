@@ -18,7 +18,7 @@ Write-Host ""
 
 # Configuración
 $SqlServer = "asprbm-nov-01"
-$Database = "SQLGuardObservatoryAuth"
+$Database = "AppSQLNova"
 $ScriptSourcePath = "$PSScriptRoot\scripts\SQLRestartNova_WebAPI.ps1"
 $ScriptDestPath = "C:\Apps\SQLGuardObservatory\Scripts\SQLRestartNova_WebAPI.ps1"
 

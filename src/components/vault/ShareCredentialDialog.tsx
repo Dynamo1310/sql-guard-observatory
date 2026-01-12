@@ -38,6 +38,7 @@ import {
   SharePermission
 } from '@/services/vaultApi';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface ShareCredentialDialogProps {
   open: boolean;
@@ -49,11 +50,11 @@ interface ShareCredentialDialogProps {
 function getPermissionIcon(permission: string) {
   switch (permission) {
     case SHARE_PERMISSIONS.ADMIN:
-      return <Crown className="h-3.5 w-3.5 text-amber-500" />;
+      return <Crown className="h-3.5 w-3.5 text-warning" />;
     case SHARE_PERMISSIONS.EDIT:
-      return <Edit className="h-3.5 w-3.5 text-blue-500" />;
+      return <Edit className="h-3.5 w-3.5 text-info" />;
     default:
-      return <Eye className="h-3.5 w-3.5 text-gray-500" />;
+      return <Eye className="h-3.5 w-3.5 text-muted-foreground" />;
   }
 }
 
@@ -83,6 +84,7 @@ export function ShareCredentialDialog({
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [permission, setPermission] = useState<SharePermission>(SHARE_PERMISSIONS.VIEW);
+  const [allowReshare, setAllowReshare] = useState(false);
   const [groupSearch, setGroupSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
 
@@ -122,7 +124,8 @@ export function ShareCredentialDialog({
       const request: ShareCredentialRequest = {
         groupIds: selectedGroupIds,
         userIds: selectedUserIds,
-        permission
+        permission,
+        allowReshare
       };
 
       await vaultApi.shareCredential(credential.id, request);
@@ -178,7 +181,9 @@ export function ShareCredentialDialog({
       <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Share2 className="h-5 w-5" />
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Share2 className="h-5 w-5 text-primary" />
+            </div>
             Compartir Credencial
           </DialogTitle>
           <DialogDescription>
@@ -220,14 +225,31 @@ export function ShareCredentialDialog({
             </Select>
           </div>
 
+          {/* Opción de permitir re-compartir */}
+          <div className="flex items-center justify-between p-4 bg-muted/20 rounded-xl border border-border/30">
+            <div className="space-y-0.5">
+              <Label htmlFor="allow-reshare" className="text-sm font-medium">
+                Permitir re-compartir
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Los destinatarios podrán compartir esta credencial con otros usuarios
+              </p>
+            </div>
+            <Checkbox
+              id="allow-reshare"
+              checked={allowReshare}
+              onCheckedChange={(checked) => setAllowReshare(checked === true)}
+            />
+          </div>
+
           {/* Tabs para grupos y usuarios */}
           <Tabs defaultValue="groups" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="groups" className="flex items-center gap-2">
+            <TabsList className="grid w-full grid-cols-2 bg-muted/30 p-1 rounded-lg">
+              <TabsTrigger value="groups" className="flex items-center gap-2 rounded-md">
                 <FolderLock className="h-4 w-4" />
                 Grupos ({selectedGroupIds.length})
               </TabsTrigger>
-              <TabsTrigger value="users" className="flex items-center gap-2">
+              <TabsTrigger value="users" className="flex items-center gap-2 rounded-md">
                 <UserPlus className="h-4 w-4" />
                 Usuarios ({selectedUserIds.length})
               </TabsTrigger>
@@ -246,7 +268,7 @@ export function ShareCredentialDialog({
               </div>
 
               {/* Lista de grupos */}
-              <ScrollArea className="h-[200px] border rounded-lg p-2">
+              <ScrollArea className="h-[200px] border border-border/50 rounded-xl p-2">
                 {isLoading ? (
                   <div className="flex items-center justify-center h-full text-muted-foreground">
                     Cargando grupos...
@@ -263,9 +285,12 @@ export function ShareCredentialDialog({
                       return (
                         <div
                           key={group.id}
-                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors ${
-                            isSelected ? 'bg-primary/10' : ''
-                          }`}
+                          className={cn(
+                            'flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all duration-200',
+                            isSelected 
+                              ? 'bg-primary/10 border border-primary/20' 
+                              : 'hover:bg-muted/50 border border-transparent'
+                          )}
                           onClick={() => toggleGroup(group.id)}
                         >
                           <div className="flex items-center gap-3">
@@ -285,7 +310,7 @@ export function ShareCredentialDialog({
                             </div>
                           </div>
                           {currentShare && (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-xs font-medium">
                               {getPermissionIcon(currentShare.permission)}
                               <span className="ml-1">{currentShare.permission}</span>
                             </Badge>
@@ -311,7 +336,7 @@ export function ShareCredentialDialog({
               </div>
 
               {/* Lista de usuarios */}
-              <ScrollArea className="h-[200px] border rounded-lg p-2">
+              <ScrollArea className="h-[200px] border border-border/50 rounded-xl p-2">
                 {isLoading ? (
                   <div className="flex items-center justify-center h-full text-muted-foreground">
                     Cargando usuarios...
@@ -328,9 +353,12 @@ export function ShareCredentialDialog({
                       return (
                         <div
                           key={user.id}
-                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors ${
-                            isSelected ? 'bg-primary/10' : ''
-                          }`}
+                          className={cn(
+                            'flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all duration-200',
+                            isSelected 
+                              ? 'bg-primary/10 border border-primary/20' 
+                              : 'hover:bg-muted/50 border border-transparent'
+                          )}
                           onClick={() => toggleUser(user.id)}
                         >
                           <div className="flex items-center gap-3">
@@ -353,7 +381,7 @@ export function ShareCredentialDialog({
                             </div>
                           </div>
                           {currentShare && (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-xs font-medium">
                               {getPermissionIcon(currentShare.permission)}
                               <span className="ml-1">{currentShare.permission}</span>
                             </Badge>
@@ -369,7 +397,7 @@ export function ShareCredentialDialog({
 
           {/* Resumen de selección */}
           {(selectedGroupIds.length > 0 || selectedUserIds.length > 0) && (
-            <div className="p-3 bg-muted/50 rounded-lg">
+            <div className="p-4 bg-muted/20 rounded-xl border border-border/30">
               <p className="text-sm font-medium mb-2">Resumen:</p>
               <div className="flex flex-wrap gap-2">
                 {selectedGroupIds.map(id => {
@@ -378,7 +406,7 @@ export function ShareCredentialDialog({
                     <Badge
                       key={`group-${id}`}
                       variant="outline"
-                      className="cursor-pointer hover:bg-destructive/10"
+                      className="cursor-pointer hover:bg-destructive/10 transition-colors font-medium"
                       onClick={() => toggleGroup(id)}
                     >
                       <FolderLock className="h-3 w-3 mr-1" />
@@ -393,7 +421,7 @@ export function ShareCredentialDialog({
                     <Badge
                       key={`user-${id}`}
                       variant="outline"
-                      className="cursor-pointer hover:bg-destructive/10"
+                      className="cursor-pointer hover:bg-destructive/10 transition-colors font-medium"
                       onClick={() => toggleUser(id)}
                     >
                       {user.displayName || user.userName}
@@ -420,4 +448,3 @@ export function ShareCredentialDialog({
 }
 
 export default ShareCredentialDialog;
-

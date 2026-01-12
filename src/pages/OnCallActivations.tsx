@@ -4,7 +4,6 @@ import {
   Activity, 
   Plus, 
   ArrowLeft,
-  Loader2,
   Clock,
   AlertTriangle,
   Database,
@@ -15,15 +14,20 @@ import {
   MoreHorizontal,
   Edit,
   Trash2,
-  Filter,
-  X
+  X,
+  RefreshCw,
+  CheckCircle,
+  Settings,
+  Tag,
+  GripVertical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -56,64 +60,72 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { OnCallActivationDialog } from '@/components/oncall/OnCallActivationDialog';
 import { 
   activationsApi, 
+  activationCategoriesApi,
   OnCallActivationDto, 
-  CreateActivationRequest,
-  activationCategories,
-  activationSeverities,
-  onCallApi
+  ActivationCategoryDto,
+  defaultActivationCategories,
+  activationSeverities
 } from '@/services/api';
 
-const categoryIcons: Record<string, any> = {
-  Database: Database,
-  Performance: Zap,
-  Connectivity: Wifi,
-  Backup: HardDrive,
-  Security: Shield,
-  Other: AlertTriangle,
+// Iconos por nombre de categoría
+const categoryIconMap: Record<string, any> = {
+  'Backups': HardDrive,
+  'Backup': HardDrive,
+  'Conectividad': Wifi,
+  'Connectivity': Wifi,
+  'Rendimiento': Zap,
+  'Performance': Zap,
+  'Espacio en Disco': Database,
+  'Disk': Database,
+  'Seguridad': Shield,
+  'Security': Shield,
+  'Base de Datos': Database,
+  'Database': Database,
+  'Otro': AlertTriangle,
+  'Other': AlertTriangle,
+};
+
+const getCategoryIcon = (categoryName: string) => {
+  return categoryIconMap[categoryName] || Tag;
 };
 
 const severityColors: Record<string, string> = {
-  Low: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-  Medium: 'bg-amber-500/20 text-amber-500 border-amber-500/30',
-  High: 'bg-orange-500/20 text-orange-500 border-orange-500/30',
-  Critical: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+  Low: 'bg-muted text-muted-foreground border-border',
+  Medium: 'bg-warning/10 text-warning border-warning/30',
+  High: 'bg-warning/20 text-warning border-warning/50',
+  Critical: 'bg-destructive/10 text-destructive border-destructive/30',
 };
 
 export default function OnCallActivations() {
   const navigate = useNavigate();
   const [activations, setActivations] = useState<OnCallActivationDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showActivationDialog, setShowActivationDialog] = useState(false);
   const [editingActivation, setEditingActivation] = useState<OnCallActivationDto | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<OnCallActivationDto | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [saving, setSaving] = useState(false);
+
+  // Categorías dinámicas
+  const [categories, setCategories] = useState<ActivationCategoryDto[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [showCategoriesDialog, setShowCategoriesDialog] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ name: '', icon: '' });
+  const [editingCategory, setEditingCategory] = useState<ActivationCategoryDto | null>(null);
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [deletingCategory, setDeletingCategory] = useState<ActivationCategoryDto | null>(null);
+  const [draggingCategory, setDraggingCategory] = useState<number | null>(null);
 
   // Filtros
   const [filterCategory, setFilterCategory] = useState<string>('');
   const [filterSeverity, setFilterSeverity] = useState<string>('');
 
-  // Helper para obtener fecha/hora local en formato datetime-local
-  const getLocalDateTimeString = (date: Date = new Date()) => {
-    const offset = date.getTimezoneOffset();
-    const localDate = new Date(date.getTime() - offset * 60 * 1000);
-    return localDate.toISOString().slice(0, 16);
-  };
-
-  // Formulario
-  const [formData, setFormData] = useState<CreateActivationRequest>({
-    scheduleId: 0,
-    activatedAt: getLocalDateTimeString(),
-    category: 'Other',
-    severity: 'Medium',
-    title: '',
-    description: '',
-  });
-
   useEffect(() => {
     loadData();
+    loadCategories();
   }, []);
 
   const loadData = async () => {
@@ -122,56 +134,128 @@ export default function OnCallActivations() {
       const data = await activationsApi.getAll();
       setActivations(data);
     } catch (err: any) {
-      // API no disponible todavía, mostrar lista vacía
       setActivations([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const loadCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      const data = await activationCategoriesApi.getAll();
+      setCategories(data.sort((a, b) => a.order - b.order));
+    } catch (err) {
+      console.error('Error loading categories:', err);
+      // Usar categorías por defecto si falla
+      const defaultCats: ActivationCategoryDto[] = defaultActivationCategories.map((name, i) => ({
+        id: i,
+        name,
+        isDefault: true,
+        isActive: true,
+        order: i,
+        createdAt: new Date().toISOString(),
+      }));
+      setCategories(defaultCats);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
 
-    if (!formData.title) {
-      toast.error('El título es requerido');
+  // Gestión de categorías
+  const handleSaveCategory = async () => {
+    if (!categoryForm.name.trim()) {
+      toast.error('El nombre de la categoría es requerido');
       return;
     }
 
     try {
-      setSaving(true);
-
-      if (editingActivation) {
-        // Al editar, mantener el scheduleId existente
-        await activationsApi.update(editingActivation.id, {
-          ...formData,
-          resolvedAt: formData.resolvedAt || undefined,
+      setSavingCategory(true);
+      if (editingCategory) {
+        await activationCategoriesApi.update(editingCategory.id, {
+          name: categoryForm.name,
+          icon: categoryForm.icon || undefined,
+          isActive: editingCategory.isActive,
         });
-        toast.success('Activación actualizada');
+        toast.success('Categoría actualizada');
       } else {
-        // Buscar la guardia correspondiente a la fecha de activación
-        const schedule = await onCallApi.getScheduleByDate(formData.activatedAt);
-        if (!schedule) {
-          toast.error('No hay guardia asignada para la fecha seleccionada');
-          return;
-        }
-
-        await activationsApi.create({
-          ...formData,
-          scheduleId: schedule.id,
+        await activationCategoriesApi.create({
+          name: categoryForm.name,
+          icon: categoryForm.icon || undefined,
         });
-        toast.success('Activación registrada');
+        toast.success('Categoría creada');
       }
-
-      setShowCreateDialog(false);
-      setEditingActivation(null);
-      resetForm();
-      await loadData();
+      setCategoryForm({ name: '', icon: '' });
+      setEditingCategory(null);
+      await loadCategories();
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally {
-      setSaving(false);
+      setSavingCategory(false);
     }
   };
+
+  const handleDeleteCategory = async (category: ActivationCategoryDto) => {
+    try {
+      setSavingCategory(true);
+      await activationCategoriesApi.delete(category.id);
+      toast.success('Categoría eliminada');
+      setDeletingCategory(null);
+      await loadCategories();
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    } finally {
+      setSavingCategory(false);
+    }
+  };
+
+  const handleToggleCategoryActive = async (category: ActivationCategoryDto) => {
+    try {
+      await activationCategoriesApi.update(category.id, {
+        name: category.name,
+        icon: category.icon,
+        isActive: !category.isActive,
+      });
+      await loadCategories();
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    }
+  };
+
+  const handleCategoryDragStart = (categoryId: number) => {
+    setDraggingCategory(categoryId);
+  };
+
+  const handleCategoryDragOver = (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    if (draggingCategory === null || draggingCategory === targetId) return;
+
+    const dragIndex = categories.findIndex(c => c.id === draggingCategory);
+    const targetIndex = categories.findIndex(c => c.id === targetId);
+
+    if (dragIndex === -1 || targetIndex === -1) return;
+
+    const newCategories = [...categories];
+    const [removed] = newCategories.splice(dragIndex, 1);
+    newCategories.splice(targetIndex, 0, removed);
+    setCategories(newCategories);
+  };
+
+  const handleCategoryDragEnd = async () => {
+    if (draggingCategory === null) return;
+    setDraggingCategory(null);
+
+    try {
+      const categoryIds = categories.map(c => c.id);
+      await activationCategoriesApi.reorder(categoryIds);
+    } catch (err: any) {
+      toast.error('Error al reordenar: ' + err.message);
+      await loadCategories();
+    }
+  };
+
+  // Lista de categorías activas para los selects
+  const activeCategories = categories.filter(c => c.isActive);
 
   const handleDelete = async (activation: OnCallActivationDto) => {
     try {
@@ -187,32 +271,14 @@ export default function OnCallActivations() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      scheduleId: 0,
-      activatedAt: getLocalDateTimeString(),
-      category: 'Other',
-      severity: 'Medium',
-      title: '',
-      description: '',
-    });
+  const openEdit = (activation: OnCallActivationDto) => {
+    setEditingActivation(activation);
+    setShowActivationDialog(true);
   };
 
-  const openEdit = (activation: OnCallActivationDto) => {
-    setFormData({
-      scheduleId: activation.scheduleId,
-      activatedAt: activation.activatedAt.slice(0, 16),
-      resolvedAt: activation.resolvedAt?.slice(0, 16),
-      durationMinutes: activation.durationMinutes,
-      category: activation.category,
-      severity: activation.severity,
-      title: activation.title,
-      description: activation.description,
-      resolution: activation.resolution,
-      instanceName: activation.instanceName,
-    });
-    setEditingActivation(activation);
-    setShowCreateDialog(true);
+  const openCreate = () => {
+    setEditingActivation(null);
+    setShowActivationDialog(true);
   };
 
   const filteredActivations = activations.filter(a => {
@@ -226,16 +292,76 @@ export default function OnCallActivations() {
     setFilterSeverity('');
   };
 
+  // Stats
+  const totalActivations = activations.length;
+  const criticalCount = activations.filter(a => a.severity === 'Critical').length;
+  const resolvedCount = activations.filter(a => a.resolvedAt).length;
+  const pendingCount = activations.filter(a => !a.resolvedAt).length;
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-10" />
+            <div>
+              <Skeleton className="h-8 w-64 mb-2" />
+              <Skeleton className="h-4 w-80" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-40" />
+        </div>
+
+        {/* KPIs Skeleton */}
+        <div className="grid gap-4 md:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-12 mb-1" />
+                <Skeleton className="h-3 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Filters Skeleton */}
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex gap-4">
+              <Skeleton className="h-10 w-40" />
+              <Skeleton className="h-10 w-40" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* List Skeleton */}
+        <div className="space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-4">
+                <div className="flex items-start gap-4">
+                  <Skeleton className="h-10 w-10 rounded-lg" />
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-48 mb-2" />
+                    <Skeleton className="h-4 w-full mb-2" />
+                    <Skeleton className="h-3 w-64" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container py-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -243,8 +369,8 @@ export default function OnCallActivations() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Activity className="h-6 w-6 text-purple-500" />
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <Activity className="h-8 w-8" />
               Activaciones de Guardia
             </h1>
             <p className="text-muted-foreground">
@@ -252,15 +378,83 @@ export default function OnCallActivations() {
             </p>
           </div>
         </div>
-        <Button onClick={() => { resetForm(); setShowCreateDialog(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nueva Activación
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowCategoriesDialog(true)}>
+            <Settings className="h-4 w-4 mr-2" />
+            Gestionar Categorías
+          </Button>
+          <Button variant="outline" onClick={loadData} disabled={loading}>
+            <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
+            Actualizar
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nueva Activación
+          </Button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Activaciones</CardTitle>
+            <Activity className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">{totalActivations}</div>
+            <p className="text-xs text-muted-foreground">registradas</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Críticas</CardTitle>
+            <AlertTriangle className={cn('h-4 w-4', criticalCount > 0 ? 'text-red-500' : 'text-muted-foreground')} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn('text-2xl font-bold', criticalCount > 0 ? 'text-red-500' : 'text-muted-foreground')}>
+              {criticalCount}
+            </div>
+            <p className="text-xs text-muted-foreground">severidad crítica</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Resueltas</CardTitle>
+            <CheckCircle className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-500">{resolvedCount}</div>
+            <p className="text-xs text-muted-foreground">completadas</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pendientes</CardTitle>
+            <Clock className={cn('h-4 w-4', pendingCount > 0 ? 'text-warning' : 'text-muted-foreground')} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn('text-2xl font-bold', pendingCount > 0 ? 'text-warning' : 'text-muted-foreground')}>
+              {pendingCount}
+            </div>
+            <p className="text-xs text-muted-foreground">sin resolver</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filtros */}
       <Card>
-        <CardContent className="pt-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-primary" />
+            Filtros
+          </CardTitle>
+          <CardDescription>Filtra las activaciones por categoría o severidad</CardDescription>
+        </CardHeader>
+        <CardContent>
           <div className="flex flex-wrap gap-4 items-end">
             <div className="space-y-1">
               <Label className="text-xs">Categoría</Label>
@@ -270,8 +464,8 @@ export default function OnCallActivations() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">Todas</SelectItem>
-                  {activationCategories.map(cat => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  {activeCategories.map(cat => (
+                    <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -303,21 +497,24 @@ export default function OnCallActivations() {
       {/* Lista de activaciones */}
       {filteredActivations.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No hay activaciones registradas
+          <CardContent className="py-12 text-center">
+            <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-lg font-semibold mb-2">Sin activaciones</p>
+            <p className="text-muted-foreground">No hay activaciones registradas</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
           {filteredActivations.map((activation) => {
-            const CategoryIcon = categoryIcons[activation.category] || AlertTriangle;
+            const CategoryIcon = getCategoryIcon(activation.category);
             return (
               <Card key={activation.id}>
                 <CardContent className="pt-4">
                   <div className="flex items-start gap-4">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    <div className={cn(
+                      'w-10 h-10 rounded-lg flex items-center justify-center border',
                       severityColors[activation.severity]
-                    }`}>
+                    )}>
                       <CategoryIcon className="h-5 w-5" />
                     </div>
                     
@@ -328,6 +525,12 @@ export default function OnCallActivations() {
                           {activation.severity}
                         </Badge>
                         <Badge variant="secondary">{activation.category}</Badge>
+                        {activation.resolvedAt && (
+                          <Badge variant="soft-success">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Resuelto
+                          </Badge>
+                        )}
                       </div>
                       
                       {activation.description && (
@@ -381,142 +584,36 @@ export default function OnCallActivations() {
         </div>
       )}
 
-      {/* Dialog crear/editar */}
-      <Dialog open={showCreateDialog} onOpenChange={(open) => {
-        if (!open) {
-          setEditingActivation(null);
-          resetForm();
-        }
-        setShowCreateDialog(open);
-      }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingActivation ? 'Editar Activación' : 'Nueva Activación'}
-            </DialogTitle>
-            <DialogDescription>
-              Registra un incidente atendido durante la guardia
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Fecha y Hora de Activación</Label>
-                <Input
-                  type="datetime-local"
-                  value={formData.activatedAt}
-                  onChange={(e) => setFormData({ ...formData, activatedAt: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Fecha y Hora de Resolución (opcional)</Label>
-                <Input
-                  type="datetime-local"
-                  value={formData.resolvedAt || ''}
-                  onChange={(e) => setFormData({ ...formData, resolvedAt: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Categoría</Label>
-                <Select 
-                  value={formData.category} 
-                  onValueChange={(v) => setFormData({ ...formData, category: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activationCategories.map(cat => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Severidad</Label>
-                <Select 
-                  value={formData.severity} 
-                  onValueChange={(v) => setFormData({ ...formData, severity: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activationSeverities.map(sev => (
-                      <SelectItem key={sev} value={sev}>{sev}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Título *</Label>
-              <Input
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="Breve descripción del incidente"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Instancia SQL (opcional)</Label>
-              <Input
-                value={formData.instanceName || ''}
-                onChange={(e) => setFormData({ ...formData, instanceName: e.target.value })}
-                placeholder="Nombre de la instancia afectada"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Descripción</Label>
-              <Textarea
-                value={formData.description || ''}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Detalle del problema..."
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Resolución</Label>
-              <Textarea
-                value={formData.resolution || ''}
-                onChange={(e) => setFormData({ ...formData, resolution: e.target.value })}
-                placeholder="Cómo se resolvió el incidente..."
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Duración (minutos)</Label>
-              <Input
-                type="number"
-                value={formData.durationMinutes || ''}
-                onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || undefined })}
-                placeholder="Tiempo total invertido"
-              />
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {editingActivation ? 'Guardar Cambios' : 'Registrar Activación'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Dialog crear/editar - usando componente compartido */}
+      <OnCallActivationDialog
+        open={showActivationDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingActivation(null);
+          }
+          setShowActivationDialog(open);
+        }}
+        editingActivation={editingActivation ? {
+          id: editingActivation.id,
+          scheduleId: editingActivation.scheduleId,
+          activatedAt: editingActivation.activatedAt,
+          resolvedAt: editingActivation.resolvedAt,
+          category: editingActivation.category,
+          severity: editingActivation.severity,
+          title: editingActivation.title,
+          description: editingActivation.description,
+          resolution: editingActivation.resolution,
+          instanceName: editingActivation.instanceName,
+          durationMinutes: editingActivation.durationMinutes,
+          serviceDeskUrl: editingActivation.serviceDeskUrl,
+          status: editingActivation.status,
+        } : null}
+        onActivationCreated={loadData}
+        onActivationUpdated={loadData}
+      />
 
       {/* Dialog de confirmación de eliminación */}
-      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !deleting && !open && setDeleteConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar activación?</AlertDialogTitle>
@@ -526,13 +623,183 @@ export default function OnCallActivations() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
+              onClick={async (e) => {
+                e.preventDefault(); // Prevenir cierre automático
+                if (deleteConfirm) {
+                  await handleDelete(deleteConfirm);
+                }
+              }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={deleting}
             >
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <RefreshCw className="h-4 w-4 mr-2 animate-spin" />}
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de gestión de categorías */}
+      <Dialog open={showCategoriesDialog} onOpenChange={(open) => {
+        if (!open) {
+          setCategoryForm({ name: '', icon: '' });
+          setEditingCategory(null);
+        }
+        setShowCategoriesDialog(open);
+      }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-5 w-5" />
+              Gestionar Categorías de Activación
+            </DialogTitle>
+            <DialogDescription>
+              Configura las categorías disponibles para clasificar las activaciones de guardia
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Formulario para agregar/editar categoría */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">
+                  {editingCategory ? 'Editar Categoría' : 'Nueva Categoría'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Nombre de la categoría"
+                    value={categoryForm.name}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSaveCategory} disabled={savingCategory}>
+                    {savingCategory && <RefreshCw className="h-4 w-4 mr-2 animate-spin" />}
+                    {editingCategory ? 'Guardar' : 'Agregar'}
+                  </Button>
+                  {editingCategory && (
+                    <Button variant="ghost" onClick={() => {
+                      setEditingCategory(null);
+                      setCategoryForm({ name: '', icon: '' });
+                    }}>
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Lista de categorías */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Categorías Existentes</CardTitle>
+                <CardDescription className="text-xs">
+                  Arrastra para reordenar. Las categorías por defecto no se pueden eliminar.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingCategories ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map(i => (
+                      <Skeleton key={i} className="h-12 w-full" />
+                    ))}
+                  </div>
+                ) : categories.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No hay categorías configuradas
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {categories.map((category) => {
+                      const CategoryIcon = getCategoryIcon(category.name);
+                      return (
+                        <div
+                          key={category.id}
+                          draggable
+                          onDragStart={() => handleCategoryDragStart(category.id)}
+                          onDragOver={(e) => handleCategoryDragOver(e, category.id)}
+                          onDragEnd={handleCategoryDragEnd}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg border bg-card transition-all",
+                            draggingCategory === category.id && "opacity-50 ring-2 ring-primary",
+                            !category.isActive && "opacity-60"
+                          )}
+                        >
+                          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                          <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center">
+                            <CategoryIcon className="h-4 w-4" />
+                          </div>
+                          <span className="flex-1 font-medium">{category.name}</span>
+                          
+                          <div className="flex items-center gap-2">
+                            {category.isDefault && (
+                              <Badge variant="secondary" className="text-xs">
+                                Por defecto
+                              </Badge>
+                            )}
+                            <Switch
+                              checked={category.isActive}
+                              onCheckedChange={() => handleToggleCategoryActive(category)}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setEditingCategory(category);
+                                setCategoryForm({ name: category.name, icon: category.icon || '' });
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            {!category.isDefault && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setDeletingCategory(category)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCategoriesDialog(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación de eliminación de categoría */}
+      <AlertDialog open={!!deletingCategory} onOpenChange={() => setDeletingCategory(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar categoría?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que quieres eliminar la categoría "{deletingCategory?.name}"?
+              Las activaciones existentes mantendrán esta categoría como texto.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingCategory && handleDeleteCategory(deletingCategory)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={savingCategory}
+            >
+              {savingCategory && <RefreshCw className="h-4 w-4 mr-2 animate-spin" />}
               Eliminar
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -541,4 +808,3 @@ export default function OnCallActivations() {
     </div>
   );
 }
-

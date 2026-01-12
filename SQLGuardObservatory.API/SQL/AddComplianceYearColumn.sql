@@ -1,5 +1,5 @@
 -- Script para agregar la columna ComplianceYear a la tabla PatchComplianceConfig
--- Ejecutar en la base de datos SQLGuardObservatoryAuth
+-- Ejecutar en la base de datos AppSQLNova
 
 -- 1. Agregar la columna ComplianceYear con valor por defecto del año actual
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.PatchComplianceConfig') AND name = 'ComplianceYear')
@@ -56,4 +56,7 @@ GO
 
 PRINT 'Migración completada exitosamente';
 PRINT 'Las configuraciones existentes ahora pertenecen al año ' + CAST(YEAR(GETDATE()) AS VARCHAR(4));
+
+
+
 

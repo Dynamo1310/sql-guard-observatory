@@ -21,11 +21,11 @@ export function SuggestedActions({ details, className, maxItems = 10, compact = 
   if (suggestions.length === 0) {
     return (
       <div className={cn(
-        'flex items-center gap-2 text-green-600',
+        'flex items-center gap-2 text-success',
         compact ? 'text-xs' : 'text-sm',
         className
       )}>
-        <div className="h-2 w-2 rounded-full bg-green-500" />
+        <div className="h-2 w-2 rounded-full bg-success" />
         No hay acciones pendientes - Todo en orden
       </div>
     );
@@ -39,34 +39,34 @@ export function SuggestedActions({ details, className, maxItems = 10, compact = 
       case 'critical':
         return {
           icon: XCircle,
-          bg: 'bg-red-500/10',
-          border: 'border-red-500/30',
-          text: 'text-red-600',
-          iconColor: 'text-red-500',
+          bg: 'bg-destructive/10',
+          border: 'border-destructive/30',
+          text: 'text-destructive',
+          iconColor: 'text-destructive',
         };
       case 'high':
         return {
           icon: AlertTriangle,
-          bg: 'bg-orange-500/10',
-          border: 'border-orange-500/30',
-          text: 'text-orange-600',
-          iconColor: 'text-orange-500',
+          bg: 'bg-warning/10',
+          border: 'border-warning/30',
+          text: 'text-warning',
+          iconColor: 'text-warning',
         };
       case 'medium':
         return {
           icon: AlertCircle,
-          bg: 'bg-yellow-500/10',
-          border: 'border-yellow-500/30',
-          text: 'text-yellow-600',
-          iconColor: 'text-yellow-500',
+          bg: 'bg-muted/30',
+          border: 'border-border/50',
+          text: 'text-muted-foreground',
+          iconColor: 'text-muted-foreground',
         };
       default:
         return {
           icon: Lightbulb,
-          bg: 'bg-blue-500/10',
-          border: 'border-blue-500/30',
-          text: 'text-blue-600',
-          iconColor: 'text-blue-500',
+          bg: 'bg-muted/20',
+          border: 'border-border/30',
+          text: 'text-muted-foreground',
+          iconColor: 'text-muted-foreground',
         };
     }
   };
@@ -74,7 +74,7 @@ export function SuggestedActions({ details, className, maxItems = 10, compact = 
   return (
     <div className={cn('space-y-2', className)}>
       <div className="flex items-center gap-2 mb-2">
-        <Lightbulb className="h-4 w-4 text-amber-500" />
+        <Lightbulb className="h-4 w-4 text-muted-foreground" />
         <span className={cn('font-semibold', compact ? 'text-xs' : 'text-sm')}>
           Acciones Sugeridas
         </span>
@@ -180,30 +180,30 @@ function generateSuggestions(details: HealthScoreV3DetailDto): SuggestedAction[]
     }
   }
   
-  // Log Chain
-  if (details.logChainDetails?.brokenChainCount > 0) {
+  // Wait Statistics
+  if (details.waitsDetails?.blockedSessionCount > 5) {
     suggestions.push({
-      message: `${details.logChainDetails.brokenChainCount} cadena(s) de log rota(s) - Ejecutar backup full en DBs afectadas`,
+      message: `${details.waitsDetails.blockedSessionCount} sesiones bloqueadas - Revisar bloqueos activos`,
       severity: 'critical',
-      category: 'Log Chain',
+      category: 'Waits',
+    });
+  } else if (details.waitsDetails?.blockedSessionCount > 0) {
+    suggestions.push({
+      message: `${details.waitsDetails.blockedSessionCount} sesion(es) bloqueada(s)`,
+      severity: 'medium',
+      category: 'Waits',
     });
   }
   
-  // Database States
-  if (details.databaseStatesDetails) {
-    const problematic = 
-      (details.databaseStatesDetails.offlineCount || 0) +
-      (details.databaseStatesDetails.suspectCount || 0) +
-      (details.databaseStatesDetails.emergencyCount || 0);
-    
-    if (problematic > 0) {
-      suggestions.push({
-        message: `${problematic} base(s) en estado crítico - Revisar error log urgentemente`,
-        severity: 'critical',
-        category: 'DB States',
-      });
-    }
+  if (details.waitsDetails?.maxBlockTimeSeconds > 60) {
+    suggestions.push({
+      message: `Bloqueo prolongado de ${details.waitsDetails.maxBlockTimeSeconds}s - Investigar bloqueador`,
+      severity: 'high',
+      category: 'Waits',
+    });
   }
+  
+  // NOTA: Database States fue eliminado del HealthScore
   
   // CPU
   if (details.cpuDetails) {
@@ -281,22 +281,7 @@ function generateSuggestions(details: HealthScoreV3DetailDto): SuggestedAction[]
     }
   }
   
-  // Critical Errors
-  if (details.erroresCriticosDetails) {
-    if (details.erroresCriticosDetails.severity20PlusLast1h > 0) {
-      suggestions.push({
-        message: `${details.erroresCriticosDetails.severity20PlusLast1h} error(es) crítico(s) en última hora`,
-        severity: 'critical',
-        category: 'Errores',
-      });
-    } else if (details.erroresCriticosDetails.severity20PlusCount > 10) {
-      suggestions.push({
-        message: `${details.erroresCriticosDetails.severity20PlusCount} errores críticos en 24h - Revisar log`,
-        severity: 'high',
-        category: 'Errores',
-      });
-    }
-  }
+  // NOTA: ErroresCriticos fue eliminado del HealthScore
   
   // Maintenance
   if (details.maintenanceDetails) {
@@ -316,34 +301,7 @@ function generateSuggestions(details: HealthScoreV3DetailDto): SuggestedAction[]
     }
   }
   
-  // Configuration
-  if (details.configuracionTempdbDetails) {
-    if (details.configuracionTempdbDetails.tempDBContentionScore < 70) {
-      suggestions.push({
-        message: 'Contención en TempDB - Revisar configuración de archivos',
-        severity: 'medium',
-        category: 'TempDB',
-      });
-    }
-  }
-  
-  // Autogrowth
-  if (details.autogrowthDetails) {
-    if (details.autogrowthDetails.filesNearLimit > 0) {
-      suggestions.push({
-        message: `${details.autogrowthDetails.filesNearLimit} archivo(s) cerca del límite - Aumentar MaxSize`,
-        severity: 'high',
-        category: 'Autogrowth',
-      });
-    }
-    if (details.autogrowthDetails.autogrowthEventsLast24h > 50) {
-      suggestions.push({
-        message: `Muchos autogrowths (${details.autogrowthDetails.autogrowthEventsLast24h} en 24h)`,
-        severity: 'medium',
-        category: 'Autogrowth',
-      });
-    }
-  }
+  // NOTA: ConfiguracionTempdb y Autogrowth fueron eliminados del HealthScore
   
   // Sort by severity
   const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };

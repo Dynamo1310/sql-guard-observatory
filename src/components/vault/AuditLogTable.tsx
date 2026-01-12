@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CredentialAuditLogDto } from '@/services/vaultApi';
+import { cn } from '@/lib/utils';
 
 interface AuditLogTableProps {
   logs: CredentialAuditLogDto[];
@@ -25,14 +26,14 @@ interface AuditLogTableProps {
 }
 
 const actionConfig: Record<string, { icon: typeof Eye; color: string; label: string }> = {
-  Created: { icon: Plus, color: 'bg-green-500/10 text-green-600', label: 'Creada' },
-  Updated: { icon: Edit, color: 'bg-blue-500/10 text-blue-600', label: 'Actualizada' },
-  Deleted: { icon: Trash2, color: 'bg-red-500/10 text-red-600', label: 'Eliminada' },
-  Viewed: { icon: Eye, color: 'bg-gray-500/10 text-gray-600', label: 'Visualizada' },
-  PasswordRevealed: { icon: Eye, color: 'bg-amber-500/10 text-amber-600', label: 'Contraseña revelada' },
-  PasswordCopied: { icon: Copy, color: 'bg-purple-500/10 text-purple-600', label: 'Contraseña copiada' },
-  ServerAdded: { icon: Server, color: 'bg-teal-500/10 text-teal-600', label: 'Servidor asociado' },
-  ServerRemoved: { icon: Server, color: 'bg-orange-500/10 text-orange-600', label: 'Servidor desasociado' }
+  Created: { icon: Plus, color: 'bg-muted text-foreground border-border', label: 'Creada' },
+  Updated: { icon: Edit, color: 'bg-muted text-foreground border-border', label: 'Actualizada' },
+  Deleted: { icon: Trash2, color: 'bg-muted text-foreground border-border', label: 'Eliminada' },
+  Viewed: { icon: Eye, color: 'bg-muted text-muted-foreground border-border', label: 'Visualizada' },
+  PasswordRevealed: { icon: Eye, color: 'bg-muted text-foreground border-border', label: 'Contraseña revelada' },
+  PasswordCopied: { icon: Copy, color: 'bg-muted text-foreground border-border', label: 'Contraseña copiada' },
+  ServerAdded: { icon: Server, color: 'bg-muted text-foreground border-border', label: 'Servidor asociado' },
+  ServerRemoved: { icon: Server, color: 'bg-muted text-foreground border-border', label: 'Servidor desasociado' }
 };
 
 export function AuditLogTable({ 
@@ -61,9 +62,9 @@ export function AuditLogTable({
   }
 
   return (
-    <ScrollArea className={`rounded-md border`} style={{ maxHeight }}>
+    <ScrollArea className="rounded-xl border border-border/50" style={{ maxHeight }}>
       <Table>
-        <TableHeader className="sticky top-0 bg-background">
+        <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-sm">
           <TableRow>
             <TableHead className="w-[180px]">Fecha</TableHead>
             <TableHead>Acción</TableHead>
@@ -79,10 +80,12 @@ export function AuditLogTable({
             const dateInfo = formatDateTime(log.performedAt);
 
             return (
-              <TableRow key={log.id}>
+              <TableRow key={log.id} className="group">
                 <TableCell className="font-mono text-xs">
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3 text-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-md bg-muted/50">
+                      <Clock className="h-3 w-3 text-muted-foreground" />
+                    </div>
                     <div>
                       <div>{dateInfo.full}</div>
                       <div className="text-muted-foreground">{dateInfo.relative}</div>
@@ -90,12 +93,12 @@ export function AuditLogTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={config.color}>
+                  <Badge variant="outline" className={cn('font-medium border', config.color)}>
                     <ActionIcon className="h-3 w-3 mr-1" />
                     {config.label}
                   </Badge>
                   {log.changedFields && (
-                    <div className="text-xs text-muted-foreground mt-1 max-w-[200px] truncate">
+                    <div className="text-xs text-muted-foreground mt-1.5 max-w-[200px] truncate">
                       {log.changedFields}
                     </div>
                   )}
@@ -106,7 +109,7 @@ export function AuditLogTable({
                   </TableCell>
                 )}
                 <TableCell>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <User className="h-3 w-3 text-muted-foreground" />
                     <span className="text-sm">
                       {log.performedByUserName || log.performedByUserId}
@@ -115,7 +118,7 @@ export function AuditLogTable({
                 </TableCell>
                 <TableCell className="font-mono text-xs">
                   {log.ipAddress && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <Globe className="h-3 w-3 text-muted-foreground" />
                       {log.ipAddress}
                     </div>
@@ -131,4 +134,3 @@ export function AuditLogTable({
 }
 
 export default AuditLogTable;
-

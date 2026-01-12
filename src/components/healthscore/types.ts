@@ -63,63 +63,51 @@ export interface CategoryInfo {
   group: 'availability' | 'performance' | 'maintenance';
 }
 
-// All 12 categories
+// 8 categorías activas del Health Score V3
 export const CATEGORIES: CategoryInfo[] = [
   // Availability & DR (40%)
-  { key: 'backups', name: 'Backups (RPO/RTO)', shortName: 'Backups', icon: 'Database', weight: 18, color: 'text-green-600', bgColor: 'bg-green-500/10', borderColor: 'border-green-500/30', group: 'availability' },
-  { key: 'alwaysOn', name: 'AlwaysOn (AG)', shortName: 'AlwaysOn', icon: 'Shield', weight: 14, color: 'text-purple-600', bgColor: 'bg-purple-500/10', borderColor: 'border-purple-500/30', group: 'availability' },
-  { key: 'logChain', name: 'Log Chain Integrity', shortName: 'Log Chain', icon: 'Link', weight: 5, color: 'text-amber-600', bgColor: 'bg-amber-500/10', borderColor: 'border-amber-500/30', group: 'availability' },
-  { key: 'databaseStates', name: 'Database States', shortName: 'DB States', icon: 'AlertTriangle', weight: 3, color: 'text-rose-600', bgColor: 'bg-rose-500/10', borderColor: 'border-rose-500/30', group: 'availability' },
+  { key: 'backups', name: 'Backups (RPO/RTO)', shortName: 'Backups', icon: 'Database', weight: 23, color: 'text-foreground', bgColor: 'bg-muted/50', borderColor: 'border-border', group: 'availability' },
+  { key: 'alwaysOn', name: 'AlwaysOn (AG)', shortName: 'AlwaysOn', icon: 'Shield', weight: 17, color: 'text-foreground', bgColor: 'bg-muted/50', borderColor: 'border-border', group: 'availability' },
   
-  // Performance (35%)
-  { key: 'cpu', name: 'CPU', shortName: 'CPU', icon: 'Cpu', weight: 10, color: 'text-orange-500', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', group: 'performance' },
-  { key: 'memoria', name: 'Memory (PLE + Grants)', shortName: 'Memory', icon: 'MemoryStick', weight: 8, color: 'text-pink-600', bgColor: 'bg-pink-500/10', borderColor: 'border-pink-500/30', group: 'performance' },
-  { key: 'io', name: 'I/O (Latency / IOPS)', shortName: 'I/O', icon: 'Zap', weight: 10, color: 'text-cyan-600', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', group: 'performance' },
-  { key: 'discos', name: 'Disk Space', shortName: 'Disks', icon: 'HardDrive', weight: 7, color: 'text-yellow-600', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', group: 'performance' },
+  // Performance (54%)
+  { key: 'cpu', name: 'CPU', shortName: 'CPU', icon: 'Cpu', weight: 12, color: 'text-foreground', bgColor: 'bg-muted/50', borderColor: 'border-border', group: 'performance' },
+  { key: 'memoria', name: 'Memory (PLE + Grants)', shortName: 'Memory', icon: 'MemoryStick', weight: 10, color: 'text-foreground', bgColor: 'bg-muted/50', borderColor: 'border-border', group: 'performance' },
+  { key: 'io', name: 'I/O (Latency / IOPS)', shortName: 'I/O', icon: 'Zap', weight: 13, color: 'text-foreground', bgColor: 'bg-muted/50', borderColor: 'border-border', group: 'performance' },
+  { key: 'discos', name: 'Disk Space', shortName: 'Disks', icon: 'HardDrive', weight: 9, color: 'text-foreground', bgColor: 'bg-muted/50', borderColor: 'border-border', group: 'performance' },
+  { key: 'waits', name: 'Wait Statistics', shortName: 'Waits', icon: 'Clock', weight: 10, color: 'text-foreground', bgColor: 'bg-muted/50', borderColor: 'border-border', group: 'performance' },
   
-  // Maintenance & Config (25%)
-  { key: 'erroresCriticos', name: 'Critical Errors (sev≥20)', shortName: 'Errors', icon: 'XCircle', weight: 7, color: 'text-red-600', bgColor: 'bg-red-500/10', borderColor: 'border-red-500/30', group: 'maintenance' },
-  { key: 'maintenance', name: 'Maintenance', shortName: 'Maint.', icon: 'Wrench', weight: 5, color: 'text-teal-600', bgColor: 'bg-teal-500/10', borderColor: 'border-teal-500/30', group: 'maintenance' },
-  { key: 'configuracionTempdb', name: 'Configuration & TempDB', shortName: 'Config', icon: 'Settings', weight: 8, color: 'text-indigo-600', bgColor: 'bg-indigo-500/10', borderColor: 'border-indigo-500/30', group: 'maintenance' },
-  { key: 'autogrowth', name: 'Autogrowth & Capacity', shortName: 'Growth', icon: 'TrendingUp', weight: 5, color: 'text-lime-600', bgColor: 'bg-lime-500/10', borderColor: 'border-lime-500/30', group: 'maintenance' },
+  // Maintenance (6%)
+  { key: 'maintenance', name: 'Maintenance', shortName: 'Maint.', icon: 'Wrench', weight: 6, color: 'text-foreground', bgColor: 'bg-muted/50', borderColor: 'border-border', group: 'maintenance' },
 ];
 
-// Get category score from HealthScoreV3Dto
+// Get category score from HealthScoreV3Dto (8 categorías activas)
 export function getCategoryScore(score: HealthScoreV3Dto, categoryKey: string): number {
   const mapping: Record<string, keyof HealthScoreV3Dto> = {
     backups: 'score_Backups',
     alwaysOn: 'score_AlwaysOn',
-    logChain: 'score_LogChain',
-    databaseStates: 'score_DatabaseStates',
     cpu: 'score_CPU',
     memoria: 'score_Memoria',
     io: 'score_IO',
     discos: 'score_Discos',
-    erroresCriticos: 'score_ErroresCriticos',
+    waits: 'score_Waits',
     maintenance: 'score_Maintenance',
-    configuracionTempdb: 'score_ConfiguracionTempdb',
-    autogrowth: 'score_Autogrowth',
   };
   
   const key = mapping[categoryKey];
   return key ? (score[key] as number) ?? 0 : 0;
 }
 
-// Get category contribution from HealthScoreV3Dto
+// Get category contribution from HealthScoreV3Dto (8 categorías activas)
 export function getCategoryContribution(score: HealthScoreV3Dto, categoryKey: string): number {
   const mapping: Record<string, keyof HealthScoreV3Dto> = {
     backups: 'backupsContribution',
     alwaysOn: 'alwaysOnContribution',
-    logChain: 'logChainContribution',
-    databaseStates: 'databaseStatesContribution',
     cpu: 'cpuContribution',
     memoria: 'memoriaContribution',
     io: 'ioContribution',
     discos: 'discosContribution',
-    erroresCriticos: 'erroresCriticosContribution',
+    waits: 'waitsContribution',
     maintenance: 'mantenimientosContribution',
-    configuracionTempdb: 'configuracionTempdbContribution',
-    autogrowth: 'autogrowthContribution',
   };
   
   const key = mapping[categoryKey];
@@ -129,10 +117,10 @@ export function getCategoryContribution(score: HealthScoreV3Dto, categoryKey: st
 // Get status color class
 export function getStatusColor(status: string): string {
   switch (status) {
-    case 'Healthy': return 'text-green-600';
-    case 'Warning': return 'text-yellow-500';
-    case 'Risk': return 'text-orange-500';
-    case 'Critical': return 'text-red-600';
+    case 'Healthy': return 'text-success';
+    case 'Warning': return 'text-warning';
+    case 'Risk': return 'text-warning';
+    case 'Critical': return 'text-destructive';
     default: return 'text-muted-foreground';
   }
 }
@@ -140,20 +128,20 @@ export function getStatusColor(status: string): string {
 // Get status background class
 export function getStatusBgColor(status: string): string {
   switch (status) {
-    case 'Healthy': return 'bg-green-500/10 border-green-500/30';
-    case 'Warning': return 'bg-yellow-500/10 border-yellow-500/30';
-    case 'Risk': return 'bg-orange-500/10 border-orange-500/30';
-    case 'Critical': return 'bg-red-500/10 border-red-500/30';
+    case 'Healthy': return 'bg-success/10 border-success/30';
+    case 'Warning': return 'bg-warning/10 border-warning/30';
+    case 'Risk': return 'bg-warning/10 border-warning/30';
+    case 'Critical': return 'bg-destructive/10 border-destructive/30';
     default: return 'bg-muted/10 border-muted/30';
   }
 }
 
 // Get score color based on numeric value
 export function getScoreColor(score: number): string {
-  if (score >= 90) return 'text-green-600';
-  if (score >= 75) return 'text-yellow-500';
-  if (score >= 60) return 'text-orange-500';
-  return 'text-red-600';
+  if (score >= 90) return 'text-success';
+  if (score >= 75) return 'text-warning';
+  if (score >= 60) return 'text-warning';
+  return 'text-destructive';
 }
 
 // Get the worst category for an instance

@@ -95,16 +95,16 @@ export function CpuTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: 
   };
 
   const getCpuColor = (cpu: number) => {
-    if (cpu >= 90) return '#ef4444'; // red
-    if (cpu >= 70) return '#eab308'; // yellow
-    return '#22c55e'; // green
+    if (cpu >= 90) return 'hsl(var(--destructive))';
+    if (cpu >= 70) return 'hsl(var(--warning))';
+    return 'hsl(var(--foreground))';
   };
 
   if (loading) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </Card>
     );
@@ -112,8 +112,8 @@ export function CpuTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: 
 
   if (error) {
     return (
-      <Card className="p-6 border-red-200 bg-red-50">
-        <div className="text-red-700">Error: {error}</div>
+      <Card className="p-6 border-destructive/50 bg-destructive/5">
+        <div className="text-destructive">Error: {error}</div>
       </Card>
     );
   }
@@ -121,7 +121,7 @@ export function CpuTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: 
   if (data.length === 0) {
     return (
       <Card className="p-6">
-        <div className="text-center text-gray-500">No hay datos disponibles</div>
+        <div className="text-center text-muted-foreground">No hay datos disponibles</div>
       </Card>
     );
   }
@@ -141,16 +141,16 @@ export function CpuTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: 
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Cpu className="h-5 w-5" />
+              <Cpu className="h-5 w-5 text-muted-foreground" />
               Uso de CPU - Últimas {hours}h
             </h3>
-            <p className="text-sm text-gray-500">{instanceName}</p>
+            <p className="text-sm text-muted-foreground">{instanceName}</p>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold" style={{ color: getCpuColor(latestCpu) }}>
               {latestCpu.toFixed(1)}%
             </div>
-            <div className="text-xs text-gray-500">CPU Total actual</div>
+            <div className="text-xs text-muted-foreground">CPU Total actual</div>
           </div>
         </div>
 
@@ -158,12 +158,12 @@ export function CpuTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: 
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="colorSqlServer" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.8}/>
+                <stop offset="95%" stopColor="#2563eb" stopOpacity={0.1}/>
               </linearGradient>
               <linearGradient id="colorOthers" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1}/>
+                <stop offset="5%" stopColor="#93c5fd" stopOpacity={0.8}/>
+                <stop offset="95%" stopColor="#93c5fd" stopOpacity={0.1}/>
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" />
@@ -188,15 +188,15 @@ export function CpuTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: 
                   const total = Number(sqlServer) + Number(others);
                   
                   return (
-                    <div className="bg-white border rounded-lg shadow-lg p-3">
-                      <p className="text-sm font-semibold">{data.fullTimestamp}</p>
-                      <p className="text-sm">
+                    <div className="bg-card border border-border rounded-lg shadow-lg p-3">
+                      <p className="text-sm font-semibold text-foreground">{data.fullTimestamp}</p>
+                      <p className="text-sm text-foreground">
                         CPU Total: <span className="font-bold" style={{ color: getCpuColor(total) }}>
                           {total.toFixed(1)}%
                         </span>
                       </p>
-                      <p className="text-sm text-blue-600">SQL Server: {sqlServer}%</p>
-                      <p className="text-sm text-purple-600">Otros Procesos: {others}%</p>
+                      <p className="text-sm text-muted-foreground">SQL Server: {sqlServer}%</p>
+                      <p className="text-sm text-muted-foreground">Otros Procesos: {others}%</p>
                     </div>
                   );
                 }
@@ -208,7 +208,7 @@ export function CpuTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: 
               type="monotone" 
               dataKey="SQL Server" 
               stackId="1"
-              stroke="#3b82f6" 
+              stroke="#2563eb" 
               strokeWidth={2}
               fillOpacity={1} 
               fill="url(#colorSqlServer)"
@@ -218,7 +218,7 @@ export function CpuTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: 
               type="monotone" 
               dataKey="Otros Procesos" 
               stackId="1"
-              stroke="#8b5cf6" 
+              stroke="#93c5fd" 
               strokeWidth={2}
               fillOpacity={1} 
               fill="url(#colorOthers)"
@@ -229,11 +229,11 @@ export function CpuTrendChart({ instanceName, hours = 24, refreshTrigger = 0 }: 
 
         {/* Alertas */}
         {latestCpu >= 70 && (
-          <div className={`p-3 rounded-lg ${latestCpu >= 90 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+          <div className={`p-3 rounded-lg border ${latestCpu >= 90 ? 'bg-destructive/5 border-destructive/20 text-destructive' : 'bg-warning/5 border-warning/20 text-warning'}`}>
             <p className="text-sm font-semibold">
               {latestCpu >= 90 ? '⚠️ Alerta Crítica' : '⚠️ Advertencia'}
             </p>
-            <p className="text-xs">
+            <p className="text-xs opacity-80">
               Uso de CPU elevado ({latestCpu.toFixed(1)}%). Revisar procesos y queries costosas.
             </p>
           </div>

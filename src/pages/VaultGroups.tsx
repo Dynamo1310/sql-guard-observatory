@@ -4,8 +4,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Users, Plus, Settings, Trash2, UserPlus, Shield, Eye, 
-  Edit2, MoreVertical, Search, FolderLock, Crown, UserCheck, UserX, Key
+  Users, Plus, Settings, Trash2, UserPlus, Shield,
+  Edit2, MoreVertical, Search, FolderLock, Crown, UserCheck, UserX, Key, RefreshCw
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -79,11 +79,10 @@ const GROUP_ICONS = [
 
 function getRoleIcon(role: string) {
   switch (role) {
-    case GROUP_ROLES.OWNER: return <Crown className="h-4 w-4 text-amber-500" />;
-    case GROUP_ROLES.ADMIN: return <Shield className="h-4 w-4 text-blue-500" />;
-    case GROUP_ROLES.MEMBER: return <UserCheck className="h-4 w-4 text-green-500" />;
-    case GROUP_ROLES.VIEWER: return <Eye className="h-4 w-4 text-gray-500" />;
-    default: return <Users className="h-4 w-4" />;
+    case GROUP_ROLES.OWNER: return <Crown className="h-4 w-4 text-foreground" />;
+    case GROUP_ROLES.ADMIN: return <Shield className="h-4 w-4 text-muted-foreground" />;
+    case GROUP_ROLES.MEMBER: return <UserCheck className="h-4 w-4 text-muted-foreground" />;
+    default: return <Users className="h-4 w-4 text-muted-foreground" />;
   }
 }
 
@@ -100,6 +99,7 @@ export default function VaultGroups() {
   const [groups, setGroups] = useState<CredentialGroupDto[]>([]);
   const [availableUsers, setAvailableUsers] = useState<VaultUserDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Dialogs
@@ -120,12 +120,13 @@ export default function VaultGroups() {
   });
   const [newMember, setNewMember] = useState({
     userId: '',
-    role: GROUP_ROLES.VIEWER as GroupRole,
+    role: GROUP_ROLES.MEMBER as GroupRole,
     receiveNotifications: true
   });
 
-  const loadGroups = async () => {
-    setIsLoading(true);
+  const loadGroups = async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
+    setIsRefreshing(true);
     try {
       const [groupsData, usersData] = await Promise.all([
         vaultApi.getGroups(),
@@ -139,6 +140,7 @@ export default function VaultGroups() {
       });
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -224,7 +226,7 @@ export default function VaultGroups() {
         description: 'El usuario fue agregado al grupo.'
       });
       setAddMemberDialogOpen(false);
-      setNewMember({ userId: '', role: GROUP_ROLES.VIEWER, receiveNotifications: true });
+      setNewMember({ userId: '', role: GROUP_ROLES.MEMBER, receiveNotifications: true });
       // Recargar el grupo seleccionado
       const updatedGroup = await vaultApi.getGroupById(selectedGroup.id);
       setSelectedGroup(updatedGroup);
@@ -302,13 +304,43 @@ export default function VaultGroups() {
   if (isLoading) {
     return (
       <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
         <div className="flex items-center justify-between">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-10 w-32" />
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-10" />
+            <Skeleton className="h-10 w-32" />
+          </div>
         </div>
+        
+        {/* Search skeleton */}
+        <Skeleton className="h-10 w-full max-w-md" />
+        
+        {/* Cards skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-48" />
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <Card key={i}>
+              <div className="h-2 bg-muted" />
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-5" />
+                  <Skeleton className="h-5 w-32" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-4">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                  <Skeleton className="h-6 w-16" />
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       </div>
@@ -320,18 +352,28 @@ export default function VaultGroups() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Users className="h-6 w-6" />
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <FolderLock className="h-8 w-8" />
             Grupos de Credenciales
           </h1>
           <p className="text-muted-foreground">
             Organiza tus credenciales en grupos y define quién puede acceder
           </p>
         </div>
-        <Button onClick={() => { resetForm(); setEditingGroup(null); setGroupDialogOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Grupo
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => loadGroups(false)}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
+          <Button onClick={() => { resetForm(); setEditingGroup(null); setGroupDialogOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo Grupo
+          </Button>
+        </div>
       </div>
 
       {/* Búsqueda */}
@@ -595,7 +637,6 @@ export default function VaultGroups() {
                         <SelectContent>
                           <SelectItem value={GROUP_ROLES.ADMIN}>Admin</SelectItem>
                           <SelectItem value={GROUP_ROLES.MEMBER}>Member</SelectItem>
-                          <SelectItem value={GROUP_ROLES.VIEWER}>Viewer</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
@@ -674,12 +715,6 @@ export default function VaultGroups() {
                     <div className="flex items-center gap-2">
                       {getRoleIcon(GROUP_ROLES.MEMBER)}
                       <span>Member - Puede ver y revelar credenciales</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value={GROUP_ROLES.VIEWER}>
-                    <div className="flex items-center gap-2">
-                      {getRoleIcon(GROUP_ROLES.VIEWER)}
-                      <span>Viewer - Solo puede ver credenciales</span>
                     </div>
                   </SelectItem>
                 </SelectContent>

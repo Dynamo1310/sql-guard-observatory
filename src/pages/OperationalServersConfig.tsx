@@ -22,7 +22,10 @@ import {
   GitBranch,
   Wrench,
   Info,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -350,15 +353,15 @@ export default function OperationalServersConfig() {
   const getAmbienteColor = (ambiente?: string) => {
     const amb = ambiente?.toLowerCase();
     if (amb === 'produccion' || amb === 'production' || amb === 'prod') {
-      return 'bg-red-500/10 text-red-500 border-red-500/20';
+      return 'bg-destructive/10 text-destructive border-destructive/20';
     }
     if (amb === 'qa' || amb === 'testing' || amb === 'test') {
-      return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+      return 'bg-warning/10 text-warning border-warning/20';
     }
     if (amb === 'desarrollo' || amb === 'development' || amb === 'dev') {
-      return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
+      return 'bg-info/10 text-info border-info/20';
     }
-    return 'bg-slate-500/10 text-slate-500 border-slate-500/20';
+    return 'bg-muted text-muted-foreground border-border/50';
   };
 
   // Formatear fecha
@@ -375,306 +378,471 @@ export default function OperationalServersConfig() {
   // Obtener color de acción de auditoría
   const getAuditActionColor = (action: string) => {
     switch (action) {
-      case 'Created': return 'bg-emerald-500/10 text-emerald-500';
-      case 'Updated': return 'bg-blue-500/10 text-blue-500';
-      case 'Deleted': return 'bg-red-500/10 text-red-500';
-      case 'Enabled': return 'bg-green-500/10 text-green-500';
-      case 'Disabled': return 'bg-amber-500/10 text-amber-500';
-      default: return 'bg-slate-500/10 text-slate-500';
+      case 'Created': return 'bg-success/10 text-success';
+      case 'Updated': return 'bg-info/10 text-info';
+      case 'Deleted': return 'bg-destructive/10 text-destructive';
+      case 'Enabled': return 'bg-success/10 text-success';
+      case 'Disabled': return 'bg-warning/10 text-warning';
+      default: return 'bg-muted text-muted-foreground';
     }
   };
 
-  return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="shrink-0 border-b bg-card px-6 py-4">
+  // Estadísticas calculadas
+  const stats = useMemo(() => {
+    const enabled = servers.filter(s => s.enabled).length;
+    const disabled = servers.length - enabled;
+    const forRestart = servers.filter(s => s.enabledForRestart && s.enabled).length;
+    const forFailover = servers.filter(s => s.enabledForFailover && s.enabled).length;
+    const forPatching = servers.filter(s => s.enabledForPatching && s.enabled).length;
+    return { total: servers.length, enabled, disabled, forRestart, forFailover, forPatching };
+  }, [servers]);
+
+  // Loading skeleton
+  if (loading && servers.length === 0) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header skeleton */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-violet-500/10">
-              <Settings className="w-5 h-5 text-violet-500" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold">Configuración de Servidores Operacionales</h1>
-              <p className="text-sm text-muted-foreground">
-                Configura qué servidores estarán disponibles para operaciones controladas
-              </p>
-            </div>
+          <div>
+            <Skeleton className="h-9 w-96 mb-2" />
+            <Skeleton className="h-5 w-80" />
           </div>
-
           <div className="flex items-center gap-2">
-            {/* Historial */}
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="sm" onClick={loadAuditHistory}>
-                  <History className="w-4 h-4 mr-2" />
-                  Historial
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="w-[400px] sm:w-[500px]">
-                <SheetHeader>
-                  <SheetTitle>Historial de Cambios</SheetTitle>
-                  <SheetDescription>
-                    Últimos cambios realizados en la configuración
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="mt-6">
-                  {loadingAudit ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : auditHistory.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No hay historial disponible
-                    </div>
-                  ) : (
-                    <ScrollArea className="h-[calc(100vh-180px)]">
-                      <div className="space-y-3 pr-4">
-                        {auditHistory.map(audit => (
-                          <Card key={audit.id} className="p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <Badge className={cn("text-xs", getAuditActionColor(audit.action))}>
-                                  {audit.action}
-                                </Badge>
-                                <p className="font-medium mt-1">{audit.serverName}</p>
-                              </div>
-                              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                {formatDate(audit.changedAt)}
-                              </span>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Por: {audit.changedByUserName || 'Desconocido'}
-                            </p>
-                          </Card>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <Button variant="outline" size="sm" onClick={loadServers} disabled={loading}>
-              <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
-              Actualizar
-            </Button>
-
-            <Button variant="outline" size="sm" onClick={openImportDialog}>
-              <Download className="w-4 h-4 mr-2" />
-              Importar del Inventario
-            </Button>
-
-            <Button size="sm" onClick={() => setShowAddDialog(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Agregar Manual
-            </Button>
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-44" />
+            <Skeleton className="h-9 w-36" />
           </div>
+        </div>
+
+        {/* KPI Cards skeleton */}
+        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-12 mb-1" />
+                <Skeleton className="h-3 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Info card skeleton */}
+        <Skeleton className="h-20 w-full" />
+
+        {/* Filters skeleton */}
+        <div className="flex gap-3">
+          <Skeleton className="h-9 flex-1 max-w-sm" />
+          <Skeleton className="h-9 w-[180px]" />
+          <Skeleton className="h-9 w-[150px]" />
+        </div>
+
+        {/* Server list skeleton */}
+        <div className="space-y-3">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-9 w-9 rounded-full" />
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-48 mb-2" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Skeleton className="h-6 w-20" />
+                    <Skeleton className="h-6 w-20" />
+                    <Skeleton className="h-6 w-20" />
+                  </div>
+                  <div className="flex gap-1">
+                    <Skeleton className="h-8 w-8" />
+                    <Skeleton className="h-8 w-8" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Settings className="h-8 w-8" />
+            Configuración de Servidores Operacionales
+          </h1>
+          <p className="text-muted-foreground">
+            Configura qué servidores estarán disponibles para operaciones controladas
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Historial */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" onClick={loadAuditHistory}>
+                <History className="w-4 h-4 mr-2" />
+                Historial
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-[400px] sm:w-[500px]">
+              <SheetHeader>
+                <SheetTitle>Historial de Cambios</SheetTitle>
+                <SheetDescription>
+                  Últimos cambios realizados en la configuración
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-6">
+                {loadingAudit ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : auditHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-lg font-semibold mb-2">Sin historial</p>
+                    <p className="text-muted-foreground">
+                      No hay cambios registrados
+                    </p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[calc(100vh-180px)]">
+                    <div className="space-y-3 pr-4">
+                      {auditHistory.map(audit => (
+                        <Card key={audit.id} className="p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <Badge className={cn("text-xs", getAuditActionColor(audit.action))}>
+                                {audit.action}
+                              </Badge>
+                              <p className="font-medium mt-1">{audit.serverName}</p>
+                            </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {formatDate(audit.changedAt)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Por: {audit.changedByUserName || 'Desconocido'}
+                          </p>
+                        </Card>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <Button variant="outline" onClick={loadServers} disabled={loading}>
+            <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+            Actualizar
+          </Button>
+
+          <Button variant="outline" onClick={openImportDialog}>
+            <Download className="w-4 h-4 mr-2" />
+            Importar del Inventario
+          </Button>
+
+          <Button onClick={() => setShowAddDialog(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Agregar Manual
+          </Button>
         </div>
       </div>
 
-      {/* Contenido Principal */}
-      <div className="flex-1 p-6 overflow-auto">
-        {/* Info banner */}
-        <Card className="mb-4 bg-violet-500/5 border-violet-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-violet-500 shrink-0 mt-0.5" />
-              <div className="text-sm">
-                <p className="font-medium text-violet-500">¿Cómo funciona?</p>
-                <p className="text-muted-foreground mt-1">
-                  Los servidores que configures aquí serán los únicos visibles en las vistas de operaciones
-                  (reinicios, failovers, parcheos). Si no hay ningún servidor configurado, se mostrarán
-                  todos los servidores del inventario por defecto.
-                </p>
-              </div>
-            </div>
+      {/* KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total</CardTitle>
+            <Server className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">Servidores</p>
           </CardContent>
         </Card>
 
-        {/* Filtros */}
-        <div className="flex gap-3 mb-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar servidor..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 h-9"
-            />
-          </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Habilitados</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-500">{stats.enabled}</div>
+            <p className="text-xs text-muted-foreground">Activos</p>
+          </CardContent>
+        </Card>
 
-          <Select value={filterAmbiente} onValueChange={setFilterAmbiente}>
-            <SelectTrigger className="h-9 w-[180px]">
-              <SelectValue placeholder="Ambiente" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los ambientes</SelectItem>
-              {availableAmbientes.map(amb => (
-                <SelectItem key={amb} value={amb.toLowerCase()}>{amb}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Deshabilitados</CardTitle>
+            <XCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-muted-foreground">{stats.disabled}</div>
+            <p className="text-xs text-muted-foreground">Inactivos</p>
+          </CardContent>
+        </Card>
 
-          <Select value={filterEnabled} onValueChange={setFilterEnabled}>
-            <SelectTrigger className="h-9 w-[150px]">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="enabled">Habilitados</SelectItem>
-              <SelectItem value="disabled">Deshabilitados</SelectItem>
-            </SelectContent>
-          </Select>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Reinicio</CardTitle>
+            <RotateCcw className="h-4 w-4 text-cyan-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-cyan-500">{stats.forRestart}</div>
+            <p className="text-xs text-muted-foreground">Habilitados</p>
+          </CardContent>
+        </Card>
 
-          <div className="ml-auto text-sm text-muted-foreground flex items-center gap-2">
-            <Badge variant="outline">{filteredServers.length}</Badge>
-            <span>servidor(es)</span>
-          </div>
-        </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Failover</CardTitle>
+            <GitBranch className="h-4 w-4 text-violet-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-violet-500">{stats.forFailover}</div>
+            <p className="text-xs text-muted-foreground">Habilitados</p>
+          </CardContent>
+        </Card>
 
-        {/* Lista de servidores */}
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredServers.length === 0 ? (
-          <Card className="p-12 text-center">
-            <Server className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-            <h3 className="font-medium text-lg mb-2">No hay servidores configurados</h3>
-            <p className="text-muted-foreground mb-4">
-              Importa servidores del inventario o agrega uno manualmente
-            </p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={openImportDialog}>
-                <Download className="w-4 h-4 mr-2" />
-                Importar del Inventario
-              </Button>
-              <Button onClick={() => setShowAddDialog(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Agregar Manual
-              </Button>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Parcheo</CardTitle>
+            <Wrench className="h-4 w-4 text-warning" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-warning">{stats.forPatching}</div>
+            <p className="text-xs text-muted-foreground">Habilitados</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Info banner */}
+      <Card className="bg-muted/20 border-border/50">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-foreground">¿Cómo funciona?</p>
+              <p className="text-muted-foreground mt-1">
+                Los servidores que configures aquí serán los únicos visibles en las vistas de operaciones
+                (reinicios, failovers, parcheos). Si no hay ningún servidor configurado, se mostrarán
+                todos los servidores del inventario por defecto.
+              </p>
             </div>
-          </Card>
-        ) : (
-          <div className="grid gap-3">
-            {filteredServers.map(server => (
-              <Card key={server.id} className={cn(
-                "transition-all",
-                !server.enabled && "opacity-60 bg-muted/30"
-              )}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    {/* Estado */}
-                    <div className="shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(
-                          "h-9 w-9 rounded-full",
-                          server.enabled 
-                            ? "text-emerald-500 hover:bg-emerald-500/10" 
-                            : "text-slate-400 hover:bg-slate-500/10"
-                        )}
-                        onClick={() => handleToggleServer(server)}
-                        title={server.enabled ? "Desactivar" : "Activar"}
-                      >
-                        {server.enabled ? <Power className="w-5 h-5" /> : <PowerOff className="w-5 h-5" />}
-                      </Button>
-                    </div>
+          </div>
+        </CardContent>
+      </Card>
 
-                    {/* Info del servidor */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{server.serverName}</span>
-                        {server.instanceName && server.instanceName !== server.serverName && (
-                          <span className="text-sm text-muted-foreground">({server.instanceName})</span>
-                        )}
-                        <Badge 
-                          variant="outline" 
-                          className={cn("text-[10px] px-1.5", getAmbienteColor(server.ambiente))}
-                        >
-                          {server.ambiente || 'N/A'}
+      {/* Filtros */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar servidor..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+
+            <Select value={filterAmbiente} onValueChange={setFilterAmbiente}>
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue placeholder="Ambiente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los ambientes</SelectItem>
+                {availableAmbientes.map(amb => (
+                  <SelectItem key={amb} value={amb.toLowerCase()}>{amb}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterEnabled} onValueChange={setFilterEnabled}>
+              <SelectTrigger className="h-9 w-[150px]">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="enabled">Habilitados</SelectItem>
+                <SelectItem value="disabled">Deshabilitados</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div className="ml-auto text-sm text-muted-foreground flex items-center gap-2">
+              <Badge variant="outline">{filteredServers.length}</Badge>
+              <span>servidor(es)</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Lista de servidores */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5 text-primary" />
+            Servidores Configurados
+          </CardTitle>
+          <CardDescription>
+            Lista de servidores disponibles para operaciones controladas
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredServers.length === 0 ? (
+            <div className="text-center py-12">
+              <Server className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-lg font-semibold mb-2">No hay servidores configurados</p>
+              <p className="text-muted-foreground mb-4">
+                Importa servidores del inventario o agrega uno manualmente
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Button variant="outline" onClick={openImportDialog}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Importar del Inventario
+                </Button>
+                <Button onClick={() => setShowAddDialog(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar Manual
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[600px] overflow-auto">
+              {filteredServers.map(server => (
+                <div 
+                  key={server.id} 
+                  className={cn(
+                    "flex items-center gap-4 p-4 rounded-lg border transition-all",
+                    !server.enabled && "opacity-60 bg-muted/30"
+                  )}
+                >
+                  {/* Estado */}
+                  <div className="shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-9 w-9 rounded-full",
+                        server.enabled 
+                          ? "text-success hover:bg-success/10" 
+                          : "text-muted-foreground hover:bg-muted/50"
+                      )}
+                      onClick={() => handleToggleServer(server)}
+                      title={server.enabled ? "Desactivar" : "Activar"}
+                    >
+                      {server.enabled ? <Power className="w-5 h-5" /> : <PowerOff className="w-5 h-5" />}
+                    </Button>
+                  </div>
+
+                  {/* Info del servidor */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{server.serverName}</span>
+                      {server.instanceName && server.instanceName !== server.serverName && (
+                        <span className="text-sm text-muted-foreground">({server.instanceName})</span>
+                      )}
+                      <Badge 
+                        variant="outline" 
+                        className={cn("text-[10px] px-1.5", getAmbienteColor(server.ambiente))}
+                      >
+                        {server.ambiente || 'N/A'}
+                      </Badge>
+                      {!server.isFromInventory && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 bg-muted text-muted-foreground border-border/50">
+                          Manual
                         </Badge>
-                        {!server.isFromInventory && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 bg-purple-500/10 text-purple-500 border-purple-500/20">
-                            Manual
-                          </Badge>
-                        )}
-                      </div>
-                      {server.description && (
-                        <p className="text-sm text-muted-foreground mt-0.5 truncate">{server.description}</p>
                       )}
                     </div>
-
-                    {/* Permisos de operaciones */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge 
-                        variant="outline" 
-                        className={cn(
-                          "text-[10px] px-2 py-0.5 gap-1",
-                          server.enabledForRestart 
-                            ? "bg-orange-500/10 text-orange-500 border-orange-500/20" 
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        Reinicio
-                      </Badge>
-                      <Badge 
-                        variant="outline" 
-                        className={cn(
-                          "text-[10px] px-2 py-0.5 gap-1",
-                          server.enabledForFailover 
-                            ? "bg-blue-500/10 text-blue-500 border-blue-500/20" 
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <GitBranch className="w-3 h-3" />
-                        Failover
-                      </Badge>
-                      <Badge 
-                        variant="outline" 
-                        className={cn(
-                          "text-[10px] px-2 py-0.5 gap-1",
-                          server.enabledForPatching 
-                            ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <Wrench className="w-3 h-3" />
-                        Parcheo
-                      </Badge>
-                    </div>
-
-                    {/* Acciones */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => openEditDialog(server)}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => {
-                          setDeletingServer(server);
-                          setShowDeleteDialog(true);
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    {server.description && (
+                      <p className="text-sm text-muted-foreground mt-0.5 truncate">{server.description}</p>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+
+                  {/* Permisos de operaciones */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        "text-[10px] px-2 py-0.5 gap-1",
+                        server.enabledForRestart 
+                          ? "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" 
+                          : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Reinicio
+                    </Badge>
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        "text-[10px] px-2 py-0.5 gap-1",
+                        server.enabledForFailover 
+                          ? "bg-violet-500/10 text-violet-500 border-violet-500/20" 
+                          : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      <GitBranch className="w-3 h-3" />
+                      Failover
+                    </Badge>
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        "text-[10px] px-2 py-0.5 gap-1",
+                        server.enabledForPatching 
+                          ? "bg-warning/10 text-warning border-warning/20" 
+                          : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      <Wrench className="w-3 h-3" />
+                      Parcheo
+                    </Badge>
+                  </div>
+
+                  {/* Acciones */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => openEditDialog(server)}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setDeletingServer(server);
+                        setShowDeleteDialog(true);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Diálogo de agregar servidor manual */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
@@ -952,7 +1120,7 @@ export default function OperationalServersConfig() {
                             {server.instanceName && <span>{server.instanceName}</span>}
                             {server.majorVersion && <span>• {server.majorVersion}</span>}
                             {server.isAlwaysOn && (
-                              <Badge variant="outline" className="text-[9px] px-1 bg-purple-500/10 text-purple-500">AG</Badge>
+                              <Badge variant="outline" className="text-[9px] px-1 bg-muted text-muted-foreground">AG</Badge>
                             )}
                           </div>
                         </div>

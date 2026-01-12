@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
@@ -7,13 +8,18 @@ namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 
 /// <summary>
 /// Collector de integridad de la cadena de logs
-/// Métricas: Log chain broken, DBs sin log backup
-/// Peso: 5%
+/// Replica exactamente la lógica de RelevamientoHealthScore_LogChain.ps1
+/// 
+/// Características:
+/// - Query optimizada con JOINs en lugar de subconsultas
+/// - Detecta bases en FULL sin log backups
+/// - Detecta log chain roto (>24h sin backup)
+/// - Retry con timeout extendido
+/// 
+/// Peso en scoring: 5%
 /// </summary>
 public class LogChainCollector : CollectorBase<LogChainCollector.LogChainMetrics>
 {
-    private readonly ApplicationDbContext _context;
-
     public override string CollectorName => "LogChain";
     public override string DisplayName => "Log Chain";
 
@@ -22,10 +28,9 @@ public class LogChainCollector : CollectorBase<LogChainCollector.LogChainMetrics
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        ApplicationDbContext context) 
-        : base(logger, configService, connectionFactory, instanceProvider)
+        IServiceScopeFactory scopeFactory) 
+        : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
-        _context = context;
     }
 
     protected override async Task<LogChainMetrics> CollectFromInstanceAsync(
@@ -54,66 +59,61 @@ public class LogChainCollector : CollectorBase<LogChainCollector.LogChainMetrics
         foreach (DataRow row in table.Rows)
         {
             var recoveryModel = GetString(row, "RecoveryModel") ?? "";
+            var logChainAtRisk = GetInt(row, "LogChainAtRisk") == 1;
+            var hoursSinceLog = GetInt(row, "HoursSinceLastLog");
             var lastLogBackup = GetDateTime(row, "LastLogBackup");
-            var isCritical = GetBool(row, "IsCritical");
 
-            // Solo considerar DBs en FULL recovery
+            // Solo DBs en FULL recovery nos interesan
             if (!recoveryModel.Equals("FULL", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            result.FullDBsWithoutLogBackup++;
+            // Contar DBs en FULL sin log backup
+            if (!lastLogBackup.HasValue)
+            {
+                result.FullDBsWithoutLogBackup++;
+            }
 
-            // Calcular horas desde último log backup
-            double hoursSince = lastLogBackup.HasValue 
-                ? (DateTime.Now - lastLogBackup.Value).TotalHours 
-                : 999;
-
-            result.MaxHoursSinceLogBackup = Math.Max(result.MaxHoursSinceLogBackup, hoursSince);
-
-            // Si no tiene log backup o es muy antiguo (>2h), es cadena rota
-            if (!lastLogBackup.HasValue || hoursSince > 2)
+            // Contar cadenas rotas
+            if (logChainAtRisk)
             {
                 result.BrokenChainCount++;
-                
-                if (isCritical)
-                    result.CriticalBrokenCount++;
             }
-            else
+
+            // Máximo de horas desde último log backup
+            if (hoursSinceLog > 0)
             {
-                // Tiene log backup reciente, no contar como "sin log backup"
-                result.FullDBsWithoutLogBackup--;
+                result.MaxHoursSinceLogBackup = Math.Max(result.MaxHoursSinceLogBackup, hoursSinceLog);
+            }
+            else if (!lastLogBackup.HasValue)
+            {
+                // Si no hay log backup, considerar máximo
+                result.MaxHoursSinceLogBackup = Math.Max(result.MaxHoursSinceLogBackup, 999);
             }
         }
     }
 
     protected override int CalculateScore(LogChainMetrics data, List<CollectorThreshold> thresholds)
     {
-        var score = 100;
-        var cap = 100;
-
-        // DB crítica con log chain roto >24h => 0 pts y cap 0
+        // Scoring (0-100):
+        // - 100 pts: Todas las DBs críticas con log chain intacto
+        // - 80 pts: 1 DB no crítica con log chain roto
+        // - 50 pts: 1 DB crítica con log chain roto
+        // - 20 pts: >2 DBs con log chain roto
+        // - 0 pts: DBs críticas con log chain roto >24h
+        
         if (data.MaxHoursSinceLogBackup > 24 && data.BrokenChainCount > 0)
-        {
-            score = 0;
-            cap = 0;
-        }
-        // 1 DB crítica con log chain roto
-        else if (data.CriticalBrokenCount == 1)
-        {
-            score = 50;
-        }
-        // >2 DBs con log chain roto
-        else if (data.BrokenChainCount > 2)
-        {
-            score = 20;
-        }
-        // 1-2 DBs con log chain roto
-        else if (data.BrokenChainCount > 0)
-        {
-            score = 80;
-        }
+            return 0;
 
-        return Math.Min(score, cap);
+        if (data.BrokenChainCount > 2)
+            return 20;
+
+        if (data.BrokenChainCount == 1)
+            return 50;
+
+        if (data.FullDBsWithoutLogBackup == 1)
+            return 80;
+
+        return 100;
     }
 
     protected override async Task SaveResultAsync(SqlInstanceInfo instance, LogChainMetrics data, int score, CancellationToken ct)
@@ -130,35 +130,65 @@ public class LogChainCollector : CollectorBase<LogChainCollector.LogChainMetrics
             MaxHoursSinceLogBackup = (int)Math.Min(data.MaxHoursSinceLogBackup, int.MaxValue)
         };
 
-        _context.InstanceHealthLogChain.Add(entity);
-        await _context.SaveChangesAsync(ct);
+        await SaveWithScopedContextAsync(async context =>
+        {
+            context.InstanceHealthLogChain.Add(entity);
+            await context.SaveChangesAsync(ct);
+        }, ct);
     }
 
     protected override string GetDefaultQuery(int sqlMajorVersion)
     {
         var cutoffDate = DateTime.Now.AddDays(-7).ToString("yyyy-MM-dd");
 
+        // Query mejorada: detecta cadenas rotas correctamente
+        // - log_reuse_wait_desc = 'LOG_BACKUP' indica que el log no puede reutilizarse porque necesita backup
+        // - Esto ocurre en bases FULL cuando NO hay backups de log o la cadena está rota
+        // - También detecta bases sin ningún backup de log (cadena nunca iniciada)
         return $@"
 SELECT 
     d.name AS DatabaseName,
     d.recovery_model_desc AS RecoveryModel,
-    (SELECT MAX(bs.backup_finish_date) 
-     FROM msdb.dbo.backupset bs WITH (NOLOCK)
-     WHERE bs.database_name = d.name 
-       AND bs.type = 'L'
-       AND bs.backup_finish_date >= '{cutoffDate}') AS LastLogBackup,
+    d.log_reuse_wait_desc AS LogReuseWait,
+    bs_full.backup_finish_date AS LastFullBackup,
+    bs_log.backup_finish_date AS LastLogBackup,
+    ISNULL(DATEDIFF(HOUR, bs_log.backup_finish_date, GETDATE()), 9999) AS HoursSinceLastLog,
+    -- LogChainAtRisk: detecta cadena de backups rota
     CASE 
-        WHEN d.name IN ('master', 'msdb', 'model') THEN 1
-        WHEN d.name LIKE '%prod%' THEN 1
-        WHEN d.name LIKE '%prd%' THEN 1
+        -- 1. Base en FULL SIN ningún log backup (cadena nunca iniciada)
+        WHEN d.recovery_model_desc = 'FULL' AND bs_log.backup_finish_date IS NULL THEN 1
+        -- 2. Base en FULL con log backup muy antiguo (>24h = cadena posiblemente rota)
+        WHEN d.recovery_model_desc = 'FULL' AND DATEDIFF(HOUR, bs_log.backup_finish_date, GETDATE()) > 24 THEN 1
+        -- 3. log_reuse_wait = 'LOG_BACKUP' indica que el log está creciendo porque necesita backup
+        --    Esto es un indicador de que la cadena no está siendo mantenida correctamente
+        WHEN d.recovery_model_desc = 'FULL' AND d.log_reuse_wait_desc = 'LOG_BACKUP' 
+             AND DATEDIFF(HOUR, bs_log.backup_finish_date, GETDATE()) > 1 THEN 1
+        -- 4. Si hay full backup pero no log backups, la cadena está incompleta
+        WHEN d.recovery_model_desc = 'FULL' AND bs_full.backup_finish_date IS NOT NULL 
+             AND bs_log.backup_finish_date IS NULL THEN 1
         ELSE 0
-    END AS IsCritical
+    END AS LogChainAtRisk,
+    d.state_desc AS DatabaseState,
+    -- Información adicional para diagnóstico
+    d.log_reuse_wait_desc AS LogReuseReason
 FROM sys.databases d
-WHERE d.recovery_model_desc = 'FULL'
+LEFT JOIN (
+    SELECT database_name, MAX(backup_finish_date) AS backup_finish_date
+    FROM msdb.dbo.backupset WITH (NOLOCK)
+    WHERE type = 'D' AND backup_finish_date >= '{cutoffDate}'
+    GROUP BY database_name
+) bs_full ON d.name = bs_full.database_name
+LEFT JOIN (
+    SELECT database_name, MAX(backup_finish_date) AS backup_finish_date
+    FROM msdb.dbo.backupset WITH (NOLOCK)
+    WHERE type = 'L' AND backup_finish_date >= '{cutoffDate}'
+    GROUP BY database_name
+) bs_log ON d.name = bs_log.database_name
+WHERE d.database_id > 4  -- Excluir system databases
   AND d.state_desc = 'ONLINE'
   AND d.name NOT IN ('tempdb')
-  AND d.database_id > 4
-  AND d.is_read_only = 0;";
+  AND d.is_read_only = 0
+ORDER BY LogChainAtRisk DESC, HoursSinceLastLog DESC;";
     }
 
     protected override Dictionary<string, object?> GetMetricsFromResult(LogChainMetrics data)
@@ -166,6 +196,7 @@ WHERE d.recovery_model_desc = 'FULL'
         return new Dictionary<string, object?>
         {
             ["BrokenChainCount"] = data.BrokenChainCount,
+            ["FullDBsWithoutLogBackup"] = data.FullDBsWithoutLogBackup,
             ["MaxHoursSinceLogBackup"] = data.MaxHoursSinceLogBackup
         };
     }
@@ -173,9 +204,7 @@ WHERE d.recovery_model_desc = 'FULL'
     public class LogChainMetrics
     {
         public int BrokenChainCount { get; set; }
-        public int CriticalBrokenCount { get; set; }
         public int FullDBsWithoutLogBackup { get; set; }
-        public double MaxHoursSinceLogBackup { get; set; }
+        public int MaxHoursSinceLogBackup { get; set; }
     }
 }
-

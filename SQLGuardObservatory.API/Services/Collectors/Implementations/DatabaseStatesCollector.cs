@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
@@ -7,13 +8,12 @@ namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 
 /// <summary>
 /// Collector de estados de bases de datos
-/// Métricas: Offline, Suspect, Emergency, RecoveryPending, Suspect Pages
+/// Métricas: Suspect, Emergency, RecoveryPending, Suspect Pages
+/// NOTA: Las bases OFFLINE no se penalizan (son intencionales)
 /// Peso: 3%
 /// </summary>
 public class DatabaseStatesCollector : CollectorBase<DatabaseStatesCollector.DatabaseStatesMetrics>
 {
-    private readonly ApplicationDbContext _context;
-
     public override string CollectorName => "DatabaseStates";
     public override string DisplayName => "Database States";
 
@@ -22,10 +22,9 @@ public class DatabaseStatesCollector : CollectorBase<DatabaseStatesCollector.Dat
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        ApplicationDbContext context) 
-        : base(logger, configService, connectionFactory, instanceProvider)
+        IServiceScopeFactory scopeFactory) 
+        : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
-        _context = context;
     }
 
     protected override async Task<DatabaseStatesMetrics> CollectFromInstanceAsync(
@@ -105,27 +104,22 @@ public class DatabaseStatesCollector : CollectorBase<DatabaseStatesCollector.Dat
             score = 0;
             cap = 0;
         }
-        // Offline => score 0, cap 50
-        else if (data.OfflineCount > 0)
-        {
-            score = 0;
-            cap = 50;
-        }
+        // NOTA: OFFLINE NO penaliza - las bases offline son intencionales
         // Suspect pages => score 40, cap 50
         else if (data.SuspectPageCount > 0)
         {
             score = 40;
             cap = 50;
         }
-        // Recovery pending
+        // Recovery pending => crítico, requiere atención
         else if (data.RecoveryPendingCount > 0)
         {
             score = 40;
         }
-        // Single user o restoring
+        // Single user o restoring => menor prioridad (pueden ser mantenimientos)
         else if (data.SingleUserCount > 0 || data.RestoringCount > 0)
         {
-            score = 60;
+            score = 80; // Menos penalización, puede ser mantenimiento
         }
 
         return Math.Min(score, cap);
@@ -149,14 +143,18 @@ public class DatabaseStatesCollector : CollectorBase<DatabaseStatesCollector.Dat
             SuspectPageCount = data.SuspectPageCount
         };
 
-        _context.InstanceHealthDatabaseStates.Add(entity);
-        await _context.SaveChangesAsync(ct);
+        await SaveWithScopedContextAsync(async context =>
+        {
+            context.InstanceHealthDatabaseStates.Add(entity);
+            await context.SaveChangesAsync(ct);
+        }, ct);
     }
 
     protected override string GetDefaultQuery(int sqlMajorVersion)
     {
         return @"
--- Database states (excluir offline que son intencionales)
+-- Database states problemáticos (OFFLINE excluido - es intencional)
+-- Solo reportamos: SUSPECT, EMERGENCY, RECOVERY_PENDING, RESTORING
 SELECT 
     d.name AS DatabaseName,
     d.state_desc AS StateDesc,
@@ -164,12 +162,12 @@ SELECT
 FROM sys.databases d
 WHERE d.database_id > 4
   AND d.name NOT IN ('tempdb')
-  AND d.state_desc NOT IN ('ONLINE'); -- Solo DBs con problemas
+  AND d.state_desc NOT IN ('ONLINE', 'OFFLINE'); -- OFFLINE es intencional, no es problema
 
--- Suspect pages
+-- Suspect pages (indica corrupción de datos)
 SELECT COUNT(*) AS SuspectPageCount
 FROM msdb.dbo.suspect_pages WITH (NOLOCK)
-WHERE event_type IN (1, 2, 3);"; // 1=823, 2=bad checksum, 3=torn page
+WHERE event_type IN (1, 2, 3);"; // 1=823 I/O error, 2=bad checksum, 3=torn page
     }
 
     protected override Dictionary<string, object?> GetMetricsFromResult(DatabaseStatesMetrics data)

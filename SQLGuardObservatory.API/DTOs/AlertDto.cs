@@ -10,6 +10,7 @@ public class OnCallAlertRuleDto
     public string AlertType { get; set; } = string.Empty;
     public int? ConditionDays { get; set; }
     public bool IsEnabled { get; set; }
+    public bool AttachExcel { get; set; }
     public string CreatedByDisplayName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -30,6 +31,7 @@ public class CreateAlertRuleRequest
     public string? Description { get; set; }
     public string AlertType { get; set; } = string.Empty;
     public int? ConditionDays { get; set; }
+    public bool AttachExcel { get; set; } = false;
     public List<CreateRecipientRequest> Recipients { get; set; } = new();
 }
 
@@ -39,6 +41,7 @@ public class UpdateAlertRuleRequest
     public string? Description { get; set; }
     public int? ConditionDays { get; set; }
     public bool? IsEnabled { get; set; }
+    public bool? AttachExcel { get; set; }
 }
 
 public class CreateRecipientRequest
@@ -109,6 +112,9 @@ public class NotificationLogFilterRequest
     public string? NotificationType { get; set; }
     public string? Status { get; set; }
 }
+
+
+
 
 
 

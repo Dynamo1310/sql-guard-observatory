@@ -39,14 +39,14 @@ const categoryIcons: Record<string, React.ElementType> = {
   'General': Bell
 };
 
-// Colores por categoría
+// Colores por categoría (monochromatic)
 const categoryColors: Record<string, string> = {
-  'Credenciales': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-  'Grupos': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-  'Compartir': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-  'Alertas': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-  'Seguridad': 'bg-red-500/10 text-red-500 border-red-500/20',
-  'General': 'bg-slate-500/10 text-slate-500 border-slate-500/20'
+  'Credenciales': 'bg-muted text-foreground border-border/50',
+  'Grupos': 'bg-muted text-foreground border-border/50',
+  'Compartir': 'bg-muted text-foreground border-border/50',
+  'Alertas': 'bg-muted text-foreground border-border/50',
+  'Seguridad': 'bg-muted text-foreground border-border/50',
+  'General': 'bg-muted text-foreground border-border/50'
 };
 
 export default function VaultNotificationSettings() {
@@ -195,19 +195,17 @@ export default function VaultNotificationSettings() {
   );
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/20">
-            <Bell className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Mis Notificaciones</h1>
-            <p className="text-muted-foreground">
-              Configura qué notificaciones del Vault deseas recibir por email
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Bell className="h-8 w-8" />
+            Mis Notificaciones
+          </h1>
+          <p className="text-muted-foreground">
+            Configura qué notificaciones del Vault deseas recibir por email
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -260,12 +258,12 @@ export default function VaultNotificationSettings() {
       </div>
 
       {/* Resumen */}
-      <Card className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700">
+      <Card className="bg-muted/20 border-border/50">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-full bg-white dark:bg-slate-800 shadow-sm">
-                <Mail className="h-6 w-6 text-amber-500" />
+              <div className="p-3 rounded-full bg-background shadow-sm">
+                <Mail className="h-6 w-6 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Notificaciones activas</p>
@@ -276,10 +274,10 @@ export default function VaultNotificationSettings() {
             </div>
             
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              <CheckCircle2 className="h-4 w-4 text-success" />
               <span>{enabledCount} habilitadas</span>
               <Separator orientation="vertical" className="h-4 mx-2" />
-              <XCircle className="h-4 w-4 text-slate-400" />
+              <XCircle className="h-4 w-4 text-muted-foreground" />
               <span>{totalCount - enabledCount} deshabilitadas</span>
             </div>
           </div>
@@ -343,8 +341,8 @@ export default function VaultNotificationSettings() {
                         flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border
                         transition-all duration-200
                         ${pref.isEnabled 
-                          ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' 
-                          : 'bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800'
+                          ? 'bg-success/5 border-success/20' 
+                          : 'bg-muted/20 border-border/50'
                         }
                         ${isSaving === pref.notificationType ? 'opacity-70' : ''}
                       `}
@@ -353,9 +351,9 @@ export default function VaultNotificationSettings() {
                         <div className="flex items-center gap-2">
                           <h4 className="font-medium truncate">{pref.displayName}</h4>
                           {pref.isEnabled ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                            <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                           ) : (
-                            <XCircle className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                            <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
@@ -383,22 +381,22 @@ export default function VaultNotificationSettings() {
       )}
 
       {/* Info adicional */}
-      <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800">
+      <Card className="bg-muted/20 border-border/50">
         <CardContent className="pt-6">
           <div className="flex gap-4">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 h-fit">
-              <Mail className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <div className="p-2 rounded-lg bg-muted h-fit">
+              <Mail className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <h4 className="font-medium text-blue-900 dark:text-blue-100">
+              <h4 className="font-medium text-foreground">
                 Sobre las notificaciones
               </h4>
-              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Las notificaciones se envían a tu email registrado cuando ocurren eventos 
                 relacionados con credenciales a las que tienes acceso. No recibirás 
                 notificaciones de credenciales privadas de otros usuarios.
               </p>
-              <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
+              <p className="text-sm text-muted-foreground mt-2">
                 Los cambios en las preferencias se aplican inmediatamente.
               </p>
             </div>

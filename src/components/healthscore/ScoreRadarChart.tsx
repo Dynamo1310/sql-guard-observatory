@@ -29,8 +29,8 @@ export function ScoreRadarChart({ score, className, showLegend = false }: ScoreR
           <p className="text-xs text-muted-foreground">
             Score: <span className={cn(
               'font-mono font-bold',
-              data.score >= 80 ? 'text-green-600' :
-              data.score >= 60 ? 'text-yellow-600' : 'text-red-600'
+              data.score >= 80 ? 'text-success' :
+              data.score >= 60 ? 'text-warning' : 'text-destructive'
             )}>{data.score}</span>/100
           </p>
           <p className="text-[10px] text-muted-foreground">

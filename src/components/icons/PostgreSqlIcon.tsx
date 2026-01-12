@@ -1,0 +1,37 @@
+/**
+ * Ícono de PostgreSQL que alterna entre versión clara/oscura según el tema
+ * Compatible con la interfaz de Lucide para uso en menús y páginas
+ */
+import postgresqlIconBlack from '/icons8-postgresql-black.svg';
+import postgresqlIconWhite from '/icons8-postgresql-white.svg';
+
+interface PostgreSqlIconProps {
+  /** className con tamaño (ej: "h-4 w-4", "h-8 w-8") - compatible con Lucide */
+  className?: string;
+}
+
+export function PostgreSqlIcon({ className = 'h-4 w-4' }: PostgreSqlIconProps) {
+  // Extraer clases de tamaño (h-X w-X) y otras clases por separado
+  const sizeClasses = className.match(/[hw]-\d+\.?\d*|[hw]-\[[\w.]+\]/g)?.join(' ') || 'h-4 w-4';
+  const otherClasses = className.replace(/[hw]-\d+\.?\d*|[hw]-\[[\w.]+\]/g, '').trim();
+  
+  return (
+    <span className={`inline-flex items-center justify-center flex-shrink-0 ${otherClasses}`}>
+      <img 
+        src={postgresqlIconBlack} 
+        alt="PostgreSQL" 
+        className={`logo-light ${sizeClasses}`}
+      />
+      <img 
+        src={postgresqlIconWhite} 
+        alt="PostgreSQL" 
+        className={`logo-dark ${sizeClasses}`}
+      />
+    </span>
+  );
+}
+
+export default PostgreSqlIcon;
+
+
+

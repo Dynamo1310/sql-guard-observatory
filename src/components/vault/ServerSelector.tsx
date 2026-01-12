@@ -347,10 +347,10 @@ export function ServerSelector({
                                           </div>
                                           <div className="flex items-center gap-1 flex-shrink-0">
                                             {server.isAws && (
-                                              <Cloud className="h-3.5 w-3.5 text-orange-500" title="AWS" />
+                                              <Cloud className="h-3.5 w-3.5 text-muted-foreground" title="AWS" />
                                             )}
                                             {server.isDmz && (
-                                              <Shield className="h-3.5 w-3.5 text-red-500" title="DMZ" />
+                                              <Shield className="h-3.5 w-3.5 text-muted-foreground" title="DMZ" />
                                             )}
                                           </div>
                                         </div>

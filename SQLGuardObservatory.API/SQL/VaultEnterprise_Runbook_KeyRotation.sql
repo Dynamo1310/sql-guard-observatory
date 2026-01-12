@@ -1,7 +1,7 @@
 -- =============================================
 -- Script: VaultEnterprise_Runbook_KeyRotation.sql
 -- Description: Runbook operativo para rotación de llaves
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- SQL Server: 2017+
 -- Date: December 2025
 --
@@ -17,7 +17,7 @@
 -- - Tener 2+ llaves activas para mismo purpose (filtered unique lo impide)
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 PRINT '============================================='

@@ -1,11 +1,11 @@
 -- =============================================
 -- Script: CreateVaultTables.sql
 -- Description: Crea las tablas para el Vault de Credenciales DBA
--- Database: SQLGuardObservatoryAuth
+-- Database: AppSQLNova
 -- Date: December 2025
 -- =============================================
 
-USE [SQLGuardObservatoryAuth]
+USE [AppSQLNova]
 GO
 
 -- =============================================

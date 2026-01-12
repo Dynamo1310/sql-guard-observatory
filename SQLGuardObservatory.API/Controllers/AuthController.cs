@@ -2,9 +2,11 @@ using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Services;
 using System.Runtime.Versioning;
+using System.Security.Claims;
 
 namespace SQLGuardObservatory.API.Controllers;
 
@@ -15,16 +17,24 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly IActiveDirectoryService _activeDirectoryService;
+    private readonly IAdminAuthorizationService _adminAuthService;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IAuthService authService, 
         IActiveDirectoryService activeDirectoryService,
+        IAdminAuthorizationService adminAuthService,
         ILogger<AuthController> logger)
     {
         _authService = authService;
         _activeDirectoryService = activeDirectoryService;
+        _adminAuthService = adminAuthService;
         _logger = logger;
+    }
+    
+    private string GetCurrentUserId()
+    {
+        return User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
     }
 
     /// <summary>
@@ -124,10 +134,10 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Obtiene la lista de usuarios (solo admin)
+    /// Obtiene la lista de usuarios (requiere vista AdminUsers)
     /// </summary>
     [HttpGet("users")]
-    [Authorize(Policy = "AdminOnly")]
+    [ViewPermission("AdminUsers")]
     public async Task<IActionResult> GetUsers()
     {
         try
@@ -143,10 +153,10 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Obtiene un usuario por ID (solo admin)
+    /// Obtiene un usuario por ID (requiere vista AdminUsers)
     /// </summary>
     [HttpGet("users/{userId}")]
-    [Authorize(Policy = "AdminOnly")]
+    [ViewPermission("AdminUsers")]
     public async Task<IActionResult> GetUser(string userId)
     {
         try
@@ -168,20 +178,47 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Crea un nuevo usuario (solo admin)
-    /// Admin solo puede asignar roles Reader y Admin
-    /// SuperAdmin puede asignar cualquier rol
+    /// Crea un nuevo usuario.
+    /// Requiere capacidad Users.Create.
     /// </summary>
     [HttpPost("users")]
-    [Authorize(Policy = "AdminOnly")]
+    [RequireCapability("Users.Create")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
         try
         {
-            // Si el usuario es Admin (no SuperAdmin) y está intentando crear un SuperAdmin, denegar
-            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && request.Role == "SuperAdmin")
+            var currentUserId = GetCurrentUserId();
+            
+            // Verificar que puede crear usuarios
+            if (!await _adminAuthService.CanCreateUsersAsync(currentUserId))
             {
-                return StatusCode(403, new { message = "Los usuarios Admin no pueden asignar el rol SuperAdmin" });
+                return Forbid();
+            }
+            
+            // Verificar que puede asignar el rol especificado
+            bool canAssignRole = false;
+            string roleInfo = "";
+            
+            if (request.RoleId.HasValue)
+            {
+                canAssignRole = await _adminAuthService.CanAssignRoleByIdAsync(currentUserId, request.RoleId.Value);
+                roleInfo = $"ID: {request.RoleId.Value}";
+            }
+            else if (!string.IsNullOrEmpty(request.Role))
+            {
+                canAssignRole = await _adminAuthService.CanAssignRoleAsync(currentUserId, request.Role);
+                roleInfo = request.Role;
+            }
+            else
+            {
+                // Sin rol especificado, asignar Reader por defecto
+                canAssignRole = await _adminAuthService.CanAssignRoleAsync(currentUserId, "Reader");
+                roleInfo = "Reader (default)";
+            }
+            
+            if (!canAssignRole)
+            {
+                return StatusCode(403, new { message = $"No tiene permisos para asignar el rol {roleInfo}" });
             }
             
             var user = await _authService.CreateUserAsync(request);
@@ -203,27 +240,42 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza un usuario (solo admin)
-    /// Admin solo puede asignar roles Reader y Admin
-    /// SuperAdmin puede asignar cualquier rol
+    /// Actualiza un usuario.
+    /// Requiere capacidad Users.Edit.
     /// </summary>
     [HttpPut("users/{userId}")]
-    [Authorize(Policy = "AdminOnly")]
+    [RequireCapability("Users.Edit")]
     public async Task<IActionResult> UpdateUser(string userId, [FromBody] UpdateUserRequest request)
     {
         try
         {
-            // Si el usuario es Admin (no SuperAdmin) y está intentando asignar SuperAdmin, denegar
-            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && request.Role == "SuperAdmin")
+            var currentUserId = GetCurrentUserId();
+            
+            // Verificar que puede modificar al usuario objetivo
+            if (!await _adminAuthService.CanModifyUserAsync(currentUserId, userId))
             {
-                return StatusCode(403, new { message = "Los usuarios Admin no pueden asignar el rol SuperAdmin" });
+                return StatusCode(403, new { message = "No tiene permisos para modificar este usuario" });
             }
             
-            // Obtener el usuario actual para verificar si está intentando cambiar el rol de un SuperAdmin
-            var existingUser = await _authService.GetUserByIdAsync(userId);
-            if (existingUser != null && !User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && existingUser.Role == "SuperAdmin")
+            // Verificar que puede asignar el rol especificado (si se está cambiando)
+            bool canAssignRole = true;
+            string roleInfo = "sin cambio";
+            
+            if (request.RoleId.HasValue)
             {
-                return StatusCode(403, new { message = "Los usuarios Admin no pueden modificar usuarios SuperAdmin" });
+                canAssignRole = await _adminAuthService.CanAssignRoleByIdAsync(currentUserId, request.RoleId.Value);
+                roleInfo = $"ID: {request.RoleId.Value}";
+            }
+            else if (!string.IsNullOrEmpty(request.Role))
+            {
+                canAssignRole = await _adminAuthService.CanAssignRoleAsync(currentUserId, request.Role);
+                roleInfo = request.Role;
+            }
+            // Si no se especifica rol, no se cambia y no hay que verificar
+            
+            if (!canAssignRole)
+            {
+                return StatusCode(403, new { message = $"No tiene permisos para asignar el rol {roleInfo}" });
             }
             
             var user = await _authService.UpdateUserAsync(userId, request);
@@ -233,8 +285,8 @@ public class AuthController : ControllerBase
                 return NotFound(new { message = "Usuario no encontrado" });
             }
 
-            _logger.LogInformation("Usuario {UserId} actualizado por {CurrentUser}. Nuevo rol: {Role}", 
-                userId, User.Identity?.Name, request.Role);
+            _logger.LogInformation("Usuario {UserId} actualizado por {CurrentUser}. Rol: {Role}", 
+                userId, User.Identity?.Name, roleInfo);
             return Ok(user);
         }
         catch (Exception ex)
@@ -245,14 +297,23 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Elimina un usuario (solo admin)
+    /// Elimina un usuario.
+    /// Requiere capacidad Users.Delete.
     /// </summary>
     [HttpDelete("users/{userId}")]
-    [Authorize(Policy = "AdminOnly")]
+    [RequireCapability("Users.Delete")]
     public async Task<IActionResult> DeleteUser(string userId)
     {
         try
         {
+            var currentUserId = GetCurrentUserId();
+            
+            // Verificar que puede eliminar usuarios
+            if (!await _adminAuthService.CanDeleteUsersAsync(currentUserId))
+            {
+                return Forbid();
+            }
+            
             var result = await _authService.DeleteUserAsync(userId);
             
             if (!result)
@@ -260,6 +321,7 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "No se pudo eliminar el usuario. Puede ser el admin principal." });
             }
 
+            _logger.LogInformation("Usuario {UserId} eliminado por {CurrentUser}", userId, User.Identity?.Name);
             return NoContent();
         }
         catch (Exception ex)
@@ -306,7 +368,7 @@ public class AuthController : ControllerBase
     /// Obtiene los miembros de un grupo de Active Directory
     /// </summary>
     [HttpGet("ad-group-members")]
-    [Authorize(Policy = "AdminOnly")]
+    [RequireCapability("Users.ImportFromAD")]
     [SupportedOSPlatform("windows")]
     public async Task<IActionResult> GetAdGroupMembers([FromQuery] string groupName)
     {
@@ -335,17 +397,24 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Importa usuarios desde un grupo de Active Directory
-    /// Admin solo puede asignar roles Reader y Admin
-    /// SuperAdmin puede asignar cualquier rol
+    /// Importa usuarios desde un grupo de Active Directory.
+    /// Requiere capacidad Users.ImportFromAD.
     /// </summary>
     [HttpPost("import-from-ad-group")]
-    [Authorize(Policy = "AdminOnly")]
+    [RequireCapability("Users.ImportFromAD")]
     [SupportedOSPlatform("windows")]
     public async Task<IActionResult> ImportFromAdGroup([FromBody] ImportUsersFromGroupRequest request)
     {
         try
         {
+            var currentUserId = GetCurrentUserId();
+            
+            // Verificar que puede crear usuarios
+            if (!await _adminAuthService.CanCreateUsersAsync(currentUserId))
+            {
+                return Forbid();
+            }
+            
             if (string.IsNullOrWhiteSpace(request.GroupName))
             {
                 return BadRequest(new { message = "El nombre del grupo es requerido" });
@@ -356,10 +425,10 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Debe seleccionar al menos un usuario para importar" });
             }
 
-            // Si el usuario es Admin (no SuperAdmin) y está intentando importar con rol SuperAdmin, denegar
-            if (!User.IsInRole("SuperAdmin") && User.IsInRole("Admin") && request.DefaultRole == "SuperAdmin")
+            // Verificar que puede asignar el rol especificado
+            if (!await _adminAuthService.CanAssignRoleAsync(currentUserId, request.DefaultRole))
             {
-                return StatusCode(403, new { message = "Los usuarios Admin no pueden asignar el rol SuperAdmin" });
+                return StatusCode(403, new { message = $"No tiene permisos para asignar el rol {request.DefaultRole}" });
             }
 
             _logger.LogInformation($"Importando {request.SelectedUsernames.Count} usuarios del grupo {request.GroupName} con rol {request.DefaultRole}");
@@ -437,6 +506,251 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Error al importar usuarios desde grupo AD");
             return StatusCode(500, new { message = $"Error al importar usuarios: {ex.Message}" });
+        }
+    }
+
+    // =============================================
+    // Endpoints de Fotos de Perfil
+    // =============================================
+
+    /// <summary>
+    /// Obtiene la foto de perfil de un usuario por su ID
+    /// </summary>
+    [HttpGet("users/{userId}/photo")]
+    [Authorize]
+    public async Task<IActionResult> GetUserPhoto(string userId)
+    {
+        try
+        {
+            var user = await _authService.GetUserByIdAsync(userId);
+            
+            if (user == null)
+            {
+                return NotFound(new { message = "Usuario no encontrado" });
+            }
+
+            if (string.IsNullOrEmpty(user.ProfilePhotoUrl))
+            {
+                return NotFound(new { message = "El usuario no tiene foto de perfil" });
+            }
+
+            return Ok(new { photoUrl = user.ProfilePhotoUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener foto de perfil del usuario {UserId}", userId);
+            return StatusCode(500, new { message = "Error al obtener la foto de perfil" });
+        }
+    }
+
+    /// <summary>
+    /// Obtiene la foto de perfil del usuario actual
+    /// </summary>
+    [HttpGet("me/photo")]
+    [Authorize]
+    public async Task<IActionResult> GetMyPhoto()
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new { message = "Usuario no autenticado" });
+            }
+
+            var user = await _authService.GetUserByIdAsync(userId);
+            
+            if (user == null)
+            {
+                return NotFound(new { message = "Usuario no encontrado" });
+            }
+
+            return Ok(new 
+            { 
+                photoUrl = user.ProfilePhotoUrl,
+                hasPhoto = user.HasProfilePhoto,
+                source = user.ProfilePhotoSource
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener foto de perfil del usuario actual");
+            return StatusCode(500, new { message = "Error al obtener la foto de perfil" });
+        }
+    }
+
+    /// <summary>
+    /// Sube la foto de perfil del usuario actual
+    /// </summary>
+    [HttpPost("me/photo/upload")]
+    [Authorize]
+    public async Task<IActionResult> UploadMyPhoto(IFormFile file)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new { message = "Usuario no autenticado" });
+            }
+
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { message = "No se proporcionó ningún archivo" });
+            }
+
+            // Validar tipo de archivo
+            var allowedTypes = new[] { "image/jpeg", "image/png", "image/gif", "image/webp" };
+            if (!allowedTypes.Contains(file.ContentType.ToLower()))
+            {
+                return BadRequest(new { message = "Tipo de archivo no permitido. Use JPG, PNG, GIF o WebP." });
+            }
+
+            // Validar tamaño (máximo 5MB para mejor calidad)
+            if (file.Length > 5 * 1024 * 1024)
+            {
+                return BadRequest(new { message = "El archivo es demasiado grande. Máximo 5MB." });
+            }
+
+            // Leer bytes del archivo
+            using var memoryStream = new MemoryStream();
+            await file.CopyToAsync(memoryStream);
+            var photoBytes = memoryStream.ToArray();
+
+            var result = await _authService.UploadUserPhotoAsync(userId, photoBytes);
+            
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al subir foto de perfil");
+            return StatusCode(500, new { message = "Error al subir la foto de perfil" });
+        }
+    }
+
+    /// <summary>
+    /// Sube la foto de perfil de un usuario específico.
+    /// Requiere capacidad Users.Edit.
+    /// </summary>
+    [HttpPost("users/{userId}/photo/upload")]
+    [RequireCapability("Users.Edit")]
+    public async Task<IActionResult> UploadUserPhoto(string userId, IFormFile file)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            
+            // Verificar que puede modificar al usuario objetivo
+            if (!await _adminAuthService.CanModifyUserAsync(currentUserId, userId))
+            {
+                return StatusCode(403, new { message = "No tiene permisos para modificar este usuario" });
+            }
+
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { message = "No se proporcionó ningún archivo" });
+            }
+
+            // Validar tipo de archivo
+            var allowedTypes = new[] { "image/jpeg", "image/png", "image/gif", "image/webp" };
+            if (!allowedTypes.Contains(file.ContentType.ToLower()))
+            {
+                return BadRequest(new { message = "Tipo de archivo no permitido. Use JPG, PNG, GIF o WebP." });
+            }
+
+            // Validar tamaño (máximo 5MB para mejor calidad)
+            if (file.Length > 5 * 1024 * 1024)
+            {
+                return BadRequest(new { message = "El archivo es demasiado grande. Máximo 5MB." });
+            }
+
+            // Leer bytes del archivo
+            using var memoryStream = new MemoryStream();
+            await file.CopyToAsync(memoryStream);
+            var photoBytes = memoryStream.ToArray();
+
+            var result = await _authService.UploadUserPhotoAsync(userId, photoBytes);
+            
+            _logger.LogInformation("Foto subida para usuario {UserId} por {CurrentUser}", 
+                userId, User.Identity?.Name);
+            
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al subir foto del usuario {UserId}", userId);
+            return StatusCode(500, new { message = "Error al subir la foto de perfil" });
+        }
+    }
+
+    /// <summary>
+    /// Elimina la foto de perfil del usuario actual
+    /// </summary>
+    [HttpDelete("me/photo")]
+    [Authorize]
+    public async Task<IActionResult> DeleteMyPhoto()
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new { message = "Usuario no autenticado" });
+            }
+
+            var result = await _authService.DeleteUserPhotoAsync(userId);
+            
+            if (!result)
+            {
+                return BadRequest(new { message = "No se pudo eliminar la foto de perfil" });
+            }
+
+            return Ok(new { message = "Foto de perfil eliminada exitosamente" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar foto de perfil");
+            return StatusCode(500, new { message = "Error al eliminar la foto de perfil" });
+        }
+    }
+
+    /// <summary>
+    /// Elimina la foto de perfil de un usuario específico.
+    /// Requiere capacidad Users.Edit.
+    /// </summary>
+    [HttpDelete("users/{userId}/photo")]
+    [RequireCapability("Users.Edit")]
+    public async Task<IActionResult> DeleteUserPhoto(string userId)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            
+            // Verificar que puede modificar al usuario objetivo
+            if (!await _adminAuthService.CanModifyUserAsync(currentUserId, userId))
+            {
+                return StatusCode(403, new { message = "No tiene permisos para modificar este usuario" });
+            }
+
+            var result = await _authService.DeleteUserPhotoAsync(userId);
+            
+            if (!result)
+            {
+                return BadRequest(new { message = "No se pudo eliminar la foto de perfil" });
+            }
+
+            _logger.LogInformation("Foto eliminada para usuario {UserId} por {CurrentUser}", 
+                userId, User.Identity?.Name);
+            
+            return Ok(new { message = "Foto de perfil eliminada exitosamente" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar foto del usuario {UserId}", userId);
+            return StatusCode(500, new { message = "Error al eliminar la foto de perfil" });
         }
     }
 }

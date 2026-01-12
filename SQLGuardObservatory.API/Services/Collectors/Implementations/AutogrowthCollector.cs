@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
@@ -7,13 +8,11 @@ namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 
 /// <summary>
 /// Collector de eventos de autogrowth
-/// Métricas: Eventos en 24h, Archivos cerca del límite
+/// Metricas: Eventos en 24h, Archivos cerca del limite
 /// Peso: 5%
 /// </summary>
 public class AutogrowthCollector : CollectorBase<AutogrowthCollector.AutogrowthMetrics>
 {
-    private readonly ApplicationDbContext _context;
-
     public override string CollectorName => "Autogrowth";
     public override string DisplayName => "Autogrowth";
 
@@ -22,10 +21,9 @@ public class AutogrowthCollector : CollectorBase<AutogrowthCollector.AutogrowthM
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        ApplicationDbContext context) 
-        : base(logger, configService, connectionFactory, instanceProvider)
+        IServiceScopeFactory scopeFactory) 
+        : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
-        _context = context;
     }
 
     protected override async Task<AutogrowthMetrics> CollectFromInstanceAsync(
@@ -82,18 +80,78 @@ public class AutogrowthCollector : CollectorBase<AutogrowthCollector.AutogrowthM
 
     protected override int CalculateScore(AutogrowthMetrics data, List<CollectorThreshold> thresholds)
     {
-        var score = EvaluateThresholds(data.AutogrowthEventsLast24h, thresholds, "Events");
+        // Scoring ajustado para ser mas realista:
+        // Los autogrowths ocasionales son NORMALES en bases de datos activas
+        // Solo penalizar cuando hay un problema real de configuracion
+        //
+        // - 100 pts: menos de 50 autogrowths/dia, ningun archivo cerca del limite
+        // - 90 pts: 50-100 autogrowths/dia
+        // - 80 pts: 100-200 autogrowths/dia
+        // - 70 pts: 200-500 autogrowths/dia
+        // - 50 pts: mas de 500 autogrowths/dia (excesivo, revisar configuracion)
+        // - 40 pts: archivos mayor al 90% del maxsize
+        // - 0 pts: Archivos en maxsize o crecimiento bloqueado
 
-        // Penalización por archivos cerca del límite
-        if (data.FilesNearLimit > 0)
+        var score = 100;
+
+        // Penalizacion por cantidad de eventos de autogrowth
+        // Umbrales mas realistas: algunos autogrowths son normales
+        if (data.AutogrowthEventsLast24h >= 1000)
         {
-            score -= 30;
+            // Excesivo: mas de 1000 autogrowths en 24h indica problema serio
+            score = 40;
+        }
+        else if (data.AutogrowthEventsLast24h >= 500)
+        {
+            // Muy alto: revisar configuracion de archivos
+            score = 50;
+        }
+        else if (data.AutogrowthEventsLast24h >= 200)
+        {
+            // Alto: considerar aumentar tamano inicial
+            score = 70;
+        }
+        else if (data.AutogrowthEventsLast24h >= 100)
+        {
+            // Moderado: aceptable pero mejorable
+            score = 80;
+        }
+        else if (data.AutogrowthEventsLast24h >= 50)
+        {
+            // Bajo: normal en bases activas
+            score = 90;
+        }
+        // menos de 50 autogrowths = score 100 (optimo)
+
+        // Archivos cerca del limite: penalizacion moderada
+        // Solo si mayor al 90% del maxsize (riesgo real de quedarse sin espacio)
+        if (data.WorstPercentOfMax > 95)
+        {
+            // Critico: muy cerca del limite
+            score = Math.Min(score, 30);
+        }
+        else if (data.WorstPercentOfMax > 90)
+        {
+            // Alto riesgo
+            score = Math.Min(score, 50);
+        }
+        else if (data.WorstPercentOfMax > 80)
+        {
+            // Riesgo moderado
+            score = Math.Min(score, 70);
         }
 
-        // Cap por archivos al límite (>90%)
-        if (data.WorstPercentOfMax > 90)
+        // Archivos al 100% del maxsize = critico
+        if (data.WorstPercentOfMax >= 100)
         {
             score = 0;
+        }
+
+        // Bad growth config: penalizacion menor (solo informativo)
+        // Growth en % funciona bien en muchos casos
+        if (data.FilesWithBadGrowth > 5) // Solo si hay MUCHOS archivos con config suboptima
+        {
+            score = Math.Min(score, 80);
         }
 
         return Math.Clamp(score, 0, 100);
@@ -114,58 +172,95 @@ public class AutogrowthCollector : CollectorBase<AutogrowthCollector.AutogrowthM
             WorstPercentOfMax = data.WorstPercentOfMax
         };
 
-        _context.InstanceHealthAutogrowth.Add(entity);
-        await _context.SaveChangesAsync(ct);
+        await SaveWithScopedContextAsync(async context =>
+        {
+            context.InstanceHealthAutogrowth.Add(entity);
+            await context.SaveChangesAsync(ct);
+        }, ct);
     }
 
     protected override string GetDefaultQuery(int sqlMajorVersion)
     {
+        // Replicando logica PowerShell exacta: Default Trace + sys.trace_events para nombres
         return @"
--- Autogrowth events in last 24h from default trace
-DECLARE @GrowthEvents INT = 0;
+-- Autogrowth Events (last 24h) using Default Trace
+DECLARE @AutogrowthEvents INT = 0;
+
 BEGIN TRY
-    DECLARE @TracePath NVARCHAR(260);
-    SELECT @TracePath = CAST(value AS NVARCHAR(260))
+    DECLARE @tracefile VARCHAR(500);
+    
+    SELECT @tracefile = CAST(value AS VARCHAR(500))
     FROM sys.fn_trace_getinfo(NULL)
     WHERE traceid = 1 AND property = 2;
-
-    IF @TracePath IS NOT NULL
+    
+    IF @tracefile IS NOT NULL
     BEGIN
-        SELECT @GrowthEvents = COUNT(*)
-        FROM sys.fn_trace_gettable(@TracePath, DEFAULT)
-        WHERE EventClass IN (92, 93) -- Data File Auto Grow, Log File Auto Grow
-          AND StartTime > DATEADD(HOUR, -24, GETDATE());
+        SELECT @AutogrowthEvents = COUNT(*)
+        FROM sys.fn_trace_gettable(@tracefile, DEFAULT) t
+        INNER JOIN sys.trace_events e ON t.EventClass = e.trace_event_id
+        WHERE e.name IN ('Data File Auto Grow', 'Log File Auto Grow')
+          AND t.StartTime > DATEADD(HOUR, -24, GETDATE());
+    END
+    ELSE
+    BEGIN
+        -- Default Trace disabled
+        SET @AutogrowthEvents = 0;
     END
 END TRY
 BEGIN CATCH
-    SET @GrowthEvents = 0;
+    SET @AutogrowthEvents = 0;
 END CATCH
-SELECT @GrowthEvents AS GrowthEvents;
 
--- Files near limit (>80% of max_size)
+SELECT @AutogrowthEvents AS GrowthEvents;
+
+-- File Size vs MaxSize (includes HasIssue flag)
 SELECT 
     DB_NAME(mf.database_id) AS DatabaseName,
     mf.name AS FileName,
     mf.type_desc AS FileType,
-    CAST(mf.size * 8.0 / 1024 AS DECIMAL(18,2)) AS CurrentSizeMB,
-    CAST(mf.max_size * 8.0 / 1024 AS DECIMAL(18,2)) AS MaxSizeMB,
-    CAST(mf.size * 100.0 / mf.max_size AS DECIMAL(5,2)) AS PctOfMax
+    mf.size * 8.0 / 1024 AS SizeMB,
+    CASE 
+        WHEN mf.max_size = -1 THEN NULL
+        WHEN mf.max_size = 268435456 THEN NULL  -- 2TB default
+        ELSE mf.max_size * 8.0 / 1024
+    END AS MaxSizeMB,
+    CASE 
+        WHEN mf.max_size = -1 OR mf.max_size = 268435456 THEN 0
+        ELSE (CAST(mf.size AS FLOAT) / mf.max_size) * 100
+    END AS PctOfMax,
+    mf.is_percent_growth AS IsPercentGrowth,
+    CASE 
+        WHEN mf.is_percent_growth = 1 THEN CAST(mf.growth AS VARCHAR) + '%'
+        ELSE CAST(mf.growth * 8 / 1024 AS VARCHAR) + ' MB'
+    END AS GrowthSetting,
+    CASE 
+        WHEN mf.max_size != -1 AND mf.max_size != 268435456 
+             AND (CAST(mf.size AS FLOAT) / mf.max_size) > 0.9 THEN 1
+        WHEN mf.is_percent_growth = 1 AND mf.size * 8 / 1024 > 1000 THEN 1
+        ELSE 0
+    END AS HasIssue
 FROM sys.master_files mf
-WHERE mf.max_size > 0 
-  AND mf.max_size != -1
-  AND mf.size * 100.0 / mf.max_size > 80
-  AND mf.growth > 0;
+WHERE mf.database_id > 4
+ORDER BY 
+    CASE 
+        WHEN mf.max_size = -1 OR mf.max_size = 268435456 THEN 0
+        ELSE (CAST(mf.size AS FLOAT) / mf.max_size) * 100
+    END DESC;
 
--- Files with bad growth config (percent growth or very small growth)
+-- Count files with bad growth config (flexible criteria)
+-- Only considers bad if:
+-- 1. File at more than 90% of configured maxsize (real risk)
+-- 2. Very small percent growth (less than 1%) on large files (more than 10GB)
 SELECT COUNT(*) AS BadGrowthCount
 FROM sys.master_files mf
 WHERE mf.growth > 0
   AND (
-      mf.is_percent_growth = 1  -- Percent growth is bad
-      OR (mf.is_percent_growth = 0 AND mf.growth < 64) -- Less than 512KB is too small
+      -- Files at more than 90% of configured maxsize
+      (mf.max_size != -1 AND mf.max_size != 268435456 AND (CAST(mf.size AS FLOAT) / mf.max_size) > 0.9)
+      -- Very small percent growth on large files (more than 10GB with less than 10% growth)
+      OR (mf.is_percent_growth = 1 AND mf.growth < 10 AND mf.size * 8 / 1024 > 10240)
   )
-  AND mf.database_id > 4
-  AND mf.type IN (0, 1);";
+  AND mf.database_id > 4;";
     }
 
     protected override Dictionary<string, object?> GetMetricsFromResult(AutogrowthMetrics data)
@@ -187,4 +282,3 @@ WHERE mf.growth > 0
         public decimal WorstPercentOfMax { get; set; }
     }
 }
-

@@ -175,7 +175,9 @@ export function PasswordReveal({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-amber-500" />
+              <div className="p-2 rounded-lg bg-warning/10">
+                <ShieldAlert className="h-5 w-5 text-warning" />
+              </div>
               Revelar contraseña
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
@@ -200,7 +202,7 @@ export function PasswordReveal({
       <div className="flex items-center gap-1">
         {isRevealing && password ? (
           <>
-            <code className="bg-muted px-2 py-1 rounded text-sm font-mono flex-1 truncate max-w-[180px]">
+            <code className="bg-muted/50 px-2.5 py-1 rounded-lg text-sm font-mono flex-1 truncate max-w-[180px] border border-border/30">
               {password}
             </code>
             <span className="text-xs text-muted-foreground tabular-nums w-6">
@@ -210,12 +212,12 @@ export function PasswordReveal({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-sm"
                   className="h-7 w-7"
                   onClick={handleCopy}
                 >
                   {copied ? (
-                    <Check className="h-3.5 w-3.5 text-green-500" />
+                    <Check className="h-3.5 w-3.5 text-success" />
                   ) : (
                     <Copy className="h-3.5 w-3.5" />
                   )}
@@ -227,7 +229,7 @@ export function PasswordReveal({
         ) : (
           <>
             <span className="text-muted-foreground text-sm">••••••••</span>
-            <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200 hidden sm:inline-flex">
+            <Badge variant="soft-warning" className="text-xs hidden sm:inline-flex font-medium">
               Auditado
             </Badge>
           </>
@@ -239,7 +241,7 @@ export function PasswordReveal({
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-sm"
                 className="h-7 w-7"
                 onClick={handleCopyWithoutReveal}
                 disabled={disabled || isCopyingWithoutReveal}
@@ -247,7 +249,7 @@ export function PasswordReveal({
                 {isCopyingWithoutReveal ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : copiedWithoutReveal ? (
-                  <Check className="h-3.5 w-3.5 text-green-500" />
+                  <Check className="h-3.5 w-3.5 text-success" />
                 ) : (
                   <ClipboardCopy className="h-3.5 w-3.5" />
                 )}
@@ -262,7 +264,7 @@ export function PasswordReveal({
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               className="h-7 w-7"
               onClick={handleRevealClick}
               disabled={disabled || isLoading}
@@ -286,4 +288,3 @@ export function PasswordReveal({
 }
 
 export default PasswordReveal;
-

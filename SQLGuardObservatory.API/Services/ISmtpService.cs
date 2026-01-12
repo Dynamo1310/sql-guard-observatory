@@ -23,8 +23,11 @@ public interface ISmtpService
     /// Envía un email
     /// </summary>
     Task<bool> SendEmailAsync(string toEmail, string? toName, string subject, string htmlBody, 
-        string notificationType, string? referenceType = null, int? referenceId = null);
+        string notificationType, string? referenceType = null, int? referenceId = null,
+        byte[]? attachmentData = null, string? attachmentName = null);
 }
+
+
 
 
 

@@ -432,8 +432,8 @@ export function CredentialDialog({
             />
 
             {/* Info: Las credenciales siempre son privadas */}
-            <div className="flex flex-row items-center gap-3 rounded-lg border p-4 bg-amber-50/50 dark:bg-amber-950/20 border-amber-200">
-              <Lock className="h-5 w-5 text-amber-500 flex-shrink-0" />
+            <div className="flex flex-row items-center gap-3 rounded-lg border p-4 bg-muted/20 border-border/50">
+              <Lock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">Credencial privada</p>
                 <p className="text-xs text-muted-foreground">
@@ -446,7 +446,7 @@ export function CredentialDialog({
             {!isEditing && (availableGroups.length > 0 || availableUsers.length > 0) && (
               <div className="space-y-4 rounded-lg border p-4">
                 <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-blue-500" />
+                  <Users className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">Compartir credencial (opcional)</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
