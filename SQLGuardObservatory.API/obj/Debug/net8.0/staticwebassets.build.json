@@ -1,0 +1,19 @@
+{
+  "Version": 1,
+  "Hash": "Mel66rcmzpVrOrZL/JEN6D3xO4W93eBOF/M9fIPMhiA=",
+  "Source": "SQLGuardObservatory.API",
+  "BasePath": "_content/SQLGuardObservatory.API",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [
+    {
+      "Name": "SQLGuardObservatory.API\\wwwroot",
+      "Source": "SQLGuardObservatory.API",
+      "ContentRoot": "C:\\Users\\tobia\\OneDrive\\Desktop\\sql-guard-observatory\\SQLGuardObservatory.API\\wwwroot\\",
+      "BasePath": "_content/SQLGuardObservatory.API",
+      "Pattern": "**"
+    }
+  ],
+  "Assets": []
+}

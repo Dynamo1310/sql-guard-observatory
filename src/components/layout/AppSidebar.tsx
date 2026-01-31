@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   Home, Activity, HardDrive, Database, Save, ListTree, Users, Heart, 
-  Phone, Calendar, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
+  Phone, Calendar, CalendarDays, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
   ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Settings, Cog, ShieldCheck, Clock,
-  Key, Lock, History, KeyRound, Share2, FolderLock, Sparkles, Server, Zap, Tag, AlertTriangle, TrendingUp
+  Key, Lock, History, KeyRound, Share2, FolderLock, Sparkles, Server, Zap, Tag, AlertTriangle, TrendingUp,
+  Snowflake, Play, BookOpen, LayoutDashboard
 } from 'lucide-react';
-import { menuBadgesApi, MenuBadgeDto, healthScoreV3Api } from '@/services/api';
+import { menuBadgesApi, MenuBadgeDto, overviewApi } from '@/services/api';
 import { NavLink, useLocation } from 'react-router-dom';
 // Logos para modo claro y oscuro
 import sqlNovaBlackLogo from '/SQLNovaBlackLogo.svg';
@@ -92,9 +93,22 @@ const rendimientoSubItems = [
 
 // Submenús de Parcheos
 const patchingSubItems = [
-  { title: 'Dashboard', url: '/patching', icon: ShieldCheck, permission: 'Patching' },
+  { title: 'Dashboard', url: '/patching', icon: LayoutDashboard, permission: 'Patching' },
+  { title: 'Planificador', url: '/patching/planner', icon: CalendarDays, permission: 'PatchPlanner' },
+  { title: 'Calendario', url: '/patching/calendar', icon: Calendar, permission: 'PatchCalendar' },
+  { title: 'Vista Célula', url: '/patching/cell', icon: Users, permission: 'PatchCellView' },
+  { title: 'Ejecución', url: '/patching/execute', icon: Play, permission: 'PatchExecution' },
   { title: 'Inst. Obsoletas', url: '/patching/obsolete', icon: Clock, permission: 'ObsoleteInstances' },
+  { title: 'Config. Freezing', url: '/patching/freezing-config', icon: Snowflake, permission: 'PatchFreezingConfig' },
+  { title: 'Config. Notificaciones', url: '/patching/notifications-config', icon: Bell, permission: 'PatchNotificationsConfig' },
   { title: 'Config. Compliance', url: '/patching/config', icon: Settings, permission: 'PatchingConfig' },
+];
+
+// ==================== KNOWLEDGE BASE ====================
+
+// Submenús de Knowledge Base
+const knowledgeBaseSubItems = [
+  { title: 'Owners de BD', url: '/knowledge/database-owners', icon: BookOpen, permission: 'DatabaseOwners' },
 ];
 
 // ==================== GUARDIAS DBA ====================
@@ -191,6 +205,10 @@ export function AppSidebar() {
   const isPatchingActive = location.pathname.startsWith('/patching');
   const [patchingOpen, setPatchingOpen] = useState(isPatchingActive);
   
+  // Knowledge Base
+  const isKnowledgeBaseActive = location.pathname.startsWith('/knowledge');
+  const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(isKnowledgeBaseActive);
+  
   // Guardias DBA
   const isOnCallActive = location.pathname.startsWith('/oncall');
   const [onCallOpen, setOnCallOpen] = useState(isOnCallActive);
@@ -238,15 +256,23 @@ export function AppSidebar() {
   }, []);
 
   // Cargar estadísticas de salud para indicadores del sidebar
-  const loadHealthStats = useCallback(async () => {
+  // Usa el caché del Overview para evitar queries pesadas
+  const loadHealthStats = useCallback(async (retryCount = 0) => {
     try {
-      const scores = await healthScoreV3Api.getAllHealthScores();
-      const prodScores = scores.filter(s => s.ambiente === 'Produccion');
+      const overviewData = await overviewApi.getOverviewData();
       setHealthStats({
-        critical: prodScores.filter(s => s.healthScore < 60).length,
-        warning: prodScores.filter(s => s.healthScore >= 60 && s.healthScore < 75).length,
-        total: prodScores.length
+        critical: overviewData.criticalCount,
+        warning: overviewData.warningCount + overviewData.riskCount,
+        total: overviewData.totalInstances
       });
+      
+      // Si recibimos datos vacíos (caché aún poblándose), reintentar después de 2 segundos
+      // Máximo 3 reintentos
+      if (overviewData.totalInstances === 0 && retryCount < 3) {
+        setTimeout(() => {
+          loadHealthStats(retryCount + 1);
+        }, 2000);
+      }
     } catch (error) {
       console.error('Error loading health stats:', error);
     }
@@ -255,7 +281,7 @@ export function AppSidebar() {
   useEffect(() => {
     loadHealthStats();
     // Actualizar cada 2 minutos
-    const interval = setInterval(loadHealthStats, 120000);
+    const interval = setInterval(() => loadHealthStats(), 120000);
     return () => clearInterval(interval);
   }, [loadHealthStats]);
 
@@ -341,6 +367,11 @@ export function AppSidebar() {
   const visiblePatchingSubItems = patchingSubItems.filter(item => hasPermission(item.permission));
   const showPatchingMenu = hasPatchingMenuPermission && visiblePatchingSubItems.length > 0;
   
+  // Knowledge Base
+  const hasKnowledgeBaseMenuPermission = hasPermission('KnowledgeBaseMenu');
+  const visibleKnowledgeBaseSubItems = knowledgeBaseSubItems.filter(item => hasPermission(item.permission));
+  const showKnowledgeBaseMenu = hasKnowledgeBaseMenuPermission && visibleKnowledgeBaseSubItems.length > 0;
+  
   // Inventario
   const hasInventarioMenuPermission = hasPermission('InventarioMenu');
   
@@ -394,7 +425,7 @@ export function AppSidebar() {
   const showAdminSection = showControlAccesoMenu || showConfiguracionMenu || showMonitoreoSistemaMenu || showAlertsMenu;
   
   // Mostrar sección Observabilidad
-  const showObservabilidadSection = hasOverviewPermission || showMonitoreoMenu || showInfraestructuraMenu || showRendimientoMenu || showPatchingMenu;
+  const showObservabilidadSection = hasOverviewPermission || showMonitoreoMenu || showInfraestructuraMenu || showRendimientoMenu || showPatchingMenu || showKnowledgeBaseMenu;
 
   // Componente reutilizable para menús colapsables
   const CollapsibleMenu = ({ 
@@ -645,6 +676,19 @@ export function AppSidebar() {
                     title="Parcheos"
                     menuKey="PatchingMenu"
                     subItems={visiblePatchingSubItems}
+                  />
+                )}
+
+                {/* Menú Knowledge Base */}
+                {showKnowledgeBaseMenu && (
+                  <CollapsibleMenu
+                    isOpen={knowledgeBaseOpen}
+                    setIsOpen={setKnowledgeBaseOpen}
+                    isActive={isKnowledgeBaseActive}
+                    icon={BookOpen}
+                    title="Knowledge Base"
+                    menuKey="KnowledgeBaseMenu"
+                    subItems={visibleKnowledgeBaseSubItems}
                   />
                 )}
               </SidebarMenu>

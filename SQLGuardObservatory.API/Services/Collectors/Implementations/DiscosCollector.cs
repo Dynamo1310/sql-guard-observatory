@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
+using SQLGuardObservatory.API.Services;
 using System.Data;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -450,6 +451,36 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
             context.InstanceHealthDiscos.Add(entity);
             await context.SaveChangesAsync(ct);
         }, ct);
+    }
+
+    /// <summary>
+    /// Post-procesamiento: Actualiza el caché del Overview después de recolectar todos los discos
+    /// </summary>
+    protected override async Task PostProcessAsync(List<CollectorInstanceResult> results, CancellationToken ct)
+    {
+        // Solo actualizar el caché si hubo resultados exitosos
+        var successCount = results.Count(r => r.Success);
+        if (successCount == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var cacheService = scope.ServiceProvider.GetService<IOverviewSummaryCacheService>();
+            
+            if (cacheService != null)
+            {
+                await cacheService.RefreshCacheAsync("DiscosCollector", ct);
+                _logger.LogDebug("Overview cache refreshed after DiscosCollector");
+            }
+        }
+        catch (Exception ex)
+        {
+            // No propagar el error para no afectar el resultado del collector
+            _logger.LogWarning(ex, "Error refreshing Overview cache after DiscosCollector");
+        }
     }
 
     /// <summary>

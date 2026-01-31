@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\buildMultiTargeting\SQLGuardObservatory.API.props" />
+</Project>

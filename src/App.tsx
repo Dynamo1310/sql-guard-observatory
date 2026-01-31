@@ -36,7 +36,14 @@ import AdminGroupDetail from "./pages/AdminGroupDetail";
 import AdminRoles from "./pages/AdminRoles";
 import PatchStatus from "./pages/PatchStatus";
 import PatchComplianceConfig from "./pages/PatchComplianceConfig";
+import PatchPlanner from "./pages/PatchPlanner";
+import PatchCalendar from "./pages/PatchCalendar";
+import PatchCellView from "./pages/PatchCellView";
+import PatchExecution from "./pages/PatchExecution";
+import PatchFreezingConfig from "./pages/PatchFreezingConfig";
+import PatchNotificationsConfig from "./pages/PatchNotificationsConfig";
 import ObsoleteInstances from "./pages/ObsoleteInstances";
+import DatabaseOwners from "./pages/DatabaseOwners";
 import VaultDashboard from "./pages/VaultDashboard";
 import VaultCredentials from "./pages/VaultCredentials";
 import VaultSharedWithMe from "./pages/VaultSharedWithMe";
@@ -59,7 +66,22 @@ import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// ========== REACT QUERY - Configuración optimizada para alta concurrencia ==========
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30 * 1000,           // Datos frescos por 30 segundos
+      gcTime: 5 * 60 * 1000,          // Mantener en caché 5 minutos (antes cacheTime)
+      retry: 3,                        // Reintentar 3 veces en error
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Backoff exponencial
+      refetchOnWindowFocus: false,     // No refetch al volver a la ventana
+      refetchOnReconnect: true,        // Refetch al reconectar
+    },
+    mutations: {
+      retry: 1,                        // Reintentar mutaciones 1 vez
+    },
+  },
+});
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -151,9 +173,45 @@ const App = () => (
                           <PatchComplianceConfig />
                         </ProtectedRoute>
                       } />
+                      <Route path="/patching/planner" element={
+                        <ProtectedRoute viewName="PatchPlanner">
+                          <PatchPlanner />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/patching/calendar" element={
+                        <ProtectedRoute viewName="PatchCalendar">
+                          <PatchCalendar />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/patching/cell" element={
+                        <ProtectedRoute viewName="PatchCellView">
+                          <PatchCellView />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/patching/execute" element={
+                        <ProtectedRoute viewName="PatchExecution">
+                          <PatchExecution />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/patching/freezing-config" element={
+                        <ProtectedRoute viewName="PatchFreezingConfig">
+                          <PatchFreezingConfig />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/patching/notifications-config" element={
+                        <ProtectedRoute viewName="PatchNotificationsConfig">
+                          <PatchNotificationsConfig />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/patching/obsolete" element={
                         <ProtectedRoute viewName="ObsoleteInstances">
                           <ObsoleteInstances />
+                        </ProtectedRoute>
+                      } />
+                      {/* Knowledge Base */}
+                      <Route path="/knowledge/database-owners" element={
+                        <ProtectedRoute viewName="DatabaseOwners">
+                          <DatabaseOwners />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall" element={

@@ -203,6 +203,45 @@ export const authApi = {
         profilePhotoUrl: data.profilePhotoUrl,
         hasProfilePhoto: data.hasProfilePhoto,
       }));
+      
+      // Pre-cargar permisos, autorización, Overview y menuBadges en paralelo
+      // Esto "calienta" el backend completamente y guarda en caché para carga instantánea
+      try {
+        const [permissionsData, authData] = await Promise.all([
+          permissionsApi.getMyPermissions(),
+          adminRolesApi.getMyAuthorization(),
+          // Pre-cargar Overview y MenuBadges para calentar esos endpoints (no guardamos en localStorage)
+          fetch(`${API_URL}/api/overview-data`, { headers: getAuthHeader() }).catch(() => null),
+          fetch(`${API_URL}/api/menubadges`, { headers: getAuthHeader() }).catch(() => null)
+        ]);
+        
+        // Guardar en caché (mismas claves que AuthContext)
+        localStorage.setItem('cached_permissions', JSON.stringify(permissionsData.permissions));
+        localStorage.setItem('cached_authorization', JSON.stringify({
+          roleId: authData.roleId,
+          roleName: authData.roleName,
+          roleColor: authData.roleColor,
+          roleIcon: authData.roleIcon,
+          rolePriority: authData.rolePriority,
+          capabilities: authData.capabilities,
+          assignableRoles: authData.assignableRoles.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            color: r.color,
+            icon: r.icon,
+            priority: r.priority,
+          })),
+          manageableGroupIds: authData.manageableGroupIds || [],
+          isSuperAdmin: authData.isSuperAdmin,
+          isAdmin: authData.isAdmin,
+          isReader: authData.isReader,
+          canCreateUsers: authData.canCreateUsers,
+          canDeleteUsers: authData.canDeleteUsers,
+          canCreateGroups: authData.canCreateGroups,
+        }));
+      } catch (error) {
+        console.warn('[Auth] Error pre-cargando datos (se cargarán después):', error);
+      }
     }
     
     return data;
@@ -1682,6 +1721,97 @@ export const healthScoreV3Api = {
       },
     });
     return handleResponse<HealthScoreV3SummaryDto>(response);
+  },
+};
+
+// ==================== OVERVIEW DATA API (OPTIMIZADO) ====================
+
+// DTOs para el endpoint optimizado /api/overview-data
+export interface OverviewDataOptimizedDto {
+  // KPIs
+  totalInstances: number;
+  healthyCount: number;
+  warningCount: number;
+  riskCount: number;
+  criticalCount: number;
+  avgScore: number;
+  backupsOverdue: number;
+  criticalDisksCount: number;
+  maintenanceOverdueCount: number;
+  
+  // Listas para tablas
+  criticalInstances: OverviewCriticalInstanceDto[];
+  backupIssues: OverviewBackupIssueDto[];
+  criticalDisks: OverviewCriticalDiskDto[];
+  maintenanceOverdue: OverviewMaintenanceOverdueDto[];
+  
+  // Timestamp
+  lastUpdate?: string;
+}
+
+export interface OverviewCriticalInstanceDto {
+  instanceName: string;
+  ambiente?: string;
+  healthScore: number;
+  issues: string[];
+  score_Backups?: number;
+  score_AlwaysOn?: number;
+  score_CPU?: number;
+  score_Memoria?: number;
+  score_Discos?: number;
+  score_Maintenance?: number;
+}
+
+export interface OverviewBackupIssueDto {
+  instanceName: string;
+  score: number;
+  issues: string[];
+  // Campos detallados de breach
+  fullBackupBreached: boolean;
+  logBackupBreached: boolean;
+  lastFullBackup?: string;
+  lastLogBackup?: string;
+  breachedDatabases: string[];
+}
+
+export interface OverviewCriticalDiskDto {
+  instanceName: string;
+  drive: string;
+  porcentajeLibre: number;
+  realPorcentajeLibre: number;
+  libreGB: number;
+  realLibreGB: number;
+  espacioInternoEnArchivosGB: number;
+  estado: string;
+}
+
+export interface OverviewMaintenanceOverdueDto {
+  instanceName: string;
+  displayName: string;
+  tipo: string;
+  lastCheckdb?: string;
+  lastIndexOptimize?: string;
+  checkdbVencido: boolean;
+  indexOptimizeVencido: boolean;
+  agName?: string;
+}
+
+/**
+ * API optimizada para la página Overview
+ * Obtiene todos los datos en una sola llamada
+ */
+export const overviewApi = {
+  /**
+   * Obtiene todos los datos del Overview en una sola llamada
+   * Solo incluye datos de PRODUCCIÓN
+   */
+  async getOverviewData(): Promise<OverviewDataOptimizedDto> {
+    const response = await fetch(`${API_URL}/api/overview-data`, {
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+    return handleResponse<OverviewDataOptimizedDto>(response);
   },
 };
 
@@ -3886,6 +4016,388 @@ export const patchingApi = {
   },
 };
 
+// ==================== PATCH PLAN API ====================
+
+// Tipos del Planner de Parcheos
+export interface PatchPlanDto {
+  id: number;
+  serverName: string;
+  instanceName?: string;
+  currentVersion: string;
+  targetVersion: string;
+  isCoordinated: boolean;
+  productOwnerNote?: string;
+  scheduledDate: string;
+  windowStartTime: string;
+  windowEndTime: string;
+  assignedDbaId?: string;
+  assignedDbaName?: string;
+  wasPatched?: boolean;
+  status: string;
+  patchedAt?: string;
+  patchedByUserName?: string;
+  notes?: string;
+  createdAt: string;
+  createdByUserName?: string;
+  updatedAt?: string;
+  // Nuevos campos
+  patchMode: string;
+  coordinationOwnerId?: string;
+  coordinationOwnerName?: string;
+  coordinationOwnerEmail?: string;
+  cellTeam?: string;
+  estimatedDuration?: number;
+  priority?: string;
+  clusterName?: string;
+  isAlwaysOn: boolean;
+  ambiente?: string;
+  contactedAt?: string;
+  responseReceivedAt?: string;
+  rescheduledCount: number;
+  waiverReason?: string;
+}
+
+export interface CreatePatchPlanRequest {
+  serverName: string;
+  instanceName?: string;
+  currentVersion: string;
+  targetVersion: string;
+  isCoordinated: boolean;
+  productOwnerNote?: string;
+  scheduledDate: string;
+  windowStartTime: string;
+  windowEndTime: string;
+  assignedDbaId?: string;
+  notes?: string;
+  // Nuevos campos
+  status?: string;
+  patchMode?: string;
+  coordinationOwnerId?: string;
+  coordinationOwnerName?: string;
+  coordinationOwnerEmail?: string;
+  cellTeam?: string;
+  estimatedDuration?: number;
+  priority?: string;
+  clusterName?: string;
+  isAlwaysOn?: boolean;
+  ambiente?: string;
+}
+
+export interface UpdatePatchPlanRequest {
+  serverName?: string;
+  instanceName?: string;
+  currentVersion?: string;
+  targetVersion?: string;
+  isCoordinated?: boolean;
+  productOwnerNote?: string;
+  scheduledDate?: string;
+  windowStartTime?: string;
+  windowEndTime?: string;
+  assignedDbaId?: string;
+  wasPatched?: boolean;
+  notes?: string;
+  // Nuevos campos
+  status?: string;
+  patchMode?: string;
+  coordinationOwnerId?: string;
+  coordinationOwnerName?: string;
+  coordinationOwnerEmail?: string;
+  cellTeam?: string;
+  estimatedDuration?: number;
+  priority?: string;
+  clusterName?: string;
+  isAlwaysOn?: boolean;
+  ambiente?: string;
+  waiverReason?: string;
+}
+
+export interface MarkPatchStatusRequest {
+  wasPatched: boolean;
+  notes?: string;
+}
+
+export interface AvailableDbaDto {
+  id: string;
+  displayName: string;
+  email?: string;
+  domainUser?: string;
+}
+
+export interface PatchPlanFilterParams {
+  fromDate?: string;
+  toDate?: string;
+  assignedDbaId?: string;
+  status?: string;
+  serverName?: string;
+  cellTeam?: string;
+  ambiente?: string;
+  priority?: string;
+  patchMode?: string;
+}
+
+export interface ReschedulePatchPlanRequest {
+  newScheduledDate: string;
+  newWindowStartTime?: string;
+  newWindowEndTime?: string;
+  reason?: string;
+}
+
+export interface PatchCalendarDto {
+  id: number;
+  serverName: string;
+  instanceName?: string;
+  status: string;
+  priority?: string;
+  cellTeam?: string;
+  ambiente?: string;
+  scheduledDate: string;
+  windowStartTime: string;
+  windowEndTime: string;
+  assignedDbaName?: string;
+  estimatedDuration?: number;
+  isAlwaysOn: boolean;
+  clusterName?: string;
+}
+
+export interface PatchDashboardStatsDto {
+  totalPlans: number;
+  completedPlans: number;
+  pendingPlans: number;
+  failedPlans: number;
+  completionPercentage: number;
+  delayedPlans: number;
+  highPriorityPending: number;
+  mediumPriorityPending: number;
+  lowPriorityPending: number;
+  cellStats: CellStatsDto[];
+  inWindowExecutions: number;
+  outOfWindowExecutions: number;
+  averageLeadTimeDays: number;
+}
+
+export interface CellStatsDto {
+  cellTeam: string;
+  backlog: number;
+  completed: number;
+  rescheduled: number;
+  waivers: number;
+}
+
+export interface SuggestedWindowDto {
+  date: string;
+  startTime: string;
+  endTime: string;
+  availableMinutes: number;
+  reason: string;
+  isRecommended: boolean;
+}
+
+export interface NonCompliantServerDto {
+  serverName: string;
+  instanceName?: string;
+  ambiente?: string;
+  majorVersion?: string;
+  currentBuild?: string;
+  currentCU?: string;
+  requiredBuild?: string;
+  requiredCU?: string;
+  pendingCUsForCompliance: number;
+  patchStatus: string;
+  isAlwaysOn: boolean;
+  clusterName?: string;
+  lastChecked?: string;
+}
+
+// Constantes de estados y modos
+export const PatchPlanStatus = {
+  Planificado: 'Planificado',
+  EnCoordinacion: 'EnCoordinacion',
+  SinRespuesta: 'SinRespuesta',
+  Aprobado: 'Aprobado',
+  EnProceso: 'EnProceso',
+  Parcheado: 'Parcheado',
+  Fallido: 'Fallido',
+  Cancelado: 'Cancelado',
+  Reprogramado: 'Reprogramado',
+} as const;
+
+export const PatchModeType = {
+  Manual: 'Manual',
+  Automatico: 'Automatico',
+  ManualNova: 'ManualNova',
+} as const;
+
+export const PatchPriority = {
+  Alta: 'Alta',
+  Media: 'Media',
+  Baja: 'Baja',
+} as const;
+
+export const patchPlanApi = {
+  // Obtener todos los planes (con filtros opcionales)
+  async getAll(filters?: PatchPlanFilterParams): Promise<PatchPlanDto[]> {
+    const params = new URLSearchParams();
+    if (filters?.fromDate) params.append('fromDate', filters.fromDate);
+    if (filters?.toDate) params.append('toDate', filters.toDate);
+    if (filters?.assignedDbaId) params.append('assignedDbaId', filters.assignedDbaId);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.serverName) params.append('serverName', filters.serverName);
+    if (filters?.cellTeam) params.append('cellTeam', filters.cellTeam);
+    if (filters?.ambiente) params.append('ambiente', filters.ambiente);
+    if (filters?.priority) params.append('priority', filters.priority);
+    if (filters?.patchMode) params.append('patchMode', filters.patchMode);
+    
+    const url = `${API_URL}/api/patchplan${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchPlanDto[]>(response);
+  },
+
+  // Obtener plan por ID
+  async getById(id: number): Promise<PatchPlanDto> {
+    const response = await fetch(`${API_URL}/api/patchplan/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchPlanDto>(response);
+  },
+
+  // Obtener DBAs disponibles (del grupo IDD General)
+  async getAvailableDbas(): Promise<AvailableDbaDto[]> {
+    const response = await fetch(`${API_URL}/api/patchplan/dbas`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<AvailableDbaDto[]>(response);
+  },
+
+  // Crear nuevo plan
+  async create(data: CreatePatchPlanRequest): Promise<PatchPlanDto> {
+    const response = await fetch(`${API_URL}/api/patchplan`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<PatchPlanDto>(response);
+  },
+
+  // Actualizar plan
+  async update(id: number, data: UpdatePatchPlanRequest): Promise<PatchPlanDto> {
+    const response = await fetch(`${API_URL}/api/patchplan/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<PatchPlanDto>(response);
+  },
+
+  // Eliminar plan
+  async delete(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/patchplan/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  // Marcar estado del parcheo (completado/fallido)
+  async markStatus(id: number, data: MarkPatchStatusRequest): Promise<PatchPlanDto> {
+    const response = await fetch(`${API_URL}/api/patchplan/${id}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<PatchPlanDto>(response);
+  },
+
+  // Obtener servidores no-compliance
+  async getNonCompliantServers(): Promise<NonCompliantServerDto[]> {
+    const response = await fetch(`${API_URL}/api/patchplan/non-compliant-servers`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<NonCompliantServerDto[]>(response);
+  },
+
+  // Sugerir ventanas disponibles
+  async suggestWindow(serverName: string, durationMinutes?: number, fromDate?: string, maxSuggestions?: number): Promise<SuggestedWindowDto[]> {
+    const params = new URLSearchParams({ serverName });
+    if (durationMinutes) params.append('durationMinutes', durationMinutes.toString());
+    if (fromDate) params.append('fromDate', fromDate);
+    if (maxSuggestions) params.append('maxSuggestions', maxSuggestions.toString());
+    
+    const response = await fetch(`${API_URL}/api/patchplan/suggest-window?${params.toString()}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<SuggestedWindowDto[]>(response);
+  },
+
+  // Obtener datos del calendario
+  async getCalendarData(year: number, month: number): Promise<PatchCalendarDto[]> {
+    const response = await fetch(`${API_URL}/api/patchplan/calendar/${year}/${month}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchCalendarDto[]>(response);
+  },
+
+  // Obtener planes por célula
+  async getByCell(cellTeam: string): Promise<PatchPlanDto[]> {
+    const response = await fetch(`${API_URL}/api/patchplan/by-cell/${encodeURIComponent(cellTeam)}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchPlanDto[]>(response);
+  },
+
+  // Obtener estadísticas del dashboard
+  async getDashboardStats(): Promise<PatchDashboardStatsDto> {
+    const response = await fetch(`${API_URL}/api/patchplan/dashboard-stats`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchDashboardStatsDto>(response);
+  },
+
+  // Reprogramar plan
+  async reschedule(id: number, data: ReschedulePatchPlanRequest): Promise<PatchPlanDto> {
+    const response = await fetch(`${API_URL}/api/patchplan/${id}/reschedule`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<PatchPlanDto>(response);
+  },
+
+  // Actualizar solo el estado
+  async updateStatus(id: number, newStatus: string): Promise<PatchPlanDto> {
+    const response = await fetch(`${API_URL}/api/patchplan/${id}/update-status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(newStatus),
+    });
+    return handleResponse<PatchPlanDto>(response);
+  },
+
+  // Obtener células únicas
+  async getCellTeams(): Promise<string[]> {
+    const response = await fetch(`${API_URL}/api/patchplan/cell-teams`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<string[]>(response);
+  },
+};
+
 // ==================== VAULT API ====================
 
 // Tipos del Vault
@@ -4595,6 +5107,344 @@ export interface SqlServerInstancesResponse {
   cacheInfo: InventoryCacheInfo;
   pagination: InventoryPagination;
 }
+
+// ==================== PATCH CONFIG API ====================
+
+// Tipos de configuración de parcheos
+export interface PatchingFreezingConfigDto {
+  id: number;
+  weekOfMonth: number;
+  isFreezingWeek: boolean;
+  description?: string;
+  updatedAt?: string;
+}
+
+export interface UpdateFreezingConfigRequest {
+  weeks: FreezingWeekConfig[];
+}
+
+export interface FreezingWeekConfig {
+  weekOfMonth: number;
+  isFreezingWeek: boolean;
+  description?: string;
+}
+
+export interface FreezingMonthInfoDto {
+  year: number;
+  month: number;
+  monthName: string;
+  weeks: FreezingWeekInfoDto[];
+}
+
+export interface FreezingWeekInfoDto {
+  weekOfMonth: number;
+  startDate: string;
+  endDate: string;
+  isFreezingWeek: boolean;
+  description?: string;
+  daysInWeek: number;
+}
+
+export interface PatchNotificationSettingDto {
+  id: number;
+  notificationType: string;
+  isEnabled: boolean;
+  hoursBefore?: number;
+  recipientType: string;
+  emailSubjectTemplate?: string;
+  emailBodyTemplate?: string;
+  description?: string;
+  updatedAt?: string;
+}
+
+export interface UpdateNotificationSettingRequest {
+  notificationType: string;
+  isEnabled: boolean;
+  hoursBefore?: number;
+  recipientType: string;
+  emailSubjectTemplate?: string;
+  emailBodyTemplate?: string;
+  description?: string;
+}
+
+export interface PatchNotificationHistoryDto {
+  id: number;
+  patchPlanId: number;
+  serverName: string;
+  notificationType: string;
+  recipientEmail: string;
+  recipientName?: string;
+  subject?: string;
+  sentAt: string;
+  wasSuccessful: boolean;
+  errorMessage?: string;
+}
+
+export const patchConfigApi = {
+  // Freezing Config
+  async getFreezingConfig(): Promise<PatchingFreezingConfigDto[]> {
+    const response = await fetch(`${API_URL}/api/patchconfig/freezing`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchingFreezingConfigDto[]>(response);
+  },
+
+  async getFreezingMonthInfo(year: number, month: number): Promise<FreezingMonthInfoDto> {
+    const response = await fetch(`${API_URL}/api/patchconfig/freezing/month/${year}/${month}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<FreezingMonthInfoDto>(response);
+  },
+
+  async updateFreezingConfig(request: UpdateFreezingConfigRequest): Promise<void> {
+    const response = await fetch(`${API_URL}/api/patchconfig/freezing`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<void>(response);
+  },
+
+  async checkDateFreezing(date: string): Promise<{ date: string; isFreezing: boolean }> {
+    const response = await fetch(`${API_URL}/api/patchconfig/freezing/check?date=${date}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ date: string; isFreezing: boolean }>(response);
+  },
+
+  // Notification Settings
+  async getNotificationSettings(): Promise<PatchNotificationSettingDto[]> {
+    const response = await fetch(`${API_URL}/api/patchconfig/notifications`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchNotificationSettingDto[]>(response);
+  },
+
+  async updateNotificationSetting(request: UpdateNotificationSettingRequest): Promise<PatchNotificationSettingDto> {
+    const response = await fetch(`${API_URL}/api/patchconfig/notifications`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<PatchNotificationSettingDto>(response);
+  },
+
+  async getNotificationHistory(patchPlanId?: number, limit?: number): Promise<PatchNotificationHistoryDto[]> {
+    const params = new URLSearchParams();
+    if (patchPlanId) params.append('patchPlanId', patchPlanId.toString());
+    if (limit) params.append('limit', limit.toString());
+    
+    const url = `${API_URL}/api/patchconfig/notifications/history${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<PatchNotificationHistoryDto[]>(response);
+  },
+};
+
+// ==================== DATABASE OWNERS API ====================
+
+// Tipos del Knowledge Base de Owners
+export interface DatabaseOwnerDto {
+  id: number;
+  serverName: string;
+  instanceName?: string;
+  databaseName: string;
+  ownerName: string;
+  ownerEmail?: string;
+  ownerPhone?: string;
+  cellTeam?: string;
+  department?: string;
+  applicationName?: string;
+  businessCriticality?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  createdByUserName?: string;
+  updatedAt?: string;
+  updatedByUserName?: string;
+  serverAmbiente?: string;
+  sqlVersion?: string;
+  isAlwaysOn?: string;
+  hostingSite?: string;
+}
+
+export interface CreateDatabaseOwnerRequest {
+  serverName: string;
+  instanceName?: string;
+  databaseName: string;
+  ownerName: string;
+  ownerEmail?: string;
+  ownerPhone?: string;
+  cellTeam?: string;
+  department?: string;
+  applicationName?: string;
+  businessCriticality?: string;
+  notes?: string;
+}
+
+export interface UpdateDatabaseOwnerRequest {
+  ownerName?: string;
+  ownerEmail?: string;
+  ownerPhone?: string;
+  cellTeam?: string;
+  department?: string;
+  applicationName?: string;
+  businessCriticality?: string;
+  notes?: string;
+  isActive?: boolean;
+}
+
+export interface DatabaseOwnerFilterParams {
+  serverName?: string;
+  databaseName?: string;
+  cellTeam?: string;
+  ownerName?: string;
+  businessCriticality?: string;
+  isActive?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface DatabaseOwnerPagedResult {
+  items: DatabaseOwnerDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface DatabaseOwnerServerDto {
+  serverName: string;
+  instanceName?: string;
+  ambiente?: string;
+  majorVersion?: string;
+}
+
+export interface AvailableDatabaseDto {
+  databaseName: string;
+  status?: string;
+  dataMB?: number;
+  recoveryModel?: string;
+  hasOwnerAssigned: boolean;
+}
+
+export interface CellTeamDto {
+  cellTeam: string;
+  databaseCount: number;
+}
+
+export const databaseOwnersApi = {
+  // Obtener todos con paginación y filtros
+  async getAll(filters?: DatabaseOwnerFilterParams): Promise<DatabaseOwnerPagedResult> {
+    const params = new URLSearchParams();
+    if (filters?.serverName) params.append('serverName', filters.serverName);
+    if (filters?.databaseName) params.append('databaseName', filters.databaseName);
+    if (filters?.cellTeam) params.append('cellTeam', filters.cellTeam);
+    if (filters?.ownerName) params.append('ownerName', filters.ownerName);
+    if (filters?.businessCriticality) params.append('businessCriticality', filters.businessCriticality);
+    if (filters?.isActive !== undefined) params.append('isActive', filters.isActive.toString());
+    if (filters?.page) params.append('page', filters.page.toString());
+    if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
+    
+    const url = `${API_URL}/api/database-owners${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DatabaseOwnerPagedResult>(response);
+  },
+
+  // Obtener por ID
+  async getById(id: number): Promise<DatabaseOwnerDto> {
+    const response = await fetch(`${API_URL}/api/database-owners/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DatabaseOwnerDto>(response);
+  },
+
+  // Buscar owner por servidor/base de datos
+  async find(serverName: string, instanceName?: string, databaseName?: string): Promise<DatabaseOwnerDto | null> {
+    const params = new URLSearchParams({ serverName });
+    if (instanceName) params.append('instanceName', instanceName);
+    if (databaseName) params.append('databaseName', databaseName);
+    
+    try {
+      const response = await fetch(`${API_URL}/api/database-owners/find?${params.toString()}`, {
+        headers: { ...getAuthHeader() },
+      });
+      if (response.status === 404) return null;
+      return handleResponse<DatabaseOwnerDto>(response);
+    } catch {
+      return null;
+    }
+  },
+
+  // Crear owner
+  async create(data: CreateDatabaseOwnerRequest): Promise<DatabaseOwnerDto> {
+    const response = await fetch(`${API_URL}/api/database-owners`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<DatabaseOwnerDto>(response);
+  },
+
+  // Actualizar owner
+  async update(id: number, data: UpdateDatabaseOwnerRequest): Promise<DatabaseOwnerDto> {
+    const response = await fetch(`${API_URL}/api/database-owners/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<DatabaseOwnerDto>(response);
+  },
+
+  // Eliminar owner
+  async delete(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/database-owners/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  // Obtener servidores disponibles
+  async getAvailableServers(): Promise<DatabaseOwnerServerDto[]> {
+    const response = await fetch(`${API_URL}/api/database-owners/servers`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DatabaseOwnerServerDto[]>(response);
+  },
+
+  // Obtener bases de datos de un servidor
+  async getDatabasesForServer(serverName: string, instanceName?: string): Promise<AvailableDatabaseDto[]> {
+    const params = instanceName ? `?instanceName=${instanceName}` : '';
+    const response = await fetch(`${API_URL}/api/database-owners/databases/${encodeURIComponent(serverName)}${params}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<AvailableDatabaseDto[]>(response);
+  },
+
+  // Obtener células únicas
+  async getCellTeams(): Promise<CellTeamDto[]> {
+    const response = await fetch(`${API_URL}/api/database-owners/cells`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<CellTeamDto[]>(response);
+  },
+};
 
 // ==================== HELPER FUNCTIONS ====================
 

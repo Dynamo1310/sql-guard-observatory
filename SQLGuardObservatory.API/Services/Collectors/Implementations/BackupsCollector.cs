@@ -231,15 +231,37 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
             result.LogBackupAgeHours = (int)(DateTime.Now - result.LastLogBackup.Value).TotalHours;
         }
 
-        // Detalles por DB (como en PowerShell: "DBName:FULL=Xh")
+        // Detalles por DB - incluir FULL y LOG breaches
         foreach (DataRow row in table.Rows)
         {
             var dbName = GetString(row, "DatabaseName") ?? "";
+            var recoveryModel = GetString(row, "RecoveryModel") ?? "";
             var lastFullBackup = GetDateTime(row, "LastFullBackup");
+            var lastLogBackup = GetDateTime(row, "LastLogBackup");
+            
             var fullAge = lastFullBackup.HasValue 
                 ? (int)(DateTime.Now - lastFullBackup.Value).TotalHours 
                 : 999;
-            result.Details.Add($"{dbName}:FULL={fullAge}h");
+            
+            // Verificar si esta DB tiene FULL breach
+            var hasFullBreach = !lastFullBackup.HasValue || lastFullBackup.Value < fullThreshold;
+            
+            // Verificar si esta DB tiene LOG breach (solo para Recovery Model FULL)
+            var hasLogBreach = recoveryModel.Equals("FULL", StringComparison.OrdinalIgnoreCase) &&
+                              (!lastLogBackup.HasValue || lastLogBackup.Value < logThreshold);
+            
+            if (hasFullBreach)
+            {
+                result.Details.Add($"{dbName}:FULL={fullAge}h");
+            }
+            
+            if (hasLogBreach)
+            {
+                var logAge = lastLogBackup.HasValue 
+                    ? (int)(DateTime.Now - lastLogBackup.Value).TotalHours 
+                    : 999;
+                result.Details.Add($"{dbName}:LOG={logAge}h");
+            }
         }
     }
 

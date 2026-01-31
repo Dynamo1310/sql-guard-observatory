@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.Negotiate;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Server.HttpSys;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Hubs;
@@ -12,6 +14,7 @@ using SQLGuardObservatory.API.Services.Collectors;
 using SQLGuardObservatory.API.Services.Collectors.Implementations;
 using Serilog;
 using Serilog.Events;
+using System.Diagnostics;
 using System.Text;
 
 // ========== CONFIGURACIÓN DE SERILOG ==========
@@ -60,6 +63,11 @@ try
         options.Authentication.Schemes = AuthenticationSchemes.NTLM | AuthenticationSchemes.Negotiate;
         options.Authentication.AllowAnonymous = true; // Permite endpoints anónimos también
         options.UrlPrefixes.Add("http://*:5000"); // Escuchar en el puerto 5000
+        
+        // ========== OPTIMIZACIÓN PARA ALTA CONCURRENCIA (200-500 usuarios) ==========
+        options.MaxConnections = 1000;              // Máximo de conexiones simultáneas
+        options.MaxRequestBodySize = 30_000_000;    // 30 MB máximo por request
+        options.RequestQueueLimit = 1000;           // Cola de requests pendientes
     });
 
     // Usar Serilog como proveedor de logging
@@ -74,21 +82,54 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// ========== SIGNALR CONFIGURATION ==========
-builder.Services.AddSignalR(options =>
+// ========== OUTPUT CACHE - Cacheo de respuestas frecuentes ==========
+builder.Services.AddOutputCache(options =>
 {
-    options.EnableDetailedErrors = true; // Solo en desarrollo
-    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
-    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    options.AddBasePolicy(builder => builder.Expire(TimeSpan.FromSeconds(30)));
+    options.AddPolicy("ShortCache", builder => builder.Expire(TimeSpan.FromSeconds(15)));
+    options.AddPolicy("MediumCache", builder => builder.Expire(TimeSpan.FromMinutes(1)));
+    options.AddPolicy("LongCache", builder => builder.Expire(TimeSpan.FromMinutes(5)));
 });
 
+// ========== MEMORY CACHE con límites ==========
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 1024; // Límite de entradas en caché
+});
+
+// ========== SIGNALR CONFIGURATION - Optimizado para alta concurrencia ==========
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = false;                       // Producción: sin detalles de error
+    options.MaximumReceiveMessageSize = 64 * 1024;              // 64KB máximo por mensaje
+    options.StreamBufferCapacity = 20;                          // Buffer para streams
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);       // Ping cada 15s
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);   // Timeout de cliente 60s
+    options.MaximumParallelInvocationsPerClient = 2;            // Limitar invocaciones paralelas
+});
+
+// ========== DbContext con resiliencia y connection pooling optimizado ==========
 // Configurar DbContext para SQL Server
 builder.Services.AddDbContext<SQLNovaDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("SQLNova")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("SQLNova"), sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null);
+        sqlOptions.CommandTimeout(60); // 60 segundos timeout
+    }));
 
 // Configurar DbContext para Identity (usuarios autorizados)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("ApplicationDb")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("ApplicationDb"), sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null);
+        sqlOptions.CommandTimeout(60);
+    }));
 
 // Configurar Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -175,6 +216,11 @@ builder.Services.AddHostedService<ProductionAlertBackgroundService>();
 builder.Services.AddScoped<IOverviewSummaryAlertService, OverviewSummaryAlertService>();
 builder.Services.AddHostedService<OverviewSummaryBackgroundService>();
 
+// Overview Data Service - Datos optimizados para la página Overview
+// El caché se actualiza automáticamente por los collectors (HealthScoreConsolidator, DiscosCollector, MaintenanceCollector)
+builder.Services.AddScoped<IOverviewSummaryCacheService, OverviewSummaryCacheService>();
+builder.Services.AddScoped<IOverviewService, OverviewService>();
+
 // Server Restart Service - Reinicio de servidores SQL
 builder.Services.AddScoped<IServerRestartService, ServerRestartService>();
 
@@ -183,6 +229,13 @@ builder.Services.AddScoped<IIndexAnalysisService, IndexAnalysisService>();
 
 // Patching Service - Estado de parcheo de servidores SQL Server
 builder.Services.AddScoped<IPatchingService, PatchingService>();
+builder.Services.AddScoped<IPatchPlanService, PatchPlanService>();
+
+// Patching - Sistema mejorado de gestión de parcheos
+builder.Services.AddScoped<IWindowSuggesterService, WindowSuggesterService>();
+builder.Services.AddScoped<IDatabaseOwnersService, DatabaseOwnersService>();
+builder.Services.AddScoped<IPatchConfigService, PatchConfigService>();
+builder.Services.AddHostedService<PatchNotificationBackgroundService>();
 
 // Vault de Credenciales DBA
 builder.Services.AddScoped<ICryptoService, CryptoService>();
@@ -242,6 +295,30 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<Collec
 builder.Services.AddSingleton<HealthScoreConsolidator>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<HealthScoreConsolidator>());
 
+// ========== HEALTH CHECKS - Monitoreo de salud del servidor ==========
+var applicationDbConnection = builder.Configuration.GetConnectionString("ApplicationDb");
+builder.Services.AddHealthChecks()
+    .AddSqlServer(
+        connectionString: applicationDbConnection ?? throw new InvalidOperationException("ApplicationDb connection string not found"),
+        name: "sqlguardobservatory-db",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "db", "sql" })
+    .AddCheck("memory", () =>
+    {
+        var allocatedBytes = GC.GetTotalMemory(forceFullCollection: false);
+        var threshold = 1_000_000_000L; // 1 GB
+        
+        if (allocatedBytes < threshold)
+            return HealthCheckResult.Healthy($"Memory usage: {allocatedBytes / 1024 / 1024} MB");
+        
+        return HealthCheckResult.Degraded($"High memory usage: {allocatedBytes / 1024 / 1024} MB");
+    }, tags: new[] { "memory" })
+    .AddCheck("cpu", () =>
+    {
+        // Check básico - el proceso está respondiendo
+        return HealthCheckResult.Healthy("CPU check passed");
+    }, tags: new[] { "cpu" });
+
 // Configurar CORS
 builder.Services.AddCors(options =>
 {
@@ -299,6 +376,33 @@ app.UseSwaggerUI();
 // CORS primero
 app.UseCors("AllowFrontend");
 
+// ========== REQUEST TIMING MIDDLEWARE - Detectar endpoints lentos ==========
+app.Use(async (context, next) =>
+{
+    var sw = Stopwatch.StartNew();
+    
+    // Registrar callback para agregar header ANTES de que la respuesta comience
+    context.Response.OnStarting(() =>
+    {
+        sw.Stop();
+        context.Response.Headers["X-Response-Time-Ms"] = sw.ElapsedMilliseconds.ToString();
+        return Task.CompletedTask;
+    });
+    
+    await next();
+    sw.Stop();
+    
+    // Log si la request tarda más de 2 segundos (excluir SignalR WebSockets)
+    if (sw.ElapsedMilliseconds > 2000 && !context.Request.Path.StartsWithSegments("/hubs"))
+    {
+        Log.Warning("Slow request: {Method} {Path} took {Duration}ms",
+            context.Request.Method, context.Request.Path, sw.ElapsedMilliseconds);
+    }
+});
+
+// ========== OUTPUT CACHE ==========
+app.UseOutputCache();
+
 // Middleware para OPTIONS - manejar preflight requests
 app.Use(async (context, next) =>
 {
@@ -314,6 +418,39 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// ========== HEALTH CHECK ENDPOINTS ==========
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = new
+        {
+            status = report.Status.ToString(),
+            totalDuration = report.TotalDuration.TotalMilliseconds,
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                duration = e.Value.Duration.TotalMilliseconds,
+                description = e.Value.Description,
+                exception = e.Value.Exception?.Message
+            })
+        };
+        await context.Response.WriteAsJsonAsync(result);
+    }
+}).AllowAnonymous();
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("db")
+}).AllowAnonymous();
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false // Solo verifica que la app responda
+}).AllowAnonymous();
 
 // Mapear Hub de SignalR para notificaciones en tiempo real
 app.MapHub<NotificationHub>("/hubs/notifications").AllowAnonymous();

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
+using SQLGuardObservatory.API.Services;
 using System.Data;
 
 namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
@@ -609,6 +610,39 @@ ORDER BY ag.name, ar.replica_server_name";
 
         // === ACTUALIZAR LA BD CON LOS VALORES SINCRONIZADOS ===
         await UpdateSyncedResultsInDatabaseAsync(results, ct);
+        
+        // === ACTUALIZAR EL CACHÉ DEL OVERVIEW ===
+        await RefreshOverviewCacheAsync(results, ct);
+    }
+
+    /// <summary>
+    /// Actualiza el caché del Overview después de recolectar los datos de mantenimiento
+    /// </summary>
+    private async Task RefreshOverviewCacheAsync(List<CollectorInstanceResult> results, CancellationToken ct)
+    {
+        // Solo actualizar el caché si hubo resultados exitosos
+        var successCount = results.Count(r => r.Success);
+        if (successCount == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var cacheService = scope.ServiceProvider.GetService<IOverviewSummaryCacheService>();
+            
+            if (cacheService != null)
+            {
+                await cacheService.RefreshCacheAsync("MaintenanceCollector", ct);
+                _logger.LogDebug("Overview cache refreshed after MaintenanceCollector");
+            }
+        }
+        catch (Exception ex)
+        {
+            // No propagar el error para no afectar el resultado del collector
+            _logger.LogWarning(ex, "Error refreshing Overview cache after MaintenanceCollector");
+        }
     }
 
     /// <summary>

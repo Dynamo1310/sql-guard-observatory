@@ -76,7 +76,7 @@ public class EmailService : IEmailService
 </body>
 </html>";
 
-        await SendEmailAsync(targetEmail, subject, body, "SwapRequest", "SwapRequest");
+        await SendEmailInternalAsync(targetEmail, subject, body, "SwapRequest", "SwapRequest");
     }
 
     public async Task SendSwapApprovedNotificationAsync(
@@ -131,7 +131,7 @@ public class EmailService : IEmailService
 </body>
 </html>";
 
-        await SendEmailAsync(requesterEmail, subject, body, "SwapApproved", "SwapRequest");
+        await SendEmailInternalAsync(requesterEmail, subject, body, "SwapApproved", "SwapRequest");
     }
 
     public async Task SendSwapRejectedNotificationAsync(
@@ -188,7 +188,15 @@ public class EmailService : IEmailService
 </body>
 </html>";
 
-        await SendEmailAsync(requesterEmail, subject, body, "SwapRejected", "SwapRequest");
+        await SendEmailInternalAsync(requesterEmail, subject, body, "SwapRejected", "SwapRequest");
+    }
+
+    /// <summary>
+    /// Envía un email genérico (implementación de la interfaz)
+    /// </summary>
+    public async Task SendEmailAsync(string toEmail, string subject, string body, bool isHtml = false)
+    {
+        await SendEmailInternalAsync(toEmail, subject, body, "Generic", null, isHtml);
     }
 
     public async Task SendEscalationOverrideNotificationAsync(
@@ -245,10 +253,10 @@ public class EmailService : IEmailService
 </body>
 </html>";
 
-        await SendEmailAsync(affectedUserEmail, subject, body, "EscalationOverride", "Assignment");
+        await SendEmailInternalAsync(affectedUserEmail, subject, body, "EscalationOverride", "Assignment");
     }
 
-    private async Task SendEmailAsync(string toEmail, string subject, string htmlBody, string notificationType, string? referenceType = null)
+    private async Task SendEmailInternalAsync(string toEmail, string subject, string htmlBody, string notificationType, string? referenceType = null, bool isHtml = true)
     {
         // Usar la configuración SMTP global de la base de datos
         var settings = await _context.SmtpSettings.FirstOrDefaultAsync(s => s.IsActive);
@@ -277,7 +285,7 @@ public class EmailService : IEmailService
                 From = new MailAddress(settings.FromEmail, settings.FromName),
                 Subject = subject,
                 Body = htmlBody,
-                IsBodyHtml = true
+                IsBodyHtml = isHtml
             };
             
             message.To.Add(toEmail);

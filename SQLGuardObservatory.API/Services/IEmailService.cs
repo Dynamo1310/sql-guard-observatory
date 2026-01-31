@@ -3,6 +3,11 @@ namespace SQLGuardObservatory.API.Services;
 public interface IEmailService
 {
     /// <summary>
+    /// Envía un email genérico
+    /// </summary>
+    Task SendEmailAsync(string toEmail, string subject, string body, bool isHtml = false);
+
+    /// <summary>
     /// Envía notificación de solicitud de intercambio al usuario objetivo
     /// </summary>
     Task SendSwapRequestNotificationAsync(

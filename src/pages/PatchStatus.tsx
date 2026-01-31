@@ -6,10 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { 
   ShieldCheck, ShieldAlert, ShieldX, RefreshCw, Server, CheckCircle2, 
   XCircle, Clock, Download, TrendingUp, Database, ShieldOff, Search, 
-  X, ArrowUpDown, ArrowUp, ArrowDown
+  X, ArrowUpDown, ArrowUp, ArrowDown, Users, CalendarCheck, AlertTriangle,
+  Timer, BarChart3, Layers
 } from 'lucide-react';
 import { SqlServerIcon } from '@/components/icons/SqlServerIcon';
-import { patchingApi, ServerPatchStatusDto } from '@/services/api';
+import { patchingApi, ServerPatchStatusDto, patchPlanApi, PatchDashboardStatsDto, PatchPlanStatus } from '@/services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +36,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import {
   PieChart,
@@ -286,6 +294,13 @@ export default function PatchStatus() {
     refetchOnWindowFocus: false,
   });
 
+  // Dashboard stats para la sección de parcheos planificados
+  const { data: dashboardStats } = useQuery({
+    queryKey: ['patchDashboardStats'],
+    queryFn: () => patchPlanApi.getDashboardStats(),
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Filtrar servidores que no responden
   const servers = useMemo(() => {
     if (!rawServers) return [];
@@ -507,22 +522,147 @@ export default function PatchStatus() {
     return sorted;
   }, [servers, searchTerm, ambienteFilter, statusFilter, versionFilter, sortConfig]);
 
-  // Exportar CSV
-  const exportToCSV = () => {
+  // Exportar a Excel
+  const exportToExcel = async () => {
     if (!filteredServers.length) return;
+
+    // Importar exceljs dinámicamente
+    const ExcelJS = await import('exceljs');
     
-    const headers = ['Servidor', 'Instancia', 'Ambiente', 'Versión', 'Build Actual', 'CU Actual', 'Build Requerido', 'CU Requerido', 'CUs Pend. Compliance', 'CUs Pend. Última', 'Estado'];
-    const rows = filteredServers.map(s => [
-      s.serverName, s.instanceName, s.ambiente, s.majorVersion, s.currentBuild,
-      s.currentCU || s.currentSP, s.requiredBuild, s.requiredCU, s.pendingCUsForCompliance, s.pendingCUsForLatest, s.patchStatus
+    // Crear workbook
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'SQL Guard Observatory';
+    workbook.created = new Date();
+
+    // Crear hoja de trabajo
+    const worksheet = workbook.addWorksheet('Estado de Parcheo');
+
+    // Configurar anchos de columna
+    worksheet.columns = [
+      { header: 'Servidor', key: 'servidor', width: 35 },
+      { header: 'Instancia', key: 'instancia', width: 35 },
+      { header: 'Ambiente', key: 'ambiente', width: 15 },
+      { header: 'Versión', key: 'version', width: 12 },
+      { header: 'Build Actual', key: 'buildActual', width: 15 },
+      { header: 'CU Actual', key: 'cuActual', width: 15 },
+      { header: 'Build Requerido', key: 'buildRequerido', width: 15 },
+      { header: 'CU Requerido', key: 'cuRequerido', width: 15 },
+      { header: 'CUs Pend. Compliance', key: 'cusPendCompliance', width: 20 },
+      { header: 'CUs Pend. Última', key: 'cusPendUltima', width: 18 },
+      { header: 'Estado', key: 'estado', width: 15 },
+    ];
+
+    // Estilo del header
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0066CC' },
+    };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // Agregar datos
+    filteredServers.forEach(server => {
+      const isObsolete = obsoleteVersions.includes(server.majorVersion);
+      let estado = 'No Compliance';
+      if (isObsolete) {
+        estado = 'Obsoleto';
+      } else if (server.patchStatus === 'Updated' || server.patchStatus === 'Compliant') {
+        estado = 'Compliance';
+      }
+
+      worksheet.addRow({
+        servidor: server.serverName,
+        instancia: server.instanceName,
+        ambiente: server.ambiente,
+        version: server.majorVersion,
+        buildActual: server.currentBuild || '',
+        cuActual: server.currentCU || server.currentSP || '',
+        buildRequerido: server.requiredBuild || '',
+        cuRequerido: server.requiredCU || '',
+        cusPendCompliance: server.pendingCUsForCompliance,
+        cusPendUltima: server.pendingCUsForLatest,
+        estado: estado,
+      });
+    });
+
+    // Agregar bordes y alternar colores
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.eachCell(cell => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          };
+        });
+        if (rowNumber % 2 === 0) {
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF5F5F5' },
+          };
+        }
+      }
+    });
+
+    // Aplicar formato condicional de colores para estado
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        const statusCell = row.getCell('estado');
+        if (statusCell.value === 'Compliance') {
+          statusCell.font = { color: { argb: 'FF16A34A' }, bold: true }; // Verde
+        } else if (statusCell.value === 'Obsoleto') {
+          statusCell.font = { color: { argb: 'FFDC2626' }, bold: true }; // Rojo
+        } else {
+          statusCell.font = { color: { argb: 'FFFBBF24' }, bold: true }; // Amarillo/Warning
+        }
+      }
+    });
+
+    // Agregar resumen al final
+    worksheet.addRow([]);
+    const totalRow = worksheet.addRow([
+      `Total: ${filteredServers.length} servidores`,
+      '', '', '', '', '', '', '', '', '', ''
     ]);
+    totalRow.font = { bold: true };
+    totalRow.getCell(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFE599' },
+    };
+
+    // Agregar estadísticas de compliance
+    const compliantCount = filteredServers.filter(s => 
+      !obsoleteVersions.includes(s.majorVersion) && 
+      (s.patchStatus === 'Updated' || s.patchStatus === 'Compliant')
+    ).length;
+    const nonCompliantCount = filteredServers.filter(s => 
+      !obsoleteVersions.includes(s.majorVersion) && 
+      s.patchStatus !== 'Updated' && s.patchStatus !== 'Compliant'
+    ).length;
+    const obsoleteCount = filteredServers.filter(s => obsoleteVersions.includes(s.majorVersion)).length;
     
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const statsRow = worksheet.addRow([
+      `Compliance: ${compliantCount} | No Compliance: ${nonCompliantCount} | Obsoletos: ${obsoleteCount}`,
+      '', '', '', '', '', '', '', '', '', ''
+    ]);
+    statsRow.font = { italic: true };
+
+    // Generar archivo y descargar
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `patch_compliance_${new Date().toISOString().split('T')[0]}.csv`;
+    link.href = url;
+    link.download = `patch_compliance_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
     link.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const getStatusBadge = (status: string, majorVersion: string) => {
@@ -659,8 +799,8 @@ export default function PatchStatus() {
             <RefreshCw className={cn('w-4 h-4 mr-2', isFetching && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button onClick={exportToCSV} variant="outline" disabled={!filteredServers.length}>
-            <Download className="w-4 h-4 mr-2" /> CSV
+          <Button onClick={exportToExcel} variant="outline" disabled={!filteredServers.length}>
+            <Download className="w-4 h-4 mr-2" /> Excel
           </Button>
         </div>
       </div>
@@ -1044,6 +1184,217 @@ export default function PatchStatus() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dashboard de Parcheos Planificados */}
+      {dashboardStats && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              Dashboard de Parcheos
+            </CardTitle>
+            <CardDescription>
+              Estadísticas del ciclo actual de parcheos planificados
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="cycle" className="w-full">
+              <TabsList className="grid w-full grid-cols-4 mb-4">
+                <TabsTrigger value="cycle">Por Ciclo</TabsTrigger>
+                <TabsTrigger value="cell">Por Célula</TabsTrigger>
+                <TabsTrigger value="compliance">Cumplimiento</TabsTrigger>
+                <TabsTrigger value="priority">Por Prioridad</TabsTrigger>
+              </TabsList>
+              
+              {/* Tab: Por Ciclo */}
+              <TabsContent value="cycle" className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-muted/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CalendarCheck className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium text-muted-foreground">Total Planificados</span>
+                    </div>
+                    <div className="text-2xl font-bold">{dashboardStats.totalPlans}</div>
+                  </div>
+                  <div className="bg-muted/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <span className="text-sm font-medium text-muted-foreground">Completados</span>
+                    </div>
+                    <div className="text-2xl font-bold text-green-600">{dashboardStats.completedPlans}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {dashboardStats.completionPercentage.toFixed(1)}% del total
+                    </div>
+                  </div>
+                  <div className="bg-muted/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="h-4 w-4 text-yellow-500" />
+                      <span className="text-sm font-medium text-muted-foreground">Pendientes</span>
+                    </div>
+                    <div className="text-2xl font-bold text-yellow-600">{dashboardStats.pendingPlans}</div>
+                  </div>
+                  <div className="bg-muted/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <span className="text-sm font-medium text-muted-foreground">Atrasados</span>
+                    </div>
+                    <div className="text-2xl font-bold text-red-600">{dashboardStats.delayedPlans}</div>
+                  </div>
+                </div>
+                
+                {/* Barra de progreso del ciclo */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Progreso del ciclo</span>
+                    <span className="font-medium">{dashboardStats.completionPercentage.toFixed(1)}%</span>
+                  </div>
+                  <Progress value={dashboardStats.completionPercentage} className="h-2" />
+                </div>
+              </TabsContent>
+              
+              {/* Tab: Por Célula */}
+              <TabsContent value="cell" className="space-y-4">
+                {dashboardStats.cellStats && dashboardStats.cellStats.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {dashboardStats.cellStats.map((cell, idx) => {
+                      const totalCell = cell.backlog + cell.completed;
+                      const completionRate = totalCell > 0 ? Math.round((cell.completed / totalCell) * 100) : 0;
+                      return (
+                        <div key={idx} className="bg-muted/30 rounded-lg p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Users className="h-4 w-4 text-primary" />
+                              <span className="font-medium">{cell.cellTeam}</span>
+                            </div>
+                            <Badge variant="outline">{totalCell} planes</Badge>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 text-center">
+                            <div>
+                              <div className="text-lg font-bold text-yellow-600">{cell.backlog}</div>
+                              <div className="text-xs text-muted-foreground">Backlog</div>
+                            </div>
+                            <div>
+                              <div className="text-lg font-bold text-green-600">{cell.completed}</div>
+                              <div className="text-xs text-muted-foreground">Completados</div>
+                            </div>
+                            <div>
+                              <div className="text-lg font-bold text-blue-600">{cell.rescheduled}</div>
+                              <div className="text-xs text-muted-foreground">Reprog.</div>
+                            </div>
+                            <div>
+                              <div className="text-lg font-bold text-purple-600">{cell.waivers}</div>
+                              <div className="text-xs text-muted-foreground">Waivers</div>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Tasa de completación</span>
+                              <span className="font-medium">{completionRate}%</span>
+                            </div>
+                            <Progress value={completionRate} className="h-1.5" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No hay datos de células disponibles</p>
+                    <p className="text-xs mt-1">Asigna células a los planes de parcheo para ver estadísticas</p>
+                  </div>
+                )}
+              </TabsContent>
+              
+              {/* Tab: Cumplimiento */}
+              <TabsContent value="compliance" className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <CalendarCheck className="h-4 w-4 text-green-500" />
+                      <span className="font-medium">En Ventana</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold text-green-600">{dashboardStats.inWindowExecutions}</span>
+                      <span className="text-muted-foreground text-sm">
+                        ({dashboardStats.completedPlans > 0 
+                          ? Math.round((dashboardStats.inWindowExecutions / dashboardStats.completedPlans) * 100) 
+                          : 0}%)
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Parcheos completados dentro de la ventana planificada
+                    </p>
+                  </div>
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-orange-500" />
+                      <span className="font-medium">Fuera de Ventana</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold text-orange-600">{dashboardStats.outOfWindowExecutions}</span>
+                      <span className="text-muted-foreground text-sm">
+                        ({dashboardStats.completedPlans > 0 
+                          ? Math.round((dashboardStats.outOfWindowExecutions / dashboardStats.completedPlans) * 100) 
+                          : 0}%)
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Parcheos completados fuera de la ventana planificada
+                    </p>
+                  </div>
+                </div>
+                
+                {dashboardStats.averageLeadTimeDays !== undefined && dashboardStats.averageLeadTimeDays > 0 && (
+                  <div className="bg-muted/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Timer className="h-4 w-4 text-primary" />
+                      <span className="font-medium">Lead Time Promedio</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold">{dashboardStats.averageLeadTimeDays.toFixed(1)}</span>
+                      <span className="text-muted-foreground">días</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Tiempo promedio desde planificación hasta ejecución
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+              
+              {/* Tab: Por Prioridad */}
+              <TabsContent value="priority" className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-4 border border-red-200 dark:border-red-900">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <span className="text-sm font-medium">Alta Prioridad</span>
+                    </div>
+                    <div className="text-2xl font-bold text-red-600">{dashboardStats.highPriorityPending}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Pendientes de alta prioridad</p>
+                  </div>
+                  <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-lg p-4 border border-yellow-200 dark:border-yellow-900">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Layers className="h-4 w-4 text-yellow-500" />
+                      <span className="text-sm font-medium">Media Prioridad</span>
+                    </div>
+                    <div className="text-2xl font-bold text-yellow-600">{dashboardStats.mediumPriorityPending}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Pendientes de prioridad media</p>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border border-green-200 dark:border-green-900">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Layers className="h-4 w-4 text-green-500" />
+                      <span className="text-sm font-medium">Baja Prioridad</span>
+                    </div>
+                    <div className="text-2xl font-bold text-green-600">{dashboardStats.lowPriorityPending}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Pendientes de baja prioridad</p>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabla de Detalle - Ancho completo */}
       <Card>

@@ -6,6 +6,7 @@ C:\Temp\Backend\Data\dbatools-buildref-index.json
 C:\Temp\Backend\SQLGuardObservatory.API.dll
 C:\Temp\Backend\SQLGuardObservatory.API.runtimeconfig.json
 C:\Temp\Backend\SQLGuardObservatory.API.pdb
+C:\Temp\Backend\HealthChecks.SqlServer.dll
 C:\Temp\Backend\Azure.Core.dll
 C:\Temp\Backend\Azure.Identity.dll
 C:\Temp\Backend\ClosedXML.dll
@@ -89,8 +90,18 @@ C:\Temp\Backend\System.Runtime.Caching.dll
 C:\Temp\Backend\System.Security.Cryptography.ProtectedData.dll
 C:\Temp\Backend\System.ServiceProcess.ServiceController.dll
 C:\Temp\Backend\XLParser.dll
-C:\Temp\Backend\runtimes\unix\lib\net6.0\Microsoft.Data.SqlClient.dll
-C:\Temp\Backend\runtimes\win\lib\net6.0\Microsoft.Data.SqlClient.dll
+C:\Temp\Backend\de\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\es\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\fr\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\it\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\ja\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\ko\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\pt-BR\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\ru\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\zh-Hans\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\zh-Hant\Microsoft.Data.SqlClient.resources.dll
+C:\Temp\Backend\runtimes\unix\lib\net8.0\Microsoft.Data.SqlClient.dll
+C:\Temp\Backend\runtimes\win\lib\net8.0\Microsoft.Data.SqlClient.dll
 C:\Temp\Backend\runtimes\win-arm\native\Microsoft.Data.SqlClient.SNI.dll
 C:\Temp\Backend\runtimes\win-arm64\native\Microsoft.Data.SqlClient.SNI.dll
 C:\Temp\Backend\runtimes\win-x64\native\Microsoft.Data.SqlClient.SNI.dll
@@ -107,6 +118,6 @@ C:\Temp\Backend\runtimes\linux\lib\net8.0\System.DirectoryServices.Protocols.dll
 C:\Temp\Backend\runtimes\osx\lib\net8.0\System.DirectoryServices.Protocols.dll
 C:\Temp\Backend\runtimes\win\lib\net8.0\System.DirectoryServices.Protocols.dll
 C:\Temp\Backend\runtimes\win\lib\net8.0\System.Management.dll
-C:\Temp\Backend\runtimes\win\lib\net6.0\System.Runtime.Caching.dll
+C:\Temp\Backend\runtimes\win\lib\net8.0\System.Runtime.Caching.dll
 C:\Temp\Backend\runtimes\win\lib\net8.0\System.ServiceProcess.ServiceController.dll
 C:\Temp\Backend\SQLGuardObservatory.API.deps.json

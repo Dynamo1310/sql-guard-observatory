@@ -92,35 +92,60 @@ const defaultAuthorizationInfo: AuthorizationInfo = {
   canCreateGroups: false,
 };
 
+// Claves de localStorage para caché
+const CACHE_KEYS = {
+  PERMISSIONS: 'cached_permissions',
+  AUTHORIZATION: 'cached_authorization',
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [authorizationInfo, setAuthorizationInfo] = useState<AuthorizationInfo>(defaultAuthorizationInfo);
+  const [permissions, setPermissions] = useState<string[]>(() => {
+    // Cargar permisos desde caché al iniciar
+    try {
+      const cached = localStorage.getItem(CACHE_KEYS.PERMISSIONS);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [authorizationInfo, setAuthorizationInfo] = useState<AuthorizationInfo>(() => {
+    // Cargar autorización desde caché al iniciar
+    try {
+      const cached = localStorage.getItem(CACHE_KEYS.AUTHORIZATION);
+      return cached ? JSON.parse(cached) : defaultAuthorizationInfo;
+    } catch {
+      return defaultAuthorizationInfo;
+    }
+  });
 
   /**
    * Carga los permisos del usuario actual desde el backend.
-   * Falla silenciosamente estableciendo permisos vacíos.
+   * Guarda en caché para cargas posteriores más rápidas.
    */
   const loadPermissions = async (): Promise<void> => {
     try {
       const { permissions: userPerms } = await permissionsApi.getMyPermissions();
       setPermissions(userPerms);
+      // Guardar en caché
+      localStorage.setItem(CACHE_KEYS.PERMISSIONS, JSON.stringify(userPerms));
     } catch (error) {
       console.error('[AuthContext] Error al cargar permisos:', error);
-      setPermissions([]);
+      // No limpiar permisos cacheados si falla la llamada
     }
   };
 
   /**
    * Carga la información de autorización administrativa del usuario.
    * Incluye capacidades basadas en rol y grupos asignados.
+   * Guarda en caché para cargas posteriores más rápidas.
    */
   const loadAuthorizationInfo = async (): Promise<void> => {
     try {
       const authInfo: UserAuthorizationDto = await adminRolesApi.getMyAuthorization();
-      setAuthorizationInfo({
+      const newAuthInfo: AuthorizationInfo = {
         roleId: authInfo.roleId,
         roleName: authInfo.roleName,
         roleColor: authInfo.roleColor,
@@ -141,10 +166,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         canCreateUsers: authInfo.canCreateUsers,
         canDeleteUsers: authInfo.canDeleteUsers,
         canCreateGroups: authInfo.canCreateGroups,
-      });
+      };
+      setAuthorizationInfo(newAuthInfo);
+      // Guardar en caché
+      localStorage.setItem(CACHE_KEYS.AUTHORIZATION, JSON.stringify(newAuthInfo));
     } catch (error) {
       console.error('[AuthContext] Error al cargar autorización:', error);
-      setAuthorizationInfo(defaultAuthorizationInfo);
+      // No limpiar autorización cacheada si falla la llamada
     }
   };
 
@@ -157,11 +185,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * Verifica la autenticación del usuario desde localStorage.
-   * Carga permisos y autorización administrativa desde el backend.
+   * Usa caché de permisos/autorización para mostrar la UI inmediatamente.
+   * Actualiza permisos en background sin bloquear.
    */
   const checkAuth = async (): Promise<void> => {
     try {
-      setLoading(true);
       setError(null);
       
       // Leer datos de autenticación desde localStorage
@@ -184,13 +212,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           hasProfilePhoto: userData.hasProfilePhoto || false
         });
         
-        // Cargar permisos de vistas y autorización administrativa en paralelo
-        await Promise.all([loadPermissions(), loadAuthorizationInfo()]);
+        // Verificar si tenemos caché de permisos/autorización
+        const hasCachedPermissions = localStorage.getItem(CACHE_KEYS.PERMISSIONS);
+        const hasCachedAuth = localStorage.getItem(CACHE_KEYS.AUTHORIZATION);
+        
+        if (hasCachedPermissions && hasCachedAuth) {
+          // Tenemos caché - mostrar UI inmediatamente y actualizar en background
+          setLoading(false);
+          // Actualizar en background (fire-and-forget)
+          Promise.all([loadPermissions(), loadAuthorizationInfo()]).catch(console.error);
+        } else {
+          // No hay caché - debemos esperar la primera carga
+          setLoading(true);
+          await Promise.all([loadPermissions(), loadAuthorizationInfo()]);
+          setLoading(false);
+        }
       } else {
-        // No hay sesión activa
+        // No hay sesión activa - limpiar todo incluyendo caché
         setUser(null);
         setPermissions([]);
         setAuthorizationInfo(defaultAuthorizationInfo);
+        localStorage.removeItem(CACHE_KEYS.PERMISSIONS);
+        localStorage.removeItem(CACHE_KEYS.AUTHORIZATION);
+        setLoading(false);
       }
     } catch (error) {
       setError('Error al verificar autenticación');
@@ -198,7 +242,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPermissions([]);
       setAuthorizationInfo(defaultAuthorizationInfo);
       console.error('[AuthContext] Error en checkAuth:', error);
-    } finally {
       setLoading(false);
     }
   };
@@ -207,6 +250,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem(CACHE_KEYS.PERMISSIONS);
+    localStorage.removeItem(CACHE_KEYS.AUTHORIZATION);
     setUser(null);
     setPermissions([]);
     setAuthorizationInfo(defaultAuthorizationInfo);

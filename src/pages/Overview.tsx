@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { HardDrive, Save, Wrench, Heart, AlertTriangle, LayoutDashboard, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { HardDrive, Save, Wrench, Heart, AlertTriangle, LayoutDashboard, RefreshCw, Eye, Database } from 'lucide-react';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,50 +7,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTableSort } from '@/hooks/use-table-sort';
-import { healthScoreV3Api, HealthScoreV3Dto, HealthScoreV3DetailDto, disksApi, DiskDto } from '@/services/api';
+import { overviewApi, OverviewDataOptimizedDto, OverviewBackupIssueDto } from '@/services/api';
 import { useNavigate } from 'react-router-dom';
-
-// Interfaces para datos derivados
-interface CriticalInstanceData {
-  instanceName: string;
-  ambiente?: string;
-  healthScore: number;
-  issues: string[];
-}
-
-interface BackupIssueData {
-  instanceName: string;
-  score: number;
-  issues: string[];
-}
-
-interface CriticalDiskData {
-  instanceName: string;
-  drive: string;
-  porcentajeLibre: number;
-  realPorcentajeLibre: number;
-  libreGB: number;
-  realLibreGB: number;
-  espacioInternoEnArchivosGB: number;
-  estado: string;
-}
-
-interface MaintenanceOverdueData {
-  instanceName: string;
-  displayName: string; // AGName si pertenece a un AG, sino instanceName
-  tipo: string; // "CHECKDB", "IndexOptimize", "Ambos"
-  lastCheckdb: string | null;
-  lastIndexOptimize: string | null;
-  checkdbVencido: boolean;
-  indexOptimizeVencido: boolean;
-  agName?: string; // Nombre del AG si pertenece a uno
-}
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 export default function Overview() {
   const navigate = useNavigate();
-  const [healthScores, setHealthScores] = useState<HealthScoreV3Dto[]>([]);
-  const [disks, setDisks] = useState<DiskDto[]>([]);
-  const [instanceDetails, setInstanceDetails] = useState<Record<string, HealthScoreV3DetailDto>>({});
+  const [data, setData] = useState<OverviewDataOptimizedDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
@@ -58,21 +25,23 @@ export default function Overview() {
     fetchData();
   }, []);
 
-  const fetchData = async (showLoading = true) => {
+  const fetchData = async (showLoading = true, retryCount = 0) => {
     try {
       if (showLoading) setLoading(true);
       setIsRefreshing(true);
       
-      const [healthData, disksData] = await Promise.all([
-        healthScoreV3Api.getAllHealthScores(),
-        disksApi.getDisks()
-      ]);
-      setHealthScores(healthData);
-      setDisks(disksData);
+      // Una sola llamada al API optimizado
+      const overviewData = await overviewApi.getOverviewData();
+      setData(overviewData);
       
-      // Cargar detalles de mantenimiento solo para instancias de producción
-      const prodInstances = healthData.filter(h => h.ambiente === 'Produccion');
-      await loadMaintenanceDetails(prodInstances);
+      // Si recibimos datos vacíos (caché aún poblándose), reintentar después de 2 segundos
+      // Máximo 3 reintentos
+      if (overviewData.totalInstances === 0 && retryCount < 3) {
+        console.log(`Overview: datos vacíos, reintentando en 2s (intento ${retryCount + 1}/3)...`);
+        setTimeout(() => {
+          fetchData(false, retryCount + 1);
+        }, 2000);
+      }
     } catch (error) {
       console.error('Error al cargar datos del overview:', error);
     } finally {
@@ -81,194 +50,11 @@ export default function Overview() {
     }
   };
 
-  const loadMaintenanceDetails = async (scores: HealthScoreV3Dto[]) => {
-    const details: Record<string, HealthScoreV3DetailDto> = {};
-    
-    // Cargar en paralelo (lotes de 10)
-    const batchSize = 10;
-    for (let i = 0; i < scores.length; i += batchSize) {
-      const batch = scores.slice(i, i + batchSize);
-      const promises = batch.map(async (score) => {
-        try {
-          const detail = await healthScoreV3Api.getHealthScoreDetails(score.instanceName);
-          return { instanceName: score.instanceName, detail };
-        } catch {
-          return null;
-        }
-      });
-      
-      const results = await Promise.all(promises);
-      results.forEach(result => {
-        if (result) {
-          details[result.instanceName] = result.detail;
-        }
-      });
-    }
-    
-    setInstanceDetails(details);
-  };
-
-  // Filtrar solo instancias de Producción
-  const productionScores = useMemo(() => {
-    return healthScores.filter(s => s.ambiente === 'Produccion');
-  }, [healthScores]);
-
-  // Filtrar discos de Producción
-  const productionDisks = useMemo(() => {
-    return disks.filter(d => d.ambiente === 'Produccion');
-  }, [disks]);
-
-  // Calcular estadísticas de producción
-  const stats = useMemo(() => {
-    const total = productionScores.length;
-    const healthy = productionScores.filter(s => s.healthStatus === 'Healthy').length;
-    const warning = productionScores.filter(s => s.healthStatus === 'Warning').length;
-    const risk = productionScores.filter(s => s.healthStatus === 'Risk').length;
-    // Instancias críticas: score < 60
-    const critical = productionScores.filter(s => s.healthScore < 60).length;
-    const avgScore = total > 0 ? Math.round(productionScores.reduce((sum, s) => sum + s.healthScore, 0) / total) : 0;
-    
-    // Backups atrasados: donde score_Backups < 100
-    const backupsOverdue = productionScores.filter(s => (s.score_Backups ?? 100) < 100).length;
-    
-    // Discos críticos: isAlerted = true
-    // El backend ya marca isAlerted = true para discos de logs con % físico < 10%
-    const criticalDisks = productionDisks.filter(d => d.isAlerted === true).length;
-
-    return { total, healthy, warning, risk, critical, avgScore, backupsOverdue, criticalDisks };
-  }, [productionScores, productionDisks]);
-
-  // Instancias críticas de producción (score < 60)
-  const criticalInstances: CriticalInstanceData[] = useMemo(() => {
-    return productionScores
-      .filter(s => s.healthScore < 60)
-      .map(s => {
-        const issues: string[] = [];
-        if ((s.score_Backups ?? 100) < 100) issues.push('Backups');
-        if ((s.score_AlwaysOn ?? 100) < 100) issues.push('AlwaysOn');
-        if ((s.score_CPU ?? 100) < 50) issues.push('CPU Alto');
-        if ((s.score_Memoria ?? 100) < 50) issues.push('Memoria');
-        if ((s.score_Discos ?? 100) < 50) issues.push('Discos');
-        if ((s.score_Maintenance ?? 100) < 100) issues.push('Mantenimiento');
-        if (issues.length === 0) issues.push('Score bajo');
-        
-        return {
-          instanceName: s.instanceName,
-          ambiente: s.ambiente,
-          healthScore: s.healthScore,
-          issues
-        };
-      })
-      .sort((a, b) => a.healthScore - b.healthScore);
-  }, [productionScores]);
-
-  // Backups atrasados de producción
-  const backupIssues: BackupIssueData[] = useMemo(() => {
-    return productionScores
-      .filter(s => (s.score_Backups ?? 100) < 100)
-      .map(s => {
-        const issues: string[] = [];
-        const backupScore = s.score_Backups ?? 100;
-        if (backupScore < 50) {
-          issues.push('FULL vencido');
-        } else if (backupScore < 100) {
-          issues.push('LOG vencido');
-        }
-        
-        return {
-          instanceName: s.instanceName,
-          score: backupScore,
-          issues
-        };
-      })
-      .sort((a, b) => a.score - b.score);
-  }, [productionScores]);
-
-  // Discos críticos de producción (isAlerted = true)
-  // El backend ya marca isAlerted = true para discos de logs con % físico < 10%
-  const criticalDisksData: CriticalDiskData[] = useMemo(() => {
-    return productionDisks
-      .filter(d => d.isAlerted === true)
-      .map(d => ({
-        instanceName: d.instanceName,
-        drive: d.drive || 'N/A',
-        porcentajeLibre: d.porcentajeLibre ?? 0,
-        realPorcentajeLibre: d.realPorcentajeLibre ?? d.porcentajeLibre ?? 0,
-        libreGB: d.libreGB ?? 0,
-        realLibreGB: d.realLibreGB ?? d.libreGB ?? 0,
-        espacioInternoEnArchivosGB: d.espacioInternoEnArchivosGB ?? 0,
-        estado: d.estado || 'Crítico'
-      }))
-      .sort((a, b) => a.realPorcentajeLibre - b.realPorcentajeLibre);
-  }, [productionDisks]);
-
-  // Mantenimiento atrasado de producción - Usa los campos CheckdbOk e IndexOptimizeOk 
-  // directamente de la tabla InstanceHealth_Maintenance (la misma que usa HealthScore)
-  // Agrupa por AGName si la instancia pertenece a un AG
-  const maintenanceOverdueData: MaintenanceOverdueData[] = useMemo(() => {
-    const tempResults: MaintenanceOverdueData[] = [];
-    const agProcessed = new Set<string>(); // Para evitar duplicados de AG
-    
-    productionScores.forEach(s => {
-      const details = instanceDetails[s.instanceName];
-      const maintenance = details?.maintenanceDetails;
-      
-      // Usar directamente los flags de la tabla InstanceHealth_Maintenance
-      const checkdbVencido = maintenance?.checkdbOk === false;
-      const indexOptimizeVencido = maintenance?.indexOptimizeOk === false;
-      
-      const lastCheckdb = maintenance?.lastCheckdb || null;
-      const lastIndexOptimize = maintenance?.lastIndexOptimize || null;
-      const agName = maintenance?.agName || undefined;
-      
-      // Si pertenece a un AG y ya lo procesamos, saltar
-      if (agName && agProcessed.has(agName)) {
-        return;
-      }
-      
-      if (checkdbVencido || indexOptimizeVencido) {
-        let tipo = '';
-        if (checkdbVencido && indexOptimizeVencido) {
-          tipo = 'CHECKDB e IndexOptimize';
-        } else if (checkdbVencido) {
-          tipo = 'CHECKDB';
-        } else {
-          tipo = 'IndexOptimize';
-        }
-        
-        // Si pertenece a un AG, marcar como procesado y usar el nombre del AG
-        if (agName) {
-          agProcessed.add(agName);
-        }
-        
-        tempResults.push({
-          instanceName: s.instanceName,
-          displayName: agName || s.instanceName, // Mostrar AGName si existe, sino instanceName
-          tipo,
-          lastCheckdb,
-          lastIndexOptimize,
-          checkdbVencido,
-          indexOptimizeVencido,
-          agName
-        });
-      }
-    });
-    
-    // Ordenar: primero los que tienen ambos vencidos, luego por nombre
-    return tempResults.sort((a, b) => {
-      const aHasBoth = a.checkdbVencido && a.indexOptimizeVencido;
-      const bHasBoth = b.checkdbVencido && b.indexOptimizeVencido;
-      if (aHasBoth && !bHasBoth) return -1;
-      if (!aHasBoth && bHasBoth) return 1;
-      return a.displayName.localeCompare(b.displayName);
-    });
-  }, [productionScores, instanceDetails]);
-
   // Ordenamiento para cada tabla
-  const { sortedData: sortedCriticalInstances, requestSort: requestSortCritical, getSortIndicator: getSortIndicatorCritical } = useTableSort(criticalInstances);
-  const { sortedData: sortedBackupIssues, requestSort: requestSortBackups, getSortIndicator: getSortIndicatorBackups } = useTableSort(backupIssues);
-  const { sortedData: sortedCriticalDisks, requestSort: requestSortDisks, getSortIndicator: getSortIndicatorDisks } = useTableSort(criticalDisksData);
-  const { sortedData: sortedMaintenanceOverdue, requestSort: requestSortMaintenance, getSortIndicator: getSortIndicatorMaintenance } = useTableSort(maintenanceOverdueData);
+  const { sortedData: sortedCriticalInstances, requestSort: requestSortCritical, getSortIndicator: getSortIndicatorCritical } = useTableSort(data?.criticalInstances ?? []);
+  const { sortedData: sortedBackupIssues, requestSort: requestSortBackups, getSortIndicator: getSortIndicatorBackups } = useTableSort(data?.backupIssues ?? []);
+  const { sortedData: sortedCriticalDisks, requestSort: requestSortDisks, getSortIndicator: getSortIndicatorDisks } = useTableSort(data?.criticalDisks ?? []);
+  const { sortedData: sortedMaintenanceOverdue, requestSort: requestSortMaintenance, getSortIndicator: getSortIndicatorMaintenance } = useTableSort(data?.maintenanceOverdue ?? []);
 
   if (loading) {
     return (
@@ -325,6 +111,19 @@ export default function Overview() {
     );
   }
 
+  // Valores por defecto si no hay datos
+  const stats = {
+    total: data?.totalInstances ?? 0,
+    healthy: data?.healthyCount ?? 0,
+    warning: data?.warningCount ?? 0,
+    risk: data?.riskCount ?? 0,
+    critical: data?.criticalCount ?? 0,
+    avgScore: data?.avgScore ?? 0,
+    backupsOverdue: data?.backupsOverdue ?? 0,
+    criticalDisks: data?.criticalDisksCount ?? 0,
+    maintenanceOverdue: data?.maintenanceOverdueCount ?? 0
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
@@ -367,7 +166,7 @@ export default function Overview() {
           <CardContent className="relative">
             <div className={`text-2xl font-bold tabular-nums ${
               stats.avgScore >= 90 ? 'text-emerald-500' : stats.avgScore >= 70 ? 'text-warning' : 'text-red-500'
-            }`}>{stats.avgScore > 0 ? stats.avgScore : '-'}</div>
+            }`}>{stats.avgScore > 0 ? Math.round(stats.avgScore) : '-'}</div>
             <p className="text-xs text-muted-foreground">
               {stats.healthy} Healthy, {stats.warning} Warn, {stats.risk} Risk
             </p>
@@ -382,13 +181,13 @@ export default function Overview() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-medium">Mantenimiento</CardTitle>
             <Wrench className={`h-4 w-4 transition-transform duration-300 group-hover:scale-110 ${
-              maintenanceOverdueData.length === 0 ? 'text-emerald-500' : maintenanceOverdueData.length < 5 ? 'text-warning' : 'text-red-500'
+              stats.maintenanceOverdue === 0 ? 'text-emerald-500' : stats.maintenanceOverdue < 5 ? 'text-warning' : 'text-red-500'
             }`} />
           </CardHeader>
           <CardContent className="relative">
             <div className={`text-2xl font-bold tabular-nums ${
-              maintenanceOverdueData.length === 0 ? 'text-emerald-500' : maintenanceOverdueData.length < 5 ? 'text-warning' : 'text-red-500'
-            }`}>{maintenanceOverdueData.length}</div>
+              stats.maintenanceOverdue === 0 ? 'text-emerald-500' : stats.maintenanceOverdue < 5 ? 'text-warning' : 'text-red-500'
+            }`}>{stats.maintenanceOverdue}</div>
             <p className="text-xs text-muted-foreground">
               Instancias con mant. vencido
             </p>
@@ -551,7 +350,10 @@ export default function Overview() {
                     Instancia {getSortIndicatorBackups('instanceName')}
                   </TableHead>
                   <TableHead>
-                    Problema
+                    Tipo
+                  </TableHead>
+                  <TableHead className="text-center">
+                    Detalle
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -561,15 +363,72 @@ export default function Overview() {
                     <TableRow key={idx}>
                       <TableCell className="font-medium">{issue.instanceName}</TableCell>
                       <TableCell className="text-sm">
-                        <StatusBadge status={issue.score < 50 ? 'critical' : 'warning'}>
-                          {issue.issues.join(', ')}
-                        </StatusBadge>
+                        <Badge variant={issue.fullBackupBreached ? "destructive" : "secondary"} className="mr-1">
+                          {issue.fullBackupBreached && issue.logBackupBreached 
+                            ? "FULL + LOG" 
+                            : issue.fullBackupBreached 
+                              ? "FULL" 
+                              : "LOG"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80" align="end">
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <Database className="h-4 w-4 text-muted-foreground" />
+                                <h4 className="font-semibold">Detalle de Backups</h4>
+                              </div>
+                              <div className="text-sm space-y-2">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Último FULL:</span>
+                                  <span className={issue.fullBackupBreached ? "text-destructive font-medium" : ""}>
+                                    {issue.lastFullBackup 
+                                      ? new Date(issue.lastFullBackup).toLocaleString('es-AR', { 
+                                          dateStyle: 'short', 
+                                          timeStyle: 'short' 
+                                        })
+                                      : 'Sin registro'}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Último LOG:</span>
+                                  <span className={issue.logBackupBreached ? "text-warning font-medium" : ""}>
+                                    {issue.lastLogBackup 
+                                      ? new Date(issue.lastLogBackup).toLocaleString('es-AR', { 
+                                          dateStyle: 'short', 
+                                          timeStyle: 'short' 
+                                        })
+                                      : 'N/A'}
+                                  </span>
+                                </div>
+                              </div>
+                              {issue.breachedDatabases && issue.breachedDatabases.length > 0 && (
+                                <div className="pt-2 border-t">
+                                  <p className="text-xs text-muted-foreground mb-2">Bases afectadas:</p>
+                                  <div className="max-h-32 overflow-y-auto space-y-1">
+                                    {issue.breachedDatabases.map((db, i) => (
+                                      <div key={i} className="text-xs bg-muted/50 px-2 py-1 rounded">
+                                        {db}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={2} className="text-center py-12">
+                    <TableCell colSpan={3} className="text-center py-12">
                       <Save className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                       <h3 className="text-lg font-semibold mb-2">No hay backups atrasados</h3>
                       <p className="text-muted-foreground">

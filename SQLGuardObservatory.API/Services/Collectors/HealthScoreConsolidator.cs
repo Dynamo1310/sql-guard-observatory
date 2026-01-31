@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
+using SQLGuardObservatory.API.Services;
 using System.Text.Json;
 
 namespace SQLGuardObservatory.API.Services.Collectors;
@@ -89,6 +90,10 @@ public class HealthScoreConsolidator : BackgroundService
     {
         _logger.LogInformation("HealthScoreConsolidator starting...");
         
+        // Pre-poblar el caché del Overview inmediatamente si hay datos previos
+        // Esto evita que la primera carga después del login sea lenta
+        await PrePopulateOverviewCacheAsync(stoppingToken);
+        
         // Esperar a que los collectors empiecen a generar datos
         await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
 
@@ -97,6 +102,9 @@ public class HealthScoreConsolidator : BackgroundService
             try
             {
                 await ConsolidateScoresAsync(stoppingToken);
+                
+                // Actualizar el caché del Overview después de consolidar los scores
+                await RefreshOverviewCacheAsync(stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -104,6 +112,62 @@ public class HealthScoreConsolidator : BackgroundService
             }
 
             await Task.Delay(_consolidationInterval, stoppingToken);
+        }
+    }
+
+    /// <summary>
+    /// Pre-pobla el caché del Overview al iniciar el backend.
+    /// Usa datos existentes de collectors previos para tener datos disponibles inmediatamente.
+    /// </summary>
+    private async Task PrePopulateOverviewCacheAsync(CancellationToken ct)
+    {
+        try
+        {
+            _logger.LogInformation("Pre-poblando caché del Overview...");
+            
+            using var scope = _serviceProvider.CreateScope();
+            var cacheService = scope.ServiceProvider.GetService<IOverviewSummaryCacheService>();
+            
+            if (cacheService != null)
+            {
+                // Verificar si ya hay caché reciente (menos de 10 minutos)
+                var existingCache = await cacheService.GetCachedDataAsync(ct);
+                if (existingCache != null && existingCache.LastUpdatedUtc > DateTime.UtcNow.AddMinutes(-10))
+                {
+                    _logger.LogInformation("Caché del Overview ya existe y es reciente, saltando pre-población");
+                    return;
+                }
+                
+                await cacheService.RefreshCacheAsync("StartupPrePopulate", ct);
+                _logger.LogInformation("Caché del Overview pre-poblado exitosamente");
+            }
+        }
+        catch (Exception ex)
+        {
+            // No es crítico si falla - el caché se poblará cuando se solicite
+            _logger.LogWarning(ex, "Error pre-poblando caché del Overview (se poblará en demanda)");
+        }
+    }
+
+    /// <summary>
+    /// Actualiza el caché del Overview Dashboard
+    /// </summary>
+    private async Task RefreshOverviewCacheAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var cacheService = scope.ServiceProvider.GetService<IOverviewSummaryCacheService>();
+            
+            if (cacheService != null)
+            {
+                await cacheService.RefreshCacheAsync("HealthScoreConsolidator", ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            // No propagar el error para no afectar el ciclo de consolidación
+            _logger.LogWarning(ex, "Error refreshing Overview cache after consolidation");
         }
     }
 

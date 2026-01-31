@@ -35,6 +35,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<OverviewSummaryAlertSchedule> OverviewSummaryAlertSchedules { get; set; } = null!;
     public DbSet<OverviewSummaryAlertHistory> OverviewSummaryAlertHistories { get; set; } = null!;
     
+    // Overview Summary Cache - Caché de datos pre-calculados para el Dashboard
+    public DbSet<OverviewSummaryCache> OverviewSummaryCache { get; set; } = null!;
+    
     // Server Restart Tasks
     public DbSet<ServerRestartTask> ServerRestartTasks { get; set; } = null!;
     public DbSet<ServerRestartDetail> ServerRestartDetails { get; set; } = null!;
@@ -46,6 +49,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Patching - Configuración de compliance y cache de estado
     public DbSet<PatchComplianceConfig> PatchComplianceConfigs { get; set; } = null!;
     public DbSet<ServerPatchStatusCache> ServerPatchStatusCache { get; set; } = null!;
+    public DbSet<PatchPlan> PatchPlans { get; set; } = null!;
+    
+    // Patching - Sistema mejorado de gestión de parcheos
+    public DbSet<PatchingFreezingConfig> PatchingFreezingConfigs { get; set; } = null!;
+    public DbSet<PatchNotificationSetting> PatchNotificationSettings { get; set; } = null!;
+    public DbSet<PatchNotificationHistory> PatchNotificationHistories { get; set; } = null!;
+    
+    // Knowledge Base - Owners de bases de datos
+    public DbSet<DatabaseOwner> DatabaseOwners { get; set; } = null!;
     
     // Vault de Credenciales DBA
     public DbSet<Credential> Credentials { get; set; } = null!;
@@ -295,6 +307,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(s => s.InstanceName).IsUnique();
         });
 
+        // Overview Summary Cache
+        builder.Entity<OverviewSummaryCache>(entity =>
+        {
+            entity.ToTable("OverviewSummaryCache");
+            entity.HasIndex(c => c.CacheKey).IsUnique();
+            entity.HasIndex(c => c.LastUpdatedUtc);
+        });
+
         // Server Restart Tasks
         builder.Entity<ServerRestartTask>(entity =>
         {
@@ -369,6 +389,76 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(s => s.InstanceName).IsUnique();
             entity.HasIndex(s => s.PatchStatus);
             entity.HasIndex(s => s.LastChecked);
+        });
+
+        // Patch Plans - Planificación de parcheos
+        builder.Entity<PatchPlan>(entity =>
+        {
+            entity.ToTable("PatchPlans");
+            entity.HasIndex(p => p.ScheduledDate);
+            entity.HasIndex(p => p.AssignedDbaId);
+            entity.HasIndex(p => p.WasPatched);
+            entity.HasIndex(p => new { p.ServerName, p.ScheduledDate });
+            // Nuevos índices para sistema mejorado
+            entity.HasIndex(p => p.Status);
+            entity.HasIndex(p => p.CellTeam);
+            entity.HasIndex(p => p.ClusterName);
+            entity.HasIndex(p => p.Priority);
+            entity.HasIndex(p => p.Ambiente);
+
+            entity.HasOne(p => p.AssignedDba)
+                .WithMany()
+                .HasForeignKey(p => p.AssignedDbaId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(p => p.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(p => p.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(p => p.PatchedByUser)
+                .WithMany()
+                .HasForeignKey(p => p.PatchedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // Patching Freezing Config - Configuración de semanas de freezing
+        builder.Entity<PatchingFreezingConfig>(entity =>
+        {
+            entity.ToTable("PatchingFreezingConfig");
+            entity.HasIndex(f => f.WeekOfMonth).IsUnique();
+        });
+
+        // Patch Notification Settings - Configuración de notificaciones
+        builder.Entity<PatchNotificationSetting>(entity =>
+        {
+            entity.ToTable("PatchNotificationSettings");
+            entity.HasIndex(n => n.NotificationType).IsUnique();
+        });
+
+        // Patch Notification History - Historial de notificaciones
+        builder.Entity<PatchNotificationHistory>(entity =>
+        {
+            entity.ToTable("PatchNotificationHistory");
+            entity.HasIndex(h => h.PatchPlanId);
+            entity.HasIndex(h => h.SentAt);
+
+            entity.HasOne(h => h.PatchPlan)
+                .WithMany()
+                .HasForeignKey(h => h.PatchPlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Database Owners - Knowledge Base de owners de BD
+        builder.Entity<DatabaseOwner>(entity =>
+        {
+            entity.ToTable("DatabaseOwners");
+            entity.HasIndex(o => o.ServerName);
+            entity.HasIndex(o => o.CellTeam);
+            entity.HasIndex(o => o.OwnerName);
+            entity.HasIndex(o => o.OwnerEmail);
+            entity.HasIndex(o => o.IsActive);
+            entity.HasIndex(o => new { o.ServerName, o.InstanceName, o.DatabaseName }).IsUnique();
         });
 
         // =============================================

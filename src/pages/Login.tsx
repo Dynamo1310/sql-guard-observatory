@@ -142,10 +142,8 @@ export default function Login() {
       await authApi.windowsLogin();
 
       setStatus('Autenticación exitosa. Redirigiendo...');
-      
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 500);
+      // Redirigir inmediatamente - windowsLogin ya esperó la pre-carga completa
+      window.location.href = '/';
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión con Windows. Asegúrate de estar en el dominio gscorp.ad y estar en la lista blanca de usuarios.');
       setLoading(false);

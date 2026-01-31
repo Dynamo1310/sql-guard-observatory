@@ -40,6 +40,7 @@ public class PermissionService : IPermissionService
         { "Patching", new ViewInfo { ViewName = "Patching", DisplayName = "Parcheos - Dashboard", Description = "Dashboard de parcheos SQL Server", Category = "Observabilidad > Parcheos" } },
         { "ObsoleteInstances", new ViewInfo { ViewName = "ObsoleteInstances", DisplayName = "Parcheos - Inst. Obsoletas", Description = "Instancias con versiones fuera de soporte", Category = "Observabilidad > Parcheos" } },
         { "PatchingConfig", new ViewInfo { ViewName = "PatchingConfig", DisplayName = "Parcheos - Config. Compliance", Description = "Configuración de compliance de parcheos", Category = "Observabilidad > Parcheos" } },
+        { "PatchPlanner", new ViewInfo { ViewName = "PatchPlanner", DisplayName = "Parcheos - Planner", Description = "Planificación de parcheos de servidores", Category = "Observabilidad > Parcheos" } },
         
         // === INVENTARIO ===
         { "InventarioMenu", new ViewInfo { ViewName = "InventarioMenu", DisplayName = "📁 Inventario (Menú)", Description = "Mostrar/ocultar el menú completo de Inventario", Category = "Inventario" } },
