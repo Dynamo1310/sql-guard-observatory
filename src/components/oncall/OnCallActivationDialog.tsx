@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Activity, Loader2, Database, Zap, Wifi, HardDrive, Shield, AlertTriangle, Search, Server, ExternalLink, Check, Clock, Tag } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Activity, Loader2, Database, Zap, Wifi, HardDrive, Shield, AlertTriangle, Search, Server, ExternalLink, Check, Clock, Tag, Plus, ChevronDown, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,30 +20,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { 
-  activationsApi, 
+import {
+  activationsApi,
   activationCategoriesApi,
   defaultActivationCategories,
   activationSeverities,
   onCallApi,
   inventoryApi,
   SqlServerInstanceDto,
-  ActivationCategoryDto
+  ActivationCategoryDto,
+  OnCallActivationDto
 } from '@/services/api';
 
 // Iconos por nombre de categoría (para categorías configurables)
@@ -84,21 +72,7 @@ interface OnCallActivationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedDate?: Date | null;
-  editingActivation?: {
-    id: number;
-    scheduleId: number;
-    activatedAt: string;
-    resolvedAt?: string;
-    category: string;
-    severity: string;
-    title: string;
-    description?: string;
-    resolution?: string;
-    instanceName?: string;
-    durationMinutes?: number;
-    serviceDeskUrl?: string;
-    status?: 'Pending' | 'Resolved';
-  } | null;
+  editingActivation?: OnCallActivationDto | null;
   onActivationCreated?: () => void;
   onActivationUpdated?: () => void;
 }
@@ -118,6 +92,41 @@ export function OnCallActivationDialog({
   const [serverSearch, setServerSearch] = useState('');
   const [categories, setCategories] = useState<ActivationCategoryDto[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
+
+  // Estado para crear nueva categoría
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
+
+  // Ref para el dropdown de servidores
+  const serverDropdownRef = useRef<HTMLDivElement>(null);
+  const serverInputRef = useRef<HTMLInputElement>(null);
+
+  // Ref para tracking si el componente está montado
+  // Evita actualizaciones de estado en componentes desmontados
+  const isMountedRef = useRef(true);
+
+  // Efecto para tracking de montaje/desmontaje del componente
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Cerrar dropdown al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (serverDropdownRef.current && !serverDropdownRef.current.contains(event.target as Node)) {
+        setServerSearchOpen(false);
+      }
+    };
+
+    if (serverSearchOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [serverSearchOpen]);
 
   // Helper para obtener fecha/hora local en formato datetime-local
   const getLocalDateTimeString = (date: Date = new Date()) => {
@@ -144,6 +153,7 @@ export function OnCallActivationDialog({
   const [formData, setFormData] = useState(getInitialFormData());
 
   // Rellenar formulario cuando se edita una activación existente
+  // IMPORTANTE: Usamos editingActivation?.id como dependencia para evitar re-renders infinitos
   useEffect(() => {
     if (open && editingActivation) {
       setFormData({
@@ -164,7 +174,8 @@ export function OnCallActivationDialog({
       // Reset form for new activation
       setFormData(getInitialFormData());
     }
-  }, [open, editingActivation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingActivation?.id]);
 
   // Cargar categorías y servidores SQL al abrir el diálogo
   useEffect(() => {
@@ -182,12 +193,16 @@ export function OnCallActivationDialog({
     try {
       setLoadingCategories(true);
       const data = await activationCategoriesApi.getActive();
+      // Verificar si el componente sigue montado antes de actualizar estado
+      if (!isMountedRef.current) return;
       setCategories(data);
       // Establecer categoría por defecto si no hay una seleccionada
       if (data.length > 0 && !formData.category) {
         setFormData(prev => ({ ...prev, category: data[0].name }));
       }
     } catch (err) {
+      // Verificar si el componente sigue montado
+      if (!isMountedRef.current) return;
       console.error('Error loading categories:', err);
       // Usar categorías por defecto si falla la carga
       const defaultCats: ActivationCategoryDto[] = defaultActivationCategories.map((name, i) => ({
@@ -203,7 +218,61 @@ export function OnCallActivationDialog({
         setFormData(prev => ({ ...prev, category: defaultCats[0].name }));
       }
     } finally {
-      setLoadingCategories(false);
+      // Verificar si el componente sigue montado
+      if (isMountedRef.current) {
+        setLoadingCategories(false);
+      }
+    }
+  };
+
+  // Crear nueva categoría desde el modal
+  const handleCreateCategory = async () => {
+    // Guard contra doble submit
+    if (savingCategory) return;
+
+    if (!newCategoryName.trim()) {
+      toast.error('El nombre de la categoría es requerido');
+      return;
+    }
+
+    // Verificar si ya existe
+    if (categories.some(c => c.name.toLowerCase() === newCategoryName.trim().toLowerCase())) {
+      toast.error('Ya existe una categoría con ese nombre');
+      return;
+    }
+
+    try {
+      setSavingCategory(true);
+      await activationCategoriesApi.create({
+        name: newCategoryName.trim(),
+      });
+
+      // Verificar si el componente sigue montado
+      if (!isMountedRef.current) return;
+
+      toast.success('Categoría creada exitosamente');
+
+      // Recargar categorías y seleccionar la nueva
+      const data = await activationCategoriesApi.getActive();
+
+      // Verificar si el componente sigue montado
+      if (!isMountedRef.current) return;
+
+      setCategories(data);
+      setFormData(prev => ({ ...prev, category: newCategoryName.trim() }));
+
+      // Limpiar estado
+      setNewCategoryName('');
+      setShowNewCategoryInput(false);
+    } catch (err: any) {
+      // Verificar si el componente sigue montado
+      if (!isMountedRef.current) return;
+      toast.error('Error al crear categoría: ' + err.message);
+    } finally {
+      // Verificar si el componente sigue montado
+      if (isMountedRef.current) {
+        setSavingCategory(false);
+      }
     }
   };
 
@@ -211,12 +280,19 @@ export function OnCallActivationDialog({
     try {
       setLoadingServers(true);
       const response = await inventoryApi.getSqlServerInstances(1, 1000);
+      // Verificar si el componente sigue montado antes de actualizar estado
+      if (!isMountedRef.current) return;
       setSqlServers(response.data);
     } catch (err) {
+      // Verificar si el componente sigue montado
+      if (!isMountedRef.current) return;
       console.error('Error loading SQL servers:', err);
       // No mostramos error, el campo será manual
     } finally {
-      setLoadingServers(false);
+      // Verificar si el componente sigue montado
+      if (isMountedRef.current) {
+        setLoadingServers(false);
+      }
     }
   };
 
@@ -225,7 +301,7 @@ export function OnCallActivationDialog({
     if (!serverSearch) return sqlServers.slice(0, 50); // Limitar a 50 si no hay búsqueda
     const search = serverSearch.toLowerCase();
     return sqlServers
-      .filter(s => 
+      .filter(s =>
         s.NombreInstancia.toLowerCase().includes(search) ||
         s.ServerName.toLowerCase().includes(search) ||
         s.ambiente?.toLowerCase().includes(search)
@@ -250,11 +326,16 @@ export function OnCallActivationDialog({
   useEffect(() => {
     if (!open) {
       setServerSearch('');
+      setShowNewCategoryInput(false);
+      setNewCategoryName('');
     }
   }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Guard contra doble submit
+    if (saving) return;
 
     if (!formData.title) {
       toast.error('El título es requerido');
@@ -285,14 +366,26 @@ export function OnCallActivationDialog({
           serviceDeskUrl: formData.serviceDeskUrl || undefined,
           status: formData.status,
         });
+
+        // Verificar si el componente sigue montado
+        if (!isMountedRef.current) return;
+
         toast.success('Activación actualizada exitosamente');
+        // IMPORTANTE: Cerrar el modal PRIMERO, luego ejecutar callback
+        // Esto evita que el modal intente actualizar estado mientras se cierra
         onOpenChange(false);
-        onActivationUpdated?.();
+        // Ejecutar callback después de un pequeño delay para asegurar que el modal se cerró
+        setTimeout(() => onActivationUpdated?.(), 50);
       } else {
         // Crear nueva activación
         const schedule = await onCallApi.getScheduleByDate(formData.activatedAt);
+
+        // Verificar si el componente sigue montado
+        if (!isMountedRef.current) return;
+
         if (!schedule) {
           toast.error('No hay guardia asignada para la fecha seleccionada');
+          setSaving(false);
           return;
         }
 
@@ -310,14 +403,25 @@ export function OnCallActivationDialog({
           serviceDeskUrl: formData.serviceDeskUrl || undefined,
           status: formData.status,
         });
+
+        // Verificar si el componente sigue montado
+        if (!isMountedRef.current) return;
+
         toast.success('Activación registrada exitosamente');
+        // IMPORTANTE: Cerrar el modal PRIMERO, luego ejecutar callback
         onOpenChange(false);
-        onActivationCreated?.();
+        // Ejecutar callback después de un pequeño delay para asegurar que el modal se cerró
+        setTimeout(() => onActivationCreated?.(), 50);
       }
     } catch (err: any) {
+      // Verificar si el componente sigue montado
+      if (!isMountedRef.current) return;
       toast.error('Error: ' + err.message);
     } finally {
-      setSaving(false);
+      // Verificar si el componente sigue montado
+      if (isMountedRef.current) {
+        setSaving(false);
+      }
     }
   };
 
@@ -344,7 +448,14 @@ export function OnCallActivationDialog({
   const selectedServer = sqlServers.find(s => s.NombreInstancia === formData.instanceName);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(newOpen) => {
+        // No permitir cerrar mientras se está guardando
+        if (saving && !newOpen) return;
+        onOpenChange(newOpen);
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -395,28 +506,86 @@ export function OnCallActivationDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="category">Categoría</Label>
-              <Select
-                value={formData.category}
-                onValueChange={(v) => setFormData({ ...formData, category: v })}
-                disabled={loadingCategories}
-              >
-                <SelectTrigger id="category">
-                  <SelectValue placeholder={loadingCategories ? "Cargando..." : "Seleccionar categoría"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((cat) => {
-                    const Icon = getCategoryIcon(cat.name, cat.icon);
-                    return (
-                      <SelectItem key={cat.id} value={cat.name}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4" />
-                          {cat.name}
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+              {showNewCategoryInput ? (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Nombre de nueva categoría"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleCreateCategory();
+                      } else if (e.key === 'Escape') {
+                        setShowNewCategoryInput(false);
+                        setNewCategoryName('');
+                      }
+                    }}
+                    className="flex-1"
+                    autoFocus
+                    disabled={savingCategory}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleCreateCategory}
+                    disabled={savingCategory || !newCategoryName.trim()}
+                  >
+                    {savingCategory ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setShowNewCategoryInput(false);
+                      setNewCategoryName('');
+                    }}
+                    disabled={savingCategory}
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ) : (
+                <Select
+                  value={formData.category}
+                  onValueChange={(v) => {
+                    if (v === '__new__') {
+                      setShowNewCategoryInput(true);
+                    } else {
+                      setFormData({ ...formData, category: v });
+                    }
+                  }}
+                  disabled={loadingCategories}
+                >
+                  <SelectTrigger id="category">
+                    <SelectValue placeholder={loadingCategories ? "Cargando..." : "Seleccionar categoría"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => {
+                      const Icon = getCategoryIcon(cat.name, cat.icon);
+                      return (
+                        <SelectItem key={cat.id} value={cat.name}>
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4" />
+                            {cat.name}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                    <SelectItem value="__new__">
+                      <div className="flex items-center gap-2 text-primary">
+                        <Plus className="h-4 w-4" />
+                        Agregar nueva categoría...
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -454,89 +623,118 @@ export function OnCallActivationDialog({
           {/* Selector de Servidor SQL */}
           <div className="space-y-2">
             <Label>Instancia SQL</Label>
-            <Popover open={serverSearchOpen} onOpenChange={setServerSearchOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={serverSearchOpen}
-                  className="w-full justify-between"
+            <div ref={serverDropdownRef} className="relative">
+              {/* Campo de búsqueda/selección */}
+              <div
+                className={cn(
+                  "flex items-center w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                  serverSearchOpen && "ring-2 ring-ring ring-offset-2"
+                )}
+              >
+                <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                <input
+                  ref={serverInputRef}
+                  type="text"
+                  className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+                  placeholder={formData.instanceName || "Buscar servidor SQL..."}
+                  value={serverSearchOpen ? serverSearch : (formData.instanceName || '')}
+                  onChange={(e) => {
+                    setServerSearch(e.target.value);
+                    if (!serverSearchOpen) {
+                      setServerSearchOpen(true);
+                    }
+                  }}
+                  onFocus={() => {
+                    setServerSearchOpen(true);
+                    setServerSearch('');
+                  }}
                   disabled={loadingServers}
-                >
-                  {loadingServers ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Cargando servidores...
-                    </span>
-                  ) : formData.instanceName ? (
-                    <span className="flex items-center gap-2 truncate">
-                      <Server className="h-4 w-4" />
-                      {formData.instanceName}
-                      {selectedServer && (
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {selectedServer.ambiente}
-                        </Badge>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground flex items-center gap-2">
-                      <Search className="h-4 w-4" />
-                      Buscar servidor SQL...
-                    </span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
-                <Command shouldFilter={false}>
-                  <CommandInput 
-                    placeholder="Buscar por nombre, instancia o ambiente..." 
-                    value={serverSearch}
-                    onValueChange={setServerSearch}
+                />
+                {formData.instanceName && !serverSearchOpen && (
+                  <button
+                    type="button"
+                    className="ml-2 p-1 hover:bg-accent rounded"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFormData(prev => ({ ...prev, instanceName: '' }));
+                    }}
+                  >
+                    <X className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                )}
+                {loadingServers ? (
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ChevronDown
+                    className={cn(
+                      "ml-2 h-4 w-4 shrink-0 opacity-50 transition-transform",
+                      serverSearchOpen && "rotate-180"
+                    )}
                   />
-                  <CommandList className="max-h-[300px] overflow-y-auto">
-                    <CommandEmpty>
-                      {loadingServers ? 'Cargando...' : 'No se encontraron servidores'}
-                    </CommandEmpty>
-                    <CommandGroup>
-                      {filteredServers.map((server) => (
-                        <CommandItem
+                )}
+              </div>
+
+              {/* Lista desplegable */}
+              {serverSearchOpen && (
+                <div
+                  className="absolute z-[9999] mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-lg"
+                  style={{ maxHeight: '250px' }}
+                >
+                  <div
+                    className="overflow-y-auto p-1"
+                    style={{ maxHeight: '248px' }}
+                    onWheel={(e) => e.stopPropagation()}
+                  >
+                    {filteredServers.length === 0 ? (
+                      <div className="py-6 text-center text-sm text-muted-foreground">
+                        {loadingServers ? 'Cargando...' : 'No se encontraron servidores'}
+                      </div>
+                    ) : (
+                      filteredServers.map((server) => (
+                        <div
                           key={server.id}
-                          value={server.NombreInstancia}
-                          onSelect={() => {
-                            setFormData({ ...formData, instanceName: server.NombreInstancia });
+                          className={cn(
+                            "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                            formData.instanceName === server.NombreInstancia && "bg-accent"
+                          )}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setFormData(prev => ({ ...prev, instanceName: server.NombreInstancia }));
                             setServerSearchOpen(false);
                             setServerSearch('');
                           }}
                         >
                           <Check
                             className={cn(
-                              "mr-2 h-4 w-4",
+                              "mr-2 h-4 w-4 shrink-0",
                               formData.instanceName === server.NombreInstancia ? "opacity-100" : "opacity-0"
                             )}
                           />
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <Server className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-medium">{server.NombreInstancia}</span>
+                              <Server className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <span className="font-medium truncate">{server.NombreInstancia}</span>
                             </div>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>{server.MajorVersion?.split(' ').slice(0, 4).join(' ')}</span>
+                              <span className="truncate">{server.MajorVersion?.split(' ').slice(0, 4).join(' ')}</span>
                               <span>•</span>
-                              <Badge variant="outline" className="text-[10px] py-0">
+                              <Badge variant="outline" className="text-[10px] py-0 shrink-0">
                                 {server.ambiente}
                               </Badge>
                             </div>
                           </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            {formData.instanceName && !selectedServer && (
-              <p className="text-xs text-muted-foreground">
-                Servidor ingresado manualmente
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            {formData.instanceName && selectedServer && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Badge variant="outline" className="text-[10px]">{selectedServer.ambiente}</Badge>
+                {selectedServer.MajorVersion?.split(' ').slice(0, 4).join(' ')}
               </p>
             )}
           </div>
@@ -644,7 +842,7 @@ export function OnCallActivationDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
               Cancelar
             </Button>
             <Button type="submit" disabled={saving}>

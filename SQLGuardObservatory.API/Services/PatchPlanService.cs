@@ -654,16 +654,30 @@ public class PatchPlanService : IPatchPlanService
     }
 
     /// <summary>
-    /// Obtiene células/equipos únicos
+    /// Obtiene células/equipos únicos (combina PatchPlans y DatabaseOwners)
     /// </summary>
     public async Task<List<string>> GetUniqueCellTeamsAsync()
     {
-        return await _context.PatchPlans
+        // Células de los planes de parcheo
+        var cellsFromPlans = await _context.PatchPlans
             .Where(p => !string.IsNullOrEmpty(p.CellTeam))
             .Select(p => p.CellTeam!)
             .Distinct()
-            .OrderBy(c => c)
             .ToListAsync();
+
+        // Células del Knowledge Base (DatabaseOwners)
+        var cellsFromOwners = await _context.DatabaseOwners
+            .Where(o => !string.IsNullOrEmpty(o.CellTeam) && o.IsActive)
+            .Select(o => o.CellTeam!)
+            .Distinct()
+            .ToListAsync();
+
+        // Combinar y ordenar
+        return cellsFromPlans
+            .Union(cellsFromOwners)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
     }
 
     /// <summary>

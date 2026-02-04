@@ -5,7 +5,7 @@ export const getApiUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  
+
   // URL fija del backend productivo
   return 'http://asprbm-nov-01:5000';
 };
@@ -24,13 +24,13 @@ async function handleResponse<T>(response: Response): Promise<T> {
       // Limpiar sesión
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      
+
       // Redirigir al login
       window.location.href = '/login';
-      
+
       throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
     }
-    
+
     const error: ApiError = await response.json().catch(() => ({
       message: 'Error en la comunicación con el servidor'
     }));
@@ -164,7 +164,7 @@ export const authApi = {
       body: JSON.stringify(credentials),
     });
     const data = await handleResponse<LoginResponse>(response);
-    
+
     // Guardar token en localStorage
     if (data.token) {
       localStorage.setItem('token', data.token);
@@ -179,7 +179,7 @@ export const authApi = {
         hasProfilePhoto: data.hasProfilePhoto,
       }));
     }
-    
+
     return data;
   },
 
@@ -188,9 +188,9 @@ export const authApi = {
       method: 'GET',
       credentials: 'include',
     });
-    
+
     const data = await handleResponse<LoginResponse>(response);
-    
+
     if (data.token) {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify({
@@ -203,7 +203,7 @@ export const authApi = {
         profilePhotoUrl: data.profilePhotoUrl,
         hasProfilePhoto: data.hasProfilePhoto,
       }));
-      
+
       // Pre-cargar permisos, autorización, Overview y menuBadges en paralelo
       // Esto "calienta" el backend completamente y guarda en caché para carga instantánea
       try {
@@ -214,7 +214,7 @@ export const authApi = {
           fetch(`${API_URL}/api/overview-data`, { headers: getAuthHeader() }).catch(() => null),
           fetch(`${API_URL}/api/menubadges`, { headers: getAuthHeader() }).catch(() => null)
         ]);
-        
+
         // Guardar en caché (mismas claves que AuthContext)
         localStorage.setItem('cached_permissions', JSON.stringify(permissionsData.permissions));
         localStorage.setItem('cached_authorization', JSON.stringify({
@@ -243,7 +243,7 @@ export const authApi = {
         console.warn('[Auth] Error pre-cargando datos (se cargarán después):', error);
       }
     }
-    
+
     return data;
   },
 
@@ -301,7 +301,7 @@ export const authApi = {
         ...getAuthHeader(),
       },
     });
-    
+
     if (!response.ok) {
       const error: ApiError = await response.json().catch(() => ({
         message: 'Error al eliminar usuario'
@@ -365,7 +365,7 @@ export const authApi = {
   async uploadMyPhoto(file: File): Promise<ProfilePhotoSyncResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const response = await fetch(`${API_URL}/api/auth/me/photo/upload`, {
       method: 'POST',
       headers: { ...getAuthHeader() },
@@ -380,7 +380,7 @@ export const authApi = {
   async uploadUserPhoto(userId: string, file: File): Promise<ProfilePhotoSyncResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const response = await fetch(`${API_URL}/api/auth/users/${userId}/photo/upload`, {
       method: 'POST',
       headers: { ...getAuthHeader() },
@@ -451,7 +451,7 @@ export const jobsApi = {
     if (instance && instance !== 'All') params.append('instance', instance);
     // Cache-busting
     params.append('_', new Date().getTime().toString());
-    
+
     const url = `${API_URL}/api/jobs?${params.toString()}`;
     const response = await fetch(url, {
       headers: {
@@ -469,7 +469,7 @@ export const jobsApi = {
     if (instance && instance !== 'All') params.append('instance', instance);
     // Cache-busting
     params.append('_', new Date().getTime().toString());
-    
+
     const url = `${API_URL}/api/jobs/summary?${params.toString()}`;
     const response = await fetch(url, {
       headers: {
@@ -499,31 +499,31 @@ export interface DiskDto {
   hosting?: string;
   servidor: string;
   drive: string;
-  
+
   // Espacio físico en disco
   totalGB?: number;
   libreGB?: number;
   porcentajeLibre?: number;
-  
+
   // Espacio REAL (v3.3) = Espacio físico + Espacio interno en archivos con growth
   realLibreGB?: number;
   realPorcentajeLibre?: number;
   espacioInternoEnArchivosGB?: number;
-  
+
   // Información de archivos
   filesWithGrowth: number;
   filesWithoutGrowth: number;
   totalFiles: number;
-  
+
   // Estado y alertas
   estado?: string;
   isAlerted: boolean;
-  
+
   // Rol del disco
   isDataDisk: boolean;
   isLogDisk: boolean;
   isTempDBDisk: boolean;
-  
+
   captureDate: string;
 }
 
@@ -532,11 +532,11 @@ export interface DiskSummaryDto {
   discosAdvertencia: number;
   discosSaludables: number;
   totalDiscos: number;
-  
+
   // Nuevos contadores para diferenciar tipos de alertas
   discosAlertadosReales: number;  // Discos con growth + espacio real <= 10%
   discosBajosSinRiesgo: number;   // Discos <10% pero sin growth o con espacio interno
-  
+
   ultimaCaptura?: string;
 }
 
@@ -554,7 +554,7 @@ export const disksApi = {
     if (hosting && hosting !== 'All') params.append('hosting', hosting);
     if (instance && instance !== 'All') params.append('instance', instance);
     if (estado && estado !== 'All') params.append('estado', estado);
-    
+
     const url = `${API_URL}/api/disks${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await fetch(url, {
       headers: {
@@ -570,7 +570,7 @@ export const disksApi = {
     if (hosting && hosting !== 'All') params.append('hosting', hosting);
     if (instance && instance !== 'All') params.append('instance', instance);
     if (estado && estado !== 'All') params.append('estado', estado);
-    
+
     const url = `${API_URL}/api/disks/summary${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await fetch(url, {
       headers: {
@@ -1361,44 +1361,44 @@ export interface HealthScoreV3Dto {
   healthScore: number;
   healthStatus: 'Healthy' | 'Warning' | 'Risk' | 'Critical';
   generatedAtUtc: string;
-  
+
   // Scores por categoria (cada uno sobre 100) - 12 CATEGORIAS
   // TAB 1: Availability & DR (35%)
   score_Backups?: number;           // 18%
   score_AlwaysOn?: number;          // 14%
   score_DatabaseStates?: number;    // 3%
-  
+
   // TAB 2: Performance (43%)
   score_CPU?: number;               // 10%
   score_Memoria?: number;           // 8%
   score_IO?: number;                // 10%
   score_Discos?: number;            // 7%
   score_Waits?: number;             // 8%
-  
+
   // TAB 3: Maintenance & Config (22%)
   score_ErroresCriticos?: number;   // 7%
   score_Maintenance?: number;       // 5%
   score_ConfiguracionTempdb?: number; // 5%
   score_Autogrowth?: number;        // 5%
-  
+
   // Diagnostico Inteligente de I/O para TempDB (v3.1)
   tempDBIODiagnosis?: string;
   tempDBIOSuggestion?: string;
   tempDBIOSeverity?: string;
-  
+
   // Contribuciones ponderadas (0-peso maximo)
   // TAB 1: Availability & DR
   backupsContribution?: number;           // Max: 18
   alwaysOnContribution?: number;          // Max: 14
   databaseStatesContribution?: number;    // Max: 3
-  
+
   // TAB 2: Performance
   cpuContribution?: number;               // Max: 10
   memoriaContribution?: number;           // Max: 8
   ioContribution?: number;                // Max: 10
   discosContribution?: number;            // Max: 7
   waitsContribution?: number;             // Max: 8
-  
+
   // TAB 3: Maintenance & Config
   erroresCriticosContribution?: number;   // Max: 7
   mantenimientosContribution?: number;    // Max: 5
@@ -1493,7 +1493,7 @@ export interface DiscosDetails {
   logDiskAvgFreePct: number;
   tempDBDiskFreePct: number;
   volumesJson?: string;
-  
+
   // Métricas de I/O del Sistema (v3.1)
   pageLifeExpectancy?: number;
   pageReadsPerSec?: number;
@@ -1535,7 +1535,7 @@ export interface ConfiguracionTempdbDetails {
   id: number;
   instanceName: string;
   collectedAtUtc: string;
-  
+
   // TempDB - Archivos
   tempDBFileCount: number;
   tempDBAllSameSize: boolean;
@@ -1543,7 +1543,7 @@ export interface ConfiguracionTempdbDetails {
   tempDBTotalSizeMB: number;
   tempDBUsedSpaceMB: number;
   tempDBFreeSpacePct: number;
-  
+
   // TempDB - Rendimiento
   tempDBAvgReadLatencyMs: number;
   tempDBAvgWriteLatencyMs: number;
@@ -1551,13 +1551,13 @@ export interface ConfiguracionTempdbDetails {
   tempDBPageLatchWaits: number;
   tempDBContentionScore: number;  // Score compuesto (0-100)
   tempDBVersionStoreMB: number;
-  
+
   // TempDB - Configuración
   tempDBAvgFileSizeMB: number;
   tempDBMinFileSizeMB: number;
   tempDBMaxFileSizeMB: number;
   tempDBGrowthConfigOK: boolean;
-  
+
   // Max Memory
   maxServerMemoryMB: number;
   totalPhysicalMemoryMB: number;
@@ -1596,17 +1596,17 @@ export interface WaitsDetails {
   id: number;
   instanceName: string;
   collectedAtUtc: string;
-  
+
   // Blocking
   blockedSessionCount: number;
   maxBlockTimeSeconds: number;
   blockerSessionIds?: string;
-  
+
   // Top Waits
   topWait1Type?: string;
   topWait1Count: number;
   topWait1Ms: number;
-  
+
   // CPU/Parallelism Waits
   cxPacketWaitCount: number;
   cxPacketWaitMs: number;
@@ -1616,11 +1616,11 @@ export interface WaitsDetails {
   sosSchedulerYieldMs: number;
   threadPoolWaitCount: number;
   threadPoolWaitMs: number;
-  
+
   // Memory Waits
   resourceSemaphoreWaitCount: number;
   resourceSemaphoreWaitMs: number;
-  
+
   // I/O Waits
   pageIOLatchWaitCount: number;
   pageIOLatchWaitMs: number;
@@ -1628,14 +1628,14 @@ export interface WaitsDetails {
   writeLogWaitMs: number;
   asyncIOCompletionCount: number;
   asyncIOCompletionMs: number;
-  
+
   // Lock Waits
   lockWaitCount: number;
   lockWaitMs: number;
-  
+
   // Config
   maxDOP?: number;
-  
+
   // Totals
   totalWaits: number;
   totalWaitMs: number;
@@ -1646,14 +1646,14 @@ export interface HealthScoreV3DetailDto extends HealthScoreV3Dto {
   backupsDetails?: BackupsDetails;
   alwaysOnDetails?: AlwaysOnDetails;
   databaseStatesDetails?: DatabaseStatesDetails;
-  
+
   // TAB 2: Performance
   cpuDetails?: CPUDetails;
   memoriaDetails?: MemoriaDetails;
   ioDetails?: IODetails;
   discosDetails?: DiscosDetails;
   waitsDetails?: WaitsDetails;  // NUEVO
-  
+
   // TAB 3: Maintenance & Config
   erroresCriticosDetails?: ErroresCriticosDetails;
   maintenanceDetails?: MaintenanceDetails;
@@ -1738,13 +1738,13 @@ export interface OverviewDataOptimizedDto {
   backupsOverdue: number;
   criticalDisksCount: number;
   maintenanceOverdueCount: number;
-  
+
   // Listas para tablas
   criticalInstances: OverviewCriticalInstanceDto[];
   backupIssues: OverviewBackupIssueDto[];
   criticalDisks: OverviewCriticalDiskDto[];
   maintenanceOverdue: OverviewMaintenanceOverdueDto[];
-  
+
   // Timestamp
   lastUpdate?: string;
 }
@@ -2104,7 +2104,7 @@ export const onCallApi = {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
-    
+
     const url = `${API_URL}/api/oncall/schedule${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await fetch(url, {
       headers: { ...getAuthHeader() },
@@ -2302,7 +2302,7 @@ export const onCallApi = {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
-    
+
     const url = `${API_URL}/api/oncall/day-overrides${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await fetch(url, {
       headers: { ...getAuthHeader() },
@@ -2903,10 +2903,10 @@ export const inventoryApi = {
     });
     return handleResponse<InventoryInstanceDto[]>(response);
   },
-  
+
   async getSqlServerInstances(
-    page: number = 1, 
-    pageSize: number = 1000, 
+    page: number = 1,
+    pageSize: number = 1000,
     search?: string,
     ambiente?: string
   ): Promise<SqlServerInstancesResponse> {
@@ -2915,13 +2915,13 @@ export const inventoryApi = {
     params.append('pageSize', pageSize.toString());
     if (search) params.append('search', search);
     if (ambiente) params.append('ambiente', ambiente);
-    
+
     const response = await fetch(`${API_URL}/api/inventoryproxy/sqlserver/instances?${params.toString()}`, {
       headers: { ...getAuthHeader() },
     });
     return handleResponse<SqlServerInstancesResponse>(response);
   },
-  
+
   async refreshSqlServerInstances(): Promise<SqlServerInstancesResponse> {
     const response = await fetch(`${API_URL}/api/inventoryproxy/sqlserver/instances/refresh`, {
       method: 'POST',
@@ -3752,7 +3752,7 @@ export const indexAnalysisApi = {
     const params = new URLSearchParams();
     params.append('minPageCount', minPageCount.toString());
     params.append('minFragmentationPct', minFragmentationPct.toString());
-    
+
     const response = await fetch(
       `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/fragmented?${params}`,
       { headers: { ...getAuthHeader() } }
@@ -3764,7 +3764,7 @@ export const indexAnalysisApi = {
   async getUnusedIndexes(instanceName: string, databaseName: string, minPageCount: number = 1000): Promise<UnusedIndexDto[]> {
     const params = new URLSearchParams();
     params.append('minPageCount', minPageCount.toString());
-    
+
     const response = await fetch(
       `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/unused?${params}`,
       { headers: { ...getAuthHeader() } }
@@ -3827,7 +3827,7 @@ export const indexAnalysisApi = {
     if (options?.minPageCount) params.append('minPageCount', options.minPageCount.toString());
     if (options?.minFragmentationPct) params.append('minFragmentationPct', options.minFragmentationPct.toString());
     if (options?.generateScripts !== undefined) params.append('generateScripts', options.generateScripts.toString());
-    
+
     const queryString = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(
       `${API_URL}/api/index-analysis/${encodeURIComponent(instanceName)}/${encodeURIComponent(databaseName)}/full${queryString}`,
@@ -3970,7 +3970,7 @@ export const patchingApi = {
 
   // Configuración de compliance
   async getComplianceConfigs(year?: number): Promise<PatchComplianceConfigDto[]> {
-    const url = year 
+    const url = year
       ? `${API_URL}/api/patching/compliance?year=${year}`
       : `${API_URL}/api/patching/compliance`;
     const response = await fetch(url, {
@@ -4246,7 +4246,7 @@ export const patchPlanApi = {
     if (filters?.ambiente) params.append('ambiente', filters.ambiente);
     if (filters?.priority) params.append('priority', filters.priority);
     if (filters?.patchMode) params.append('patchMode', filters.patchMode);
-    
+
     const url = `${API_URL}/api/patchplan${params.toString() ? '?' + params.toString() : ''}`;
     const response = await fetch(url, {
       headers: { ...getAuthHeader() },
@@ -4332,7 +4332,7 @@ export const patchPlanApi = {
     if (durationMinutes) params.append('durationMinutes', durationMinutes.toString());
     if (fromDate) params.append('fromDate', fromDate);
     if (maxSuggestions) params.append('maxSuggestions', maxSuggestions.toString());
-    
+
     const response = await fetch(`${API_URL}/api/patchplan/suggest-window?${params.toString()}`, {
       headers: { ...getAuthHeader() },
     });
@@ -4596,10 +4596,10 @@ export const vaultApi = {
     if (filter?.groupId !== undefined) params.append('groupId', String(filter.groupId));
     if (filter?.includeDeleted) params.append('includeDeleted', 'true');
 
-    const url = params.toString() 
+    const url = params.toString()
       ? `${API_URL}/api/vault/credentials?${params.toString()}`
       : `${API_URL}/api/vault/credentials`;
-    
+
     const response = await fetch(url, {
       headers: { ...getAuthHeader() },
     });
@@ -5239,7 +5239,7 @@ export const patchConfigApi = {
     const params = new URLSearchParams();
     if (patchPlanId) params.append('patchPlanId', patchPlanId.toString());
     if (limit) params.append('limit', limit.toString());
-    
+
     const url = `${API_URL}/api/patchconfig/notifications/history${params.toString() ? '?' + params.toString() : ''}`;
     const response = await fetch(url, {
       headers: { ...getAuthHeader() },
@@ -5352,7 +5352,7 @@ export const databaseOwnersApi = {
     if (filters?.isActive !== undefined) params.append('isActive', filters.isActive.toString());
     if (filters?.page) params.append('page', filters.page.toString());
     if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
-    
+
     const url = `${API_URL}/api/database-owners${params.toString() ? '?' + params.toString() : ''}`;
     const response = await fetch(url, {
       headers: { ...getAuthHeader() },
@@ -5373,7 +5373,7 @@ export const databaseOwnersApi = {
     const params = new URLSearchParams({ serverName });
     if (instanceName) params.append('instanceName', instanceName);
     if (databaseName) params.append('databaseName', databaseName);
-    
+
     try {
       const response = await fetch(`${API_URL}/api/database-owners/find?${params.toString()}`, {
         headers: { ...getAuthHeader() },
@@ -5443,6 +5443,241 @@ export const databaseOwnersApi = {
       headers: { ...getAuthHeader() },
     });
     return handleResponse<CellTeamDto[]>(response);
+  },
+};
+
+// ==================== OVERVIEW ASSIGNMENTS ====================
+
+export interface OverviewAssignmentDto {
+  id: number;
+  issueType: string;
+  instanceName: string;
+  driveOrTipo?: string;
+  assignedToUserId: string;
+  assignedToUserName: string;
+  assignedByUserId: string;
+  assignedByUserName: string;
+  assignedAt: string;
+  resolvedAt?: string;
+  notes?: string;
+}
+
+export interface CreateOverviewAssignmentRequest {
+  issueType: string;
+  instanceName: string;
+  driveOrTipo?: string;
+  assignedToUserId: string;
+  notes?: string;
+}
+
+export interface AssignableUserDto {
+  id: string;
+  displayName: string;
+  email?: string;
+  domainUser?: string;
+}
+
+export const overviewAssignmentsApi = {
+  // Obtener todas las asignaciones activas
+  async getActive(): Promise<OverviewAssignmentDto[]> {
+    const response = await fetch(`${API_URL}/api/overview-assignments`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OverviewAssignmentDto[]>(response);
+  },
+
+  // Obtener asignaciones por tipo
+  async getByType(issueType: string): Promise<OverviewAssignmentDto[]> {
+    const response = await fetch(`${API_URL}/api/overview-assignments/type/${issueType}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<OverviewAssignmentDto[]>(response);
+  },
+
+  // Obtener usuarios disponibles del grupo IDD (General)
+  async getAvailableUsers(): Promise<AssignableUserDto[]> {
+    const response = await fetch(`${API_URL}/api/overview-assignments/available-users`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<AssignableUserDto[]>(response);
+  },
+
+  // Crear o actualizar asignación
+  async create(data: CreateOverviewAssignmentRequest): Promise<OverviewAssignmentDto> {
+    const response = await fetch(`${API_URL}/api/overview-assignments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<OverviewAssignmentDto>(response);
+  },
+
+  // Eliminar asignación
+  async remove(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/overview-assignments/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  // Resolver asignación
+  async resolve(id: number, notes?: string): Promise<OverviewAssignmentDto> {
+    const response = await fetch(`${API_URL}/api/overview-assignments/${id}/resolve`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ notes }),
+    });
+    return handleResponse<OverviewAssignmentDto>(response);
+  },
+
+  // Buscar asignación específica
+  async find(issueType: string, instanceName: string, driveOrTipo?: string): Promise<OverviewAssignmentDto | null> {
+    const params = new URLSearchParams({ issueType, instanceName });
+    if (driveOrTipo) params.append('driveOrTipo', driveOrTipo);
+
+    const response = await fetch(`${API_URL}/api/overview-assignments/find?${params.toString()}`, {
+      headers: { ...getAuthHeader() },
+    });
+    const result = await handleResponse<OverviewAssignmentDto | null>(response);
+    return result;
+  },
+};
+
+// ==================== BACKUP ALERTS ====================
+
+export interface BackupAlertConfigDto {
+  id: number;
+  name: string;
+  description?: string;
+  isEnabled: boolean;
+  checkIntervalMinutes: number;
+  alertIntervalMinutes: number;
+  recipients: string[];
+  ccRecipients: string[];
+  lastRunAt?: string;
+  lastAlertSentAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  updatedByDisplayName?: string;
+}
+
+export interface CreateBackupAlertRequest {
+  name?: string;
+  description?: string;
+  checkIntervalMinutes?: number;
+  alertIntervalMinutes?: number;
+  recipients?: string[];
+  ccRecipients?: string[];
+}
+
+export interface UpdateBackupAlertRequest {
+  name?: string;
+  description?: string;
+  isEnabled?: boolean;
+  checkIntervalMinutes?: number;
+  alertIntervalMinutes?: number;
+  recipients?: string[];
+  ccRecipients?: string[];
+}
+
+export interface BackupAlertHistoryDto {
+  id: number;
+  configId: number;
+  sentAt: string;
+  recipientCount: number;
+  ccCount: number;
+  instancesAffected: string[];
+  success: boolean;
+  errorMessage?: string;
+}
+
+export interface BackupAlertStatusDto {
+  unassignedIssues: BackupIssueSummaryDto[];
+  assignedIssues: BackupIssueSummaryDto[];
+}
+
+export interface BackupIssueSummaryDto {
+  instanceName: string;
+  fullBackupBreached: boolean;
+  logBackupBreached: boolean;
+  assignedToUserName?: string;
+  assignedAt?: string;
+}
+
+export const backupAlertsApi = {
+  // Obtener configuración
+  async getConfig(): Promise<BackupAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/config`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<BackupAlertConfigDto>(response);
+  },
+
+  // Crear configuración
+  async createConfig(data: CreateBackupAlertRequest): Promise<BackupAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/config`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<BackupAlertConfigDto>(response);
+  },
+
+  // Actualizar configuración
+  async updateConfig(data: UpdateBackupAlertRequest): Promise<BackupAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/config`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<BackupAlertConfigDto>(response);
+  },
+
+  // Obtener historial
+  async getHistory(limit: number = 10): Promise<BackupAlertHistoryDto[]> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/history?limit=${limit}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<BackupAlertHistoryDto[]>(response);
+  },
+
+  // Obtener estado actual de backups (asignados vs no asignados)
+  async getStatus(): Promise<BackupAlertStatusDto> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/status`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<BackupAlertStatusDto>(response);
+  },
+
+  // Enviar email de prueba
+  async testAlert(): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/test`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ success: boolean; message: string }>(response);
+  },
+
+  // Ejecutar verificación manualmente
+  async runNow(): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/run`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ success: boolean; message: string }>(response);
   },
 };
 

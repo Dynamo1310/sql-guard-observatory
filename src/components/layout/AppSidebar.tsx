@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Home, Activity, HardDrive, Database, Save, ListTree, Users, Heart, 
+import {
+  Home, Activity, HardDrive, Database, Save, ListTree, Users, Heart,
   Phone, Calendar, CalendarDays, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
   ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Settings, Cog, ShieldCheck, Clock,
   Key, Lock, History, KeyRound, Share2, FolderLock, Sparkles, Server, Zap, Tag, AlertTriangle, TrendingUp,
@@ -168,6 +168,7 @@ const monitoreoSistemaSubItems = [
 // Submenús de Alertas (dentro de Monitoreo Sistema)
 const alertsSubItems = [
   { title: 'Servidores Caídos', url: '/admin/alerts/servers-down', icon: Bell, permission: 'AlertaServidoresCaidos' },
+  { title: 'Backups Atrasados', url: '/admin/alerts/backups', icon: Save, permission: 'AlertaBackups' },
   { title: 'Resumen Overview', url: '/admin/alerts/overview-summary', icon: FileText, permission: 'AlertaResumenOverview' },
 ];
 
@@ -176,72 +177,72 @@ export function AppSidebar() {
   const { hasPermission } = useAuth();
   const isCollapsed = state === 'collapsed';
   const location = useLocation();
-  
+
   // ==================== ESTADOS DE MENÚS COLAPSABLES ====================
-  
+
   // Observabilidad
   const isMonitoreoActive = location.pathname === '/healthscore' || location.pathname === '/admin/collectors';
   const [monitoreoOpen, setMonitoreoOpen] = useState(isMonitoreoActive);
-  
+
   const isInfraestructuraActive = ['/disks', '/backups'].includes(location.pathname);
   const [infraestructuraOpen, setInfraestructuraOpen] = useState(isInfraestructuraActive);
-  
+
   // Inventario
   const isInventarioSqlServerActive = location.pathname.startsWith('/inventory/sqlserver');
   const [inventarioSqlServerOpen, setInventarioSqlServerOpen] = useState(isInventarioSqlServerActive);
-  
+
   const isInventarioPostgreSqlActive = location.pathname.startsWith('/inventory/postgresql');
   const [inventarioPostgreSqlOpen, setInventarioPostgreSqlOpen] = useState(isInventarioPostgreSqlActive);
-  
+
   const isInventarioRedisActive = location.pathname.startsWith('/inventory/redis');
   const [inventarioRedisOpen, setInventarioRedisOpen] = useState(isInventarioRedisActive);
-  
+
   const isInventarioDocumentDbActive = location.pathname.startsWith('/inventory/documentdb');
   const [inventarioDocumentDbOpen, setInventarioDocumentDbOpen] = useState(isInventarioDocumentDbActive);
-  
+
   const isRendimientoActive = ['/jobs', '/indexes'].includes(location.pathname);
   const [rendimientoOpen, setRendimientoOpen] = useState(isRendimientoActive);
-  
+
   const isPatchingActive = location.pathname.startsWith('/patching');
   const [patchingOpen, setPatchingOpen] = useState(isPatchingActive);
-  
+
   // Knowledge Base
   const isKnowledgeBaseActive = location.pathname.startsWith('/knowledge');
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(isKnowledgeBaseActive);
-  
+
   // Guardias DBA
   const isOnCallActive = location.pathname.startsWith('/oncall');
   const [onCallOpen, setOnCallOpen] = useState(isOnCallActive);
-  
+
   // Operaciones
   const isOperationsActive = location.pathname.startsWith('/operations');
   const [operationsOpen, setOperationsOpen] = useState(isOperationsActive);
-  
+
   // Seguridad
   const isVaultActive = location.pathname.startsWith('/vault');
   const [vaultOpen, setVaultOpen] = useState(isVaultActive);
-  
+
   // Administración
   const isControlAccesoActive = ['/admin/users', '/admin/groups', '/admin/roles'].some(p => location.pathname.startsWith(p));
   const [controlAccesoOpen, setControlAccesoOpen] = useState(isControlAccesoActive);
-  
+
   const isConfiguracionActive = ['/admin/smtp', '/admin/menu-badges'].includes(location.pathname);
   const [configuracionOpen, setConfiguracionOpen] = useState(isConfiguracionActive);
-  
+
   const isMonitoreoSistemaActive = location.pathname === '/admin/logs';
   const [monitoreoSistemaOpen, setMonitoreoSistemaOpen] = useState(isMonitoreoSistemaActive);
-  
+
   const isAlertsActive = location.pathname.startsWith('/admin/alerts');
   const [alertsOpen, setAlertsOpen] = useState(isAlertsActive);
 
   // Estado para los badges de menú "Nuevo"
   const [menuBadges, setMenuBadges] = useState<MenuBadgeDto[]>([]);
-  
+
   // Estado para indicadores de salud en tiempo real
   const [healthStats, setHealthStats] = useState<{ critical: number; warning: number; total: number }>({
     critical: 0, warning: 0, total: 0
   });
-  
+
   // Cargar badges al montar el componente
   useEffect(() => {
     const loadBadges = async () => {
@@ -265,7 +266,7 @@ export function AppSidebar() {
         warning: overviewData.warningCount + overviewData.riskCount,
         total: overviewData.totalInstances
       });
-      
+
       // Si recibimos datos vacíos (caché aún poblándose), reintentar después de 2 segundos
       // Máximo 3 reintentos
       if (overviewData.totalInstances === 0 && retryCount < 3) {
@@ -310,7 +311,7 @@ export function AppSidebar() {
     const badge = getMenuBadge(menuKey);
     if (!badge) return null;
     return (
-      <span 
+      <span
         className="text-[9px] px-1 py-0.5 rounded font-medium text-white ml-1"
         style={{ backgroundColor: getBadgeColor(badge.badgeColor) }}
       >
@@ -326,9 +327,9 @@ export function AppSidebar() {
       warning: 'bg-warning',
       healthy: 'bg-emerald-500',
     };
-    
+
     if (count === 0) return null;
-    
+
     return (
       <span className="relative flex items-center ml-auto">
         {count !== undefined && count > 0 && (
@@ -347,104 +348,104 @@ export function AppSidebar() {
 
   // ==================== VERIFICACIÓN DE PERMISOS ====================
   // Los menús contenedores requieren su permiso específico + al menos un subitem visible
-  
+
   // Observabilidad
   const hasOverviewPermission = hasPermission('Overview');
-  
+
   const hasMonitoreoMenuPermission = hasPermission('MonitoreoMenu');
   const visibleMonitoreoSubItems = monitoreoSubItems.filter(item => hasPermission(item.permission));
   const showMonitoreoMenu = hasMonitoreoMenuPermission && visibleMonitoreoSubItems.length > 0;
-  
+
   const hasInfraestructuraMenuPermission = hasPermission('InfraestructuraMenu');
   const visibleInfraestructuraSubItems = infraestructuraSubItems.filter(item => hasPermission(item.permission));
   const showInfraestructuraMenu = hasInfraestructuraMenuPermission && visibleInfraestructuraSubItems.length > 0;
-  
+
   const hasRendimientoMenuPermission = hasPermission('RendimientoMenu');
   const visibleRendimientoSubItems = rendimientoSubItems.filter(item => hasPermission(item.permission));
   const showRendimientoMenu = hasRendimientoMenuPermission && visibleRendimientoSubItems.length > 0;
-  
+
   const hasPatchingMenuPermission = hasPermission('PatchingMenu');
   const visiblePatchingSubItems = patchingSubItems.filter(item => hasPermission(item.permission));
   const showPatchingMenu = hasPatchingMenuPermission && visiblePatchingSubItems.length > 0;
-  
+
   // Knowledge Base
   const hasKnowledgeBaseMenuPermission = hasPermission('KnowledgeBaseMenu');
   const visibleKnowledgeBaseSubItems = knowledgeBaseSubItems.filter(item => hasPermission(item.permission));
   const showKnowledgeBaseMenu = hasKnowledgeBaseMenuPermission && visibleKnowledgeBaseSubItems.length > 0;
-  
+
   // Inventario
   const hasInventarioMenuPermission = hasPermission('InventarioMenu');
-  
+
   const visibleInventarioSqlServerSubItems = inventarioSqlServerSubItems.filter(item => hasPermission(item.permission));
   const showInventarioSqlServerMenu = hasInventarioMenuPermission && visibleInventarioSqlServerSubItems.length > 0;
-  
+
   const visibleInventarioPostgreSqlSubItems = inventarioPostgreSqlSubItems.filter(item => hasPermission(item.permission));
   const showInventarioPostgreSqlMenu = hasInventarioMenuPermission && visibleInventarioPostgreSqlSubItems.length > 0;
-  
+
   const visibleInventarioRedisSubItems = inventarioRedisSubItems.filter(item => hasPermission(item.permission));
   const showInventarioRedisMenu = hasInventarioMenuPermission && visibleInventarioRedisSubItems.length > 0;
-  
+
   const visibleInventarioDocumentDbSubItems = inventarioDocumentDbSubItems.filter(item => hasPermission(item.permission));
   const showInventarioDocumentDbMenu = hasInventarioMenuPermission && visibleInventarioDocumentDbSubItems.length > 0;
-  
+
   const showInventarioSection = showInventarioSqlServerMenu || showInventarioPostgreSqlMenu || showInventarioRedisMenu || showInventarioDocumentDbMenu;
-  
+
   // Guardias DBA
   const hasOnCallMenuPermission = hasPermission('OnCall');
   const visibleOnCallSubItems = onCallSubItems.filter(item => hasPermission(item.permission));
   const showOnCallMenu = hasOnCallMenuPermission && visibleOnCallSubItems.length > 0;
-  
+
   // Operaciones
   const hasOperationsMenuPermission = hasPermission('OperationsMenu');
   const visibleOperationsSubItems = operationsSubItems.filter(item => hasPermission(item.permission));
   const showOperationsMenu = hasOperationsMenuPermission && visibleOperationsSubItems.length > 0;
-  
+
   // Seguridad
   const hasVaultMenuPermission = hasPermission('VaultMenu');
   const visibleVaultSubItems = vaultSubItems.filter(item => hasPermission(item.permission));
   const showVaultMenu = hasVaultMenuPermission && visibleVaultSubItems.length > 0;
   const showSecuritySection = showVaultMenu;
-  
+
   // Administración
   const hasControlAccesoMenuPermission = hasPermission('ControlAccesoMenu');
   const visibleControlAccesoSubItems = controlAccesoSubItems.filter(item => hasPermission(item.permission));
   const showControlAccesoMenu = hasControlAccesoMenuPermission && visibleControlAccesoSubItems.length > 0;
-  
+
   const hasConfiguracionMenuPermission = hasPermission('ConfiguracionMenu');
   const visibleConfiguracionSubItems = configuracionSubItems.filter(item => hasPermission(item.permission));
   const showConfiguracionMenu = hasConfiguracionMenuPermission && visibleConfiguracionSubItems.length > 0;
-  
+
   const hasMonitoreoSistemaMenuPermission = hasPermission('MonitoreoSistemaMenu');
   const visibleMonitoreoSistemaSubItems = monitoreoSistemaSubItems.filter(item => hasPermission(item.permission));
   const showMonitoreoSistemaMenu = hasMonitoreoSistemaMenuPermission && visibleMonitoreoSistemaSubItems.length > 0;
-  
+
   const hasAlertsMenuPermission = hasPermission('AlertsMenu');
   const visibleAlertsSubItems = alertsSubItems.filter(item => hasPermission(item.permission));
   const showAlertsMenu = hasAlertsMenuPermission && visibleAlertsSubItems.length > 0;
-  
+
   const showAdminSection = showControlAccesoMenu || showConfiguracionMenu || showMonitoreoSistemaMenu || showAlertsMenu;
-  
+
   // Mostrar sección Observabilidad
   const showObservabilidadSection = hasOverviewPermission || showMonitoreoMenu || showInfraestructuraMenu || showRendimientoMenu || showPatchingMenu || showKnowledgeBaseMenu;
 
   // Componente reutilizable para menús colapsables
-  const CollapsibleMenu = ({ 
-    isOpen, 
-    setIsOpen, 
-    isActive, 
-    icon: Icon, 
+  const CollapsibleMenu = ({
+    isOpen,
+    setIsOpen,
+    isActive,
+    icon: Icon,
     customIcon,
-    title, 
+    title,
     menuKey,
     subItems,
     statusIndicator
-  }: { 
-    isOpen: boolean; 
-    setIsOpen: (open: boolean) => void; 
-    isActive: boolean; 
-    icon?: any; 
+  }: {
+    isOpen: boolean;
+    setIsOpen: (open: boolean) => void;
+    isActive: boolean;
+    icon?: any;
     customIcon?: React.ReactNode;
-    title: string; 
+    title: string;
     menuKey: string;
     subItems: { title: string; url: string; icon: any; permission: string }[];
     statusIndicator?: React.ReactNode;
@@ -460,16 +461,15 @@ export function AppSidebar() {
             <PopoverTrigger asChild>
               <SidebarMenuButton
                 style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 }}
-                className={`w-full flex items-center justify-center p-2 rounded-md text-sm transition-colors ${
-                  isActive ? 'bg-foreground/5 text-foreground font-medium' : 'hover:bg-sidebar-accent/50 text-muted-foreground'
-                }`}
+                className={`w-full flex items-center justify-center p-2 rounded-md text-sm transition-colors ${isActive ? 'bg-foreground/5 text-foreground font-medium' : 'hover:bg-sidebar-accent/50 text-muted-foreground'
+                  }`}
               >
                 {customIcon ? customIcon : <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`} />}
               </SidebarMenuButton>
             </PopoverTrigger>
-            <PopoverContent 
-              side="right" 
-              align="start" 
+            <PopoverContent
+              side="right"
+              align="start"
               sideOffset={8}
               className="w-56 p-2 bg-sidebar border-sidebar-border"
             >
@@ -485,11 +485,10 @@ export function AppSidebar() {
                       to={subItem.url}
                       end={subItem.url === '/patching' || subItem.url === '/vault/dashboard'}
                       onClick={() => setPopoverOpen(false)}
-                      className={`flex items-center gap-2 text-sm py-2 px-2 rounded-md transition-colors ${
-                        isSubItemActive 
-                          ? 'bg-foreground/5 text-foreground font-medium' 
-                          : 'hover:bg-sidebar-accent/50 text-muted-foreground hover:text-foreground'
-                      }`}
+                      className={`flex items-center gap-2 text-sm py-2 px-2 rounded-md transition-colors ${isSubItemActive
+                        ? 'bg-foreground/5 text-foreground font-medium'
+                        : 'hover:bg-sidebar-accent/50 text-muted-foreground hover:text-foreground'
+                        }`}
                     >
                       <subItem.icon className={`h-4 w-4 ${isSubItemActive ? 'text-foreground' : 'text-muted-foreground'}`} />
                       <span className="flex items-center">{subItem.title}<MenuBadgeTag menuKey={subItem.permission} /></span>
@@ -510,9 +509,8 @@ export function AppSidebar() {
         <SidebarMenuItem>
           <CollapsibleTrigger asChild>
             <SidebarMenuButton
-              className={`w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${
-                isActive ? 'bg-foreground/5 text-foreground font-medium' : 'hover:bg-sidebar-accent/50 text-muted-foreground'
-              }`}
+              className={`w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors ${isActive ? 'bg-foreground/5 text-foreground font-medium' : 'hover:bg-sidebar-accent/50 text-muted-foreground'
+                }`}
             >
               {customIcon ? customIcon : <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`} />}
               <span className="flex-1 text-left flex items-center gap-1">
@@ -523,7 +521,7 @@ export function AppSidebar() {
               {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </SidebarMenuButton>
           </CollapsibleTrigger>
-          
+
           <CollapsibleContent>
             <SidebarMenuSub>
               {subItems.map((subItem) => {
@@ -561,30 +559,30 @@ export function AppSidebar() {
             title="Expandir menú"
           >
             {/* Símbolo negro para modo claro */}
-            <img 
-              src={sqlNovaSymbolBlack} 
-              alt="SQL Nova" 
+            <img
+              src={sqlNovaSymbolBlack}
+              alt="SQL Nova"
               className="logo-light h-7 w-7 transition-transform duration-300 ease-out group-hover:scale-110 group-hover:rotate-6"
             />
             {/* Símbolo blanco para modo oscuro */}
-            <img 
-              src={sqlNovaSymbolWhite} 
-              alt="SQL Nova" 
+            <img
+              src={sqlNovaSymbolWhite}
+              alt="SQL Nova"
               className="logo-dark h-7 w-7 transition-transform duration-300 ease-out group-hover:scale-110 group-hover:rotate-6"
             />
           </button>
         ) : (
           <>
             {/* Logo negro para modo claro */}
-            <img 
-              src={sqlNovaBlackLogo} 
-              alt="SQL Nova" 
+            <img
+              src={sqlNovaBlackLogo}
+              alt="SQL Nova"
               className="logo-light h-10 w-auto"
             />
             {/* Logo blanco para modo oscuro */}
-            <img 
-              src={sqlNovaWhiteLogo} 
-              alt="SQL Nova" 
+            <img
+              src={sqlNovaWhiteLogo}
+              alt="SQL Nova"
               className="logo-dark h-10 w-auto"
             />
           </>
@@ -594,320 +592,320 @@ export function AppSidebar() {
       <SidebarContent className="p-0">
         <ScrollArea className="h-[calc(100vh-4rem)]">
           <div className="py-2">
-        {/* ==================== OBSERVABILIDAD ==================== */}
-        {showObservabilidadSection && (
-          <SidebarGroup className="pb-2">
-            <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
-              Observabilidad
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {/* Overview - Item plano */}
-                {hasOverviewPermission && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
-                      <NavLink
-                        to="/overview"
-                        end
-                        style={{
-                          ...(isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : {}),
-                          ...(location.pathname === '/overview' ? { backgroundColor: 'hsl(var(--foreground) / 0.05)', color: 'hsl(var(--foreground))', fontWeight: 500 } : {})
-                        }}
-                        className="w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors hover:bg-sidebar-accent/50 text-muted-foreground"
-                      >
-                        <Home className={`h-4 w-4 flex-shrink-0 ${location.pathname === '/overview' ? 'text-foreground' : 'text-muted-foreground'}`} />
-                        {!isCollapsed && (
-                          <span className="flex items-center">
-                            Overview
-                            <MenuBadgeTag menuKey="Overview" />
-                          </span>
-                        )}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
+            {/* ==================== OBSERVABILIDAD ==================== */}
+            {showObservabilidadSection && (
+              <SidebarGroup className="pb-2">
+                <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
+                  Observabilidad
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {/* Overview - Item plano */}
+                    {hasOverviewPermission && (
+                      <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                          <NavLink
+                            to="/overview"
+                            end
+                            style={{
+                              ...(isCollapsed ? { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0 } : {}),
+                              ...(location.pathname === '/overview' ? { backgroundColor: 'hsl(var(--foreground) / 0.05)', color: 'hsl(var(--foreground))', fontWeight: 500 } : {})
+                            }}
+                            className="w-full flex items-center justify-start gap-2 p-2 rounded-md text-sm transition-colors hover:bg-sidebar-accent/50 text-muted-foreground"
+                          >
+                            <Home className={`h-4 w-4 flex-shrink-0 ${location.pathname === '/overview' ? 'text-foreground' : 'text-muted-foreground'}`} />
+                            {!isCollapsed && (
+                              <span className="flex items-center">
+                                Overview
+                                <MenuBadgeTag menuKey="Overview" />
+                              </span>
+                            )}
+                          </NavLink>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )}
 
-                {/* Menú Monitoreo */}
-                {showMonitoreoMenu && (
-                  <CollapsibleMenu
-                    isOpen={monitoreoOpen}
-                    setIsOpen={setMonitoreoOpen}
-                    isActive={isMonitoreoActive}
-                    icon={ActivityIcon}
-                    title="Monitoreo"
-                    menuKey="MonitoreoMenu"
-                    subItems={visibleMonitoreoSubItems}
-                  />
-                )}
+                    {/* Menú Monitoreo */}
+                    {showMonitoreoMenu && (
+                      <CollapsibleMenu
+                        isOpen={monitoreoOpen}
+                        setIsOpen={setMonitoreoOpen}
+                        isActive={isMonitoreoActive}
+                        icon={ActivityIcon}
+                        title="Monitoreo"
+                        menuKey="MonitoreoMenu"
+                        subItems={visibleMonitoreoSubItems}
+                      />
+                    )}
 
-                {/* Menú Infraestructura */}
-                {showInfraestructuraMenu && (
-                  <CollapsibleMenu
-                    isOpen={infraestructuraOpen}
-                    setIsOpen={setInfraestructuraOpen}
-                    isActive={isInfraestructuraActive}
-                    icon={Server}
-                    title="Infraestructura"
-                    menuKey="InfraestructuraMenu"
-                    subItems={visibleInfraestructuraSubItems}
-                  />
-                )}
+                    {/* Menú Infraestructura */}
+                    {showInfraestructuraMenu && (
+                      <CollapsibleMenu
+                        isOpen={infraestructuraOpen}
+                        setIsOpen={setInfraestructuraOpen}
+                        isActive={isInfraestructuraActive}
+                        icon={Server}
+                        title="Infraestructura"
+                        menuKey="InfraestructuraMenu"
+                        subItems={visibleInfraestructuraSubItems}
+                      />
+                    )}
 
-                {/* Menú Rendimiento */}
-                {showRendimientoMenu && (
-                  <CollapsibleMenu
-                    isOpen={rendimientoOpen}
-                    setIsOpen={setRendimientoOpen}
-                    isActive={isRendimientoActive}
-                    icon={Zap}
-                    title="Rendimiento"
-                    menuKey="RendimientoMenu"
-                    subItems={visibleRendimientoSubItems}
-                  />
-                )}
+                    {/* Menú Rendimiento */}
+                    {showRendimientoMenu && (
+                      <CollapsibleMenu
+                        isOpen={rendimientoOpen}
+                        setIsOpen={setRendimientoOpen}
+                        isActive={isRendimientoActive}
+                        icon={Zap}
+                        title="Rendimiento"
+                        menuKey="RendimientoMenu"
+                        subItems={visibleRendimientoSubItems}
+                      />
+                    )}
 
-                {/* Menú Parcheos */}
-                {showPatchingMenu && (
-                  <CollapsibleMenu
-                    isOpen={patchingOpen}
-                    setIsOpen={setPatchingOpen}
-                    isActive={isPatchingActive}
-                    icon={ShieldCheck}
-                    title="Parcheos"
-                    menuKey="PatchingMenu"
-                    subItems={visiblePatchingSubItems}
-                  />
-                )}
+                    {/* Menú Parcheos */}
+                    {showPatchingMenu && (
+                      <CollapsibleMenu
+                        isOpen={patchingOpen}
+                        setIsOpen={setPatchingOpen}
+                        isActive={isPatchingActive}
+                        icon={ShieldCheck}
+                        title="Parcheos"
+                        menuKey="PatchingMenu"
+                        subItems={visiblePatchingSubItems}
+                      />
+                    )}
 
-                {/* Menú Knowledge Base */}
-                {showKnowledgeBaseMenu && (
-                  <CollapsibleMenu
-                    isOpen={knowledgeBaseOpen}
-                    setIsOpen={setKnowledgeBaseOpen}
-                    isActive={isKnowledgeBaseActive}
-                    icon={BookOpen}
-                    title="Knowledge Base"
-                    menuKey="KnowledgeBaseMenu"
-                    subItems={visibleKnowledgeBaseSubItems}
-                  />
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+                    {/* Menú Knowledge Base */}
+                    {showKnowledgeBaseMenu && (
+                      <CollapsibleMenu
+                        isOpen={knowledgeBaseOpen}
+                        setIsOpen={setKnowledgeBaseOpen}
+                        isActive={isKnowledgeBaseActive}
+                        icon={BookOpen}
+                        title="Base de Conocimiento"
+                        menuKey="KnowledgeBaseMenu"
+                        subItems={visibleKnowledgeBaseSubItems}
+                      />
+                    )}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
 
-        {/* ==================== INVENTARIO ==================== */}
-        {showInventarioSection && (
-          <>
-            {showObservabilidadSection && !isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
-            <SidebarGroup className="pb-2">
-              <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
-                Inventario
-              </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {/* SQL Server */}
-                {showInventarioSqlServerMenu && (
-                  <CollapsibleMenu
-                    isOpen={inventarioSqlServerOpen}
-                    setIsOpen={setInventarioSqlServerOpen}
-                    isActive={isInventarioSqlServerActive}
-                    icon={SqlServerIcon}
-                    title="SQL Server"
-                    menuKey="InventarioMenu"
-                    subItems={visibleInventarioSqlServerSubItems}
-                  />
-                )}
-                
-                {/* PostgreSQL */}
-                {showInventarioPostgreSqlMenu && (
-                  <CollapsibleMenu
-                    isOpen={inventarioPostgreSqlOpen}
-                    setIsOpen={setInventarioPostgreSqlOpen}
-                    isActive={isInventarioPostgreSqlActive}
-                    icon={PostgreSqlIcon}
-                    title="PostgreSQL"
-                    menuKey="InventarioMenu"
-                    subItems={visibleInventarioPostgreSqlSubItems}
-                  />
-                )}
-                
-                {/* Redis */}
-                {showInventarioRedisMenu && (
-                  <CollapsibleMenu
-                    isOpen={inventarioRedisOpen}
-                    setIsOpen={setInventarioRedisOpen}
-                    isActive={isInventarioRedisActive}
-                    icon={RedisIcon}
-                    title="Redis"
-                    menuKey="InventarioMenu"
-                    subItems={visibleInventarioRedisSubItems}
-                  />
-                )}
-                
-                {/* DocumentDB */}
-                {showInventarioDocumentDbMenu && (
-                  <CollapsibleMenu
-                    isOpen={inventarioDocumentDbOpen}
-                    setIsOpen={setInventarioDocumentDbOpen}
-                    isActive={isInventarioDocumentDbActive}
-                    icon={DocumentDbIcon}
-                    title="DocumentDB"
-                    menuKey="InventarioMenu"
-                    subItems={visibleInventarioDocumentDbSubItems}
-                  />
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          </>
-        )}
+            {/* ==================== INVENTARIO ==================== */}
+            {showInventarioSection && (
+              <>
+                {showObservabilidadSection && !isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
+                <SidebarGroup className="pb-2">
+                  <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
+                    Inventario
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {/* SQL Server */}
+                      {showInventarioSqlServerMenu && (
+                        <CollapsibleMenu
+                          isOpen={inventarioSqlServerOpen}
+                          setIsOpen={setInventarioSqlServerOpen}
+                          isActive={isInventarioSqlServerActive}
+                          icon={SqlServerIcon}
+                          title="SQL Server"
+                          menuKey="InventarioMenu"
+                          subItems={visibleInventarioSqlServerSubItems}
+                        />
+                      )}
 
-        {/* ==================== GUARDIAS DBA ==================== */}
-        {showOnCallMenu && (
-          <>
-            {(showObservabilidadSection || showInventarioSection) && !isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
-            <SidebarGroup className="pb-2">
-              <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
-                Guardias DBA
-              </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <CollapsibleMenu
-                  isOpen={onCallOpen}
-                  setIsOpen={setOnCallOpen}
-                  isActive={isOnCallActive}
-                  icon={Phone}
-                  title="Guardias DBA"
-                  menuKey="OnCall"
-                  subItems={visibleOnCallSubItems}
-                />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          </>
-        )}
+                      {/* PostgreSQL */}
+                      {showInventarioPostgreSqlMenu && (
+                        <CollapsibleMenu
+                          isOpen={inventarioPostgreSqlOpen}
+                          setIsOpen={setInventarioPostgreSqlOpen}
+                          isActive={isInventarioPostgreSqlActive}
+                          icon={PostgreSqlIcon}
+                          title="PostgreSQL"
+                          menuKey="InventarioMenu"
+                          subItems={visibleInventarioPostgreSqlSubItems}
+                        />
+                      )}
 
-        {/* ==================== OPERACIONES ==================== */}
-        {showOperationsMenu && (
-          <>
-            {!isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
-            <SidebarGroup className="pb-2">
-              <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
-                Operaciones
-              </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <CollapsibleMenu
-                  isOpen={operationsOpen}
-                  setIsOpen={setOperationsOpen}
-                  isActive={isOperationsActive}
-                  icon={Cog}
-                  title="Operaciones"
-                  menuKey="OperationsMenu"
-                  subItems={visibleOperationsSubItems}
-                />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          </>
-        )}
+                      {/* Redis */}
+                      {showInventarioRedisMenu && (
+                        <CollapsibleMenu
+                          isOpen={inventarioRedisOpen}
+                          setIsOpen={setInventarioRedisOpen}
+                          isActive={isInventarioRedisActive}
+                          icon={RedisIcon}
+                          title="Redis"
+                          menuKey="InventarioMenu"
+                          subItems={visibleInventarioRedisSubItems}
+                        />
+                      )}
 
-        {/* ==================== SEGURIDAD ==================== */}
-        {showSecuritySection && (
-          <>
-            {!isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
-            <SidebarGroup className="pb-2">
-              <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
-                Seguridad
-              </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {/* Vault DBA */}
-                {showVaultMenu && (
-                  <CollapsibleMenu
-                    isOpen={vaultOpen}
-                    setIsOpen={setVaultOpen}
-                    isActive={isVaultActive}
-                    icon={KeyRound}
-                    title="Vault DBA"
-                    menuKey="VaultMenu"
-                    subItems={visibleVaultSubItems}
-                  />
-                )}
+                      {/* DocumentDB */}
+                      {showInventarioDocumentDbMenu && (
+                        <CollapsibleMenu
+                          isOpen={inventarioDocumentDbOpen}
+                          setIsOpen={setInventarioDocumentDbOpen}
+                          isActive={isInventarioDocumentDbActive}
+                          icon={DocumentDbIcon}
+                          title="DocumentDB"
+                          menuKey="InventarioMenu"
+                          subItems={visibleInventarioDocumentDbSubItems}
+                        />
+                      )}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            )}
 
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          </>
-        )}
+            {/* ==================== GUARDIAS DBA ==================== */}
+            {showOnCallMenu && (
+              <>
+                {(showObservabilidadSection || showInventarioSection) && !isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
+                <SidebarGroup className="pb-2">
+                  <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
+                    Guardias DBA
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      <CollapsibleMenu
+                        isOpen={onCallOpen}
+                        setIsOpen={setOnCallOpen}
+                        isActive={isOnCallActive}
+                        icon={Phone}
+                        title="Guardias DBA"
+                        menuKey="OnCall"
+                        subItems={visibleOnCallSubItems}
+                      />
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            )}
 
-        {/* ==================== ADMINISTRACIÓN ==================== */}
-        {showAdminSection && (
-          <>
-            {!isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
-            <SidebarGroup className="pb-2">
-              <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
-                Administración
-              </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {/* Control de Acceso */}
-                {showControlAccesoMenu && (
-                  <CollapsibleMenu
-                    isOpen={controlAccesoOpen}
-                    setIsOpen={setControlAccesoOpen}
-                    isActive={isControlAccesoActive}
-                    icon={Users}
-                    title="Control de Acceso"
-                    menuKey="ControlAccesoMenu"
-                    subItems={visibleControlAccesoSubItems}
-                  />
-                )}
+            {/* ==================== OPERACIONES ==================== */}
+            {showOperationsMenu && (
+              <>
+                {!isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
+                <SidebarGroup className="pb-2">
+                  <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
+                    Operaciones
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      <CollapsibleMenu
+                        isOpen={operationsOpen}
+                        setIsOpen={setOperationsOpen}
+                        isActive={isOperationsActive}
+                        icon={Cog}
+                        title="Operaciones"
+                        menuKey="OperationsMenu"
+                        subItems={visibleOperationsSubItems}
+                      />
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            )}
 
-                {/* Configuración */}
-                {showConfiguracionMenu && (
-                  <CollapsibleMenu
-                    isOpen={configuracionOpen}
-                    setIsOpen={setConfiguracionOpen}
-                    isActive={isConfiguracionActive}
-                    icon={Settings}
-                    title="Configuración"
-                    menuKey="ConfiguracionMenu"
-                    subItems={visibleConfiguracionSubItems}
-                  />
-                )}
+            {/* ==================== SEGURIDAD ==================== */}
+            {showSecuritySection && (
+              <>
+                {!isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
+                <SidebarGroup className="pb-2">
+                  <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
+                    Seguridad
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {/* Vault DBA */}
+                      {showVaultMenu && (
+                        <CollapsibleMenu
+                          isOpen={vaultOpen}
+                          setIsOpen={setVaultOpen}
+                          isActive={isVaultActive}
+                          icon={KeyRound}
+                          title="Vault DBA"
+                          menuKey="VaultMenu"
+                          subItems={visibleVaultSubItems}
+                        />
+                      )}
 
-                {/* Monitoreo Sistema */}
-                {showMonitoreoSistemaMenu && (
-                  <CollapsibleMenu
-                    isOpen={monitoreoSistemaOpen}
-                    setIsOpen={setMonitoreoSistemaOpen}
-                    isActive={isMonitoreoSistemaActive}
-                    icon={FileText}
-                    title="Monitoreo Sistema"
-                    menuKey="MonitoreoSistemaMenu"
-                    subItems={visibleMonitoreoSistemaSubItems}
-                  />
-                )}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            )}
 
-                {/* Alertas */}
-                {showAlertsMenu && (
-                  <CollapsibleMenu
-                    isOpen={alertsOpen}
-                    setIsOpen={setAlertsOpen}
-                    isActive={isAlertsActive}
-                    icon={Bell}
-                    title="Alertas"
-                    menuKey="AlertsMenu"
-                    subItems={visibleAlertsSubItems}
-                  />
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          </>
-        )}
+            {/* ==================== ADMINISTRACIÓN ==================== */}
+            {showAdminSection && (
+              <>
+                {!isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
+                <SidebarGroup className="pb-2">
+                  <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
+                    Administración
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {/* Control de Acceso */}
+                      {showControlAccesoMenu && (
+                        <CollapsibleMenu
+                          isOpen={controlAccesoOpen}
+                          setIsOpen={setControlAccesoOpen}
+                          isActive={isControlAccesoActive}
+                          icon={Users}
+                          title="Control de Acceso"
+                          menuKey="ControlAccesoMenu"
+                          subItems={visibleControlAccesoSubItems}
+                        />
+                      )}
+
+                      {/* Configuración */}
+                      {showConfiguracionMenu && (
+                        <CollapsibleMenu
+                          isOpen={configuracionOpen}
+                          setIsOpen={setConfiguracionOpen}
+                          isActive={isConfiguracionActive}
+                          icon={Settings}
+                          title="Configuración"
+                          menuKey="ConfiguracionMenu"
+                          subItems={visibleConfiguracionSubItems}
+                        />
+                      )}
+
+                      {/* Monitoreo Sistema */}
+                      {showMonitoreoSistemaMenu && (
+                        <CollapsibleMenu
+                          isOpen={monitoreoSistemaOpen}
+                          setIsOpen={setMonitoreoSistemaOpen}
+                          isActive={isMonitoreoSistemaActive}
+                          icon={FileText}
+                          title="Monitoreo Sistema"
+                          menuKey="MonitoreoSistemaMenu"
+                          subItems={visibleMonitoreoSistemaSubItems}
+                        />
+                      )}
+
+                      {/* Alertas */}
+                      {showAlertsMenu && (
+                        <CollapsibleMenu
+                          isOpen={alertsOpen}
+                          setIsOpen={setAlertsOpen}
+                          isActive={isAlertsActive}
+                          icon={Bell}
+                          title="Alertas"
+                          menuKey="AlertsMenu"
+                          subItems={visibleAlertsSubItems}
+                        />
+                      )}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            )}
           </div>
         </ScrollArea>
       </SidebarContent>

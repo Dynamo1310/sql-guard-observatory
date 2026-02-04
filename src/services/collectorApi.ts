@@ -193,7 +193,11 @@ export const collectorApi = {
         'Content-Type': 'application/json',
       },
     });
-    return handleResponse<CollectorThreshold[]>(response);
+    const thresholds = await handleResponse<CollectorThreshold[]>(response);
+
+    // Filtrar umbrales obsoletos que no deben mostrarse en el frontend
+    const hiddenThresholds = ['LogChain_Broken'];
+    return thresholds.filter(t => !hiddenThresholds.includes(t.thresholdName));
   },
 
   // Actualizar un umbral específico

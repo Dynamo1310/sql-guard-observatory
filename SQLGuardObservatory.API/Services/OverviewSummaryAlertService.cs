@@ -933,5 +933,9 @@ internal class DiskVolumeData
     public decimal? RealFreePct { get; set; }
     public bool? IsAlerted { get; set; }
     public int? FilesWithGrowth { get; set; }
+    /// <summary>
+    /// v3.5: Indica si es un disco crítico del sistema (C, E, F, G, H)
+    /// </summary>
+    public bool? IsCriticalSystemDisk { get; set; }
 }
 

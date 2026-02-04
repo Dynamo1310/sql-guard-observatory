@@ -27,6 +27,7 @@ import OnCallSwaps from "./pages/OnCallSwaps";
 import OnCallSettings from "./pages/OnCallSettings";
 import SmtpSettings from "./pages/SmtpSettings";
 import ProductionAlerts from "./pages/ProductionAlerts";
+import BackupAlerts from "./pages/BackupAlerts";
 import OverviewSummaryAlerts from "./pages/OverviewSummaryAlerts";
 import ServerRestart from "./pages/ServerRestart";
 import OperationalServersConfig from "./pages/OperationalServersConfig";
@@ -120,7 +121,7 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="*" element={
                 <AuthGate>
-                    <Routes>
+                  <Routes>
                     <Route element={<AppLayout />}>
                       <Route path="/" element={<DefaultRoute />} />
                       <Route path="/overview" element={
@@ -279,6 +280,11 @@ const App = () => (
                           <ProductionAlerts />
                         </ProtectedRoute>
                       } />
+                      <Route path="/admin/alerts/backups" element={
+                        <ProtectedRoute viewName="AlertaBackups">
+                          <BackupAlerts />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/admin/alerts/overview-summary" element={
                         <ProtectedRoute viewName="AlertaResumenOverview">
                           <OverviewSummaryAlerts />
@@ -414,8 +420,8 @@ const App = () => (
                     </Route>
                     <Route path="*" element={<NotFound />} />
                   </Routes>
-              </AuthGate>
-            } />
+                </AuthGate>
+              } />
             </Routes>
           </BrowserRouter>
         </TooltipProvider>

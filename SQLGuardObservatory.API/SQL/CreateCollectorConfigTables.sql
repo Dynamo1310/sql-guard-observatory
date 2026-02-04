@@ -238,15 +238,14 @@ VALUES
     ('Discos', 'FreeSpace_Low', 'Espacio Bajo', 5, '>=', 40, 'Score', 'Espacio libre 5-9%', 5, 4, 'FreeSpace'),
     ('Discos', 'FreeSpace_Critical', 'Espacio Crítico', 5, '<', 0, 'Score', 'Espacio libre <5%', 5, 5, 'FreeSpace');
 
--- Backups Collector Thresholds (ajustado segun ChatGPT: Log Chain cap bajado a 40)
+-- Backups Collector Thresholds
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)
 VALUES
     ('Backups', 'FullBackup_Normal', 'Full Backup Normal', 24, '<=', 100, 'Score', 'Full backup en ultimas 24h', 24, 1, 'FullBackup'),
     ('Backups', 'FullBackup_DWH', 'Full Backup DWH', 168, '<=', 100, 'Score', 'Full backup DWH en ultimos 7 dias', 168, 2, 'FullBackup'),
     ('Backups', 'FullBackup_Breach', 'Full Backup Vencido', 24, '>', 0, 'Score', 'Sin full backup reciente', 24, 3, 'FullBackup'),
     ('Backups', 'LogBackup_Normal', 'Log Backup Normal', 2, '<=', 100, 'Score', 'Log backup en ultimas 2h', 2, 1, 'LogBackup'),
-    ('Backups', 'LogBackup_Breach', 'Log Backup Vencido', 2, '>', 0, 'Score', 'Sin log backup reciente', 2, 2, 'LogBackup'),
-    ('Backups', 'LogChain_Broken', 'Log Chain Rota', 1, '>=', 40, 'Cap', 'Cadena de log rota, cap global a 40 (ajustado)', 1, 10, 'Caps');
+    ('Backups', 'LogBackup_Breach', 'Log Backup Vencido', 2, '>', 0, 'Score', 'Sin log backup reciente', 2, 2, 'LogBackup');
 
 -- AlwaysOn Collector Thresholds (ajustado segun ChatGPT: AG No Sync menos binario, por %)
 INSERT INTO dbo.CollectorThresholds (CollectorName, ThresholdName, DisplayName, ThresholdValue, ThresholdOperator, ResultingScore, ActionType, Description, DefaultValue, EvaluationOrder, ThresholdGroup)

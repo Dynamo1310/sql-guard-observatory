@@ -41,6 +41,15 @@ public class PermissionService : IPermissionService
         { "ObsoleteInstances", new ViewInfo { ViewName = "ObsoleteInstances", DisplayName = "Parcheos - Inst. Obsoletas", Description = "Instancias con versiones fuera de soporte", Category = "Observabilidad > Parcheos" } },
         { "PatchingConfig", new ViewInfo { ViewName = "PatchingConfig", DisplayName = "Parcheos - Config. Compliance", Description = "Configuración de compliance de parcheos", Category = "Observabilidad > Parcheos" } },
         { "PatchPlanner", new ViewInfo { ViewName = "PatchPlanner", DisplayName = "Parcheos - Planner", Description = "Planificación de parcheos de servidores", Category = "Observabilidad > Parcheos" } },
+        { "PatchCalendar", new ViewInfo { ViewName = "PatchCalendar", DisplayName = "Parcheos - Calendario", Description = "Calendario de parcheos planificados", Category = "Observabilidad > Parcheos" } },
+        { "PatchCellView", new ViewInfo { ViewName = "PatchCellView", DisplayName = "Parcheos - Vista Célula", Description = "Backlog y estadísticas por célula", Category = "Observabilidad > Parcheos" } },
+        { "PatchExecution", new ViewInfo { ViewName = "PatchExecution", DisplayName = "Parcheos - Ejecución", Description = "Ejecución de parcheos de servidores", Category = "Observabilidad > Parcheos" } },
+        { "PatchFreezingConfig", new ViewInfo { ViewName = "PatchFreezingConfig", DisplayName = "Parcheos - Config. Freezing", Description = "Configuración de semanas de freezing", Category = "Observabilidad > Parcheos" } },
+        { "PatchNotificationsConfig", new ViewInfo { ViewName = "PatchNotificationsConfig", DisplayName = "Parcheos - Config. Notificaciones", Description = "Configuración de notificaciones de parcheo", Category = "Observabilidad > Parcheos" } },
+        
+        // === KNOWLEDGE BASE ===
+        { "KnowledgeBaseMenu", new ViewInfo { ViewName = "KnowledgeBaseMenu", DisplayName = "📁 Knowledge Base (Menú)", Description = "Mostrar/ocultar el menú de Knowledge Base", Category = "Knowledge Base" } },
+        { "DatabaseOwners", new ViewInfo { ViewName = "DatabaseOwners", DisplayName = "Knowledge Base - Owners BD", Description = "Gestión de owners de bases de datos", Category = "Knowledge Base" } },
         
         // === INVENTARIO ===
         { "InventarioMenu", new ViewInfo { ViewName = "InventarioMenu", DisplayName = "📁 Inventario (Menú)", Description = "Mostrar/ocultar el menú completo de Inventario", Category = "Inventario" } },

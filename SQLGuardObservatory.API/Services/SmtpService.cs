@@ -170,6 +170,89 @@ public class SmtpService : ISmtpService
         }
     }
 
+    /// <summary>
+    /// Envía un email a múltiples destinatarios con soporte para CC.
+    /// Un solo email es enviado con todos los destinatarios TO y CC.
+    /// </summary>
+    public async Task<bool> SendEmailWithCcAsync(
+        IEnumerable<string> toEmails, 
+        IEnumerable<string>? ccEmails,
+        string subject, 
+        string htmlBody,
+        string notificationType,
+        string? referenceType = null, 
+        int? referenceId = null)
+    {
+        var toList = toEmails.Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
+        var ccList = ccEmails?.Where(e => !string.IsNullOrWhiteSpace(e)).ToList() ?? new List<string>();
+        
+        if (toList.Count == 0)
+        {
+            _logger.LogWarning("No hay destinatarios TO para enviar email");
+            return false;
+        }
+
+        var settings = await _context.SmtpSettings.FirstOrDefaultAsync(s => s.IsActive);
+        
+        if (settings == null)
+        {
+            _logger.LogWarning("No hay configuración SMTP activa");
+            var allRecipients = string.Join(", ", toList);
+            await LogNotification(allRecipients, null, subject, htmlBody, "Failed", "No hay configuración SMTP activa", notificationType, referenceType, referenceId);
+            return false;
+        }
+
+        try
+        {
+            using var client = new SmtpClient(settings.Host, settings.Port);
+
+            if (!string.IsNullOrEmpty(settings.Username))
+            {
+                client.Credentials = new NetworkCredential(settings.Username, settings.Password);
+            }
+
+            client.EnableSsl = settings.EnableSsl;
+            client.DeliveryMethod = SmtpDeliveryMethod.Network;
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(settings.FromEmail, settings.FromName),
+                Subject = subject,
+                Body = htmlBody,
+                IsBodyHtml = true
+            };
+
+            // Agregar destinatarios TO
+            foreach (var email in toList)
+            {
+                message.To.Add(new MailAddress(email.Trim()));
+            }
+
+            // Agregar destinatarios CC
+            foreach (var email in ccList)
+            {
+                message.CC.Add(new MailAddress(email.Trim()));
+            }
+
+            await client.SendMailAsync(message);
+
+            var allRecipients = string.Join(", ", toList);
+            _logger.LogInformation(
+                "Email enviado a {ToCount} destinatarios TO y {CcCount} CC: {Subject}", 
+                toList.Count, ccList.Count, subject);
+            await LogNotification(allRecipients, null, subject, htmlBody, "Sent", null, notificationType, referenceType, referenceId);
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            var allRecipients = string.Join(", ", toList);
+            _logger.LogError(ex, "Error al enviar email a {Recipients}", allRecipients);
+            await LogNotification(allRecipients, null, subject, htmlBody, "Failed", ex.Message, notificationType, referenceType, referenceId);
+            return false;
+        }
+    }
+
     private async Task LogNotification(string toEmail, string? toName, string subject, string? body,
         string status, string? errorMessage, string notificationType, string? referenceType, int? referenceId)
     {

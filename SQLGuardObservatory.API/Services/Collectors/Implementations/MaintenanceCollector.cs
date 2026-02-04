@@ -867,6 +867,7 @@ WITH JobsWithHistory AS (
     INNER JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
     WHERE j.name LIKE '%IntegrityCheck%'
       AND j.name NOT LIKE '%STOP%'
+      AND j.enabled = 1
 ),
 JobsWithoutHistory AS (
     -- Jobs SIN historial pero CON datos en sysjobservers (última ejecución)
@@ -894,6 +895,7 @@ JobsWithoutHistory AS (
     INNER JOIN msdb.dbo.sysjobservers js ON j.job_id = js.job_id
     WHERE j.name LIKE '%IntegrityCheck%'
       AND j.name NOT LIKE '%STOP%'
+      AND j.enabled = 1
       AND js.last_run_date > 0
       AND NOT EXISTS (SELECT 1 FROM msdb.dbo.sysjobhistory jh WHERE jh.job_id = j.job_id AND jh.step_id = 0)
 ),
@@ -978,6 +980,7 @@ WITH JobsWithHistory AS (
     INNER JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
     WHERE j.name LIKE '%IndexOptimize%'
       AND j.name NOT LIKE '%STOP%'
+      AND j.enabled = 1
 ),
 JobsWithoutHistory AS (
     SELECT 
@@ -1003,6 +1006,7 @@ JobsWithoutHistory AS (
     INNER JOIN msdb.dbo.sysjobservers js ON j.job_id = js.job_id
     WHERE j.name LIKE '%IndexOptimize%'
       AND j.name NOT LIKE '%STOP%'
+      AND j.enabled = 1
       AND js.last_run_date > 0
       AND NOT EXISTS (SELECT 1 FROM msdb.dbo.sysjobhistory jh WHERE jh.job_id = j.job_id AND jh.step_id = 0)
 ),

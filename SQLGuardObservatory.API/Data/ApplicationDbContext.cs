@@ -119,6 +119,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<CollectorExecutionLog> CollectorExecutionLogs { get; set; } = null!;
     public DbSet<CollectorException> CollectorExceptions { get; set; } = null!;
 
+    // Overview Issue Assignments - Asignaciones de problemas del Overview
+    public DbSet<OverviewIssueAssignment> OverviewIssueAssignments { get; set; } = null!;
+    
+    // Backup Alerts - Alertas de backups atrasados
+    public DbSet<BackupAlertConfig> BackupAlertConfigs { get; set; } = null!;
+    public DbSet<BackupAlertHistory> BackupAlertHistories { get; set; } = null!;
+
     // Health Score v3.0 FINAL - 12 Categorías (métricas de instancias)
     public DbSet<InstanceHealthScore> InstanceHealthScores { get; set; } = null!;
     public DbSet<InstanceHealthBackups> InstanceHealthBackups { get; set; } = null!;
@@ -887,6 +894,55 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(m => m.BadgeText).HasMaxLength(50);
             entity.Property(m => m.BadgeColor).HasMaxLength(50);
             entity.Property(m => m.UpdatedBy).HasMaxLength(100);
+        });
+
+        // =============================================
+        // Overview Issue Assignments - Asignaciones de problemas
+        // =============================================
+        
+        builder.Entity<OverviewIssueAssignment>(entity =>
+        {
+            entity.ToTable("OverviewIssueAssignments");
+            entity.HasIndex(a => a.IssueType);
+            entity.HasIndex(a => a.InstanceName);
+            entity.HasIndex(a => a.AssignedToUserId);
+            entity.HasIndex(a => a.ResolvedAt);
+
+            entity.HasOne(a => a.AssignedToUser)
+                .WithMany()
+                .HasForeignKey(a => a.AssignedToUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(a => a.AssignedByUser)
+                .WithMany()
+                .HasForeignKey(a => a.AssignedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // =============================================
+        // Backup Alerts - Alertas de backups atrasados
+        // =============================================
+        
+        builder.Entity<BackupAlertConfig>(entity =>
+        {
+            entity.ToTable("BackupAlertConfig");
+            
+            entity.HasOne(c => c.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(c => c.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<BackupAlertHistory>(entity =>
+        {
+            entity.ToTable("BackupAlertHistory");
+            entity.HasIndex(h => h.SentAt);
+            entity.HasIndex(h => h.ConfigId);
+
+            entity.HasOne(h => h.Config)
+                .WithMany()
+                .HasForeignKey(h => h.ConfigId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // =============================================

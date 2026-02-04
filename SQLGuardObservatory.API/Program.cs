@@ -212,6 +212,13 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<IProductionAlertService, ProductionAlertService>();
 builder.Services.AddHostedService<ProductionAlertBackgroundService>();
 
+// Overview Issue Assignments - Asignaciones de problemas del Overview
+builder.Services.AddScoped<IOverviewAssignmentService, OverviewAssignmentService>();
+
+// Backup Alerts - Alertas de backups atrasados
+builder.Services.AddScoped<IBackupAlertService, BackupAlertService>();
+builder.Services.AddHostedService<BackupAlertBackgroundService>();
+
 // Overview Summary Alerts - Resumen programado del estado de producción
 builder.Services.AddScoped<IOverviewSummaryAlertService, OverviewSummaryAlertService>();
 builder.Services.AddHostedService<OverviewSummaryBackgroundService>();

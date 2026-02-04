@@ -123,10 +123,11 @@ public class DisksService : IDisksService
                                 var totalFiles = vol.TotalFiles ?? (filesWithGrowth + filesWithoutGrowth);
                                 var isAlerted = vol.IsAlerted ?? false;
                                 
-                                // v3.3: Determinar estado basado en la lógica del script
+                                // v3.5: Determinar estado basado en la lógica del script
                                 var isLogDisk = vol.IsLogDisk ?? false;
+                                var isCriticalSystemDisk = vol.IsCriticalSystemDisk ?? false;
                                 
-                                var diskEstado = GetEstadoV33(freePct, realFreePct, filesWithGrowth, isAlerted, isLogDisk);
+                                var diskEstado = GetEstadoV33(freePct, realFreePct, filesWithGrowth, isAlerted, isLogDisk, isCriticalSystemDisk);
 
                                 // Filtrar por estado si se especificó
                                 if (!string.IsNullOrWhiteSpace(estado) && diskEstado != estado)
@@ -311,23 +312,33 @@ public class DisksService : IDisksService
     }
 
     /// <summary>
-    /// v3.4: Determina el estado del disco según la lógica del script de relevamiento
-    /// - Crítico: IsAlerted = true (tiene growth + espacio real <= 10%)
-    /// - Crítico: Disco con .ldf (logs) + growth + % físico libre < 10% (sin importar espacio interno)
+    /// v3.5: Determina el estado del disco según la lógica del script de relevamiento
+    /// - Crítico: IsAlerted = true (tiene growth + espacio real &lt;= 10%)
+    /// - Crítico: Disco con .ldf (logs) + growth + % físico libre &lt; 10% (sin importar espacio interno)
+    /// - Crítico: v3.5: Disco crítico del sistema (C, E, F, G, H) con % físico &lt; 10%
     /// - Advertencia: Espacio real entre 10-20%
-    /// - Saludable: Espacio real > 20%
+    /// - Saludable: Espacio real &gt; 20%
     /// 
-    /// NOTA: Un disco con <10% físico pero sin growth o con espacio interno
-    /// NO se marca como crítico porque los archivos no van a crecer.
+    /// NOTA: Un disco con &lt;10% físico pero sin growth o con espacio interno
+    /// NO se marca como crítico porque los archivos no van a crecer,
+    /// EXCEPTO si es un disco crítico del sistema (C, E, F, G, H).
     /// 
     /// EXCEPCIÓN IMPORTANTE: Los discos que contienen archivos .ldf (logs) con growth
-    /// y % físico libre < 10% son SIEMPRE críticos aunque tengan espacio interno.
+    /// y % físico libre &lt; 10% son SIEMPRE críticos aunque tengan espacio interno.
     /// Esto es porque si se llena el disco de logs, la instancia queda INACCESIBLE.
+    /// 
+    /// v3.5: Los discos críticos del sistema (C=SO, E=Motor, F=TempDB Data, G=TempDB Log, H=User Log)
+    /// son SIEMPRE críticos si tienen &lt; 10% de espacio libre, independientemente del growth.
     /// </summary>
-    private static string GetEstadoV33(decimal freePct, decimal realFreePct, int filesWithGrowth, bool isAlerted, bool isLogDisk = false)
+    private static string GetEstadoV33(decimal freePct, decimal realFreePct, int filesWithGrowth, bool isAlerted, bool isLogDisk = false, bool isCriticalSystemDisk = false)
     {
         // Si está marcado como alertado por el script, es crítico
         if (isAlerted)
+            return "Critico";
+        
+        // v3.5: Discos críticos del sistema (C, E, F, G, H) con % físico bajo (< 10%)
+        // Son SIEMPRE críticos independientemente del growth
+        if (isCriticalSystemDisk && freePct < 10)
             return "Critico";
         
         // v3.4: Discos con archivos .ldf (logs) + growth + % físico bajo (< 10%)
@@ -406,6 +417,11 @@ public class DiskVolumeInfo
     public bool? IsDataDisk { get; set; }
     public bool? IsLogDisk { get; set; }
     public bool? IsTempDBDisk { get; set; }
+    
+    /// <summary>
+    /// v3.5: Indica si es un disco crítico del sistema (C, E, F, G, H)
+    /// </summary>
+    public bool? IsCriticalSystemDisk { get; set; }
     
     // Información de disco físico
     public string? MediaType { get; set; }

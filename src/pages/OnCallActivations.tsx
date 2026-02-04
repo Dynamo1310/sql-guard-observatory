@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Activity, 
-  Plus, 
+import {
+  Activity,
+  Plus,
   ArrowLeft,
   Clock,
   AlertTriangle,
@@ -62,10 +62,10 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { OnCallActivationDialog } from '@/components/oncall/OnCallActivationDialog';
-import { 
-  activationsApi, 
+import {
+  activationsApi,
   activationCategoriesApi,
-  OnCallActivationDto, 
+  OnCallActivationDto,
   ActivationCategoryDto,
   defaultActivationCategories,
   activationSeverities
@@ -109,6 +109,9 @@ export default function OnCallActivations() {
   const [deleteConfirm, setDeleteConfirm] = useState<OnCallActivationDto | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Estado global para bloquear operaciones simultáneas
+  const [isProcessing, setIsProcessing] = useState(false);
+
   // Categorías dinámicas
   const [categories, setCategories] = useState<ActivationCategoryDto[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
@@ -117,6 +120,7 @@ export default function OnCallActivations() {
   const [editingCategory, setEditingCategory] = useState<ActivationCategoryDto | null>(null);
   const [savingCategory, setSavingCategory] = useState(false);
   const [deletingCategory, setDeletingCategory] = useState<ActivationCategoryDto | null>(null);
+  const [reopenCategoriesAfterAlert, setReopenCategoriesAfterAlert] = useState(false);
   const [draggingCategory, setDraggingCategory] = useState<number | null>(null);
 
   // Filtros
@@ -164,12 +168,15 @@ export default function OnCallActivations() {
 
   // Gestión de categorías
   const handleSaveCategory = async () => {
+    if (isProcessing || savingCategory) return; // Guard contra operaciones simultáneas
+
     if (!categoryForm.name.trim()) {
       toast.error('El nombre de la categoría es requerido');
       return;
     }
 
     try {
+      setIsProcessing(true);
       setSavingCategory(true);
       if (editingCategory) {
         await activationCategoriesApi.update(editingCategory.id, {
@@ -192,25 +199,38 @@ export default function OnCallActivations() {
       toast.error('Error: ' + err.message);
     } finally {
       setSavingCategory(false);
+      setIsProcessing(false);
     }
   };
 
   const handleDeleteCategory = async (category: ActivationCategoryDto) => {
+    if (isProcessing || savingCategory) return;
+
     try {
+      setIsProcessing(true);
       setSavingCategory(true);
       await activationCategoriesApi.delete(category.id);
       toast.success('Categoría eliminada');
-      setDeletingCategory(null);
       await loadCategories();
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally {
       setSavingCategory(false);
+      setIsProcessing(false);
+      setDeletingCategory(null);
+      // Reabrir el Dialog de categorías después de la operación
+      if (reopenCategoriesAfterAlert) {
+        setReopenCategoriesAfterAlert(false);
+        setTimeout(() => setShowCategoriesDialog(true), 100);
+      }
     }
   };
 
   const handleToggleCategoryActive = async (category: ActivationCategoryDto) => {
+    if (isProcessing) return; // Guard contra operaciones simultáneas
+
     try {
+      setIsProcessing(true);
       await activationCategoriesApi.update(category.id, {
         name: category.name,
         icon: category.icon,
@@ -219,6 +239,8 @@ export default function OnCallActivations() {
       await loadCategories();
     } catch (err: any) {
       toast.error('Error: ' + err.message);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -243,14 +265,19 @@ export default function OnCallActivations() {
 
   const handleCategoryDragEnd = async () => {
     if (draggingCategory === null) return;
+    if (isProcessing) return; // Guard contra operaciones simultáneas
+
     setDraggingCategory(null);
 
     try {
+      setIsProcessing(true);
       const categoryIds = categories.map(c => c.id);
       await activationCategoriesApi.reorder(categoryIds);
     } catch (err: any) {
       toast.error('Error al reordenar: ' + err.message);
       await loadCategories();
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -258,16 +285,20 @@ export default function OnCallActivations() {
   const activeCategories = categories.filter(c => c.isActive);
 
   const handleDelete = async (activation: OnCallActivationDto) => {
+    if (isProcessing || deleting) return;
+
     try {
+      setIsProcessing(true);
       setDeleting(true);
       await activationsApi.delete(activation.id);
       toast.success('Activación eliminada');
-      setDeleteConfirm(null);
       await loadData();
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally {
       setDeleting(false);
+      setIsProcessing(false);
+      setDeleteConfirm(null);
     }
   };
 
@@ -517,7 +548,7 @@ export default function OnCallActivations() {
                     )}>
                       <CategoryIcon className="h-5 w-5" />
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-semibold">{activation.title}</h3>
@@ -532,13 +563,13 @@ export default function OnCallActivations() {
                           </Badge>
                         )}
                       </div>
-                      
+
                       {activation.description && (
                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                           {activation.description}
                         </p>
                       )}
-                      
+
                       <div className="flex flex-wrap gap-4 mt-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
@@ -563,12 +594,20 @@ export default function OnCallActivations() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEdit(activation)}>
+                        <DropdownMenuItem onClick={() => {
+                          // Delay para permitir que el DropdownMenu se cierre
+                          // antes de abrir el Dialog de edición
+                          setTimeout(() => openEdit(activation), 100);
+                        }}>
                           <Edit className="h-4 w-4 mr-2" />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => setDeleteConfirm(activation)}
+                        <DropdownMenuItem
+                          onClick={() => {
+                            // Delay para permitir que el DropdownMenu se cierre
+                            // antes de abrir el AlertDialog de confirmación
+                            setTimeout(() => setDeleteConfirm(activation), 100);
+                          }}
                           className="text-destructive"
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
@@ -593,62 +632,25 @@ export default function OnCallActivations() {
           }
           setShowActivationDialog(open);
         }}
-        editingActivation={editingActivation ? {
-          id: editingActivation.id,
-          scheduleId: editingActivation.scheduleId,
-          activatedAt: editingActivation.activatedAt,
-          resolvedAt: editingActivation.resolvedAt,
-          category: editingActivation.category,
-          severity: editingActivation.severity,
-          title: editingActivation.title,
-          description: editingActivation.description,
-          resolution: editingActivation.resolution,
-          instanceName: editingActivation.instanceName,
-          durationMinutes: editingActivation.durationMinutes,
-          serviceDeskUrl: editingActivation.serviceDeskUrl,
-          status: editingActivation.status,
-        } : null}
+        editingActivation={editingActivation}
         onActivationCreated={loadData}
         onActivationUpdated={loadData}
       />
 
-      {/* Dialog de confirmación de eliminación */}
-      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !deleting && !open && setDeleteConfirm(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar activación?</AlertDialogTitle>
-            <AlertDialogDescription>
-              ¿Estás seguro de que quieres eliminar la activación "{deleteConfirm?.title}"?
-              Esta acción no se puede deshacer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async (e) => {
-                e.preventDefault(); // Prevenir cierre automático
-                if (deleteConfirm) {
-                  await handleDelete(deleteConfirm);
-                }
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleting}
-            >
-              {deleting && <RefreshCw className="h-4 w-4 mr-2 animate-spin" />}
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       {/* Dialog de gestión de categorías */}
-      <Dialog open={showCategoriesDialog} onOpenChange={(open) => {
-        if (!open) {
-          setCategoryForm({ name: '', icon: '' });
-          setEditingCategory(null);
-        }
-        setShowCategoriesDialog(open);
-      }}>
+      <Dialog
+        open={showCategoriesDialog}
+        onOpenChange={(open) => {
+          // No permitir cerrar mientras hay operaciones en progreso
+          if (!open && (isProcessing || savingCategory)) return;
+
+          if (!open) {
+            setCategoryForm({ name: '', icon: '' });
+            setEditingCategory(null);
+          }
+          setShowCategoriesDialog(open);
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -674,14 +676,20 @@ export default function OnCallActivations() {
                     placeholder="Nombre de la categoría"
                     value={categoryForm.name}
                     onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveCategory();
+                      }
+                    }}
                     className="flex-1"
                   />
-                  <Button onClick={handleSaveCategory} disabled={savingCategory}>
+                  <Button type="button" onClick={handleSaveCategory} disabled={savingCategory}>
                     {savingCategory && <RefreshCw className="h-4 w-4 mr-2 animate-spin" />}
                     {editingCategory ? 'Guardar' : 'Agregar'}
                   </Button>
                   {editingCategory && (
-                    <Button variant="ghost" onClick={() => {
+                    <Button type="button" variant="ghost" onClick={() => {
                       setEditingCategory(null);
                       setCategoryForm({ name: '', icon: '' });
                     }}>
@@ -719,7 +727,15 @@ export default function OnCallActivations() {
                         <div
                           key={category.id}
                           draggable
-                          onDragStart={() => handleCategoryDragStart(category.id)}
+                          onDragStart={(e) => {
+                            // Solo permitir drag desde el ícono de grip
+                            const target = e.target as HTMLElement;
+                            if (!target.closest('[data-drag-handle]')) {
+                              e.preventDefault();
+                              return;
+                            }
+                            handleCategoryDragStart(category.id);
+                          }}
                           onDragOver={(e) => handleCategoryDragOver(e, category.id)}
                           onDragEnd={handleCategoryDragEnd}
                           className={cn(
@@ -728,13 +744,15 @@ export default function OnCallActivations() {
                             !category.isActive && "opacity-60"
                           )}
                         >
-                          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                          <div data-drag-handle className="cursor-grab">
+                            <GripVertical className="h-4 w-4 text-muted-foreground" />
+                          </div>
                           <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center">
                             <CategoryIcon className="h-4 w-4" />
                           </div>
                           <span className="flex-1 font-medium">{category.name}</span>
-                          
-                          <div className="flex items-center gap-2">
+
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             {category.isDefault && (
                               <Badge variant="secondary" className="text-xs">
                                 Por defecto
@@ -743,11 +761,16 @@ export default function OnCallActivations() {
                             <Switch
                               checked={category.isActive}
                               onCheckedChange={() => handleToggleCategoryActive(category)}
+                              disabled={isProcessing}
                             />
                             <Button
+                              type="button"
                               variant="ghost"
                               size="icon"
-                              onClick={() => {
+                              disabled={isProcessing}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 setEditingCategory(category);
                                 setCategoryForm({ name: category.name, icon: category.icon || '' });
                               }}
@@ -756,9 +779,23 @@ export default function OnCallActivations() {
                             </Button>
                             {!category.isDefault && (
                               <Button
+                                type="button"
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => setDeletingCategory(category)}
+                                disabled={isProcessing}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  // IMPORTANTE: Cerrar el Dialog de categorías ANTES de abrir el AlertDialog
+                                  // para evitar conflictos de focus trap entre modales anidados
+                                  setShowCategoriesDialog(false);
+                                  setReopenCategoriesAfterAlert(true);
+                                  // Usar setTimeout para asegurar que el Dialog se cierre completamente
+                                  // antes de abrir el AlertDialog
+                                  setTimeout(() => {
+                                    setDeletingCategory(category);
+                                  }, 100);
+                                }}
                                 className="text-destructive hover:text-destructive"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -775,15 +812,60 @@ export default function OnCallActivations() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCategoriesDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowCategoriesDialog(false)}
+              disabled={isProcessing || savingCategory}
+            >
               Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de confirmación de eliminación de categoría */}
-      <AlertDialog open={!!deletingCategory} onOpenChange={() => setDeletingCategory(null)}>
+      {/* AlertDialog de confirmación de eliminación de activación */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && !deleting && setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar activación?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que quieres eliminar la activación "{deleteConfirm?.title}"?
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteConfirm) {
+                  handleDelete(deleteConfirm);
+                }
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <RefreshCw className="h-4 w-4 mr-2 animate-spin" />}
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog de confirmación de eliminación de categoría */}
+      <AlertDialog
+        open={!!deletingCategory}
+        onOpenChange={(open) => {
+          if (!open && !savingCategory) {
+            setDeletingCategory(null);
+            // Reabrir el Dialog de categorías si el usuario canceló
+            if (reopenCategoriesAfterAlert) {
+              setReopenCategoriesAfterAlert(false);
+              setTimeout(() => setShowCategoriesDialog(true), 100);
+            }
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar categoría?</AlertDialogTitle>
@@ -793,11 +875,16 @@ export default function OnCallActivations() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={savingCategory}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deletingCategory && handleDeleteCategory(deletingCategory)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                if (deletingCategory) {
+                  handleDeleteCategory(deletingCategory);
+                }
+              }}
               disabled={savingCategory}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {savingCategory && <RefreshCw className="h-4 w-4 mr-2 animate-spin" />}
               Eliminar

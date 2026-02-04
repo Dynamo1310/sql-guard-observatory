@@ -11,16 +11,21 @@ namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 
 /// <summary>
 /// Collector de métricas de Discos
-/// Replica exactamente la lógica de RelevamientoHealthScore_Discos.ps1 v3.3
+/// Replica exactamente la lógica de RelevamientoHealthScore_Discos.ps1 v3.5
 /// 
 /// Características:
 /// - Espacio Libre REAL: Considera espacio en disco + espacio interno en archivos con growth
 /// - RealFreePct = (FreeGB + FreeSpaceInGrowableFilesGB) / TotalGB * 100
-/// - IsAlerted = true SOLO si FilesWithGrowth > 0 AND RealFreePct <= 10%
+/// - IsAlerted = true si:
+///   1. FilesWithGrowth > 0 AND RealFreePct &lt;= 10%
+///   2. Disco de logs con growth Y % físico &lt; 10%
+///   3. v3.5: Disco crítico del sistema (C, E, F, G, H) con % físico &lt; 10%
 /// - DWH Hardcoded: Servidores DWH siempre asumen growth habilitado
 /// - SQL 2005/2008 fallback: Usa xp_fixeddrives cuando sys.dm_os_volume_stats no existe
 /// - Análisis de archivos: Usa FILEPROPERTY para calcular espacio interno
 /// - Normalización de mount points: E:\DWM\DWM4\ -> E:\
+/// - v3.5: Discos críticos (C=SO, E=Motor, F=TempDB Data, G=TempDB Log, H=User Log)
+///   siempre alertan si tienen &lt; 10% de espacio libre
 /// 
 /// Peso: 7%
 /// </summary>
@@ -28,6 +33,20 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
 {
     public override string CollectorName => "Discos";
     public override string DisplayName => "Discos";
+
+    /// <summary>
+    /// v3.5: Discos críticos del sistema que SIEMPRE deben alertar si tienen poco espacio,
+    /// independientemente de si tienen archivos con growth habilitado.
+    /// - C:\ = Sistema Operativo
+    /// - E:\ = Bases del motor SQL
+    /// - F:\ = Datafiles de tempdb
+    /// - G:\ = Log de tempdb
+    /// - H:\ = Log de bases de usuario
+    /// </summary>
+    private static readonly HashSet<string> CriticalSystemDrives = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "C:\\", "E:\\", "F:\\", "G:\\", "H:\\"
+    };
 
     public DiscosCollector(
         ILogger<DiscosCollector> logger,
@@ -266,12 +285,18 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
                 ? Math.Round((vol.RealFreeGB / vol.TotalGB) * 100m, 2) 
                 : 100m;
 
-            // Determinar si debe alertar (v3.4)
+            // v3.5: Determinar si es disco crítico del sistema
+            vol.IsCriticalSystemDisk = CriticalSystemDrives.Contains(vol.MountPoint);
+
+            // Determinar si debe alertar (v3.5)
             // IsAlerted = true si:
             // 1. FilesWithGrowth > 0 AND RealFreePct <= 10% (lógica original v3.3)
             // 2. Disco de LOGS con growth Y % físico < 10% (aunque tenga espacio interno)
             //    porque si se llena el disco de logs, la instancia queda inaccesible
-            vol.IsAlerted = vol.FilesWithGrowth > 0 && vol.RealFreePct <= 10;
+            // 3. v3.5: Disco crítico del sistema (C, E, F, G, H) con % físico < 10%
+            //    porque son discos fundamentales para el funcionamiento del servidor
+            vol.IsAlerted = (vol.FilesWithGrowth > 0 && vol.RealFreePct <= 10)
+                || (vol.IsCriticalSystemDisk && vol.FreePct < 10);
         }
     }
 
@@ -331,13 +356,20 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
         if (result.Volumes.Count == 0)
             return;
 
-        // v3.4: Recalcular IsAlerted para discos de LOGS
-        // Después de ProcessRoles ya tenemos IsLogDisk establecido
-        // Si es disco de logs con growth y % físico < 10%, marcar como alertado
-        // aunque tenga espacio interno disponible (porque si se llena, la instancia queda inaccesible)
+        // v3.5: Recalcular IsAlerted después de ProcessRoles
+        // Ya tenemos IsLogDisk y IsCriticalSystemDisk establecidos
         foreach (var vol in result.Volumes)
         {
+            // v3.4: Discos de LOGS con growth y % físico < 10%
+            // Si se llena el disco de logs, la instancia queda inaccesible
             if (vol.IsLogDisk && vol.FilesWithGrowth > 0 && vol.FreePct < 10)
+            {
+                vol.IsAlerted = true;
+            }
+            
+            // v3.5: Discos críticos del sistema (C, E, F, G, H) SIEMPRE alertan si están bajos
+            // Independientemente de si tienen archivos con growth o no
+            if (vol.IsCriticalSystemDisk && vol.FreePct < 10)
             {
                 vol.IsAlerted = true;
             }
@@ -695,6 +727,12 @@ WHERE SUBSTRING(filename, 1, 1) BETWEEN 'A' AND 'Z'";
         
         // Alerta (v3.3)
         public bool IsAlerted { get; set; }
+        
+        /// <summary>
+        /// v3.5: Indica si es un disco crítico del sistema (C, E, F, G, H)
+        /// que debe alertar siempre que tenga poco espacio
+        /// </summary>
+        public bool IsCriticalSystemDisk { get; set; }
         
         // Roles (nombres deben coincidir con DiskVolumeInfo en DisksService)
         public bool IsDataDisk { get; set; }

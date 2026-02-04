@@ -607,6 +607,7 @@ export default function AdminGroupDetail() {
                   'Observabilidad > Infraestructura',
                   'Observabilidad > Rendimiento',
                   'Observabilidad > Parcheos',
+                  'Knowledge Base',
                   'Inventario',
                   'Guardias DBA',
                   'Operaciones',
