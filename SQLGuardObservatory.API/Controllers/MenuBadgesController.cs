@@ -85,6 +85,7 @@ public class MenuBadgesController : ControllerBase
         { "AdminLogs", ("Monitoreo Sistema - Logs API", "Administración > Monitoreo Sistema") },
         { "AlertsMenu", ("📁 Alertas (Menú)", "Administración > Monitoreo Sistema") },
         { "AlertaServidoresCaidos", ("Alertas - Servidores Caídos", "Administración > Monitoreo Sistema") },
+        { "AlertaBackups", ("Alertas - Backups Atrasados", "Administración > Monitoreo Sistema") },
         { "AlertaResumenOverview", ("Alertas - Resumen Overview", "Administración > Monitoreo Sistema") },
     };
 

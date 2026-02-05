@@ -106,6 +106,7 @@ public class PermissionService : IPermissionService
         { "AdminLogs", new ViewInfo { ViewName = "AdminLogs", DisplayName = "Monitoreo Sistema - Logs API", Description = "Visualización y gestión de logs del backend", Category = "Administración > Monitoreo Sistema" } },
         { "AlertsMenu", new ViewInfo { ViewName = "AlertsMenu", DisplayName = "📁 Alertas (Menú)", Description = "Mostrar/ocultar el menú completo de Alertas", Category = "Administración > Monitoreo Sistema" } },
         { "AlertaServidoresCaidos", new ViewInfo { ViewName = "AlertaServidoresCaidos", DisplayName = "Alertas - Servidores Caídos", Description = "Configurar alertas de servidores sin conexión", Category = "Administración > Monitoreo Sistema" } },
+        { "AlertaBackups", new ViewInfo { ViewName = "AlertaBackups", DisplayName = "Alertas - Backups Atrasados", Description = "Configurar alertas de backups vencidos en Producción", Category = "Administración > Monitoreo Sistema" } },
         { "AlertaResumenOverview", new ViewInfo { ViewName = "AlertaResumenOverview", DisplayName = "Alertas - Resumen Overview", Description = "Configurar envío programado de resumen del estado de producción", Category = "Administración > Monitoreo Sistema" } },
     };
 

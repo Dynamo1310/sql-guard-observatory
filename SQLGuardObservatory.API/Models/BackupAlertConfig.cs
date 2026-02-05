@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using SQLGuardObservatory.API.Helpers;
 
 namespace SQLGuardObservatory.API.Models;
 
@@ -47,7 +48,7 @@ public class BackupAlertConfig
     
     public DateTime? LastAlertSentAt { get; set; }
     
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = LocalClockAR.Now;
     
     public DateTime? UpdatedAt { get; set; }
     
@@ -72,7 +73,7 @@ public class BackupAlertHistory
     [ForeignKey(nameof(ConfigId))]
     public virtual BackupAlertConfig? Config { get; set; }
     
-    public DateTime SentAt { get; set; } = DateTime.UtcNow;
+    public DateTime SentAt { get; set; } = LocalClockAR.Now;
     
     /// <summary>
     /// Cantidad de destinatarios (TO)

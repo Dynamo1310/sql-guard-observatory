@@ -33,5 +33,32 @@ public class InstanceHealthBackups
     
     // Detalles de backup por DB (como en PowerShell)
     public string? BackupDetails { get; set; }
+    
+    // Campos para supresión de alertas de LOG durante FULL backup
+    /// <summary>
+    /// Indica si hay un backup FULL ejecutándose en la instancia
+    /// </summary>
+    public bool IsFullRunning { get; set; }
+    
+    /// <summary>
+    /// Cuándo comenzó el backup FULL en ejecución
+    /// </summary>
+    public DateTime? FullRunningSince { get; set; }
+    
+    /// <summary>
+    /// Indica si el chequeo de LOG está suprimido (por FULL running o grace period)
+    /// </summary>
+    public bool LogCheckSuppressed { get; set; }
+    
+    /// <summary>
+    /// Razón de la supresión: "FULL_RUNNING" o "GRACE_PERIOD"
+    /// </summary>
+    [MaxLength(50)]
+    public string? LogCheckSuppressReason { get; set; }
+    
+    /// <summary>
+    /// Indica si el collector tiene permiso VIEW SERVER STATE para detectar backups en ejecución
+    /// </summary>
+    public bool HasViewServerState { get; set; } = true;
 }
 

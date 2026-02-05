@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
+using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Models;
 using System.Text.Json;
 
@@ -38,9 +39,17 @@ public class BackupAlertService : IBackupAlertService
 
     public async Task<BackupAlertConfig?> GetConfigAsync()
     {
-        return await _context.BackupAlertConfigs
-            .Include(c => c.UpdatedByUser)
-            .FirstOrDefaultAsync();
+        try
+        {
+            return await _context.BackupAlertConfigs
+                .Include(c => c.UpdatedByUser)
+                .FirstOrDefaultAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error al obtener configuración de alertas de backup. La tabla podría no existir aún.");
+            return null;
+        }
     }
 
     public async Task<BackupAlertConfig> CreateConfigAsync(CreateBackupAlertRequest request, string userId, string userDisplayName)
@@ -53,7 +62,7 @@ public class BackupAlertService : IBackupAlertService
             AlertIntervalMinutes = request.AlertIntervalMinutes,
             Recipients = string.Join(",", request.Recipients),
             CcRecipients = string.Join(",", request.CcRecipients),
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = LocalClockAR.Now,
             UpdatedByUserId = userId
         };
 
@@ -80,7 +89,7 @@ public class BackupAlertService : IBackupAlertService
         if (request.Recipients != null) config.Recipients = string.Join(",", request.Recipients);
         if (request.CcRecipients != null) config.CcRecipients = string.Join(",", request.CcRecipients);
         
-        config.UpdatedAt = DateTime.UtcNow;
+        config.UpdatedAt = LocalClockAR.Now;
         config.UpdatedByUserId = userId;
 
         await _context.SaveChangesAsync();
@@ -89,10 +98,18 @@ public class BackupAlertService : IBackupAlertService
 
     public async Task<List<BackupAlertHistory>> GetHistoryAsync(int limit = 20)
     {
-        return await _context.BackupAlertHistories
-            .OrderByDescending(h => h.SentAt)
-            .Take(limit)
-            .ToListAsync();
+        try
+        {
+            return await _context.BackupAlertHistories
+                .OrderByDescending(h => h.SentAt)
+                .Take(limit)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error al obtener historial de alertas de backup. La tabla podría no existir aún.");
+            return new List<BackupAlertHistory>();
+        }
     }
 
     /// <summary>
@@ -100,46 +117,67 @@ public class BackupAlertService : IBackupAlertService
     /// </summary>
     public async Task<BackupAlertStatusDto> GetStatusAsync()
     {
-        // Obtener backups atrasados del caché
-        var backupIssues = await GetBackupIssuesFromCacheAsync();
-        
-        // Obtener asignaciones activas de tipo Backup
-        var assignments = await _context.OverviewIssueAssignments
-            .Include(a => a.AssignedToUser)
-            .Where(a => a.IssueType == "Backup" && a.ResolvedAt == null)
-            .ToListAsync();
-
-        var assignedInstanceNames = assignments.Select(a => a.InstanceName).ToHashSet();
-
-        var result = new BackupAlertStatusDto
+        try
         {
-            UnassignedIssues = backupIssues
-                .Where(b => !assignedInstanceNames.Contains(b.InstanceName))
-                .Select(b => new BackupIssueSummaryDto
-                {
-                    InstanceName = b.InstanceName,
-                    FullBackupBreached = b.FullBackupBreached,
-                    LogBackupBreached = b.LogBackupBreached
-                })
-                .ToList(),
-            AssignedIssues = backupIssues
-                .Where(b => assignedInstanceNames.Contains(b.InstanceName))
-                .Select(b => 
-                {
-                    var assignment = assignments.FirstOrDefault(a => a.InstanceName == b.InstanceName);
-                    return new BackupIssueSummaryDto
+            // Obtener backups atrasados del caché
+            var backupIssues = await GetBackupIssuesFromCacheAsync();
+            
+            // Obtener asignaciones activas de tipo Backup
+            List<OverviewIssueAssignment> assignments;
+            try
+            {
+                assignments = await _context.OverviewIssueAssignments
+                    .Include(a => a.AssignedToUser)
+                    .Where(a => a.IssueType == "Backup" && a.ResolvedAt == null)
+                    .ToListAsync();
+            }
+            catch
+            {
+                // Tabla de asignaciones podría no existir
+                assignments = new List<OverviewIssueAssignment>();
+            }
+
+            var assignedInstanceNames = assignments.Select(a => a.InstanceName).ToHashSet();
+
+            var result = new BackupAlertStatusDto
+            {
+                UnassignedIssues = backupIssues
+                    .Where(b => !assignedInstanceNames.Contains(b.InstanceName))
+                    .Select(b => new BackupIssueSummaryDto
                     {
                         InstanceName = b.InstanceName,
                         FullBackupBreached = b.FullBackupBreached,
                         LogBackupBreached = b.LogBackupBreached,
-                        AssignedToUserName = assignment?.AssignedToUser?.DisplayName ?? assignment?.AssignedToUser?.DomainUser,
-                        AssignedAt = assignment?.AssignedAt.ToString("o")
-                    };
-                })
-                .ToList()
-        };
+                        LogCheckSuppressed = b.LogCheckSuppressed,
+                        LogCheckSuppressReason = b.LogCheckSuppressReason
+                    })
+                    .ToList(),
+                AssignedIssues = backupIssues
+                    .Where(b => assignedInstanceNames.Contains(b.InstanceName))
+                    .Select(b => 
+                    {
+                        var assignment = assignments.FirstOrDefault(a => a.InstanceName == b.InstanceName);
+                        return new BackupIssueSummaryDto
+                        {
+                            InstanceName = b.InstanceName,
+                            FullBackupBreached = b.FullBackupBreached,
+                            LogBackupBreached = b.LogBackupBreached,
+                            LogCheckSuppressed = b.LogCheckSuppressed,
+                            LogCheckSuppressReason = b.LogCheckSuppressReason,
+                            AssignedToUserName = assignment?.AssignedToUser?.DisplayName ?? assignment?.AssignedToUser?.DomainUser,
+                            AssignedAt = assignment?.AssignedAt.ToString("dd/MM/yyyy HH:mm")
+                        };
+                    })
+                    .ToList()
+            };
 
-        return result;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error al obtener estado de backups");
+            return new BackupAlertStatusDto();
+        }
     }
 
     /// <summary>
@@ -167,7 +205,7 @@ public class BackupAlertService : IBackupAlertService
         var success = await _smtpService.SendEmailWithCcAsync(
             recipients,
             ccRecipients,
-            "[SQLNova] TEST - Alerta de Backups Atrasados",
+            "[DBA] Alerta de Backups - PRUEBA",
             htmlBody,
             "BackupAlertTest"
         );
@@ -188,29 +226,45 @@ public class BackupAlertService : IBackupAlertService
             return (false, "Alerta no está habilitada");
         }
 
-        // Actualizar última ejecución
-        config.LastRunAt = DateTime.UtcNow;
+        // Actualizar última ejecución (hora Argentina)
+        config.LastRunAt = LocalClockAR.Now;
         await _context.SaveChangesAsync();
 
         // Obtener estado actual
         var status = await GetStatusAsync();
         
-        if (status.UnassignedIssues.Count == 0)
+        // Filtrar issues que solo tienen LOG breach pero está suprimido
+        // Estas instancias no deben generar alerta
+        var effectiveIssues = status.UnassignedIssues
+            .Where(i => i.FullBackupBreached || (i.LogBackupBreached && !i.LogCheckSuppressed))
+            .ToList();
+        
+        if (effectiveIssues.Count == 0)
         {
-            _logger.LogInformation("No hay backups atrasados sin asignar");
+            var suppressedCount = status.UnassignedIssues.Count - effectiveIssues.Count;
+            if (suppressedCount > 0)
+            {
+                _logger.LogInformation(
+                    "No hay backups atrasados sin asignar que requieran alerta ({SuppressedCount} instancias con LOG suprimido por FULL en ejecución)",
+                    suppressedCount);
+            }
+            else
+            {
+                _logger.LogInformation("No hay backups atrasados sin asignar");
+            }
             return (true, "No hay backups atrasados sin asignar");
         }
 
         // Verificar si debe enviar alerta (respetando AlertIntervalMinutes)
         if (config.LastAlertSentAt.HasValue)
         {
-            var minutesSinceLastAlert = (DateTime.UtcNow - config.LastAlertSentAt.Value).TotalMinutes;
+            var minutesSinceLastAlert = (LocalClockAR.Now - config.LastAlertSentAt.Value).TotalMinutes;
             if (minutesSinceLastAlert < config.AlertIntervalMinutes)
             {
                 _logger.LogInformation(
                     "Hay {Count} backups atrasados sin asignar, pero aún no se cumple el intervalo de alerta ({Minutes} minutos desde la última)",
-                    status.UnassignedIssues.Count, (int)minutesSinceLastAlert);
-                return (true, $"Hay {status.UnassignedIssues.Count} backups atrasados, próxima alerta en {config.AlertIntervalMinutes - (int)minutesSinceLastAlert} minutos");
+                    effectiveIssues.Count, (int)minutesSinceLastAlert);
+                return (true, $"Hay {effectiveIssues.Count} backups atrasados, próxima alerta en {config.AlertIntervalMinutes - (int)minutesSinceLastAlert} minutos");
             }
         }
 
@@ -224,24 +278,24 @@ public class BackupAlertService : IBackupAlertService
             return (false, "No hay destinatarios configurados");
         }
 
-        var htmlBody = GenerateAlertEmailBody(status.UnassignedIssues, isTest: false);
+        var htmlBody = GenerateAlertEmailBody(effectiveIssues, isTest: false);
 
         var success = await _smtpService.SendEmailWithCcAsync(
             recipients,
             ccRecipients,
-            $"[SQLNova] Alerta: {status.UnassignedIssues.Count} Backup(s) Atrasado(s)",
+            $"[DBA] Alerta: {effectiveIssues.Count} Instancia(s) con Backups Atrasados",
             htmlBody,
             "BackupAlert"
         );
 
-        // Registrar en historial
+        // Registrar en historial (hora Argentina)
         var history = new BackupAlertHistory
         {
             ConfigId = config.Id,
-            SentAt = DateTime.UtcNow,
+            SentAt = LocalClockAR.Now,
             RecipientCount = recipients.Count,
             CcCount = ccRecipients.Count,
-            InstancesAffected = string.Join(",", status.UnassignedIssues.Select(i => i.InstanceName)),
+            InstancesAffected = string.Join(",", effectiveIssues.Select(i => i.InstanceName)),
             Success = success,
             ErrorMessage = success ? null : "Error al enviar email"
         };
@@ -250,13 +304,13 @@ public class BackupAlertService : IBackupAlertService
         
         if (success)
         {
-            config.LastAlertSentAt = DateTime.UtcNow;
+            config.LastAlertSentAt = LocalClockAR.Now;
         }
         
         await _context.SaveChangesAsync();
 
         return success
-            ? (true, $"Alerta enviada a {recipients.Count} destinatarios para {status.UnassignedIssues.Count} backups atrasados")
+            ? (true, $"Alerta enviada a {recipients.Count} destinatarios para {effectiveIssues.Count} backups atrasados")
             : (false, "Error al enviar alerta");
     }
 
@@ -287,86 +341,84 @@ public class BackupAlertService : IBackupAlertService
     }
 
     /// <summary>
-    /// Genera el HTML del email de alerta
+    /// Genera el HTML del email de alerta - Formato minimalista y profesional
+    /// Nota: No incluye alertas de LOG cuando LogCheckSuppressed es true (FULL en ejecución o grace period)
     /// </summary>
     private string GenerateAlertEmailBody(List<BackupIssueSummaryDto> issues, bool isTest)
     {
-        var testBanner = isTest ? @"
-            <div style='background-color: #f59e0b; color: white; padding: 10px; text-align: center; font-weight: bold;'>
-                EMAIL DE PRUEBA - Este es un email de prueba del sistema de alertas
-            </div>" : "";
+        var now = LocalClockAR.Now;
+        var testNotice = isTest ? "<p style='color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; margin-bottom: 16px;'><strong>Nota:</strong> Este es un email de prueba.</p>" : "";
 
-        var issueRows = string.Join("", issues.Select(i => $@"
-            <tr>
-                <td style='padding: 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace;'>{i.InstanceName}</td>
-                <td style='padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: center;'>
-                    {(i.FullBackupBreached && i.LogBackupBreached 
-                        ? "<span style='background-color: #dc2626; color: white; padding: 2px 8px; border-radius: 4px;'>FULL + LOG</span>"
-                        : i.FullBackupBreached 
-                            ? "<span style='background-color: #dc2626; color: white; padding: 2px 8px; border-radius: 4px;'>FULL</span>"
-                            : "<span style='background-color: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px;'>LOG</span>")}
-                </td>
-            </tr>"));
+        var issueRows = string.Join("", issues.Select(issue => 
+        {
+            // Si LOG está suprimido (FULL running o grace period), no incluir LOG en el tipo de backup
+            var effectiveLogBreached = issue.LogBackupBreached && !issue.LogCheckSuppressed;
+            
+            // Determinar el tipo de backup a mostrar
+            string backupType;
+            if (issue.FullBackupBreached && effectiveLogBreached)
+            {
+                backupType = "Full + Log";
+            }
+            else if (issue.FullBackupBreached)
+            {
+                backupType = "Full";
+            }
+            else if (effectiveLogBreached)
+            {
+                backupType = "Log";
+            }
+            else
+            {
+                // Si no hay ningún breach efectivo, esta instancia no debería estar en la lista
+                // pero por seguridad, retornamos vacío
+                return "";
+            }
+            
+            return $@"
+                <tr>
+                    <td style='padding: 6px 12px; border-bottom: 1px solid #e0e0e0;'>{issue.InstanceName}</td>
+                    <td style='padding: 6px 12px; border-bottom: 1px solid #e0e0e0; text-align: center;'>{backupType}</td>
+                </tr>";
+        }));
 
         return $@"
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset='utf-8'>
-    <style>
-        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }}
-        .container {{ max-width: 700px; margin: 0 auto; }}
-        .header {{ background-color: #dc2626; color: white; padding: 20px; text-align: center; }}
-        .header h1 {{ margin: 0; font-size: 24px; }}
-        .content {{ background-color: #ffffff; padding: 20px; }}
-        .stats {{ display: flex; gap: 20px; margin-bottom: 20px; }}
-        .stat-card {{ background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 15px; flex: 1; text-align: center; }}
-        .stat-value {{ font-size: 32px; font-weight: bold; color: #dc2626; }}
-        .stat-label {{ color: #991b1b; font-size: 12px; }}
-        table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-        th {{ background-color: #1e293b; color: white; padding: 12px; text-align: left; }}
-        .footer {{ background-color: #1e293b; color: #94a3b8; padding: 15px; text-align: center; font-size: 12px; }}
-        .note {{ background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin-top: 20px; }}
-    </style>
+    <meta charset='UTF-8'>
 </head>
-<body>
-    <div class='container'>
-        {testBanner}
-        <div class='header'>
-            <h1>Alerta de Backups Atrasados</h1>
-        </div>
-        <div class='content'>
-            <div class='stats'>
-                <div class='stat-card'>
-                    <div class='stat-value'>{issues.Count}</div>
-                    <div class='stat-label'>INSTANCIAS CON BACKUPS ATRASADOS</div>
-                </div>
-            </div>
-            
-            <p>Las siguientes instancias de <strong>Producción</strong> tienen backups vencidos y requieren atención:</p>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th>Instancia</th>
-                        <th style='text-align: center;'>Tipo de Backup</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {issueRows}
-                </tbody>
-            </table>
-            
-            <div class='note'>
-                <strong>Nota:</strong> Esta alerta no incluye instancias que ya tienen un responsable asignado en el Overview de SQLNova.
-                Para dejar de recibir alertas sobre una instancia específica, asigne un responsable desde el panel de Overview.
-            </div>
-        </div>
-        <div class='footer'>
-            SQLNova App - Sistema de Monitoreo DBA<br/>
-            {DateTime.Now:dd/MM/yyyy HH:mm:ss}
-        </div>
-    </div>
+<body style='font-family: Calibri, Arial, sans-serif; font-size: 14px; color: #333; line-height: 1.5; margin: 0; padding: 20px;'>
+    
+    {testNotice}
+    
+    <p>Hola,</p>
+    
+    <p>Se detectaron <strong>{issues.Count} instancia(s)</strong> de SQL Server en Producción con backups atrasados:</p>
+    
+    <table style='border-collapse: collapse; margin: 16px 0; font-size: 13px;' cellpadding='0' cellspacing='0'>
+        <thead>
+            <tr style='background-color: #f5f5f5;'>
+                <th style='padding: 8px 12px; border: 1px solid #e0e0e0; text-align: left; font-weight: 600;'>Instancia</th>
+                <th style='padding: 8px 12px; border: 1px solid #e0e0e0; text-align: center; font-weight: 600;'>Tipo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {issueRows}
+        </tbody>
+    </table>
+    
+    <p>Por favor revisar a la brevedad.</p>
+    
+    <p>Saludos,<br>
+    <strong>Equipo DBA</strong></p>
+    
+    <hr style='border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;'>
+    
+    <p style='font-size: 11px; color: #888;'>
+        Alerta automática generada el {now:dd/MM/yyyy} a las {now:HH:mm} hs (Argentina)
+    </p>
+    
 </body>
 </html>";
     }

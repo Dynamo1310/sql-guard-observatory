@@ -9,7 +9,6 @@ namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 
 /// <summary>
 /// Collector de métricas de Backups
-/// Replica exactamente la lógica de RelevamientoHealthScore_Backups.ps1
 /// 
 /// Características:
 /// - Sincronización AlwaysOn: Identifica grupos AG y sincroniza el mejor backup entre nodos
@@ -17,6 +16,13 @@ namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 /// - DWH handling: 7 días tolerancia para FULL backup en instancias DWH
 /// - Excepción SSCC03: Instancia con backup a nivel VM
 /// - SQL 2005 fallback: Query compatible con subqueries en lugar de GROUP BY
+/// - Supresión de LOG: No alerta por LOG cuando hay FULL running o en grace period
+/// - Detección de FULL running: Usa sys.dm_exec_requests para detectar backups en ejecución
+/// 
+/// Umbrales configurables (desde CollectorThresholds):
+/// - FullThresholdHours: 30 horas (antes 24h)
+/// - LogThresholdHours: 2 horas
+/// - GraceMinutesAfterFull: 15 minutos
 /// 
 /// Peso: 18%
 /// </summary>
@@ -24,6 +30,12 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
 {
     public override string CollectorName => "Backups";
     public override string DisplayName => "Backups";
+
+    // Umbrales por defecto (se sobrescriben con valores de CollectorThresholds)
+    private const int DEFAULT_FULL_THRESHOLD_HOURS = 30;
+    private const int DEFAULT_LOG_THRESHOLD_HOURS = 2;
+    private const int DEFAULT_GRACE_MINUTES_AFTER_FULL = 15;
+    private const int DWH_FULL_THRESHOLD_HOURS = 168; // 7 días
 
     // Instancias con backup a nivel VM (excluidas de verificación)
     private static readonly HashSet<string> VmBackupInstances = new(StringComparer.OrdinalIgnoreCase)
@@ -35,6 +47,11 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
     private Dictionary<string, AlwaysOnGroup> _alwaysOnGroups = new();
     private Dictionary<string, string> _nodeToGroup = new();
 
+    // Thresholds cargados de la configuración
+    private int _fullThresholdHours = DEFAULT_FULL_THRESHOLD_HOURS;
+    private int _logThresholdHours = DEFAULT_LOG_THRESHOLD_HOURS;
+    private int _graceMinutesAfterFull = DEFAULT_GRACE_MINUTES_AFTER_FULL;
+
     public BackupsCollector(
         ILogger<BackupsCollector> logger,
         ICollectorConfigService configService,
@@ -43,6 +60,110 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
         IServiceScopeFactory scopeFactory) 
         : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
+    }
+
+    /// <summary>
+    /// Pre-procesamiento: Cargar thresholds e identificar grupos AlwaysOn
+    /// </summary>
+    protected override async Task PreProcessAsync(List<SqlInstanceInfo> instances, CancellationToken ct)
+    {
+        // Cargar thresholds configurables
+        await LoadThresholdsAsync(ct);
+
+        _alwaysOnGroups.Clear();
+        _nodeToGroup.Clear();
+
+        _logger.LogInformation("Identificando grupos de AlwaysOn...");
+
+        // Solo procesar instancias con AlwaysOn habilitado
+        var alwaysOnInstances = instances.Where(i => i.IsAlwaysOnEnabled).ToList();
+
+        foreach (var instance in alwaysOnInstances)
+        {
+            try
+            {
+                var query = @"
+                    SELECT DISTINCT
+                        ag.name AS AGName,
+                        ar.replica_server_name AS ReplicaServer
+                    FROM sys.availability_groups ag
+                    INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
+                    ORDER BY ag.name, ar.replica_server_name";
+
+                var dataTable = await ExecuteQueryAsync(instance.InstanceName, query, 10, ct);
+
+                foreach (DataRow row in dataTable.Rows)
+                {
+                    var agName = GetString(row, "AGName") ?? "";
+                    var replicaServer = GetString(row, "ReplicaServer") ?? "";
+
+                    if (string.IsNullOrEmpty(agName) || string.IsNullOrEmpty(replicaServer))
+                        continue;
+
+                    if (!_alwaysOnGroups.ContainsKey(agName))
+                    {
+                        _alwaysOnGroups[agName] = new AlwaysOnGroup { Name = agName };
+                    }
+
+                    if (!_alwaysOnGroups[agName].Nodes.Contains(replicaServer, StringComparer.OrdinalIgnoreCase))
+                    {
+                        _alwaysOnGroups[agName].Nodes.Add(replicaServer);
+                    }
+
+                    _nodeToGroup[replicaServer] = agName;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "No se pudo consultar AG en {Instance}", instance.InstanceName);
+            }
+        }
+
+        if (_alwaysOnGroups.Count > 0)
+        {
+            _logger.LogInformation("{Count} grupo(s) AlwaysOn identificado(s)", _alwaysOnGroups.Count);
+            foreach (var ag in _alwaysOnGroups)
+            {
+                _logger.LogDebug("  AG {Name}: {Nodes}", ag.Key, string.Join(", ", ag.Value.Nodes));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Carga los thresholds configurables desde la base de datos
+    /// </summary>
+    private async Task LoadThresholdsAsync(CancellationToken ct)
+    {
+        try
+        {
+            var thresholds = await _configService.GetActiveThresholdsAsync(CollectorName, ct);
+
+            var fullThreshold = thresholds.FirstOrDefault(t => t.ThresholdName == "FullThresholdHours");
+            if (fullThreshold != null)
+            {
+                _fullThresholdHours = (int)fullThreshold.ThresholdValue;
+            }
+
+            var logThreshold = thresholds.FirstOrDefault(t => t.ThresholdName == "LogThresholdHours");
+            if (logThreshold != null)
+            {
+                _logThresholdHours = (int)logThreshold.ThresholdValue;
+            }
+
+            var graceThreshold = thresholds.FirstOrDefault(t => t.ThresholdName == "GraceMinutesAfterFull");
+            if (graceThreshold != null)
+            {
+                _graceMinutesAfterFull = (int)graceThreshold.ThresholdValue;
+            }
+
+            _logger.LogInformation(
+                "Thresholds cargados: FULL={FullHours}h, LOG={LogHours}h, GracePeriod={GraceMinutes}min",
+                _fullThresholdHours, _logThresholdHours, _graceMinutesAfterFull);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error cargando thresholds, usando valores por defecto");
+        }
     }
 
     protected override async Task<BackupsMetrics> CollectFromInstanceAsync(
@@ -58,7 +179,7 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
         result.IsDWH = isDWH;
         result.IsSql2005 = isSql2005;
 
-        // Excepción SSCC03: Backup a nivel VM - marcar como OK sin verificar (como en PowerShell)
+        // Excepción SSCC03: Backup a nivel VM - marcar como OK sin verificar
         if (VmBackupInstances.Contains(instance.InstanceName))
         {
             _logger.LogInformation("{Instance} - VM Backup - Excluido de verificación (backup a nivel VM)", instance.InstanceName);
@@ -67,6 +188,7 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
             result.FullBackupBreached = false;
             result.LogBackupBreached = false;
             result.IsVmBackup = true;
+            result.HasViewServerState = true;
             result.Details.Add("VM_BACKUP:OK");
             return result;
         }
@@ -75,7 +197,7 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
         var cutoffDays = isDWH ? -14 : -7;
         var cutoffDate = DateTime.Now.AddDays(cutoffDays).ToString("yyyy-MM-dd");
 
-        // Retry con 3 intentos (como en PowerShell)
+        // Retry con 3 intentos
         DataTable? dataTable = null;
         int attemptCount = 0;
         bool usedFallback = isSql2005;
@@ -90,7 +212,7 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                 // Determinar query según intento y versión
                 var useSQL2005Query = isSql2005 || attemptCount == 3;
                 var currentTimeout = attemptCount == 1 ? timeoutSeconds : timeoutSeconds * 2;
-                var currentQuery = useSQL2005Query ? GetSQL2005Query(cutoffDate) : GetModernQuery(cutoffDate);
+                var currentQuery = useSQL2005Query ? GetSQL2005Query(cutoffDate) : GetModernQueryWithRunningBackups(cutoffDate);
 
                 if (attemptCount == 3 && !isSql2005)
                 {
@@ -99,11 +221,33 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                 }
 
                 dataTable = await ExecuteQueryAsync(instance.InstanceName, currentQuery, currentTimeout, ct);
+                result.HasViewServerState = true;
                 break;
             }
             catch (Exception ex)
             {
                 lastError = ex;
+                
+                // Verificar si es error de permisos VIEW SERVER STATE
+                if (ex.Message.Contains("VIEW SERVER STATE") || ex.Message.Contains("permission"))
+                {
+                    _logger.LogWarning(
+                        "Cannot detect running backups on {Instance} - VIEW SERVER STATE permission not granted. Using fallback query.",
+                        instance.InstanceName);
+                    result.HasViewServerState = false;
+                    
+                    // Intentar con query sin detección de running backups
+                    try
+                    {
+                        var fallbackQuery = isSql2005 ? GetSQL2005Query(cutoffDate) : GetModernQuery(cutoffDate);
+                        dataTable = await ExecuteQueryAsync(instance.InstanceName, fallbackQuery, timeoutSeconds * 2, ct);
+                        break;
+                    }
+                    catch
+                    {
+                        // Continuar con el retry normal
+                    }
+                }
                 
                 if (attemptCount < 3)
                 {
@@ -133,26 +277,95 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
             _logger.LogInformation("{Instance} - Query SQL 2005 fallback exitosa", instance.InstanceName);
         }
 
-        // Procesar resultados (lógica idéntica al PowerShell)
-        ProcessBackupResults(dataTable, result, isDWH);
+        // Procesar resultados con la nueva lógica de supresión
+        ProcessBackupResults(dataTable, result, isDWH, instance.InstanceName);
 
         return result;
     }
 
-    private void ProcessBackupResults(DataTable table, BackupsMetrics result, bool isDWH)
+    /// <summary>
+    /// Procesa los resultados del backup con lógica de supresión de LOG
+    /// </summary>
+    private void ProcessBackupResults(DataTable table, BackupsMetrics result, bool isDWH, string instanceName)
     {
-        // Umbrales exactos del PowerShell:
-        // DWH: 7 días para FULL backup
-        // Otras instancias: 24 horas para FULL backup
-        // LOG: 2 horas para todas
-        var fullThresholdDays = isDWH ? -7 : -1;
-        var fullThreshold = DateTime.Now.AddDays(fullThresholdDays);
-        var logThreshold = DateTime.Now.AddHours(-2);
+        // Umbrales: DWH usa 7 días, el resto usa el threshold configurable (30h por defecto)
+        var fullThresholdHours = isDWH ? DWH_FULL_THRESHOLD_HOURS : _fullThresholdHours;
+        var fullThreshold = DateTime.Now.AddHours(-fullThresholdHours);
+        var logThreshold = DateTime.Now.AddHours(-_logThresholdHours);
+        var graceThreshold = DateTime.Now.AddMinutes(-_graceMinutesAfterFull);
 
         var breachedFullDbs = new List<DataRow>();
         var breachedLogDbs = new List<DataRow>();
         var fullRecoveryDbs = new List<DataRow>();
 
+        // Detectar si hay algún FULL running en cualquier DB de la instancia
+        bool anyFullRunning = false;
+        DateTime? earliestFullRunningSince = null;
+
+        // Primera pasada: detectar FULL running y recolectar datos
+        foreach (DataRow row in table.Rows)
+        {
+            var isFullRunning = GetInt(row, "IsFullRunning") == 1;
+            var fullRunningSince = GetDateTime(row, "FullRunningSince");
+
+            if (isFullRunning)
+            {
+                anyFullRunning = true;
+                if (!earliestFullRunningSince.HasValue || (fullRunningSince.HasValue && fullRunningSince.Value < earliestFullRunningSince.Value))
+                {
+                    earliestFullRunningSince = fullRunningSince;
+                }
+            }
+        }
+
+        result.IsFullRunning = anyFullRunning;
+        result.FullRunningSince = earliestFullRunningSince;
+
+        // Determinar si el LOG check debe suprimirse
+        // Caso 1: Hay un FULL corriendo
+        if (anyFullRunning)
+        {
+            result.LogCheckSuppressed = true;
+            result.LogCheckSuppressReason = "FULL_RUNNING";
+            _logger.LogInformation(
+                "LOG check suppressed for {Instance} - FULL backup running since {Since}",
+                instanceName, earliestFullRunningSince?.ToString("yyyy-MM-dd HH:mm:ss") ?? "unknown");
+        }
+        else
+        {
+            // Caso 2: FULL terminó hace poco (grace period)
+            // Buscar el FULL más reciente para verificar si estamos en grace period
+            DateTime? mostRecentFullBackup = null;
+            foreach (DataRow row in table.Rows)
+            {
+                var lastFullBackup = GetDateTime(row, "LastFullBackup");
+                if (lastFullBackup.HasValue)
+                {
+                    if (!mostRecentFullBackup.HasValue || lastFullBackup.Value > mostRecentFullBackup.Value)
+                    {
+                        mostRecentFullBackup = lastFullBackup.Value;
+                    }
+                }
+            }
+
+            // Si el FULL más reciente terminó dentro del grace period, suprimir LOG check
+            if (mostRecentFullBackup.HasValue && mostRecentFullBackup.Value > graceThreshold)
+            {
+                var minutesSinceFullCompleted = (int)(DateTime.Now - mostRecentFullBackup.Value).TotalMinutes;
+                var minutesRemaining = _graceMinutesAfterFull - minutesSinceFullCompleted;
+                
+                if (minutesRemaining > 0)
+                {
+                    result.LogCheckSuppressed = true;
+                    result.LogCheckSuppressReason = "GRACE_PERIOD";
+                    _logger.LogInformation(
+                        "LOG check suppressed for {Instance} - Grace period after FULL ({MinutesRemaining}m remaining)",
+                        instanceName, minutesRemaining);
+                }
+            }
+        }
+
+        // Segunda pasada: evaluar breaches
         foreach (DataRow row in table.Rows)
         {
             var recoveryModel = GetString(row, "RecoveryModel") ?? "";
@@ -165,22 +378,30 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                 breachedFullDbs.Add(row);
             }
 
-            // Track Full Recovery DBs para log backup
-            if (recoveryModel.Equals("FULL", StringComparison.OrdinalIgnoreCase))
+            // Track Full/Bulk-Logged Recovery DBs para log backup
+            if (recoveryModel.Equals("FULL", StringComparison.OrdinalIgnoreCase) ||
+                recoveryModel.Equals("BULK_LOGGED", StringComparison.OrdinalIgnoreCase))
             {
                 fullRecoveryDbs.Add(row);
                 
-                if (!lastLogBackup.HasValue || lastLogBackup.Value < logThreshold)
+                // Solo evaluar LOG breach si NO está suprimido
+                if (!result.LogCheckSuppressed)
                 {
-                    breachedLogDbs.Add(row);
+                    if (!lastLogBackup.HasValue || lastLogBackup.Value < logThreshold)
+                    {
+                        breachedLogDbs.Add(row);
+                    }
                 }
             }
         }
 
         result.FullBackupBreached = breachedFullDbs.Count > 0;
-        result.LogBackupBreached = breachedLogDbs.Count > 0;
+        
+        // Si LOG está suprimido, NO marcamos breach aunque técnicamente haya
+        result.LogBackupBreached = result.LogCheckSuppressed ? false : breachedLogDbs.Count > 0;
+        
         result.BreachedFullCount = breachedFullDbs.Count;
-        result.BreachedLogCount = breachedLogDbs.Count;
+        result.BreachedLogCount = result.LogCheckSuppressed ? 0 : breachedLogDbs.Count;
         result.FullRecoveryDbCount = fullRecoveryDbs.Count;
 
         // Si hay DBs con breach, mostrar el PEOR backup (más antiguo)
@@ -246,8 +467,10 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
             // Verificar si esta DB tiene FULL breach
             var hasFullBreach = !lastFullBackup.HasValue || lastFullBackup.Value < fullThreshold;
             
-            // Verificar si esta DB tiene LOG breach (solo para Recovery Model FULL)
-            var hasLogBreach = recoveryModel.Equals("FULL", StringComparison.OrdinalIgnoreCase) &&
+            // Verificar si esta DB tiene LOG breach (solo si no está suprimido y recovery model aplica)
+            var hasLogBreach = !result.LogCheckSuppressed &&
+                              (recoveryModel.Equals("FULL", StringComparison.OrdinalIgnoreCase) ||
+                               recoveryModel.Equals("BULK_LOGGED", StringComparison.OrdinalIgnoreCase)) &&
                               (!lastLogBackup.HasValue || lastLogBackup.Value < logThreshold);
             
             if (hasFullBreach)
@@ -263,24 +486,23 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                 result.Details.Add($"{dbName}:LOG={logAge}h");
             }
         }
+
+        // Agregar información de supresión a los detalles
+        if (result.LogCheckSuppressed)
+        {
+            result.Details.Add($"LOG_SUPPRESSED:{result.LogCheckSuppressReason}");
+        }
     }
 
     protected override int CalculateScore(BackupsMetrics data, List<CollectorThreshold> thresholds)
     {
-        // Lógica exacta del PowerShell Consolidate:
-        // Backups tiene peso 18% (9% FULL + 9% LOG)
-        // 
-        // En el consolidador se calcula así:
-        // $fullBackupScore = if ($backupsData.FullBackupBreached) { 0 } else { 100 }
-        // $logBackupScore = if ($backupsData.LogBackupBreached) { 0 } else { 100 }
-        // 
-        // Luego: ($fullBackupScore * 0.09) + ($logBackupScore * 0.09)
-        // 
-        // Para este collector, retornamos un score combinado:
+        // Score combinado:
         // - FULL OK y LOG OK: 100
         // - FULL Breach solo: 50 (pierde mitad del peso)
         // - LOG Breach solo: 50 (pierde mitad del peso)
         // - Ambos Breach: 0
+        // 
+        // Nota: Si LOG está suprimido, se considera OK para el score
         
         var fullScore = data.FullBackupBreached ? 0 : 50;
         var logScore = data.LogBackupBreached ? 0 : 50;
@@ -301,8 +523,13 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
             LastLogBackup = data.LastLogBackup,
             FullBackupBreached = data.FullBackupBreached,
             LogBackupBreached = data.LogBackupBreached,
-            // Detalles como en PowerShell: unidos por "|"
-            BackupDetails = data.Details.Count > 0 ? string.Join("|", data.Details) : null
+            BackupDetails = data.Details.Count > 0 ? string.Join("|", data.Details) : null,
+            // Nuevos campos de supresión
+            IsFullRunning = data.IsFullRunning,
+            FullRunningSince = data.FullRunningSince,
+            LogCheckSuppressed = data.LogCheckSuppressed,
+            LogCheckSuppressReason = data.LogCheckSuppressReason,
+            HasViewServerState = data.HasViewServerState
         };
 
         await SaveWithScopedContextAsync(async context =>
@@ -313,74 +540,7 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
     }
 
     /// <summary>
-    /// Pre-procesamiento: Identificar grupos AlwaysOn para sincronización posterior
-    /// Replica Get-AlwaysOnGroups del PowerShell
-    /// </summary>
-    protected override async Task PreProcessAsync(List<SqlInstanceInfo> instances, CancellationToken ct)
-    {
-        _alwaysOnGroups.Clear();
-        _nodeToGroup.Clear();
-
-        _logger.LogInformation("Identificando grupos de AlwaysOn...");
-
-        // Solo procesar instancias con AlwaysOn habilitado
-        var alwaysOnInstances = instances.Where(i => i.IsAlwaysOnEnabled).ToList();
-
-        foreach (var instance in alwaysOnInstances)
-        {
-            try
-            {
-                var query = @"
-                    SELECT DISTINCT
-                        ag.name AS AGName,
-                        ar.replica_server_name AS ReplicaServer
-                    FROM sys.availability_groups ag
-                    INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
-                    ORDER BY ag.name, ar.replica_server_name";
-
-                var dataTable = await ExecuteQueryAsync(instance.InstanceName, query, 10, ct);
-
-                foreach (DataRow row in dataTable.Rows)
-                {
-                    var agName = GetString(row, "AGName") ?? "";
-                    var replicaServer = GetString(row, "ReplicaServer") ?? "";
-
-                    if (string.IsNullOrEmpty(agName) || string.IsNullOrEmpty(replicaServer))
-                        continue;
-
-                    if (!_alwaysOnGroups.ContainsKey(agName))
-                    {
-                        _alwaysOnGroups[agName] = new AlwaysOnGroup { Name = agName };
-                    }
-
-                    if (!_alwaysOnGroups[agName].Nodes.Contains(replicaServer, StringComparer.OrdinalIgnoreCase))
-                    {
-                        _alwaysOnGroups[agName].Nodes.Add(replicaServer);
-                    }
-
-                    _nodeToGroup[replicaServer] = agName;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "No se pudo consultar AG en {Instance}", instance.InstanceName);
-            }
-        }
-
-        if (_alwaysOnGroups.Count > 0)
-        {
-            _logger.LogInformation("{Count} grupo(s) AlwaysOn identificado(s)", _alwaysOnGroups.Count);
-            foreach (var ag in _alwaysOnGroups)
-            {
-                _logger.LogDebug("  AG {Name}: {Nodes}", ag.Key, string.Join(", ", ag.Value.Nodes));
-            }
-        }
-    }
-
-    /// <summary>
     /// Post-procesamiento: Sincronizar backups entre nodos AlwaysOn
-    /// Replica Sync-AlwaysOnBackups del PowerShell
-    /// Toma el MEJOR valor de cada grupo (backup más reciente) y lo aplica a TODOS los nodos
     /// </summary>
     protected override async Task PostProcessAsync(List<CollectorInstanceResult> results, CancellationToken ct)
     {
@@ -409,6 +569,8 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
             // Encontrar el MEJOR LastFullBackup (más reciente)
             DateTime? bestFullDate = null;
             DateTime? bestLogDate = null;
+            bool anyFullRunning = false;
+            DateTime? earliestFullRunningSince = null;
 
             foreach (var result in groupResults)
             {
@@ -428,11 +590,20 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                             bestLogDate = metrics.LastLogBackup.Value;
                         }
                     }
+                    if (metrics.IsFullRunning)
+                    {
+                        anyFullRunning = true;
+                        if (!earliestFullRunningSince.HasValue || 
+                            (metrics.FullRunningSince.HasValue && metrics.FullRunningSince.Value < earliestFullRunningSince.Value))
+                        {
+                            earliestFullRunningSince = metrics.FullRunningSince;
+                        }
+                    }
                 }
             }
 
-            _logger.LogDebug("AG {Name}: Mejor FULL: {Full}, Mejor LOG: {Log}", 
-                agGroup.Name, bestFullDate, bestLogDate);
+            _logger.LogDebug("AG {Name}: Mejor FULL: {Full}, Mejor LOG: {Log}, FullRunning: {Running}", 
+                agGroup.Name, bestFullDate, bestLogDate, anyFullRunning);
 
             // Aplicar los MEJORES valores a TODOS los nodos del grupo
             foreach (var result in groupResults)
@@ -443,9 +614,18 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                     metrics.LastLogBackup = bestLogDate;
                     metrics.WasSyncedFromAlwaysOn = true;
 
+                    // Sincronizar estado de FULL running
+                    if (anyFullRunning && !metrics.IsFullRunning)
+                    {
+                        metrics.IsFullRunning = true;
+                        metrics.FullRunningSince = earliestFullRunningSince;
+                        metrics.LogCheckSuppressed = true;
+                        metrics.LogCheckSuppressReason = "FULL_RUNNING";
+                    }
+
                     // Recalcular breaches con los valores sincronizados
                     var isDWH = result.InstanceName.Contains("DWH", StringComparison.OrdinalIgnoreCase);
-                    var fullThresholdHours = isDWH ? 168 : 24; // 7 días vs 1 día
+                    var fullThresholdHours = isDWH ? DWH_FULL_THRESHOLD_HOURS : _fullThresholdHours;
 
                     if (bestFullDate.HasValue)
                     {
@@ -458,26 +638,33 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                         metrics.FullBackupBreached = true;
                     }
 
-                    if (bestLogDate.HasValue)
+                    // LOG breach solo si no está suprimido
+                    if (!metrics.LogCheckSuppressed)
                     {
-                        var logAge = DateTime.Now - bestLogDate.Value;
-                        metrics.LogBackupBreached = logAge.TotalHours > 2;
-                        metrics.LogBackupAgeHours = (int)logAge.TotalHours;
+                        if (bestLogDate.HasValue)
+                        {
+                            var logAge = DateTime.Now - bestLogDate.Value;
+                            metrics.LogBackupBreached = logAge.TotalHours > _logThresholdHours;
+                            metrics.LogBackupAgeHours = (int)logAge.TotalHours;
+                        }
+                        else
+                        {
+                            // Si no hay LOG backup, no se considera breach
+                            metrics.LogBackupBreached = false;
+                        }
                     }
                     else
                     {
-                        // Si no hay LOG backup, no se considera breach (igual que PowerShell)
                         metrics.LogBackupBreached = false;
                     }
 
-                    // Recalcular score con la nueva lógica:
-                    // FULL OK + LOG OK = 100, FULL Breach = -50, LOG Breach = -50
+                    // Recalcular score
                     var fullScore = metrics.FullBackupBreached ? 0 : 50;
                     var logScore = metrics.LogBackupBreached ? 0 : 50;
                     result.Score = fullScore + logScore;
 
-                    _logger.LogDebug("Nodo {Instance} sincronizado: FULL={FullBreached}, LOG={LogBreached}, Score={Score}", 
-                        result.InstanceName, metrics.FullBackupBreached, metrics.LogBackupBreached, result.Score);
+                    _logger.LogDebug("Nodo {Instance} sincronizado: FULL={FullBreached}, LOG={LogBreached}, Suppressed={Suppressed}, Score={Score}", 
+                        result.InstanceName, metrics.FullBackupBreached, metrics.LogBackupBreached, metrics.LogCheckSuppressed, result.Score);
 
                     // IMPORTANTE: Actualizar el registro ya guardado en la BD con los valores sincronizados
                     await UpdateSyncedBackupAsync(result.InstanceName, metrics, ct);
@@ -508,6 +695,10 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                     latestRecord.LastLogBackup = metrics.LastLogBackup;
                     latestRecord.FullBackupBreached = metrics.FullBackupBreached;
                     latestRecord.LogBackupBreached = metrics.LogBackupBreached;
+                    latestRecord.IsFullRunning = metrics.IsFullRunning;
+                    latestRecord.FullRunningSince = metrics.FullRunningSince;
+                    latestRecord.LogCheckSuppressed = metrics.LogCheckSuppressed;
+                    latestRecord.LogCheckSuppressReason = metrics.LogCheckSuppressReason;
                     latestRecord.BackupDetails = metrics.Details.Count > 0 
                         ? string.Join("|", metrics.Details) + "|SYNCED_FROM_AG" 
                         : "SYNCED_FROM_AG";
@@ -523,6 +714,53 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
         }
     }
 
+    /// <summary>
+    /// Query moderna con detección de backups FULL en ejecución (SQL 2012+)
+    /// </summary>
+    private string GetModernQueryWithRunningBackups(string cutoffDate)
+    {
+        return $@"
+;WITH last_full AS (
+    SELECT bs.database_name, MAX(bs.backup_finish_date) AS last_full_finish
+    FROM msdb.dbo.backupset bs WITH (NOLOCK)
+    WHERE bs.type = 'D' AND bs.backup_finish_date IS NOT NULL
+      AND bs.backup_finish_date >= '{cutoffDate}'
+    GROUP BY bs.database_name
+),
+last_log AS (
+    SELECT bs.database_name, MAX(bs.backup_finish_date) AS last_log_finish
+    FROM msdb.dbo.backupset bs WITH (NOLOCK)
+    WHERE bs.type = 'L' AND bs.backup_finish_date IS NOT NULL
+      AND bs.backup_finish_date >= '{cutoffDate}'
+    GROUP BY bs.database_name
+),
+running_full AS (
+    SELECT DISTINCT 
+        DB_NAME(r.database_id) AS database_name, 
+        MIN(r.start_time) OVER (PARTITION BY r.database_id) AS full_running_since
+    FROM sys.dm_exec_requests r
+    WHERE r.command = 'BACKUP DATABASE' AND r.database_id <> 0
+)
+SELECT
+    d.name AS DatabaseName,
+    d.recovery_model_desc AS RecoveryModel,
+    lf.last_full_finish AS LastFullBackup,
+    ll.last_log_finish AS LastLogBackup,
+    CASE WHEN rf.database_name IS NOT NULL THEN 1 ELSE 0 END AS IsFullRunning,
+    rf.full_running_since AS FullRunningSince
+FROM sys.databases d
+LEFT JOIN last_full lf ON lf.database_name = d.name
+LEFT JOIN last_log ll ON ll.database_name = d.name
+LEFT JOIN running_full rf ON rf.database_name = d.name
+WHERE d.state_desc = 'ONLINE'
+  AND d.name NOT IN ('tempdb', 'SqlMant')
+  AND d.database_id > 4
+  AND d.is_read_only = 0;";
+    }
+
+    /// <summary>
+    /// Query moderna sin detección de running backups (fallback si no hay VIEW SERVER STATE)
+    /// </summary>
     private string GetModernQuery(string cutoffDate)
     {
         return $@"
@@ -530,7 +768,9 @@ SELECT
     d.name AS DatabaseName,
     d.recovery_model_desc AS RecoveryModel,
     MAX(CASE WHEN bs.type = 'D' THEN bs.backup_finish_date END) AS LastFullBackup,
-    MAX(CASE WHEN bs.type = 'L' THEN bs.backup_finish_date END) AS LastLogBackup
+    MAX(CASE WHEN bs.type = 'L' THEN bs.backup_finish_date END) AS LastLogBackup,
+    CAST(0 AS INT) AS IsFullRunning,
+    CAST(NULL AS DATETIME) AS FullRunningSince
 FROM sys.databases d
 LEFT JOIN msdb.dbo.backupset bs WITH (NOLOCK)
     ON d.name = bs.database_name
@@ -542,6 +782,9 @@ WHERE d.state_desc = 'ONLINE'
 GROUP BY d.name, d.recovery_model_desc;";
     }
 
+    /// <summary>
+    /// Query SQL 2005 fallback (sin CTEs ni dm_exec_requests)
+    /// </summary>
     private string GetSQL2005Query(string cutoffDate)
     {
         return $@"
@@ -557,7 +800,9 @@ SELECT
      FROM msdb.dbo.backupset bs WITH (NOLOCK)
      WHERE bs.database_name = d.name 
        AND bs.type = 'L'
-       AND bs.backup_finish_date >= '{cutoffDate}') AS LastLogBackup
+       AND bs.backup_finish_date >= '{cutoffDate}') AS LastLogBackup,
+    CAST(0 AS INT) AS IsFullRunning,
+    CAST(NULL AS DATETIME) AS FullRunningSince
 FROM sys.databases d
 WHERE d.state_desc = 'ONLINE'
   AND d.name NOT IN ('tempdb', 'SqlMant')
@@ -567,9 +812,8 @@ WHERE d.state_desc = 'ONLINE'
 
     protected override string GetDefaultQuery(int sqlMajorVersion)
     {
-        // Se usa GetModernQuery o GetSQL2005Query según el intento
         var cutoffDate = DateTime.Now.AddDays(-7).ToString("yyyy-MM-dd");
-        return sqlMajorVersion <= 9 ? GetSQL2005Query(cutoffDate) : GetModernQuery(cutoffDate);
+        return sqlMajorVersion <= 9 ? GetSQL2005Query(cutoffDate) : GetModernQueryWithRunningBackups(cutoffDate);
     }
 
     protected override Dictionary<string, object?> GetMetricsFromResult(BackupsMetrics data)
@@ -581,7 +825,11 @@ WHERE d.state_desc = 'ONLINE'
             ["LastFullBackup"] = data.LastFullBackup,
             ["LastLogBackup"] = data.LastLogBackup,
             ["IsDWH"] = data.IsDWH,
-            ["WasSyncedFromAlwaysOn"] = data.WasSyncedFromAlwaysOn
+            ["WasSyncedFromAlwaysOn"] = data.WasSyncedFromAlwaysOn,
+            ["IsFullRunning"] = data.IsFullRunning,
+            ["LogCheckSuppressed"] = data.LogCheckSuppressed,
+            ["LogCheckSuppressReason"] = data.LogCheckSuppressReason,
+            ["HasViewServerState"] = data.HasViewServerState
         };
     }
 
@@ -601,6 +849,13 @@ WHERE d.state_desc = 'ONLINE'
         public int FullBackupAgeHours { get; set; }
         public int LogBackupAgeHours { get; set; }
         public List<string> Details { get; set; } = new();
+        
+        // Campos para supresión de LOG durante FULL backup
+        public bool IsFullRunning { get; set; }
+        public DateTime? FullRunningSince { get; set; }
+        public bool LogCheckSuppressed { get; set; }
+        public string? LogCheckSuppressReason { get; set; }
+        public bool HasViewServerState { get; set; } = true;
     }
 
     private class AlwaysOnGroup

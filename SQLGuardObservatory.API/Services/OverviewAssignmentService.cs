@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
+using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Models;
 
 namespace SQLGuardObservatory.API.Services;
@@ -44,14 +45,22 @@ public class OverviewAssignmentService : IOverviewAssignmentService
     /// </summary>
     public async Task<List<OverviewAssignmentDto>> GetActiveAssignmentsAsync()
     {
-        var assignments = await _context.OverviewIssueAssignments
-            .Include(a => a.AssignedToUser)
-            .Include(a => a.AssignedByUser)
-            .Where(a => a.ResolvedAt == null)
-            .OrderByDescending(a => a.AssignedAt)
-            .ToListAsync();
+        try
+        {
+            var assignments = await _context.OverviewIssueAssignments
+                .Include(a => a.AssignedToUser)
+                .Include(a => a.AssignedByUser)
+                .Where(a => a.ResolvedAt == null)
+                .OrderByDescending(a => a.AssignedAt)
+                .ToListAsync();
 
-        return assignments.Select(MapToDto).ToList();
+            return assignments.Select(MapToDto).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error al obtener asignaciones activas. La tabla podría no existir aún.");
+            return new List<OverviewAssignmentDto>();
+        }
     }
 
     /// <summary>
@@ -158,7 +167,7 @@ public class OverviewAssignmentService : IOverviewAssignmentService
             // Actualizar la asignación existente en lugar de crear una nueva
             existing.AssignedToUserId = request.AssignedToUserId;
             existing.AssignedByUserId = assignedByUserId;
-            existing.AssignedAt = DateTime.UtcNow;
+            existing.AssignedAt = LocalClockAR.Now;
             existing.Notes = request.Notes;
             
             await _context.SaveChangesAsync();
@@ -232,7 +241,7 @@ public class OverviewAssignmentService : IOverviewAssignmentService
             return null;
         }
 
-        assignment.ResolvedAt = DateTime.UtcNow;
+        assignment.ResolvedAt = LocalClockAR.Now;
         if (notes != null)
         {
             assignment.Notes = notes;

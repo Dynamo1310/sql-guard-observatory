@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using SQLGuardObservatory.API.Helpers;
 
 namespace SQLGuardObservatory.API.Models;
 
@@ -55,7 +56,7 @@ public class OverviewIssueAssignment
     /// <summary>
     /// Fecha/hora de la asignación
     /// </summary>
-    public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
+    public DateTime AssignedAt { get; set; } = LocalClockAR.Now;
     
     /// <summary>
     /// Fecha/hora en que se resolvió el problema (null = activo)

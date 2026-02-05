@@ -97,4 +97,15 @@ public class BackupIssueSummaryDto
     public bool LogBackupBreached { get; set; }
     public string? AssignedToUserName { get; set; }
     public string? AssignedAt { get; set; }
+    
+    // Campos para supresión de alertas de LOG durante FULL backup
+    /// <summary>
+    /// Indica si el chequeo de LOG está suprimido (por FULL running o grace period)
+    /// </summary>
+    public bool LogCheckSuppressed { get; set; }
+    
+    /// <summary>
+    /// Razón de la supresión: "FULL_RUNNING" o "GRACE_PERIOD"
+    /// </summary>
+    public string? LogCheckSuppressReason { get; set; }
 }

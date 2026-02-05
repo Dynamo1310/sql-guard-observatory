@@ -65,6 +65,17 @@ public class OverviewBackupIssueDto
     /// Lista de bases de datos con backup atrasado (formato: "DBName:FULL=Xh" o "DBName:LOG=Xh")
     /// </summary>
     public List<string> BreachedDatabases { get; set; } = new();
+    
+    // Campos para supresión de alertas de LOG durante FULL backup
+    /// <summary>
+    /// Indica si el chequeo de LOG está suprimido (por FULL running o grace period)
+    /// </summary>
+    public bool LogCheckSuppressed { get; set; }
+    
+    /// <summary>
+    /// Razón de la supresión: "FULL_RUNNING" o "GRACE_PERIOD"
+    /// </summary>
+    public string? LogCheckSuppressReason { get; set; }
 }
 
 /// <summary>
@@ -138,4 +149,8 @@ public class OverviewBackupBreachRaw
     public DateTime? LastFullBackup { get; set; }
     public DateTime? LastLogBackup { get; set; }
     public string? BackupDetails { get; set; }
+    
+    // Campos para supresión de alertas de LOG
+    public bool LogCheckSuppressed { get; set; }
+    public string? LogCheckSuppressReason { get; set; }
 }

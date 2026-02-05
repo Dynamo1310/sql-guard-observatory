@@ -107,7 +107,9 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                 LastFullBackup = b.LastFullBackup,
                 LastLogBackup = b.LastLogBackup,
                 Issues = BuildBackupIssuesList(b),
-                BreachedDatabases = ParseBreachedDatabases(b.BackupDetails, b.FullBackupBreached, b.LogBackupBreached)
+                BreachedDatabases = ParseBreachedDatabases(b.BackupDetails, b.FullBackupBreached, b.LogBackupBreached),
+                LogCheckSuppressed = b.LogCheckSuppressed,
+                LogCheckSuppressReason = b.LogCheckSuppressReason
             })
             .OrderBy(b => b.Score)
             .ThenByDescending(b => b.FullBackupBreached) // FULL breach primero (más crítico)
@@ -540,12 +542,15 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                     LastFullBackup,
                     LastLogBackup,
                     BackupDetails,
+                    ISNULL(LogCheckSuppressed, 0) AS LogCheckSuppressed,
+                    LogCheckSuppressReason,
                     ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
                 FROM dbo.InstanceHealth_Backups
                 WHERE Ambiente = 'Produccion'
             )
             SELECT InstanceName, FullBackupBreached, LogBackupBreached, 
-                   LastFullBackup, LastLogBackup, BackupDetails
+                   LastFullBackup, LastLogBackup, BackupDetails,
+                   LogCheckSuppressed, LogCheckSuppressReason
             FROM LatestBackups
             WHERE rn = 1 AND (FullBackupBreached = 1 OR LogBackupBreached = 1)";
 
@@ -565,7 +570,9 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                 LogBackupBreached = !reader.IsDBNull(2) && reader.GetBoolean(2),
                 LastFullBackup = reader.IsDBNull(3) ? null : reader.GetDateTime(3),
                 LastLogBackup = reader.IsDBNull(4) ? null : reader.GetDateTime(4),
-                BackupDetails = reader.IsDBNull(5) ? null : reader.GetString(5)
+                BackupDetails = reader.IsDBNull(5) ? null : reader.GetString(5),
+                LogCheckSuppressed = !reader.IsDBNull(6) && reader.GetBoolean(6),
+                LogCheckSuppressReason = reader.IsDBNull(7) ? null : reader.GetString(7)
             });
         }
 
