@@ -5,6 +5,22 @@ using SQLGuardObservatory.API.Helpers;
 namespace SQLGuardObservatory.API.Models;
 
 /// <summary>
+/// Tipo de alerta de backup: FULL o LOG
+/// </summary>
+public enum BackupAlertType
+{
+    /// <summary>
+    /// Alertas para backups FULL atrasados
+    /// </summary>
+    Full = 1,
+    
+    /// <summary>
+    /// Alertas para backups LOG atrasados
+    /// </summary>
+    Log = 2
+}
+
+/// <summary>
 /// Configuración de alertas por email para backups atrasados
 /// </summary>
 [Table("BackupAlertConfig")]
@@ -12,6 +28,11 @@ public class BackupAlertConfig
 {
     [Key]
     public int Id { get; set; }
+    
+    /// <summary>
+    /// Tipo de alerta: Full o Log (cada tipo tiene su propia configuración)
+    /// </summary>
+    public BackupAlertType AlertType { get; set; } = BackupAlertType.Full;
     
     [Required]
     [MaxLength(200)]
@@ -72,6 +93,11 @@ public class BackupAlertHistory
     
     [ForeignKey(nameof(ConfigId))]
     public virtual BackupAlertConfig? Config { get; set; }
+    
+    /// <summary>
+    /// Tipo de alerta: Full o Log
+    /// </summary>
+    public BackupAlertType AlertType { get; set; } = BackupAlertType.Full;
     
     public DateTime SentAt { get; set; } = LocalClockAR.Now;
     

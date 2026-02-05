@@ -6,7 +6,7 @@ namespace SQLGuardObservatory.API.Services;
 
 /// <summary>
 /// Servicio en background que verifica periódicamente si hay backups atrasados
-/// y envía alertas cuando corresponde
+/// y envía alertas cuando corresponde (FULL y LOG independientes)
 /// </summary>
 public class BackupAlertBackgroundService : BackgroundService
 {
@@ -32,7 +32,11 @@ public class BackupAlertBackgroundService : BackgroundService
         {
             try
             {
-                await RunCheckCycleAsync(stoppingToken);
+                // Ejecutar verificación para FULL
+                await RunCheckForTypeAsync(BackupAlertType.Full, stoppingToken);
+                
+                // Ejecutar verificación para LOG
+                await RunCheckForTypeAsync(BackupAlertType.Log, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -46,13 +50,29 @@ public class BackupAlertBackgroundService : BackgroundService
         _logger.LogInformation("Backup Alert Background Service stopped");
     }
 
-    private async Task RunCheckCycleAsync(CancellationToken stoppingToken)
+    /// <summary>
+    /// Ejecuta la verificación para un tipo específico de alerta (FULL o LOG)
+    /// </summary>
+    private async Task RunCheckForTypeAsync(BackupAlertType alertType, CancellationToken stoppingToken)
     {
         using var scope = _serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         
-        // Verificar si la alerta está habilitada
-        var config = await context.BackupAlertConfigs.FirstOrDefaultAsync(stoppingToken);
+        var typeName = alertType == BackupAlertType.Full ? "FULL" : "LOG";
+        
+        // Verificar si la alerta de este tipo está habilitada
+        BackupAlertConfig? config;
+        try
+        {
+            config = await context.BackupAlertConfigs
+                .FirstOrDefaultAsync(c => c.AlertType == alertType, stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            // La tabla podría no existir aún o no tener la columna AlertType
+            _logger.LogDebug(ex, "Error checking config for {Type} alerts - table may not exist yet", typeName);
+            return;
+        }
         
         if (config == null || !config.IsEnabled)
         {
@@ -70,12 +90,12 @@ public class BackupAlertBackgroundService : BackgroundService
             }
         }
 
-        _logger.LogInformation("Running backup alert check (interval: {Interval} min)", config.CheckIntervalMinutes);
+        _logger.LogInformation("Running {Type} backup alert check (interval: {Interval} min)", typeName, config.CheckIntervalMinutes);
 
         // Ejecutar la verificación
         var alertService = scope.ServiceProvider.GetRequiredService<IBackupAlertService>();
-        var result = await alertService.RunCheckAsync();
+        var result = await alertService.RunCheckAsync(alertType);
         
-        _logger.LogInformation("Backup alert check completed: {Success} - {Message}", result.success, result.message);
+        _logger.LogInformation("{Type} backup alert check completed: {Success} - {Message}", typeName, result.success, result.message);
     }
 }

@@ -15,7 +15,9 @@ import {
   Send,
   Lock,
   Users,
-  UserPlus
+  UserPlus,
+  Database,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Capabilities } from '@/lib/capabilities';
@@ -28,6 +30,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import {
   Select,
   SelectContent,
@@ -43,12 +51,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
   backupAlertsApi,
   BackupAlertConfigDto,
   BackupAlertHistoryDto,
-  BackupAlertStatusDto
+  BackupAlertStatusDto,
+  BackupAlertType
 } from '@/services/api';
 
 const checkIntervalOptions = [
@@ -74,55 +84,86 @@ const alertIntervalOptions = [
   { value: 1440, label: '24 horas' },
 ];
 
+// Estado por tipo de alerta
+interface AlertTypeState {
+  config: BackupAlertConfigDto | null;
+  history: BackupAlertHistoryDto[];
+  name: string;
+  description: string;
+  isEnabled: boolean;
+  checkIntervalMinutes: number;
+  alertIntervalMinutes: number;
+  recipients: string[];
+  ccRecipients: string[];
+  newEmail: string;
+  newCcEmail: string;
+  saving: boolean;
+  testing: boolean;
+  running: boolean;
+}
+
+const createInitialState = (alertType: BackupAlertType): AlertTypeState => ({
+  config: null,
+  history: [],
+  name: alertType === 'full' ? 'Alerta de Backups FULL Atrasados' : 'Alerta de Backups LOG Atrasados',
+  description: alertType === 'full'
+    ? 'Alerta automática cuando se detectan backups FULL vencidos'
+    : 'Alerta automática cuando se detectan backups LOG vencidos',
+  isEnabled: false,
+  checkIntervalMinutes: 60,
+  alertIntervalMinutes: 240,
+  recipients: [],
+  ccRecipients: [],
+  newEmail: '',
+  newCcEmail: '',
+  saving: false,
+  testing: false,
+  running: false,
+});
+
 export default function BackupAlerts() {
   const { hasCapability } = useAuth();
   const canConfigureAlerts = hasCapability(Capabilities.SystemConfigureAlerts);
 
-  const [config, setConfig] = useState<BackupAlertConfigDto | null>(null);
-  const [history, setHistory] = useState<BackupAlertHistoryDto[]>([]);
+  const [fullState, setFullState] = useState<AlertTypeState>(createInitialState('full'));
+  const [logState, setLogState] = useState<AlertTypeState>(createInitialState('log'));
   const [status, setStatus] = useState<BackupAlertStatusDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingStatus, setLoadingStatus] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [running, setRunning] = useState(false);
+  const [historyTab, setHistoryTab] = useState<BackupAlertType>('full');
 
-  // Form state
-  const [name, setName] = useState('Alerta de Backups Atrasados');
-  const [description, setDescription] = useState('Alerta automática cuando se detectan backups vencidos');
-  const [isEnabled, setIsEnabled] = useState(false);
-  const [checkIntervalMinutes, setCheckIntervalMinutes] = useState(60);
-  const [alertIntervalMinutes, setAlertIntervalMinutes] = useState(240);
-  const [recipients, setRecipients] = useState<string[]>([]);
-  const [ccRecipients, setCcRecipients] = useState<string[]>([]);
-  const [newEmail, setNewEmail] = useState('');
-  const [newCcEmail, setNewCcEmail] = useState('');
-
-  const loadConfig = useCallback(async () => {
+  const loadConfigForType = useCallback(async (type: BackupAlertType, setState: React.Dispatch<React.SetStateAction<AlertTypeState>>) => {
     try {
-      setLoading(true);
       const [configData, historyData] = await Promise.all([
-        backupAlertsApi.getConfig(),
-        backupAlertsApi.getHistory(10),
+        backupAlertsApi.getConfig(type),
+        backupAlertsApi.getHistory(type, 10),
       ]);
 
-      if (configData) {
-        setConfig(configData);
-        setName(configData.name);
-        setDescription(configData.description || '');
-        setIsEnabled(configData.isEnabled);
-        setCheckIntervalMinutes(configData.checkIntervalMinutes || 60);
-        setAlertIntervalMinutes(configData.alertIntervalMinutes || 240);
-        setRecipients(configData.recipients || []);
-        setCcRecipients(configData.ccRecipients || []);
-      }
-      setHistory(historyData);
+      setState(prev => ({
+        ...prev,
+        config: configData,
+        history: historyData,
+        name: configData?.name || prev.name,
+        description: configData?.description || prev.description,
+        isEnabled: configData?.isEnabled || false,
+        checkIntervalMinutes: configData?.checkIntervalMinutes || 60,
+        alertIntervalMinutes: configData?.alertIntervalMinutes || 240,
+        recipients: configData?.recipients || [],
+        ccRecipients: configData?.ccRecipients || [],
+      }));
     } catch (err: any) {
-      console.error('Error loading config:', err);
-    } finally {
-      setLoading(false);
+      console.error(`Error loading ${type} config:`, err);
     }
   }, []);
+
+  const loadAllConfigs = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([
+      loadConfigForType('full', setFullState),
+      loadConfigForType('log', setLogState),
+    ]);
+    setLoading(false);
+  }, [loadConfigForType]);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -137,76 +178,68 @@ export default function BackupAlerts() {
   }, []);
 
   useEffect(() => {
-    loadConfig();
+    loadAllConfigs();
     loadStatus();
-  }, [loadConfig, loadStatus]);
+  }, [loadAllConfigs, loadStatus]);
 
-  const handleSave = async () => {
-    if (!name.trim()) {
+  const handleSave = async (type: BackupAlertType) => {
+    const state = type === 'full' ? fullState : logState;
+    const setState = type === 'full' ? setFullState : setLogState;
+
+    if (!state.name.trim()) {
       toast.error('El nombre es requerido');
       return;
     }
 
-    if (recipients.length === 0) {
+    if (state.recipients.length === 0) {
       toast.error('Agrega al menos un destinatario');
       return;
     }
 
     try {
-      setSaving(true);
+      setState(prev => ({ ...prev, saving: true }));
 
       const payload = {
-        name: name.trim(),
-        description: description.trim() || undefined,
-        isEnabled,
-        checkIntervalMinutes,
-        alertIntervalMinutes,
-        recipients,
-        ccRecipients,
+        name: state.name.trim(),
+        description: state.description.trim() || undefined,
+        isEnabled: state.isEnabled,
+        checkIntervalMinutes: state.checkIntervalMinutes,
+        alertIntervalMinutes: state.alertIntervalMinutes,
+        recipients: state.recipients,
+        ccRecipients: state.ccRecipients,
       };
 
-      let result: BackupAlertConfigDto;
-      if (config && config.id > 0) {
-        result = await backupAlertsApi.updateConfig(payload);
-      } else {
-        result = await backupAlertsApi.createConfig({
-          name: payload.name,
-          description: payload.description,
-          checkIntervalMinutes: payload.checkIntervalMinutes,
-          alertIntervalMinutes: payload.alertIntervalMinutes,
-          recipients: payload.recipients,
-          ccRecipients: payload.ccRecipients,
-        });
-      }
-
-      setConfig(result);
-      toast.success('Configuración guardada correctamente');
+      const result = await backupAlertsApi.updateConfig(type, payload);
+      setState(prev => ({ ...prev, config: result }));
+      toast.success(`Configuración de ${type.toUpperCase()} guardada correctamente`);
     } catch (err: any) {
       toast.error('Error al guardar: ' + err.message);
     } finally {
-      setSaving(false);
+      setState(prev => ({ ...prev, saving: false }));
     }
   };
 
-  const handleToggle = async (enabled: boolean) => {
-    setIsEnabled(enabled);
+  const handleToggle = async (type: BackupAlertType, enabled: boolean) => {
+    const setState = type === 'full' ? setFullState : setLogState;
 
-    if (config && config.id > 0) {
-      try {
-        const result = await backupAlertsApi.updateConfig({ isEnabled: enabled });
-        setConfig(result);
-        toast.success(enabled ? 'Alerta activada' : 'Alerta desactivada');
-      } catch (err: any) {
-        setIsEnabled(!enabled);
-        toast.error('Error: ' + err.message);
-      }
-    }
-  };
+    setState(prev => ({ ...prev, isEnabled: enabled }));
 
-  const handleTest = async () => {
     try {
-      setTesting(true);
-      const result = await backupAlertsApi.testAlert();
+      const result = await backupAlertsApi.updateConfig(type, { isEnabled: enabled });
+      setState(prev => ({ ...prev, config: result }));
+      toast.success(`Alerta ${type.toUpperCase()} ${enabled ? 'activada' : 'desactivada'}`);
+    } catch (err: any) {
+      setState(prev => ({ ...prev, isEnabled: !enabled }));
+      toast.error('Error: ' + err.message);
+    }
+  };
+
+  const handleTest = async (type: BackupAlertType) => {
+    const setState = type === 'full' ? setFullState : setLogState;
+
+    try {
+      setState(prev => ({ ...prev, testing: true }));
+      const result = await backupAlertsApi.testAlert(type);
       if (result.success) {
         toast.success(result.message);
       } else {
@@ -215,17 +248,19 @@ export default function BackupAlerts() {
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally {
-      setTesting(false);
+      setState(prev => ({ ...prev, testing: false }));
     }
   };
 
-  const handleRunNow = async () => {
+  const handleRunNow = async (type: BackupAlertType) => {
+    const setState = type === 'full' ? setFullState : setLogState;
+
     try {
-      setRunning(true);
-      const result = await backupAlertsApi.runNow();
+      setState(prev => ({ ...prev, running: true }));
+      const result = await backupAlertsApi.runNow(type);
       if (result.success) {
         toast.success(result.message);
-        await loadConfig();
+        await loadConfigForType(type, setState);
         await loadStatus();
       } else {
         toast.error(result.message);
@@ -233,12 +268,15 @@ export default function BackupAlerts() {
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally {
-      setRunning(false);
+      setState(prev => ({ ...prev, running: false }));
     }
   };
 
-  const addRecipient = (isCC = false) => {
-    const email = (isCC ? newCcEmail : newEmail).trim().toLowerCase();
+  const addRecipient = (type: BackupAlertType, isCC = false) => {
+    const state = type === 'full' ? fullState : logState;
+    const setState = type === 'full' ? setFullState : setLogState;
+    const email = (isCC ? state.newCcEmail : state.newEmail).trim().toLowerCase();
+
     if (!email) return;
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -246,26 +284,25 @@ export default function BackupAlerts() {
       return;
     }
 
-    const list = isCC ? ccRecipients : recipients;
+    const list = isCC ? state.ccRecipients : state.recipients;
     if (list.includes(email)) {
       toast.error('Este email ya está agregado');
       return;
     }
 
     if (isCC) {
-      setCcRecipients([...ccRecipients, email]);
-      setNewCcEmail('');
+      setState(prev => ({ ...prev, ccRecipients: [...prev.ccRecipients, email], newCcEmail: '' }));
     } else {
-      setRecipients([...recipients, email]);
-      setNewEmail('');
+      setState(prev => ({ ...prev, recipients: [...prev.recipients, email], newEmail: '' }));
     }
   };
 
-  const removeRecipient = (email: string, isCC = false) => {
+  const removeRecipient = (type: BackupAlertType, email: string, isCC = false) => {
+    const setState = type === 'full' ? setFullState : setLogState;
     if (isCC) {
-      setCcRecipients(ccRecipients.filter(r => r !== email));
+      setState(prev => ({ ...prev, ccRecipients: prev.ccRecipients.filter(r => r !== email) }));
     } else {
-      setRecipients(recipients.filter(r => r !== email));
+      setState(prev => ({ ...prev, recipients: prev.recipients.filter(r => r !== email) }));
     }
   };
 
@@ -280,6 +317,263 @@ export default function BackupAlerts() {
     });
   };
 
+  // Componente reutilizable para la configuración de un tipo de alerta
+  const AlertTypeConfig = ({ type, state, setState }: {
+    type: BackupAlertType;
+    state: AlertTypeState;
+    setState: React.Dispatch<React.SetStateAction<AlertTypeState>>;
+  }) => {
+    const typeName = type === 'full' ? 'FULL' : 'LOG';
+    const TypeIcon = type === 'full' ? Database : FileText;
+
+    return (
+      <div className="space-y-4">
+        {/* Header con switch */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TypeIcon className="h-5 w-5 text-muted-foreground" />
+            <span className="font-medium">Alerta de Backups {typeName}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {canConfigureAlerts ? (
+              <>
+                <Label htmlFor={`enabled-${type}`} className="text-sm">
+                  {state.isEnabled ? 'Activa' : 'Inactiva'}
+                </Label>
+                <Switch
+                  id={`enabled-${type}`}
+                  checked={state.isEnabled}
+                  onCheckedChange={(v) => handleToggle(type, v)}
+                />
+              </>
+            ) : (
+              <Badge variant="outline">
+                <Lock className="h-3 w-3 mr-1" />
+                Solo lectura
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Intervalos */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>
+              <Clock className="h-4 w-4 inline mr-1" />
+              Intervalo de Verificación
+            </Label>
+            <Select
+              value={state.checkIntervalMinutes.toString()}
+              onValueChange={(v) => setState(prev => ({ ...prev, checkIntervalMinutes: parseInt(v) }))}
+              disabled={!canConfigureAlerts}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {checkIntervalOptions.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value.toString()}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Cada cuánto se verifican los backups {typeName}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>
+              <Mail className="h-4 w-4 inline mr-1" />
+              Intervalo de Alertas
+            </Label>
+            <Select
+              value={state.alertIntervalMinutes.toString()}
+              onValueChange={(v) => setState(prev => ({ ...prev, alertIntervalMinutes: parseInt(v) }))}
+              disabled={!canConfigureAlerts}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {alertIntervalOptions.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value.toString()}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Cada cuánto se envía email si siguen atrasados
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Destinatarios TO */}
+        <div className="space-y-3">
+          <Label className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            Destinatarios (TO)
+          </Label>
+
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              placeholder="email@ejemplo.com"
+              value={state.newEmail}
+              onChange={(e) => setState(prev => ({ ...prev, newEmail: e.target.value }))}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRecipient(type, false))}
+              disabled={!canConfigureAlerts}
+            />
+            <Button type="button" variant="outline" onClick={() => addRecipient(type, false)} disabled={!canConfigureAlerts}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {state.recipients.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {state.recipients.map(email => (
+                <Badge key={email} variant="secondary" className="py-1.5 px-3">
+                  <Mail className="h-3 w-3 mr-1.5" />
+                  {email}
+                  {canConfigureAlerts && (
+                    <button
+                      type="button"
+                      onClick={() => removeRecipient(type, email, false)}
+                      className="ml-2 hover:text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No hay destinatarios configurados
+            </p>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Destinatarios CC */}
+        <div className="space-y-3">
+          <Label className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4" />
+            Copia (CC)
+          </Label>
+
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              placeholder="copia@ejemplo.com"
+              value={state.newCcEmail}
+              onChange={(e) => setState(prev => ({ ...prev, newCcEmail: e.target.value }))}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRecipient(type, true))}
+              disabled={!canConfigureAlerts}
+            />
+            <Button type="button" variant="outline" onClick={() => addRecipient(type, true)} disabled={!canConfigureAlerts}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {state.ccRecipients.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {state.ccRecipients.map(email => (
+                <Badge key={email} variant="outline" className="py-1.5 px-3">
+                  <UserPlus className="h-3 w-3 mr-1.5" />
+                  {email}
+                  {canConfigureAlerts && (
+                    <button
+                      type="button"
+                      onClick={() => removeRecipient(type, email, true)}
+                      className="ml-2 hover:text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No hay destinatarios en copia
+            </p>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Acciones */}
+        <div className="flex flex-wrap gap-2">
+          {canConfigureAlerts && (
+            <>
+              <Button onClick={() => handleSave(type)} disabled={state.saving}>
+                {state.saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Guardar
+                  </>
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => handleTest(type)}
+                disabled={state.testing || state.recipients.length === 0}
+              >
+                {state.testing ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
+                Enviar Prueba
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => handleRunNow(type)}
+                disabled={state.running || !state.isEnabled}
+              >
+                {state.running ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-4 w-4" />
+                )}
+                Ejecutar Ahora
+              </Button>
+            </>
+          )}
+        </div>
+
+        {/* Estado del servicio */}
+        {state.config && (
+          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground bg-muted/30 rounded-lg p-3">
+            <div className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              <span>Última verificación:</span>
+              <span className="font-mono text-xs">{formatDate(state.config.lastRunAt)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Mail className="h-3 w-3" />
+              <span>Última alerta:</span>
+              <span className="font-mono text-xs">{formatDate(state.config.lastAlertSentAt)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto p-6 space-y-6">
@@ -291,42 +585,21 @@ export default function BackupAlerts() {
           <Skeleton className="h-10 w-28" />
         </div>
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader>
             <Skeleton className="h-6 w-56" />
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-6">
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-6 w-40" />
-            </div>
+          <CardContent className="space-y-4">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
           </CardContent>
         </Card>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <Skeleton className="h-6 w-48" />
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-24" />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </CardContent>
-          </Card>
-        </div>
       </div>
     );
   }
 
   const totalIssues = (status?.unassignedIssues.length || 0) + (status?.assignedIssues.length || 0);
+  const fullHistory = fullState.history;
+  const logHistory = logState.history;
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -338,10 +611,10 @@ export default function BackupAlerts() {
             Alertas de Backups Atrasados
           </h1>
           <p className="text-muted-foreground">
-            Notificaciones automáticas cuando se detectan backups vencidos en Producción
+            Notificaciones automáticas para backups FULL y LOG vencidos en Producción
           </p>
         </div>
-        <Button variant="outline" onClick={() => { loadConfig(); loadStatus(); }}>
+        <Button variant="outline" onClick={() => { loadAllConfigs(); loadStatus(); }}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loadingStatus ? 'animate-spin' : ''}`} />
           Actualizar
         </Button>
@@ -398,333 +671,63 @@ export default function BackupAlerts() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Configuración */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Configuración de Alerta
-                </CardTitle>
-                <CardDescription>
-                  Define los intervalos, destinatarios y copia
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                {canConfigureAlerts ? (
-                  <>
-                    <Label htmlFor="enabled" className="text-sm">
-                      {isEnabled ? 'Activa' : 'Inactiva'}
-                    </Label>
-                    <Switch
-                      id="enabled"
-                      checked={isEnabled}
-                      onCheckedChange={handleToggle}
-                    />
-                  </>
-                ) : (
-                  <Badge variant="outline">
-                    <Lock className="h-3 w-3 mr-1" />
-                    Solo lectura
+      {/* Configuración con Accordion */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            Configuración de Alertas
+          </CardTitle>
+          <CardDescription>
+            Configura las alertas de FULL y LOG de forma independiente
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Accordion type="multiple" defaultValue={['full', 'log']} className="w-full">
+            <AccordionItem value="full">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-3">
+                  <Database className="h-5 w-5 text-blue-500" />
+                  <span className="font-semibold">Backups FULL (Completos)</span>
+                  <Badge variant={fullState.isEnabled ? 'default' : 'secondary'} className="ml-2">
+                    {fullState.isEnabled ? 'Activa' : 'Inactiva'}
                   </Badge>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nombre de la Alerta</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Alerta de Backups Atrasados"
-                  disabled={!canConfigureAlerts}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Descripción (opcional)</Label>
-                <Input
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Descripción..."
-                  disabled={!canConfigureAlerts}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="checkInterval">
-                  <Clock className="h-4 w-4 inline mr-1" />
-                  Intervalo de Verificación
-                </Label>
-                <Select
-                  value={checkIntervalMinutes.toString()}
-                  onValueChange={(v) => setCheckIntervalMinutes(parseInt(v))}
-                  disabled={!canConfigureAlerts}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {checkIntervalOptions.map(opt => (
-                      <SelectItem key={opt.value} value={opt.value.toString()}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Cada cuánto se verifican los backups atrasados
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="alertInterval">
-                  <Mail className="h-4 w-4 inline mr-1" />
-                  Intervalo de Alertas
-                </Label>
-                <Select
-                  value={alertIntervalMinutes.toString()}
-                  onValueChange={(v) => setAlertIntervalMinutes(parseInt(v))}
-                  disabled={!canConfigureAlerts}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {alertIntervalOptions.map(opt => (
-                      <SelectItem key={opt.value} value={opt.value.toString()}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Cada cuánto se envía email si siguen atrasados
-                </p>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Destinatarios TO */}
-            <div className="space-y-3">
-              <Label className="flex items-center gap-2">
-                <Mail className="h-4 w-4" />
-                Destinatarios (TO)
-              </Label>
-
-              <div className="flex gap-2">
-                <Input
-                  type="email"
-                  placeholder="email@ejemplo.com"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRecipient(false))}
-                  disabled={!canConfigureAlerts}
-                />
-                <Button type="button" variant="outline" onClick={() => addRecipient(false)} disabled={!canConfigureAlerts}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {recipients.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {recipients.map(email => (
-                    <Badge key={email} variant="secondary" className="py-1.5 px-3">
-                      <Mail className="h-3 w-3 mr-1.5" />
-                      {email}
-                      {canConfigureAlerts && (
-                        <button
-                          type="button"
-                          onClick={() => removeRecipient(email, false)}
-                          className="ml-2 hover:text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      )}
+                  {fullState.recipients.length > 0 && (
+                    <Badge variant="outline" className="text-xs">
+                      {fullState.recipients.length} destinatarios
                     </Badge>
-                  ))}
+                  )}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No hay destinatarios configurados
-                </p>
-              )}
-            </div>
+              </AccordionTrigger>
+              <AccordionContent className="pt-4">
+                <AlertTypeConfig type="full" state={fullState} setState={setFullState} />
+              </AccordionContent>
+            </AccordionItem>
 
-            <Separator />
-
-            {/* Destinatarios CC */}
-            <div className="space-y-3">
-              <Label className="flex items-center gap-2">
-                <UserPlus className="h-4 w-4" />
-                Copia (CC)
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Estos destinatarios recibirán el mismo email en copia
-              </p>
-
-              <div className="flex gap-2">
-                <Input
-                  type="email"
-                  placeholder="copia@ejemplo.com"
-                  value={newCcEmail}
-                  onChange={(e) => setNewCcEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRecipient(true))}
-                  disabled={!canConfigureAlerts}
-                />
-                <Button type="button" variant="outline" onClick={() => addRecipient(true)} disabled={!canConfigureAlerts}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {ccRecipients.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {ccRecipients.map(email => (
-                    <Badge key={email} variant="outline" className="py-1.5 px-3">
-                      <UserPlus className="h-3 w-3 mr-1.5" />
-                      {email}
-                      {canConfigureAlerts && (
-                        <button
-                          type="button"
-                          onClick={() => removeRecipient(email, true)}
-                          className="ml-2 hover:text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      )}
-                    </Badge>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No hay destinatarios en copia
-                </p>
-              )}
-            </div>
-
-            <Separator />
-
-            {canConfigureAlerts ? (
-              <Button onClick={handleSave} disabled={saving} className="w-full">
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  'Guardar Configuración'
-                )}
-              </Button>
-            ) : (
-              <Alert>
-                <Lock className="h-4 w-4" />
-                <AlertDescription>
-                  Solo lectura. No tienes permisos para modificar esta configuración.
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Panel lateral */}
-        <div className="space-y-6">
-          {/* Acciones rápidas */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Play className="h-5 w-5" />
-                Acciones
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {canConfigureAlerts ? (
-                <>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={handleTest}
-                    disabled={testing || recipients.length === 0}
-                  >
-                    {testing ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="mr-2 h-4 w-4" />
-                    )}
-                    Enviar Email de Prueba
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={handleRunNow}
-                    disabled={running || !isEnabled}
-                  >
-                    {running ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Play className="mr-2 h-4 w-4" />
-                    )}
-                    Ejecutar Verificación Ahora
-                  </Button>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-2">
-                  <Lock className="h-4 w-4 inline mr-1" />
-                  Requiere permisos
-                </p>
-              )}
-
-              {!isEnabled && (
-                <Alert>
-                  <Bell className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    Activa la alerta para ejecutar verificaciones
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Info de estado */}
-          {config && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Estado del Servicio
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Estado:</span>
-                  <Badge variant={config.isEnabled ? 'default' : 'secondary'}>
-                    {config.isEnabled ? 'Activa' : 'Inactiva'}
+            <AccordionItem value="log">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-5 w-5 text-amber-500" />
+                  <span className="font-semibold">Backups LOG (Transaccionales)</span>
+                  <Badge variant={logState.isEnabled ? 'default' : 'secondary'} className="ml-2">
+                    {logState.isEnabled ? 'Activa' : 'Inactiva'}
                   </Badge>
+                  {logState.recipients.length > 0 && (
+                    <Badge variant="outline" className="text-xs">
+                      {logState.recipients.length} destinatarios
+                    </Badge>
+                  )}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Última verificación:</span>
-                  <span className="font-mono text-xs">{formatDate(config.lastRunAt)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Última alerta:</span>
-                  <span className="font-mono text-xs">{formatDate(config.lastAlertSentAt)}</span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+              </AccordionTrigger>
+              <AccordionContent className="pt-4">
+                <AlertTypeConfig type="log" state={logState} setState={setLogState} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </CardContent>
+      </Card>
 
-      {/* Historial de alertas */}
+      {/* Historial de alertas con Tabs */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -732,69 +735,146 @@ export default function BackupAlerts() {
             Historial de Alertas Enviadas
           </CardTitle>
           <CardDescription>
-            Últimas 10 alertas enviadas por el sistema
+            Últimas alertas enviadas para cada tipo
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {history.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Bell className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p>No hay alertas enviadas aún</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Instancias Afectadas</TableHead>
-                  <TableHead>Destinatarios</TableHead>
-                  <TableHead>Estado</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.map((h) => (
-                  <TableRow key={h.id}>
-                    <TableCell className="font-mono text-xs">
-                      {formatDate(h.sentAt)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {h.instancesAffected.slice(0, 3).map(inst => (
-                          <Badge key={inst} variant="destructive" className="font-mono text-xs">
-                            {inst}
+          <Tabs value={historyTab} onValueChange={(v) => setHistoryTab(v as BackupAlertType)}>
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="full" className="flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                FULL ({fullHistory.length})
+              </TabsTrigger>
+              <TabsTrigger value="log" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                LOG ({logHistory.length})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="full">
+              {fullHistory.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Database className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p>No hay alertas FULL enviadas aún</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Instancias Afectadas</TableHead>
+                      <TableHead>Destinatarios</TableHead>
+                      <TableHead>Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {fullHistory.map((h) => (
+                      <TableRow key={h.id}>
+                        <TableCell className="font-mono text-xs">
+                          {formatDate(h.sentAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {h.instancesAffected.slice(0, 3).map(inst => (
+                              <Badge key={inst} variant="destructive" className="font-mono text-xs">
+                                {inst}
+                              </Badge>
+                            ))}
+                            {h.instancesAffected.length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{h.instancesAffected.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {h.recipientCount} TO
+                            {h.ccCount > 0 && `, ${h.ccCount} CC`}
                           </Badge>
-                        ))}
-                        {h.instancesAffected.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{h.instancesAffected.length - 3}
+                        </TableCell>
+                        <TableCell>
+                          {h.success ? (
+                            <Badge variant="default" className="bg-success text-success-foreground">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Enviado
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Error
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
+
+            <TabsContent value="log">
+              {logHistory.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p>No hay alertas LOG enviadas aún</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Instancias Afectadas</TableHead>
+                      <TableHead>Destinatarios</TableHead>
+                      <TableHead>Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {logHistory.map((h) => (
+                      <TableRow key={h.id}>
+                        <TableCell className="font-mono text-xs">
+                          {formatDate(h.sentAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {h.instancesAffected.slice(0, 3).map(inst => (
+                              <Badge key={inst} variant="destructive" className="font-mono text-xs">
+                                {inst}
+                              </Badge>
+                            ))}
+                            {h.instancesAffected.length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{h.instancesAffected.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {h.recipientCount} TO
+                            {h.ccCount > 0 && `, ${h.ccCount} CC`}
                           </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {h.recipientCount} TO
-                        {h.ccCount > 0 && `, ${h.ccCount} CC`}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {h.success ? (
-                        <Badge variant="default" className="bg-success text-success-foreground">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Enviado
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive">
-                          <XCircle className="h-3 w-3 mr-1" />
-                          Error
-                        </Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                        </TableCell>
+                        <TableCell>
+                          {h.success ? (
+                            <Badge variant="default" className="bg-success text-success-foreground">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Enviado
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Error
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
@@ -803,10 +883,12 @@ export default function BackupAlerts() {
         <Bell className="h-4 w-4" />
         <AlertDescription>
           <strong>Funcionamiento:</strong> El sistema verifica periódicamente los backups atrasados del Overview.
-          Solo genera alertas para instancias de <strong>Producción</strong> que <strong>no tengan un responsable asignado</strong>.
+          Las alertas de <strong>FULL</strong> y <strong>LOG</strong> son independientes: cada una puede tener sus propios destinatarios, intervalos y configuración.
+          <br /><br />
+          <strong>Importante:</strong> Las alertas de LOG se suprimen automáticamente mientras haya un backup FULL en ejecución en la instancia,
+          evitando falsos positivos durante ventanas de mantenimiento.
           <br /><br />
           <strong>Para dejar de recibir alertas</strong> sobre una instancia específica, asigna un responsable desde el panel de Overview.
-          Esto permite que el equipo sepa quién está trabajando en el problema y evita alertas redundantes.
         </AlertDescription>
       </Alert>
     </div>

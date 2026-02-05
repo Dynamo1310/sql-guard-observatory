@@ -2,13 +2,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SQLGuardObservatory.API.Authorization;
 using SQLGuardObservatory.API.DTOs;
+using SQLGuardObservatory.API.Models;
 using SQLGuardObservatory.API.Services;
 using System.Security.Claims;
 
 namespace SQLGuardObservatory.API.Controllers;
 
 /// <summary>
-/// Controller para gestionar alertas de backups atrasados
+/// Controller para gestionar alertas de backups atrasados (FULL y LOG independientes)
 /// </summary>
 [ApiController]
 [Route("api/backup-alerts")]
@@ -31,14 +32,57 @@ public class BackupAlertsController : ControllerBase
     private string GetUserDisplayName() => User.FindFirst(ClaimTypes.Name)?.Value ?? User.Identity?.Name ?? "unknown";
 
     /// <summary>
-    /// Obtiene la configuración de alertas de backups
+    /// Convierte string "full"/"log" a BackupAlertType
     /// </summary>
-    [HttpGet("config")]
-    public async Task<ActionResult<BackupAlertConfigDto>> GetConfig()
+    private BackupAlertType ParseAlertType(string type)
+    {
+        return type?.ToLower() switch
+        {
+            "full" => BackupAlertType.Full,
+            "log" => BackupAlertType.Log,
+            _ => throw new ArgumentException($"Tipo de alerta inválido: {type}. Debe ser 'full' o 'log'.")
+        };
+    }
+
+    /// <summary>
+    /// Convierte BackupAlertType a string
+    /// </summary>
+    private string AlertTypeToString(BackupAlertType type) => type == BackupAlertType.Full ? "full" : "log";
+
+    /// <summary>
+    /// Mapea BackupAlertConfig a BackupAlertConfigDto
+    /// </summary>
+    private BackupAlertConfigDto MapConfigToDto(BackupAlertConfig config)
+    {
+        return new BackupAlertConfigDto
+        {
+            Id = config.Id,
+            AlertType = AlertTypeToString(config.AlertType),
+            Name = config.Name,
+            Description = config.Description,
+            IsEnabled = config.IsEnabled,
+            CheckIntervalMinutes = config.CheckIntervalMinutes,
+            AlertIntervalMinutes = config.AlertIntervalMinutes,
+            Recipients = config.Recipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
+            CcRecipients = config.CcRecipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
+            LastRunAt = config.LastRunAt?.ToString("o"),
+            LastAlertSentAt = config.LastAlertSentAt?.ToString("o"),
+            CreatedAt = config.CreatedAt,
+            UpdatedAt = config.UpdatedAt,
+            UpdatedByDisplayName = config.UpdatedByUser?.DisplayName
+        };
+    }
+
+    /// <summary>
+    /// Obtiene la configuración de alertas por tipo (full o log)
+    /// </summary>
+    [HttpGet("config/{type}")]
+    public async Task<ActionResult<BackupAlertConfigDto>> GetConfig(string type)
     {
         try
         {
-            var config = await _alertService.GetConfigAsync();
+            var alertType = ParseAlertType(type);
+            var config = await _alertService.GetConfigAsync(alertType);
             
             if (config == null)
             {
@@ -46,7 +90,10 @@ public class BackupAlertsController : ControllerBase
                 return Ok(new BackupAlertConfigDto
                 {
                     Id = 0,
-                    Name = "Alerta de Backups Atrasados",
+                    AlertType = type.ToLower(),
+                    Name = alertType == BackupAlertType.Full 
+                        ? "Alerta de Backups FULL Atrasados" 
+                        : "Alerta de Backups LOG Atrasados",
                     Description = "",
                     IsEnabled = false,
                     CheckIntervalMinutes = 60,
@@ -61,112 +108,60 @@ public class BackupAlertsController : ControllerBase
                 });
             }
 
-            return Ok(new BackupAlertConfigDto
-            {
-                Id = config.Id,
-                Name = config.Name,
-                Description = config.Description,
-                IsEnabled = config.IsEnabled,
-                CheckIntervalMinutes = config.CheckIntervalMinutes,
-                AlertIntervalMinutes = config.AlertIntervalMinutes,
-                Recipients = config.Recipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
-                CcRecipients = config.CcRecipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
-                LastRunAt = config.LastRunAt?.ToString("o"),
-                LastAlertSentAt = config.LastAlertSentAt?.ToString("o"),
-                CreatedAt = config.CreatedAt,
-                UpdatedAt = config.UpdatedAt,
-                UpdatedByDisplayName = config.UpdatedByUser?.DisplayName
-            });
+            return Ok(MapConfigToDto(config));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting backup alert config");
+            _logger.LogError(ex, "Error getting backup alert config for type {Type}", type);
             return StatusCode(500, new { message = "Error interno: " + ex.Message });
         }
     }
 
     /// <summary>
-    /// Crea la configuración de alertas de backups
+    /// Actualiza la configuración de alertas por tipo (full o log)
     /// </summary>
-    [HttpPost("config")]
+    [HttpPut("config/{type}")]
     [RequireCapability("System.ConfigureAlerts")]
-    public async Task<ActionResult<BackupAlertConfigDto>> CreateConfig([FromBody] CreateBackupAlertRequest request)
+    public async Task<ActionResult<BackupAlertConfigDto>> UpdateConfig(string type, [FromBody] UpdateBackupAlertRequest request)
     {
         try
         {
-            var config = await _alertService.CreateConfigAsync(request, GetUserId(), GetUserDisplayName());
+            var alertType = ParseAlertType(type);
+            var config = await _alertService.UpdateConfigAsync(alertType, request, GetUserId(), GetUserDisplayName());
 
-            return Ok(new BackupAlertConfigDto
-            {
-                Id = config.Id,
-                Name = config.Name,
-                Description = config.Description,
-                IsEnabled = config.IsEnabled,
-                CheckIntervalMinutes = config.CheckIntervalMinutes,
-                AlertIntervalMinutes = config.AlertIntervalMinutes,
-                Recipients = config.Recipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
-                CcRecipients = config.CcRecipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
-                LastRunAt = config.LastRunAt?.ToString("o"),
-                LastAlertSentAt = config.LastAlertSentAt?.ToString("o"),
-                CreatedAt = config.CreatedAt,
-                UpdatedAt = config.UpdatedAt
-            });
+            return Ok(MapConfigToDto(config));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating backup alert config");
+            _logger.LogError(ex, "Error updating backup alert config for type {Type}", type);
             return StatusCode(500, new { message = "Error interno: " + ex.Message });
         }
     }
 
     /// <summary>
-    /// Actualiza la configuración de alertas de backups
+    /// Obtiene el historial de alertas enviadas por tipo (full o log)
     /// </summary>
-    [HttpPut("config")]
-    [RequireCapability("System.ConfigureAlerts")]
-    public async Task<ActionResult<BackupAlertConfigDto>> UpdateConfig([FromBody] UpdateBackupAlertRequest request)
+    [HttpGet("history/{type}")]
+    public async Task<ActionResult<List<BackupAlertHistoryDto>>> GetHistory(string type, [FromQuery] int limit = 10)
     {
         try
         {
-            var config = await _alertService.UpdateConfigAsync(request, GetUserId(), GetUserDisplayName());
-
-            return Ok(new BackupAlertConfigDto
-            {
-                Id = config.Id,
-                Name = config.Name,
-                Description = config.Description,
-                IsEnabled = config.IsEnabled,
-                CheckIntervalMinutes = config.CheckIntervalMinutes,
-                AlertIntervalMinutes = config.AlertIntervalMinutes,
-                Recipients = config.Recipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
-                CcRecipients = config.CcRecipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>(),
-                LastRunAt = config.LastRunAt?.ToString("o"),
-                LastAlertSentAt = config.LastAlertSentAt?.ToString("o"),
-                CreatedAt = config.CreatedAt,
-                UpdatedAt = config.UpdatedAt
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating backup alert config");
-            return StatusCode(500, new { message = "Error interno: " + ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Obtiene el historial de alertas enviadas
-    /// </summary>
-    [HttpGet("history")]
-    public async Task<ActionResult<List<BackupAlertHistoryDto>>> GetHistory([FromQuery] int limit = 10)
-    {
-        try
-        {
-            var history = await _alertService.GetHistoryAsync(limit);
+            var alertType = ParseAlertType(type);
+            var history = await _alertService.GetHistoryAsync(alertType, limit);
             
             return Ok(history.Select(h => new BackupAlertHistoryDto
             {
                 Id = h.Id,
                 ConfigId = h.ConfigId,
+                AlertType = AlertTypeToString(h.AlertType),
                 SentAt = h.SentAt.ToString("o"),
                 RecipientCount = h.RecipientCount,
                 CcCount = h.CcCount,
@@ -175,15 +170,19 @@ public class BackupAlertsController : ControllerBase
                 ErrorMessage = h.ErrorMessage
             }).ToList());
         }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting backup alert history");
+            _logger.LogError(ex, "Error getting backup alert history for type {Type}", type);
             return StatusCode(500, new { message = "Error interno: " + ex.Message });
         }
     }
 
     /// <summary>
-    /// Obtiene el estado actual de backups (asignados vs no asignados)
+    /// Obtiene el estado actual de backups (asignados vs no asignados) - Combinado para FULL y LOG
     /// </summary>
     [HttpGet("status")]
     public async Task<ActionResult<BackupAlertStatusDto>> GetStatus()
@@ -201,39 +200,49 @@ public class BackupAlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Envía un email de prueba
+    /// Envía un email de prueba por tipo (full o log)
     /// </summary>
-    [HttpPost("test")]
+    [HttpPost("test/{type}")]
     [RequireCapability("System.ConfigureAlerts")]
-    public async Task<ActionResult> TestAlert()
+    public async Task<ActionResult> TestAlert(string type)
     {
         try
         {
-            var result = await _alertService.TestAlertAsync();
+            var alertType = ParseAlertType(type);
+            var result = await _alertService.TestAlertAsync(alertType);
             return Ok(new { success = result.success, message = result.message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error sending test alert");
+            _logger.LogError(ex, "Error sending test alert for type {Type}", type);
             return StatusCode(500, new { success = false, message = "Error interno: " + ex.Message });
         }
     }
 
     /// <summary>
-    /// Ejecuta una verificación manualmente
+    /// Ejecuta una verificación manualmente por tipo (full o log)
     /// </summary>
-    [HttpPost("run")]
+    [HttpPost("run/{type}")]
     [RequireCapability("System.ConfigureAlerts")]
-    public async Task<ActionResult> RunNow()
+    public async Task<ActionResult> RunNow(string type)
     {
         try
         {
-            var result = await _alertService.RunCheckAsync();
+            var alertType = ParseAlertType(type);
+            var result = await _alertService.RunCheckAsync(alertType);
             return Ok(new { success = result.success, message = result.message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error running manual check");
+            _logger.LogError(ex, "Error running manual check for type {Type}", type);
             return StatusCode(500, new { success = false, message = "Error interno: " + ex.Message });
         }
     }

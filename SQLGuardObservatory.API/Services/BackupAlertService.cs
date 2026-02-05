@@ -9,17 +9,39 @@ namespace SQLGuardObservatory.API.Services;
 
 public interface IBackupAlertService
 {
-    Task<BackupAlertConfig?> GetConfigAsync();
-    Task<BackupAlertConfig> CreateConfigAsync(CreateBackupAlertRequest request, string userId, string userDisplayName);
-    Task<BackupAlertConfig> UpdateConfigAsync(UpdateBackupAlertRequest request, string userId, string userDisplayName);
-    Task<List<BackupAlertHistory>> GetHistoryAsync(int limit = 20);
+    /// <summary>
+    /// Obtiene la configuración de alertas por tipo (FULL o LOG)
+    /// </summary>
+    Task<BackupAlertConfig?> GetConfigAsync(BackupAlertType alertType);
+    
+    /// <summary>
+    /// Actualiza la configuración de alertas por tipo
+    /// </summary>
+    Task<BackupAlertConfig> UpdateConfigAsync(BackupAlertType alertType, UpdateBackupAlertRequest request, string userId, string userDisplayName);
+    
+    /// <summary>
+    /// Obtiene el historial de alertas por tipo
+    /// </summary>
+    Task<List<BackupAlertHistory>> GetHistoryAsync(BackupAlertType alertType, int limit = 20);
+    
+    /// <summary>
+    /// Obtiene el estado actual de backups (combinado FULL y LOG)
+    /// </summary>
     Task<BackupAlertStatusDto> GetStatusAsync();
-    Task<(bool success, string message)> TestAlertAsync();
-    Task<(bool success, string message)> RunCheckAsync();
+    
+    /// <summary>
+    /// Envía un email de prueba por tipo
+    /// </summary>
+    Task<(bool success, string message)> TestAlertAsync(BackupAlertType alertType);
+    
+    /// <summary>
+    /// Ejecuta la verificación y envía alerta por tipo
+    /// </summary>
+    Task<(bool success, string message)> RunCheckAsync(BackupAlertType alertType);
 }
 
 /// <summary>
-/// Servicio para gestionar alertas de backups atrasados
+/// Servicio para gestionar alertas de backups atrasados (FULL y LOG independientes)
 /// </summary>
 public class BackupAlertService : IBackupAlertService
 {
@@ -37,48 +59,65 @@ public class BackupAlertService : IBackupAlertService
         _logger = logger;
     }
 
-    public async Task<BackupAlertConfig?> GetConfigAsync()
+    public async Task<BackupAlertConfig?> GetConfigAsync(BackupAlertType alertType)
     {
         try
         {
-            return await _context.BackupAlertConfigs
+            var config = await _context.BackupAlertConfigs
                 .Include(c => c.UpdatedByUser)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(c => c.AlertType == alertType);
+
+            // Si no existe, crear una configuración por defecto
+            if (config == null)
+            {
+                config = await CreateDefaultConfigAsync(alertType);
+            }
+
+            return config;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error al obtener configuración de alertas de backup. La tabla podría no existir aún.");
+            _logger.LogWarning(ex, "Error al obtener configuración de alertas de backup tipo {AlertType}. La tabla podría no existir aún.", alertType);
             return null;
         }
     }
 
-    public async Task<BackupAlertConfig> CreateConfigAsync(CreateBackupAlertRequest request, string userId, string userDisplayName)
+    /// <summary>
+    /// Crea una configuración por defecto para el tipo especificado
+    /// </summary>
+    private async Task<BackupAlertConfig> CreateDefaultConfigAsync(BackupAlertType alertType)
     {
         var config = new BackupAlertConfig
         {
-            Name = request.Name,
-            Description = request.Description,
-            CheckIntervalMinutes = request.CheckIntervalMinutes,
-            AlertIntervalMinutes = request.AlertIntervalMinutes,
-            Recipients = string.Join(",", request.Recipients),
-            CcRecipients = string.Join(",", request.CcRecipients),
-            CreatedAt = LocalClockAR.Now,
-            UpdatedByUserId = userId
+            AlertType = alertType,
+            Name = alertType == BackupAlertType.Full 
+                ? "Alerta de Backups FULL Atrasados" 
+                : "Alerta de Backups LOG Atrasados",
+            Description = alertType == BackupAlertType.Full
+                ? "Alerta automática cuando se detectan backups FULL vencidos"
+                : "Alerta automática cuando se detectan backups LOG vencidos",
+            IsEnabled = false,
+            CheckIntervalMinutes = 60,
+            AlertIntervalMinutes = 240,
+            Recipients = "",
+            CcRecipients = "",
+            CreatedAt = LocalClockAR.Now
         };
 
         _context.BackupAlertConfigs.Add(config);
         await _context.SaveChangesAsync();
+        
+        _logger.LogInformation("Configuración de alerta {AlertType} creada por defecto", alertType);
         return config;
     }
 
-    public async Task<BackupAlertConfig> UpdateConfigAsync(UpdateBackupAlertRequest request, string userId, string userDisplayName)
+    public async Task<BackupAlertConfig> UpdateConfigAsync(BackupAlertType alertType, UpdateBackupAlertRequest request, string userId, string userDisplayName)
     {
-        var config = await _context.BackupAlertConfigs.FirstOrDefaultAsync();
+        var config = await _context.BackupAlertConfigs.FirstOrDefaultAsync(c => c.AlertType == alertType);
         
         if (config == null)
         {
-            config = new BackupAlertConfig();
-            _context.BackupAlertConfigs.Add(config);
+            config = await CreateDefaultConfigAsync(alertType);
         }
 
         if (request.Name != null) config.Name = request.Name;
@@ -96,24 +135,25 @@ public class BackupAlertService : IBackupAlertService
         return config;
     }
 
-    public async Task<List<BackupAlertHistory>> GetHistoryAsync(int limit = 20)
+    public async Task<List<BackupAlertHistory>> GetHistoryAsync(BackupAlertType alertType, int limit = 20)
     {
         try
         {
             return await _context.BackupAlertHistories
+                .Where(h => h.AlertType == alertType)
                 .OrderByDescending(h => h.SentAt)
                 .Take(limit)
                 .ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error al obtener historial de alertas de backup. La tabla podría no existir aún.");
+            _logger.LogWarning(ex, "Error al obtener historial de alertas de backup tipo {AlertType}. La tabla podría no existir aún.", alertType);
             return new List<BackupAlertHistory>();
         }
     }
 
     /// <summary>
-    /// Obtiene el estado actual de backups (asignados vs no asignados)
+    /// Obtiene el estado actual de backups (asignados vs no asignados) - Combinado para FULL y LOG
     /// </summary>
     public async Task<BackupAlertStatusDto> GetStatusAsync()
     {
@@ -181,11 +221,11 @@ public class BackupAlertService : IBackupAlertService
     }
 
     /// <summary>
-    /// Envía un email de prueba con la lista actual de backups atrasados
+    /// Envía un email de prueba para el tipo especificado
     /// </summary>
-    public async Task<(bool success, string message)> TestAlertAsync()
+    public async Task<(bool success, string message)> TestAlertAsync(BackupAlertType alertType)
     {
-        var config = await GetConfigAsync();
+        var config = await GetConfigAsync(alertType);
         if (config == null)
         {
             return (false, "No hay configuración de alertas");
@@ -200,31 +240,35 @@ public class BackupAlertService : IBackupAlertService
         }
 
         var status = await GetStatusAsync();
-        var htmlBody = GenerateAlertEmailBody(status.UnassignedIssues, isTest: true);
+        var issues = FilterIssuesByType(status.UnassignedIssues, alertType);
+        var htmlBody = GenerateAlertEmailBody(issues, alertType, isTest: true);
+        var typeName = alertType == BackupAlertType.Full ? "FULL" : "LOG";
 
         var success = await _smtpService.SendEmailWithCcAsync(
             recipients,
             ccRecipients,
-            "[DBA] Alerta de Backups - PRUEBA",
+            $"[DBA] Alerta de Backups {typeName} - PRUEBA",
             htmlBody,
-            "BackupAlertTest"
+            $"BackupAlert{typeName}Test"
         );
 
         return success 
-            ? (true, $"Email de prueba enviado a {recipients.Count} destinatarios y {ccRecipients.Count} en CC")
+            ? (true, $"Email de prueba ({typeName}) enviado a {recipients.Count} destinatarios y {ccRecipients.Count} en CC")
             : (false, "Error al enviar email de prueba");
     }
 
     /// <summary>
-    /// Ejecuta la verificación y envía alerta si hay backups atrasados sin asignar
+    /// Ejecuta la verificación y envía alerta para el tipo especificado
     /// </summary>
-    public async Task<(bool success, string message)> RunCheckAsync()
+    public async Task<(bool success, string message)> RunCheckAsync(BackupAlertType alertType)
     {
-        var config = await GetConfigAsync();
+        var config = await GetConfigAsync(alertType);
         if (config == null || !config.IsEnabled)
         {
-            return (false, "Alerta no está habilitada");
+            return (false, $"Alerta {alertType} no está habilitada");
         }
+
+        var typeName = alertType == BackupAlertType.Full ? "FULL" : "LOG";
 
         // Actualizar última ejecución (hora Argentina)
         config.LastRunAt = LocalClockAR.Now;
@@ -233,26 +277,13 @@ public class BackupAlertService : IBackupAlertService
         // Obtener estado actual
         var status = await GetStatusAsync();
         
-        // Filtrar issues que solo tienen LOG breach pero está suprimido
-        // Estas instancias no deben generar alerta
-        var effectiveIssues = status.UnassignedIssues
-            .Where(i => i.FullBackupBreached || (i.LogBackupBreached && !i.LogCheckSuppressed))
-            .ToList();
+        // Filtrar issues por tipo
+        var effectiveIssues = FilterIssuesByType(status.UnassignedIssues, alertType);
         
         if (effectiveIssues.Count == 0)
         {
-            var suppressedCount = status.UnassignedIssues.Count - effectiveIssues.Count;
-            if (suppressedCount > 0)
-            {
-                _logger.LogInformation(
-                    "No hay backups atrasados sin asignar que requieran alerta ({SuppressedCount} instancias con LOG suprimido por FULL en ejecución)",
-                    suppressedCount);
-            }
-            else
-            {
-                _logger.LogInformation("No hay backups atrasados sin asignar");
-            }
-            return (true, "No hay backups atrasados sin asignar");
+            _logger.LogInformation("No hay backups {Type} atrasados sin asignar", typeName);
+            return (true, $"No hay backups {typeName} atrasados sin asignar");
         }
 
         // Verificar si debe enviar alerta (respetando AlertIntervalMinutes)
@@ -262,9 +293,9 @@ public class BackupAlertService : IBackupAlertService
             if (minutesSinceLastAlert < config.AlertIntervalMinutes)
             {
                 _logger.LogInformation(
-                    "Hay {Count} backups atrasados sin asignar, pero aún no se cumple el intervalo de alerta ({Minutes} minutos desde la última)",
-                    effectiveIssues.Count, (int)minutesSinceLastAlert);
-                return (true, $"Hay {effectiveIssues.Count} backups atrasados, próxima alerta en {config.AlertIntervalMinutes - (int)minutesSinceLastAlert} minutos");
+                    "Hay {Count} backups {Type} atrasados sin asignar, pero aún no se cumple el intervalo de alerta ({Minutes} minutos desde la última)",
+                    effectiveIssues.Count, typeName, (int)minutesSinceLastAlert);
+                return (true, $"Hay {effectiveIssues.Count} backups {typeName} atrasados, próxima alerta en {config.AlertIntervalMinutes - (int)minutesSinceLastAlert} minutos");
             }
         }
 
@@ -274,24 +305,25 @@ public class BackupAlertService : IBackupAlertService
 
         if (recipients.Count == 0)
         {
-            _logger.LogWarning("No hay destinatarios configurados para alertas de backup");
+            _logger.LogWarning("No hay destinatarios configurados para alertas de backup {Type}", typeName);
             return (false, "No hay destinatarios configurados");
         }
 
-        var htmlBody = GenerateAlertEmailBody(effectiveIssues, isTest: false);
+        var htmlBody = GenerateAlertEmailBody(effectiveIssues, alertType, isTest: false);
 
         var success = await _smtpService.SendEmailWithCcAsync(
             recipients,
             ccRecipients,
-            $"[DBA] Alerta: {effectiveIssues.Count} Instancia(s) con Backups Atrasados",
+            $"[DBA] Alerta: {effectiveIssues.Count} Instancia(s) con Backups {typeName} Atrasados",
             htmlBody,
-            "BackupAlert"
+            $"BackupAlert{typeName}"
         );
 
         // Registrar en historial (hora Argentina)
         var history = new BackupAlertHistory
         {
             ConfigId = config.Id,
+            AlertType = alertType,
             SentAt = LocalClockAR.Now,
             RecipientCount = recipients.Count,
             CcCount = ccRecipients.Count,
@@ -310,8 +342,25 @@ public class BackupAlertService : IBackupAlertService
         await _context.SaveChangesAsync();
 
         return success
-            ? (true, $"Alerta enviada a {recipients.Count} destinatarios para {effectiveIssues.Count} backups atrasados")
+            ? (true, $"Alerta {typeName} enviada a {recipients.Count} destinatarios para {effectiveIssues.Count} backups atrasados")
             : (false, "Error al enviar alerta");
+    }
+
+    /// <summary>
+    /// Filtra los issues por tipo de alerta (FULL o LOG)
+    /// </summary>
+    private List<BackupIssueSummaryDto> FilterIssuesByType(List<BackupIssueSummaryDto> issues, BackupAlertType alertType)
+    {
+        if (alertType == BackupAlertType.Full)
+        {
+            // Solo instancias con FULL backup breach
+            return issues.Where(i => i.FullBackupBreached).ToList();
+        }
+        else
+        {
+            // Solo instancias con LOG backup breach Y que no esté suprimido
+            return issues.Where(i => i.LogBackupBreached && !i.LogCheckSuppressed).ToList();
+        }
     }
 
     /// <summary>
@@ -342,45 +391,26 @@ public class BackupAlertService : IBackupAlertService
 
     /// <summary>
     /// Genera el HTML del email de alerta - Formato minimalista y profesional
-    /// Nota: No incluye alertas de LOG cuando LogCheckSuppressed es true (FULL en ejecución o grace period)
     /// </summary>
-    private string GenerateAlertEmailBody(List<BackupIssueSummaryDto> issues, bool isTest)
+    private string GenerateAlertEmailBody(List<BackupIssueSummaryDto> issues, BackupAlertType alertType, bool isTest)
     {
         var now = LocalClockAR.Now;
-        var testNotice = isTest ? "<p style='color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; margin-bottom: 16px;'><strong>Nota:</strong> Este es un email de prueba.</p>" : "";
+        var typeName = alertType == BackupAlertType.Full ? "FULL" : "LOG";
+        var testNotice = isTest 
+            ? "<p style='color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; margin-bottom: 16px;'><strong>Nota:</strong> Este es un email de prueba.</p>" 
+            : "";
 
         var issueRows = string.Join("", issues.Select(issue => 
         {
-            // Si LOG está suprimido (FULL running o grace period), no incluir LOG en el tipo de backup
-            var effectiveLogBreached = issue.LogBackupBreached && !issue.LogCheckSuppressed;
-            
-            // Determinar el tipo de backup a mostrar
-            string backupType;
-            if (issue.FullBackupBreached && effectiveLogBreached)
-            {
-                backupType = "Full + Log";
-            }
-            else if (issue.FullBackupBreached)
-            {
-                backupType = "Full";
-            }
-            else if (effectiveLogBreached)
-            {
-                backupType = "Log";
-            }
-            else
-            {
-                // Si no hay ningún breach efectivo, esta instancia no debería estar en la lista
-                // pero por seguridad, retornamos vacío
-                return "";
-            }
-            
             return $@"
                 <tr>
                     <td style='padding: 6px 12px; border-bottom: 1px solid #e0e0e0;'>{issue.InstanceName}</td>
-                    <td style='padding: 6px 12px; border-bottom: 1px solid #e0e0e0; text-align: center;'>{backupType}</td>
                 </tr>";
         }));
+
+        var description = alertType == BackupAlertType.Full
+            ? "backups FULL (completos) atrasados"
+            : "backups de LOG (transaccionales) atrasados";
 
         return $@"
 <!DOCTYPE html>
@@ -394,13 +424,12 @@ public class BackupAlertService : IBackupAlertService
     
     <p>Hola,</p>
     
-    <p>Se detectaron <strong>{issues.Count} instancia(s)</strong> de SQL Server en Producción con backups atrasados:</p>
+    <p>Se detectaron <strong>{issues.Count} instancia(s)</strong> de SQL Server en Producción con {description}:</p>
     
     <table style='border-collapse: collapse; margin: 16px 0; font-size: 13px;' cellpadding='0' cellspacing='0'>
         <thead>
             <tr style='background-color: #f5f5f5;'>
                 <th style='padding: 8px 12px; border: 1px solid #e0e0e0; text-align: left; font-weight: 600;'>Instancia</th>
-                <th style='padding: 8px 12px; border: 1px solid #e0e0e0; text-align: center; font-weight: 600;'>Tipo</th>
             </tr>
         </thead>
         <tbody>
@@ -416,7 +445,7 @@ public class BackupAlertService : IBackupAlertService
     <hr style='border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;'>
     
     <p style='font-size: 11px; color: #888;'>
-        Alerta automática generada el {now:dd/MM/yyyy} a las {now:HH:mm} hs (Argentina)
+        Alerta automática de Backups {typeName} generada el {now:dd/MM/yyyy} a las {now:HH:mm} hs (Argentina)
     </p>
     
 </body>

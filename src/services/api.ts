@@ -5552,8 +5552,11 @@ export const overviewAssignmentsApi = {
 
 // ==================== BACKUP ALERTS ====================
 
+export type BackupAlertType = 'full' | 'log';
+
 export interface BackupAlertConfigDto {
   id: number;
+  alertType: BackupAlertType;
   name: string;
   description?: string;
   isEnabled: boolean;
@@ -5590,6 +5593,7 @@ export interface UpdateBackupAlertRequest {
 export interface BackupAlertHistoryDto {
   id: number;
   configId: number;
+  alertType: BackupAlertType;
   sentAt: string;
   recipientCount: number;
   ccCount: number;
@@ -5612,30 +5616,17 @@ export interface BackupIssueSummaryDto {
 }
 
 export const backupAlertsApi = {
-  // Obtener configuración
-  async getConfig(): Promise<BackupAlertConfigDto> {
-    const response = await fetch(`${API_URL}/api/backup-alerts/config`, {
+  // Obtener configuración por tipo (full o log)
+  async getConfig(type: BackupAlertType): Promise<BackupAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/config/${type}`, {
       headers: { ...getAuthHeader() },
     });
     return handleResponse<BackupAlertConfigDto>(response);
   },
 
-  // Crear configuración
-  async createConfig(data: CreateBackupAlertRequest): Promise<BackupAlertConfigDto> {
-    const response = await fetch(`${API_URL}/api/backup-alerts/config`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeader(),
-      },
-      body: JSON.stringify(data),
-    });
-    return handleResponse<BackupAlertConfigDto>(response);
-  },
-
-  // Actualizar configuración
-  async updateConfig(data: UpdateBackupAlertRequest): Promise<BackupAlertConfigDto> {
-    const response = await fetch(`${API_URL}/api/backup-alerts/config`, {
+  // Actualizar configuración por tipo
+  async updateConfig(type: BackupAlertType, data: UpdateBackupAlertRequest): Promise<BackupAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/config/${type}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -5646,15 +5637,15 @@ export const backupAlertsApi = {
     return handleResponse<BackupAlertConfigDto>(response);
   },
 
-  // Obtener historial
-  async getHistory(limit: number = 10): Promise<BackupAlertHistoryDto[]> {
-    const response = await fetch(`${API_URL}/api/backup-alerts/history?limit=${limit}`, {
+  // Obtener historial por tipo
+  async getHistory(type: BackupAlertType, limit: number = 10): Promise<BackupAlertHistoryDto[]> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/history/${type}?limit=${limit}`, {
       headers: { ...getAuthHeader() },
     });
     return handleResponse<BackupAlertHistoryDto[]>(response);
   },
 
-  // Obtener estado actual de backups (asignados vs no asignados)
+  // Obtener estado actual de backups (asignados vs no asignados) - Combinado
   async getStatus(): Promise<BackupAlertStatusDto> {
     const response = await fetch(`${API_URL}/api/backup-alerts/status`, {
       headers: { ...getAuthHeader() },
@@ -5662,18 +5653,18 @@ export const backupAlertsApi = {
     return handleResponse<BackupAlertStatusDto>(response);
   },
 
-  // Enviar email de prueba
-  async testAlert(): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_URL}/api/backup-alerts/test`, {
+  // Enviar email de prueba por tipo
+  async testAlert(type: BackupAlertType): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/test/${type}`, {
       method: 'POST',
       headers: { ...getAuthHeader() },
     });
     return handleResponse<{ success: boolean; message: string }>(response);
   },
 
-  // Ejecutar verificación manualmente
-  async runNow(): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_URL}/api/backup-alerts/run`, {
+  // Ejecutar verificación manualmente por tipo
+  async runNow(type: BackupAlertType): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/backup-alerts/run/${type}`, {
       method: 'POST',
       headers: { ...getAuthHeader() },
     });

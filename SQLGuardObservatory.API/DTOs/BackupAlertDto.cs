@@ -6,6 +6,12 @@ namespace SQLGuardObservatory.API.DTOs;
 public class BackupAlertConfigDto
 {
     public int Id { get; set; }
+    
+    /// <summary>
+    /// Tipo de alerta: "full" o "log"
+    /// </summary>
+    public string AlertType { get; set; } = "full";
+    
     public string Name { get; set; } = "";
     public string? Description { get; set; }
     public bool IsEnabled { get; set; }
@@ -63,6 +69,12 @@ public class BackupAlertHistoryDto
 {
     public int Id { get; set; }
     public int ConfigId { get; set; }
+    
+    /// <summary>
+    /// Tipo de alerta: "full" o "log"
+    /// </summary>
+    public string AlertType { get; set; } = "full";
+    
     public string SentAt { get; set; } = "";
     public int RecipientCount { get; set; }
     public int CcCount { get; set; }
