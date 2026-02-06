@@ -352,6 +352,12 @@ ORDER BY ag.name, ar.replica_server_name";
 
             result.CheckdbJobs.Add(jobInfo);
 
+            // Log de diagnóstico cuando el historial de steps fue purgado
+            if (totalSteps == 0 && isRealSuccess)
+            {
+                _logger.LogDebug("  ⚠️ CHECKDB job '{JobName}' tiene TotalSteps=0 pero run_status=1 (historial de steps purgado)", jobName);
+            }
+
             if (finishTime.HasValue)
             {
                 // Un job es reciente si: FinishTime >= cutoff Y fue éxito real
@@ -367,6 +373,8 @@ ORDER BY ag.name, ar.replica_server_name";
                 if (!isRecent)
                 {
                     allCheckdbOk = false;
+                    _logger.LogDebug("  ❌ CHECKDB job '{JobName}' NO está OK: FinishTime={FinishTime}, IsRealSuccess={IsSuccess}, Cutoff={Cutoff}",
+                        jobName, finishTime.Value.ToString("yyyy-MM-dd HH:mm:ss"), isRealSuccess, cutoffDate.ToString("yyyy-MM-dd HH:mm:ss"));
                 }
             }
             else
@@ -430,6 +438,12 @@ ORDER BY ag.name, ar.replica_server_name";
 
             result.IndexOptimizeJobs.Add(jobInfo);
 
+            // Log de diagnóstico cuando el historial de steps fue purgado
+            if (totalSteps == 0 && isRealSuccess)
+            {
+                _logger.LogDebug("  ⚠️ IndexOptimize job '{JobName}' tiene TotalSteps=0 pero run_status=1 (historial de steps purgado)", jobName);
+            }
+
             if (finishTime.HasValue)
             {
                 var isRecent = finishTime.Value >= cutoffDate && isRealSuccess;
@@ -442,6 +456,8 @@ ORDER BY ag.name, ar.replica_server_name";
                 if (!isRecent)
                 {
                     allIndexOptOk = false;
+                    _logger.LogDebug("  ❌ IndexOptimize job '{JobName}' NO está OK: FinishTime={FinishTime}, IsRealSuccess={IsSuccess}, Cutoff={Cutoff}",
+                        jobName, finishTime.Value.ToString("yyyy-MM-dd HH:mm:ss"), isRealSuccess, cutoffDate.ToString("yyyy-MM-dd HH:mm:ss"));
                 }
             }
             else
@@ -920,10 +936,10 @@ RankedExecutions AS (
         -- Un job es realmente exitoso si:
         -- 1. El job terminó exitoso (run_status = 1)
         -- 2. Todos los pasos fueron exitosos (FailedSteps = 0)
-        -- 3. Se ejecutó al menos 1 paso
+        -- Nota: No se exige TotalSteps >= 1 porque el historial de steps puede ser
+        -- purgado por SQL Agent, dejando solo el resumen (step_id=0) con run_status=1.
         CASE WHEN run_status = 1 
-              AND FailedSteps = 0 
-              AND TotalSteps >= 1
+              AND FailedSteps = 0
              THEN 1 ELSE 0 END AS IsRealSuccess,
         ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY FinishTime DESC) AS rn
     FROM AllJobExecutions
@@ -1028,9 +1044,10 @@ RankedExecutions AS (
         SuccessfulSteps,
         FailedSteps,
         HasHistory,
+        -- Nota: No se exige TotalSteps >= 1 porque el historial de steps puede ser
+        -- purgado por SQL Agent, dejando solo el resumen (step_id=0) con run_status=1.
         CASE WHEN run_status = 1 
-              AND FailedSteps = 0 
-              AND TotalSteps >= 1
+              AND FailedSteps = 0
              THEN 1 ELSE 0 END AS IsRealSuccess,
         ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY FinishTime DESC) AS rn
     FROM AllJobExecutions
