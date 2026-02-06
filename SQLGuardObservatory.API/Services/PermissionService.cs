@@ -79,6 +79,7 @@ public class PermissionService : IPermissionService
         { "OperationsMenu", new ViewInfo { ViewName = "OperationsMenu", DisplayName = "📁 Operaciones (Menú)", Description = "Mostrar/ocultar el menú completo de Operaciones", Category = "Operaciones" } },
         { "ServerRestart", new ViewInfo { ViewName = "ServerRestart", DisplayName = "Operaciones - Reinicio Servidores", Description = "Reiniciar servidores SQL Server (operación crítica)", Category = "Operaciones" } },
         { "OperationsConfig", new ViewInfo { ViewName = "OperationsConfig", DisplayName = "Operaciones - Config. Servidores", Description = "Configuración de servidores para operaciones", Category = "Operaciones" } },
+        { "GestionDecomiso", new ViewInfo { ViewName = "GestionDecomiso", DisplayName = "Operaciones - Decomiso de BD", Description = "Gestión de decomiso de bases de datos sin uso", Category = "Operaciones" } },
         
         // === SEGURIDAD ===
         { "VaultMenu", new ViewInfo { ViewName = "VaultMenu", DisplayName = "📁 Vault DBA (Menú)", Description = "Mostrar/ocultar el menú completo de Vault DBA", Category = "Seguridad" } },

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "V0o1UdG2sWNMgbjcZvp7weUsn1KXgk4avH596kcTBkGXol0UJ4Eap1j1VNvx3i6NK6kLSdkTLp78hsDhpCF0jg==",
+  "dgSpecHash": "KjKJoDHrPjZYpUOysXg7rBE4r5PSVZpyR8aHuPR06lkqzmppad9zsFupnPpYGpve8UkVpjCylsJPkQDqoeqKgw==",
   "success": true,
   "projectFilePath": "C:\\Users\\tobia\\OneDrive\\Desktop\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj",
   "expectedPackageFiles": [
@@ -8,6 +8,7 @@
     "C:\\Users\\tobia\\.nuget\\packages\\azure.core\\1.35.0\\azure.core.1.35.0.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\azure.identity\\1.10.3\\azure.identity.1.10.3.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\closedxml\\0.102.3\\closedxml.0.102.3.nupkg.sha512",
+    "C:\\Users\\tobia\\.nuget\\packages\\dapper\\2.1.35\\dapper.2.1.35.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\documentformat.openxml\\2.16.0\\documentformat.openxml.2.16.0.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\excelnumberformat\\1.1.0\\excelnumberformat.1.1.0.nupkg.sha512",
     "C:\\Users\\tobia\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",

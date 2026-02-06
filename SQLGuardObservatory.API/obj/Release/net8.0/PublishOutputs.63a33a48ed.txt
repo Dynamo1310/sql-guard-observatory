@@ -10,6 +10,7 @@ C:\Temp\Backend\HealthChecks.SqlServer.dll
 C:\Temp\Backend\Azure.Core.dll
 C:\Temp\Backend\Azure.Identity.dll
 C:\Temp\Backend\ClosedXML.dll
+C:\Temp\Backend\Dapper.dll
 C:\Temp\Backend\DocumentFormat.OpenXml.dll
 C:\Temp\Backend\ExcelNumberFormat.dll
 C:\Temp\Backend\Irony.dll
