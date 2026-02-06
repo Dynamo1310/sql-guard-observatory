@@ -5672,6 +5672,87 @@ export const backupAlertsApi = {
   },
 };
 
+// ==================== GESTIÓN DE DECOMISO API ====================
+
+export interface DecomisoGridDto {
+  gestionId: number | null;
+  serverName: string;
+  dbName: string;
+  hostName: string | null;
+  programName: string | null;
+  loginName: string | null;
+  databaseSizeMB: number | null;
+  databaseSizeGB: number;
+  ultimaActividad: string | null;
+  diasInactividad: number;
+  estado: string;
+  ticketJira: string | null;
+  responsable: string | null;
+  observaciones: string | null;
+  fechaModificacion: string | null;
+  fechaCarga: string;
+}
+
+export interface DecomisoResumenDto {
+  totalBases: number;
+  espacioRecuperableGB: number;
+  pendientesAccion: number;
+}
+
+export interface DecomisoGridResponse {
+  items: DecomisoGridDto[];
+  resumen: DecomisoResumenDto;
+}
+
+export interface UpdateDecomisoRequest {
+  serverName: string;
+  dbName: string;
+  estado: string;
+  ticketJira?: string;
+  responsable?: string;
+  observaciones?: string;
+}
+
+export const decomisosApi = {
+  // Obtener grilla de decomisos con resumen KPI
+  async getAll(serverName?: string): Promise<DecomisoGridResponse> {
+    const params = new URLSearchParams();
+    if (serverName) params.append('serverName', serverName);
+
+    const url = `${API_URL}/api/decomisos${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DecomisoGridResponse>(response);
+  },
+
+  // Actualizar estado de gestión por ID
+  async update(id: number, data: UpdateDecomisoRequest): Promise<DecomisoGridDto> {
+    const response = await fetch(`${API_URL}/api/decomisos/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<DecomisoGridDto>(response);
+  },
+
+  // Crear o actualizar estado de gestión por ServerName + DBName (upsert)
+  async upsert(data: UpdateDecomisoRequest): Promise<DecomisoGridDto> {
+    const response = await fetch(`${API_URL}/api/decomisos/upsert`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<DecomisoGridDto>(response);
+  },
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 export function isAuthenticated(): boolean {

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Hubs;
+using SQLGuardObservatory.API.Middleware;
 using SQLGuardObservatory.API.Models;
 using SQLGuardObservatory.API.Services;
 using SQLGuardObservatory.API.Services.Collectors;
@@ -241,6 +242,9 @@ builder.Services.AddScoped<IPatchPlanService, PatchPlanService>();
 // Patching - Sistema mejorado de gestión de parcheos
 builder.Services.AddScoped<IWindowSuggesterService, WindowSuggesterService>();
 builder.Services.AddScoped<IDatabaseOwnersService, DatabaseOwnersService>();
+
+// Gestión de Decomiso de Bases de Datos
+builder.Services.AddScoped<IDecomisoService, DecomisoService>();
 builder.Services.AddScoped<IPatchConfigService, PatchConfigService>();
 builder.Services.AddHostedService<PatchNotificationBackgroundService>();
 
@@ -379,6 +383,9 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 // app.UseHttpsRedirection(); // Deshabilitado - solo usamos HTTP
+
+// Middleware global de manejo de excepciones
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 // CORS primero
 app.UseCors("AllowFrontend");

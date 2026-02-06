@@ -34,6 +34,9 @@ public class SQLNovaDbContext : DbContext
     // Health Score v3.1 - Wait Statistics & Blocking
     public DbSet<InstanceHealthWaits> InstanceHealthWaits { get; set; }
 
+    // Gestión de Decomiso de Bases de Datos
+    public DbSet<GestionDecomiso> GestionDecomisos { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -127,6 +130,15 @@ public class SQLNovaDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        // Gestión de Decomiso
+        modelBuilder.Entity<GestionDecomiso>(entity =>
+        {
+            entity.ToTable("GestionDecomiso", "dbo");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.ServerName, e.DBName }).IsUnique();
+            entity.HasIndex(e => e.Estado);
         });
     }
 }

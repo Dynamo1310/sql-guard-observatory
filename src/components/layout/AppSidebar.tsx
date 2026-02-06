@@ -130,6 +130,7 @@ const onCallSubItems = [
 const operationsSubItems = [
   { title: 'Reinicio de Servidores', url: '/operations/server-restart', icon: RotateCcw, permission: 'ServerRestart' },
   { title: 'Config. Servidores', url: '/operations/servers-config', icon: Settings, permission: 'OperationsConfig' },
+  { title: 'Decomiso de BD', url: '/operations/gestion-decomiso', icon: Database, permission: 'GestionDecomiso' },
 ];
 
 // ==================== SEGURIDAD ====================
