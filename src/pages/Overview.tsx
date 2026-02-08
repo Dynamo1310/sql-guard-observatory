@@ -410,9 +410,9 @@ export default function Overview() {
                   <TableRow>
                     <TableHead
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => requestSortBackups('instanceName')}
+                      onClick={() => requestSortBackups('displayName')}
                     >
-                      Instancia {getSortIndicatorBackups('instanceName')}
+                      Instancia {getSortIndicatorBackups('displayName')}
                     </TableHead>
                     <TableHead>
                       Tipo
@@ -428,13 +428,19 @@ export default function Overview() {
                 <TableBody>
                   {sortedBackupIssues.length > 0 ? (
                     sortedBackupIssues.map((issue, idx) => {
-                      const assignment = getAssignment('Backup', issue.instanceName);
-                      const assignmentKey = `Backup-${issue.instanceName}-`;
+                      const issueKey = issue.displayName || issue.instanceName;
+                      const assignment = getAssignment('Backup', issueKey);
+                      const assignmentKey = `Backup-${issueKey}-`;
                       const isLoading = loadingAssignment === assignmentKey;
 
                       return (
                         <TableRow key={idx}>
-                          <TableCell className="font-medium">{issue.instanceName}</TableCell>
+                          <TableCell className="font-medium">
+                            {issue.displayName || issue.instanceName}
+                            {issue.agName && (
+                              <span className="ml-1 text-xs text-muted-foreground">(AG)</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-sm">
                             <Badge variant={issue.fullBackupBreached ? "destructive" : "secondary"} className="mr-1">
                               {issue.fullBackupBreached && issue.logBackupBreached
@@ -462,7 +468,7 @@ export default function Overview() {
                             ) : (
                               <Select
                                 disabled={isLoading || availableUsers.length === 0}
-                                onValueChange={(userId) => handleAssign('Backup', issue.instanceName, userId)}
+                                onValueChange={(userId) => handleAssign('Backup', issueKey, userId)}
                               >
                                 <SelectTrigger className="h-7 w-[130px] text-xs">
                                   <SelectValue placeholder={isLoading ? "..." : "Asignar"} />

@@ -178,6 +178,17 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
 
         result.IsDWH = isDWH;
         result.IsSql2005 = isSql2005;
+        
+        // Asignar AGName si la instancia pertenece a un Availability Group
+        var hostName = instance.InstanceName.Split('\\')[0];
+        if (_nodeToGroup.TryGetValue(hostName, out var agName))
+        {
+            result.AGName = agName;
+        }
+        else if (_nodeToGroup.TryGetValue(instance.InstanceName, out var agNameFull))
+        {
+            result.AGName = agNameFull;
+        }
 
         // Excepción SSCC03: Backup a nivel VM - marcar como OK sin verificar
         if (VmBackupInstances.Contains(instance.InstanceName))
@@ -529,7 +540,9 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
             FullRunningSince = data.FullRunningSince,
             LogCheckSuppressed = data.LogCheckSuppressed,
             LogCheckSuppressReason = data.LogCheckSuppressReason,
-            HasViewServerState = data.HasViewServerState
+            HasViewServerState = data.HasViewServerState,
+            // Availability Group
+            AGName = data.AGName
         };
 
         await SaveWithScopedContextAsync(async context =>
@@ -699,6 +712,7 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                     latestRecord.FullRunningSince = metrics.FullRunningSince;
                     latestRecord.LogCheckSuppressed = metrics.LogCheckSuppressed;
                     latestRecord.LogCheckSuppressReason = metrics.LogCheckSuppressReason;
+                    latestRecord.AGName = metrics.AGName;
                     latestRecord.BackupDetails = metrics.Details.Count > 0 
                         ? string.Join("|", metrics.Details) + "|SYNCED_FROM_AG" 
                         : "SYNCED_FROM_AG";
@@ -856,6 +870,11 @@ WHERE d.state_desc = 'ONLINE'
         public bool LogCheckSuppressed { get; set; }
         public string? LogCheckSuppressReason { get; set; }
         public bool HasViewServerState { get; set; } = true;
+        
+        /// <summary>
+        /// Nombre del Availability Group (null si no pertenece a un AG)
+        /// </summary>
+        public string? AGName { get; set; }
     }
 
     private class AlwaysOnGroup

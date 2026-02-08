@@ -98,22 +98,8 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                 : 0;
 
             // Backups atrasados - usar datos reales de la tabla InstanceHealth_Backups
-            var backupIssues = backupBreaches.Select(b => new OverviewBackupIssueDto
-            {
-                InstanceName = b.InstanceName,
-                Score = healthScores.FirstOrDefault(h => h.InstanceName.Equals(b.InstanceName, StringComparison.OrdinalIgnoreCase))?.BackupsScore ?? 0,
-                FullBackupBreached = b.FullBackupBreached,
-                LogBackupBreached = b.LogBackupBreached,
-                LastFullBackup = b.LastFullBackup,
-                LastLogBackup = b.LastLogBackup,
-                Issues = BuildBackupIssuesList(b),
-                BreachedDatabases = ParseBreachedDatabases(b.BackupDetails, b.FullBackupBreached, b.LogBackupBreached),
-                LogCheckSuppressed = b.LogCheckSuppressed,
-                LogCheckSuppressReason = b.LogCheckSuppressReason
-            })
-            .OrderBy(b => b.Score)
-            .ThenByDescending(b => b.FullBackupBreached) // FULL breach primero (más crítico)
-            .ToList();
+            // Agrupar por AG: para AGs, si al menos un nodo tiene backup OK, el AG no está breached
+            var backupIssues = BuildBackupIssuesWithAGGrouping(backupBreaches, healthScores);
 
             // Instancias críticas (score < 60)
             var criticalInstances = healthScores
@@ -527,12 +513,14 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
     }
 
     /// <summary>
-    /// Obtiene los backups con breach de producción consultando datos reales
+    /// Obtiene los backups con breach de producción consultando datos reales.
+    /// Incluye AGName para agrupar nodos de Availability Groups.
     /// </summary>
     private async Task<List<OverviewBackupBreachRaw>> GetProductionBackupBreachesAsync(CancellationToken ct)
     {
         var results = new List<OverviewBackupBreachRaw>();
 
+        // Traer TODOS los registros más recientes (incluyendo no-breached) para poder evaluar AGs correctamente
         var query = @"
             WITH LatestBackups AS (
                 SELECT 
@@ -544,15 +532,16 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                     BackupDetails,
                     ISNULL(LogCheckSuppressed, 0) AS LogCheckSuppressed,
                     LogCheckSuppressReason,
+                    AGName,
                     ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
                 FROM dbo.InstanceHealth_Backups
                 WHERE Ambiente = 'Produccion'
             )
             SELECT InstanceName, FullBackupBreached, LogBackupBreached, 
                    LastFullBackup, LastLogBackup, BackupDetails,
-                   LogCheckSuppressed, LogCheckSuppressReason
+                   LogCheckSuppressed, LogCheckSuppressReason, AGName
             FROM LatestBackups
-            WHERE rn = 1 AND (FullBackupBreached = 1 OR LogBackupBreached = 1)";
+            WHERE rn = 1";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
@@ -572,11 +561,131 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                 LastLogBackup = reader.IsDBNull(4) ? null : reader.GetDateTime(4),
                 BackupDetails = reader.IsDBNull(5) ? null : reader.GetString(5),
                 LogCheckSuppressed = !reader.IsDBNull(6) && reader.GetBoolean(6),
-                LogCheckSuppressReason = reader.IsDBNull(7) ? null : reader.GetString(7)
+                LogCheckSuppressReason = reader.IsDBNull(7) ? null : reader.GetString(7),
+                AGName = reader.IsDBNull(8) ? null : reader.GetString(8)
             });
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Construye la lista de backup issues agrupando por Availability Group.
+    /// Para AGs: si al menos un nodo tiene backup OK (no breached), el AG no se reporta como breached.
+    /// El backup en AGs se ejecuta en un solo nodo, por lo que es suficiente que un nodo tenga backup.
+    /// </summary>
+    private static List<OverviewBackupIssueDto> BuildBackupIssuesWithAGGrouping(
+        List<OverviewBackupBreachRaw> allBackups, 
+        List<OverviewHealthScoreRaw> healthScores)
+    {
+        var results = new List<OverviewBackupIssueDto>();
+        var agProcessed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Separar instancias con y sin AG
+        var agBackups = allBackups.Where(b => !string.IsNullOrEmpty(b.AGName)).ToList();
+        var standaloneBackups = allBackups.Where(b => string.IsNullOrEmpty(b.AGName)).ToList();
+
+        // Procesar AGs: agrupar por AGName
+        var agGroups = agBackups.GroupBy(b => b.AGName!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var agGroup in agGroups)
+        {
+            var agName = agGroup.Key;
+            var nodes = agGroup.ToList();
+
+            // Para determinar breach del AG:
+            // Si al menos un nodo NO tiene FULL breach → el AG no tiene FULL breach
+            // Si al menos un nodo NO tiene LOG breach → el AG no tiene LOG breach
+            // (Porque el backup se ejecuta en un solo nodo del AG)
+            var agFullBreached = nodes.All(n => n.FullBackupBreached);
+            var agLogBreached = nodes.All(n => n.LogBackupBreached);
+
+            // Si ningún tipo de backup está atrasado a nivel AG, no agregar
+            if (!agFullBreached && !agLogBreached)
+            {
+                continue;
+            }
+
+            // Usar los mejores valores (más recientes) del AG
+            var bestFullBackup = nodes
+                .Where(n => n.LastFullBackup.HasValue)
+                .OrderByDescending(n => n.LastFullBackup)
+                .FirstOrDefault()?.LastFullBackup;
+            var bestLogBackup = nodes
+                .Where(n => n.LastLogBackup.HasValue)
+                .OrderByDescending(n => n.LastLogBackup)
+                .FirstOrDefault()?.LastLogBackup;
+
+            // Supresión: si algún nodo tiene LOG suprimido, el AG hereda
+            var logSuppressed = nodes.Any(n => n.LogCheckSuppressed);
+            var suppressReason = nodes.FirstOrDefault(n => n.LogCheckSuppressed)?.LogCheckSuppressReason;
+
+            // Combinar los details de todos los nodos
+            var allDetails = string.Join("|", nodes.Where(n => !string.IsNullOrEmpty(n.BackupDetails)).Select(n => n.BackupDetails));
+
+            // Crear un raw ficticio para reutilizar los helpers
+            var agRaw = new OverviewBackupBreachRaw
+            {
+                InstanceName = nodes.First().InstanceName,
+                FullBackupBreached = agFullBreached,
+                LogBackupBreached = agLogBreached,
+                BackupDetails = allDetails,
+                LogCheckSuppressed = logSuppressed,
+                LogCheckSuppressReason = suppressReason
+            };
+
+            // Obtener el score del primer nodo disponible
+            var score = nodes
+                .Select(n => healthScores.FirstOrDefault(h => h.InstanceName.Equals(n.InstanceName, StringComparison.OrdinalIgnoreCase))?.BackupsScore ?? 0)
+                .Min();
+
+            results.Add(new OverviewBackupIssueDto
+            {
+                InstanceName = nodes.First().InstanceName,
+                DisplayName = agName,
+                AgName = agName,
+                Score = score,
+                FullBackupBreached = agFullBreached,
+                LogBackupBreached = agLogBreached,
+                LastFullBackup = bestFullBackup,
+                LastLogBackup = bestLogBackup,
+                Issues = BuildBackupIssuesList(agRaw),
+                BreachedDatabases = ParseBreachedDatabases(allDetails, agFullBreached, agLogBreached),
+                LogCheckSuppressed = logSuppressed,
+                LogCheckSuppressReason = suppressReason
+            });
+        }
+
+        // Procesar instancias standalone (sin AG)
+        foreach (var b in standaloneBackups)
+        {
+            // Solo incluir si tiene algún breach
+            if (!b.FullBackupBreached && !b.LogBackupBreached)
+            {
+                continue;
+            }
+
+            results.Add(new OverviewBackupIssueDto
+            {
+                InstanceName = b.InstanceName,
+                DisplayName = b.InstanceName,
+                AgName = null,
+                Score = healthScores.FirstOrDefault(h => h.InstanceName.Equals(b.InstanceName, StringComparison.OrdinalIgnoreCase))?.BackupsScore ?? 0,
+                FullBackupBreached = b.FullBackupBreached,
+                LogBackupBreached = b.LogBackupBreached,
+                LastFullBackup = b.LastFullBackup,
+                LastLogBackup = b.LastLogBackup,
+                Issues = BuildBackupIssuesList(b),
+                BreachedDatabases = ParseBreachedDatabases(b.BackupDetails, b.FullBackupBreached, b.LogBackupBreached),
+                LogCheckSuppressed = b.LogCheckSuppressed,
+                LogCheckSuppressReason = b.LogCheckSuppressReason
+            });
+        }
+
+        return results
+            .OrderBy(b => b.Score)
+            .ThenByDescending(b => b.FullBackupBreached)
+            .ToList();
     }
 
     /// <summary>

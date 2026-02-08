@@ -1764,6 +1764,8 @@ export interface OverviewCriticalInstanceDto {
 
 export interface OverviewBackupIssueDto {
   instanceName: string;
+  displayName: string;
+  agName?: string;
   score: number;
   issues: string[];
   // Campos detallados de breach
@@ -1772,6 +1774,9 @@ export interface OverviewBackupIssueDto {
   lastFullBackup?: string;
   lastLogBackup?: string;
   breachedDatabases: string[];
+  // Supresión de LOG
+  logCheckSuppressed: boolean;
+  logCheckSuppressReason?: string;
 }
 
 export interface OverviewCriticalDiskDto {
@@ -5609,10 +5614,13 @@ export interface BackupAlertStatusDto {
 
 export interface BackupIssueSummaryDto {
   instanceName: string;
+  displayName: string;
   fullBackupBreached: boolean;
   logBackupBreached: boolean;
   assignedToUserName?: string;
   assignedAt?: string;
+  logCheckSuppressed: boolean;
+  logCheckSuppressReason?: string;
 }
 
 export const backupAlertsApi = {

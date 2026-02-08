@@ -105,6 +105,12 @@ public class BackupAlertStatusDto
 public class BackupIssueSummaryDto
 {
     public string InstanceName { get; set; } = "";
+    
+    /// <summary>
+    /// Nombre a mostrar: AGName si pertenece a un AG, sino InstanceName
+    /// </summary>
+    public string DisplayName { get; set; } = "";
+    
     public bool FullBackupBreached { get; set; }
     public bool LogBackupBreached { get; set; }
     public string? AssignedToUserName { get; set; }

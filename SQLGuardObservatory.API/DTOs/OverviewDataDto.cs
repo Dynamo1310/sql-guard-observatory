@@ -52,6 +52,17 @@ public class OverviewCriticalInstanceDto
 public class OverviewBackupIssueDto
 {
     public string InstanceName { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Nombre a mostrar: AGName si pertenece a un AG, sino InstanceName
+    /// </summary>
+    public string DisplayName { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Nombre del Availability Group (null si no pertenece a un AG)
+    /// </summary>
+    public string? AgName { get; set; }
+    
     public int Score { get; set; }
     public List<string> Issues { get; set; } = new();
     
@@ -153,4 +164,9 @@ public class OverviewBackupBreachRaw
     // Campos para supresión de alertas de LOG
     public bool LogCheckSuppressed { get; set; }
     public string? LogCheckSuppressReason { get; set; }
+    
+    /// <summary>
+    /// Nombre del Availability Group (null si no pertenece a un AG)
+    /// </summary>
+    public string? AGName { get; set; }
 }

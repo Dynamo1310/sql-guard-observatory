@@ -177,15 +177,17 @@ public class BackupAlertService : IBackupAlertService
                 assignments = new List<OverviewIssueAssignment>();
             }
 
-            var assignedInstanceNames = assignments.Select(a => a.InstanceName).ToHashSet();
+            // Usar DisplayName como clave de asignación (AGName para AGs, InstanceName para standalone)
+            var assignedKeys = assignments.Select(a => a.InstanceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var result = new BackupAlertStatusDto
             {
                 UnassignedIssues = backupIssues
-                    .Where(b => !assignedInstanceNames.Contains(b.InstanceName))
+                    .Where(b => !assignedKeys.Contains(b.DisplayName) && !assignedKeys.Contains(b.InstanceName))
                     .Select(b => new BackupIssueSummaryDto
                     {
                         InstanceName = b.InstanceName,
+                        DisplayName = b.DisplayName,
                         FullBackupBreached = b.FullBackupBreached,
                         LogBackupBreached = b.LogBackupBreached,
                         LogCheckSuppressed = b.LogCheckSuppressed,
@@ -193,13 +195,16 @@ public class BackupAlertService : IBackupAlertService
                     })
                     .ToList(),
                 AssignedIssues = backupIssues
-                    .Where(b => assignedInstanceNames.Contains(b.InstanceName))
+                    .Where(b => assignedKeys.Contains(b.DisplayName) || assignedKeys.Contains(b.InstanceName))
                     .Select(b => 
                     {
-                        var assignment = assignments.FirstOrDefault(a => a.InstanceName == b.InstanceName);
+                        var assignment = assignments.FirstOrDefault(a => 
+                            a.InstanceName.Equals(b.DisplayName, StringComparison.OrdinalIgnoreCase) ||
+                            a.InstanceName.Equals(b.InstanceName, StringComparison.OrdinalIgnoreCase));
                         return new BackupIssueSummaryDto
                         {
                             InstanceName = b.InstanceName,
+                            DisplayName = b.DisplayName,
                             FullBackupBreached = b.FullBackupBreached,
                             LogBackupBreached = b.LogBackupBreached,
                             LogCheckSuppressed = b.LogCheckSuppressed,
@@ -327,7 +332,7 @@ public class BackupAlertService : IBackupAlertService
             SentAt = LocalClockAR.Now,
             RecipientCount = recipients.Count,
             CcCount = ccRecipients.Count,
-            InstancesAffected = string.Join(",", effectiveIssues.Select(i => i.InstanceName)),
+            InstancesAffected = string.Join(",", effectiveIssues.Select(i => !string.IsNullOrEmpty(i.DisplayName) ? i.DisplayName : i.InstanceName)),
             Success = success,
             ErrorMessage = success ? null : "Error al enviar email"
         };
@@ -402,9 +407,11 @@ public class BackupAlertService : IBackupAlertService
 
         var issueRows = string.Join("", issues.Select(issue => 
         {
+            // Usar DisplayName (nombre del AG si aplica, sino InstanceName)
+            var displayName = !string.IsNullOrEmpty(issue.DisplayName) ? issue.DisplayName : issue.InstanceName;
             return $@"
                 <tr>
-                    <td style='padding: 6px 12px; border-bottom: 1px solid #e0e0e0;'>{issue.InstanceName}</td>
+                    <td style='padding: 6px 12px; border-bottom: 1px solid #e0e0e0;'>{displayName}</td>
                 </tr>";
         }));
 

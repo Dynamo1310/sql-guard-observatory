@@ -654,8 +654,8 @@ export default function BackupAlerts() {
           {status?.unassignedIssues.length ? (
             <div className="mt-3 flex flex-wrap gap-2">
               {status.unassignedIssues.slice(0, 10).map(issue => (
-                <Badge key={issue.instanceName} variant="destructive" className="font-mono">
-                  {issue.instanceName}
+                <Badge key={issue.displayName || issue.instanceName} variant="destructive" className="font-mono">
+                  {issue.displayName || issue.instanceName}
                   <span className="ml-1 text-xs opacity-75">
                     ({issue.fullBackupBreached && issue.logBackupBreached
                       ? "FULL+LOG"

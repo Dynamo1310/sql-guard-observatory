@@ -60,5 +60,11 @@ public class InstanceHealthBackups
     /// Indica si el collector tiene permiso VIEW SERVER STATE para detectar backups en ejecución
     /// </summary>
     public bool HasViewServerState { get; set; } = true;
+    
+    /// <summary>
+    /// Nombre del Availability Group al que pertenece la instancia (null si no es AG)
+    /// </summary>
+    [MaxLength(255)]
+    public string? AGName { get; set; }
 }
 
