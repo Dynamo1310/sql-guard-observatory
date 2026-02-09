@@ -91,6 +91,7 @@ public static class PermissionInitializer
             "ConfigSMTP",
             "AlertaServidoresCaidos",
             "AlertaBackups",
+            "AlertaDiscosCriticos",
             "AlertaResumenOverview",
             "ServerRestart",
             "OperationsConfig",

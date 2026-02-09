@@ -10,17 +10,17 @@ public interface ISqlConnectionFactory
     /// <summary>
     /// Crea una conexión a una instancia SQL Server
     /// </summary>
-    Task<SqlConnection> CreateConnectionAsync(string instanceName, int timeoutSeconds = 15, CancellationToken ct = default);
+    Task<SqlConnection> CreateConnectionAsync(string instanceName, int timeoutSeconds = 15, CancellationToken ct = default, string? hostingSite = null, string? ambiente = null);
     
     /// <summary>
     /// Prueba la conectividad a una instancia
     /// </summary>
-    Task<bool> TestConnectionAsync(string instanceName, int timeoutSeconds = 10, CancellationToken ct = default);
+    Task<bool> TestConnectionAsync(string instanceName, int timeoutSeconds = 10, CancellationToken ct = default, string? hostingSite = null, string? ambiente = null);
     
     /// <summary>
     /// Obtiene la versión major de SQL Server de una instancia
     /// </summary>
-    Task<int> GetSqlMajorVersionAsync(string instanceName, int timeoutSeconds = 10, CancellationToken ct = default);
+    Task<int> GetSqlMajorVersionAsync(string instanceName, int timeoutSeconds = 10, CancellationToken ct = default, string? hostingSite = null, string? ambiente = null);
 }
 
 /// <summary>

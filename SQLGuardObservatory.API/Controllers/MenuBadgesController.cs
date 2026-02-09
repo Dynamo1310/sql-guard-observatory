@@ -86,6 +86,7 @@ public class MenuBadgesController : ControllerBase
         { "AlertsMenu", ("📁 Alertas (Menú)", "Administración > Monitoreo Sistema") },
         { "AlertaServidoresCaidos", ("Alertas - Servidores Caídos", "Administración > Monitoreo Sistema") },
         { "AlertaBackups", ("Alertas - Backups Atrasados", "Administración > Monitoreo Sistema") },
+        { "AlertaDiscosCriticos", ("Alertas - Discos Críticos", "Administración > Monitoreo Sistema") },
         { "AlertaResumenOverview", ("Alertas - Resumen Overview", "Administración > Monitoreo Sistema") },
     };
 

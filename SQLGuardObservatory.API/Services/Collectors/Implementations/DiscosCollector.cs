@@ -215,10 +215,15 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
             vol.OriginalMountPoints.Add(mountPoint);
         }
 
-        // Calcular FreePct para volúmenes combinados
+        // Calcular FreePct para volúmenes combinados y establecer IsCriticalSystemDisk
         foreach (var vol in volumesByDrive.Values)
         {
             vol.FreePct = vol.TotalGB > 0 ? (vol.FreeGB / vol.TotalGB) * 100m : 100m;
+            
+            // v3.5: Establecer si es disco crítico del sistema AQUÍ
+            // porque ProcessFileAnalysis puede no ejecutarse si no hay archivos SQL
+            vol.IsCriticalSystemDisk = CriticalSystemDrives.Contains(vol.MountPoint);
+            
             result.Volumes.Add(vol);
         }
     }

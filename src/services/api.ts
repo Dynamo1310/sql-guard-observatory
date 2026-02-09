@@ -5680,6 +5680,122 @@ export const backupAlertsApi = {
   },
 };
 
+// ==================== DISK ALERTS ====================
+
+export interface DiskAlertConfigDto {
+  id: number;
+  name: string;
+  description?: string;
+  isEnabled: boolean;
+  checkIntervalMinutes: number;
+  alertIntervalMinutes: number;
+  recipients: string[];
+  ccRecipients: string[];
+  lastRunAt?: string;
+  lastAlertSentAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  updatedByDisplayName?: string;
+}
+
+export interface UpdateDiskAlertRequest {
+  name?: string;
+  description?: string;
+  isEnabled?: boolean;
+  checkIntervalMinutes?: number;
+  alertIntervalMinutes?: number;
+  recipients?: string[];
+  ccRecipients?: string[];
+}
+
+export interface DiskAlertHistoryDto {
+  id: number;
+  configId: number;
+  sentAt: string;
+  recipientCount: number;
+  ccCount: number;
+  disksAffected: string[];
+  criticalDiskCount: number;
+  success: boolean;
+  errorMessage?: string;
+}
+
+export interface DiskAlertStatusDto {
+  unassignedDisks: CriticalDiskIssueSummaryDto[];
+  assignedDisks: CriticalDiskIssueSummaryDto[];
+  totalCriticalDisks: number;
+}
+
+export interface CriticalDiskIssueSummaryDto {
+  instanceName: string;
+  drive: string;
+  porcentajeLibre: number;
+  libreGB: number;
+  totalGB?: number;
+  realPorcentajeLibre?: number;
+  realLibreGB?: number;
+  isCriticalSystemDisk: boolean;
+  assignedToUserName?: string;
+  assignedAt?: string;
+}
+
+export const diskAlertsApi = {
+  // Obtener configuración
+  async getConfig(): Promise<DiskAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/disk-alerts/config`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DiskAlertConfigDto>(response);
+  },
+
+  // Actualizar configuración
+  async updateConfig(data: UpdateDiskAlertRequest): Promise<DiskAlertConfigDto> {
+    const response = await fetch(`${API_URL}/api/disk-alerts/config`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<DiskAlertConfigDto>(response);
+  },
+
+  // Obtener historial
+  async getHistory(limit: number = 10): Promise<DiskAlertHistoryDto[]> {
+    const response = await fetch(`${API_URL}/api/disk-alerts/history?limit=${limit}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DiskAlertHistoryDto[]>(response);
+  },
+
+  // Obtener estado actual de discos críticos
+  async getStatus(): Promise<DiskAlertStatusDto> {
+    const response = await fetch(`${API_URL}/api/disk-alerts/status`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DiskAlertStatusDto>(response);
+  },
+
+  // Enviar email de prueba
+  async testAlert(): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/disk-alerts/test`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ success: boolean; message: string }>(response);
+  },
+
+  // Ejecutar verificación manualmente
+  async runNow(): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/disk-alerts/run`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ success: boolean; message: string }>(response);
+  },
+};
+
 // ==================== GESTIÓN DE DECOMISO API ====================
 
 export interface DecomisoGridDto {

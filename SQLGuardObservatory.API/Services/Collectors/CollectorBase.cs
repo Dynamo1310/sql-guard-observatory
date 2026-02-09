@@ -27,6 +27,7 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
     public abstract string CollectorName { get; }
     public abstract string DisplayName { get; }
     public bool IsRunning => _isRunning;
+    protected virtual bool IncludeAWS => false;
 
     protected CollectorBase(
         ILogger logger,
@@ -88,7 +89,7 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
             var executionLog = await _configService.StartExecutionLogAsync(CollectorName, "Scheduled", null, ct);
             
             // Obtener instancias
-            var instances = await _instanceProvider.GetFilteredInstancesAsync(ct: ct);
+            var instances = await _instanceProvider.GetFilteredInstancesAsync(includeAWS: IncludeAWS, ct: ct);
             _logger.LogInformation("Collector {CollectorName} starting for {Count} instances", CollectorName, instances.Count);
 
             // Pre-procesamiento (opcional, para identificar grupos de instancias como AlwaysOn)
@@ -204,8 +205,8 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
 
         try
         {
-            // Verificar conectividad
-            if (!await _connectionFactory.TestConnectionAsync(instance.InstanceName, config.TimeoutSeconds, ct))
+            // Verificar conectividad (pasando hostingSite/ambiente para resolución de credenciales)
+            if (!await _connectionFactory.TestConnectionAsync(instance.InstanceName, config.TimeoutSeconds, ct, instance.HostingSite, instance.Ambiente))
             {
                 _logger.LogDebug("Instance {InstanceName} not reachable, skipping", instance.InstanceName);
                 return result; // Success = false, Error = null (skipped)
@@ -214,7 +215,7 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
             // Obtener versión de SQL Server si no la tenemos
             if (instance.SqlMajorVersion == 0)
             {
-                instance.SqlMajorVersion = await _connectionFactory.GetSqlMajorVersionAsync(instance.InstanceName, 10, ct);
+                instance.SqlMajorVersion = await _connectionFactory.GetSqlMajorVersionAsync(instance.InstanceName, 10, ct, instance.HostingSite, instance.Ambiente);
             }
 
             // Obtener query específica para la versión
@@ -321,9 +322,11 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
         string instanceName,
         string query,
         int timeoutSeconds,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? hostingSite = null,
+        string? ambiente = null)
     {
-        await using var connection = await _connectionFactory.CreateConnectionAsync(instanceName, timeoutSeconds, ct);
+        await using var connection = await _connectionFactory.CreateConnectionAsync(instanceName, timeoutSeconds, ct, hostingSite, ambiente);
         await using var command = connection.CreateCommand();
         command.CommandText = query;
         command.CommandTimeout = timeoutSeconds;
@@ -342,9 +345,11 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
         string instanceName,
         string query,
         int timeoutSeconds,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? hostingSite = null,
+        string? ambiente = null)
     {
-        await using var connection = await _connectionFactory.CreateConnectionAsync(instanceName, timeoutSeconds, ct);
+        await using var connection = await _connectionFactory.CreateConnectionAsync(instanceName, timeoutSeconds, ct, hostingSite, ambiente);
         await using var command = connection.CreateCommand();
         command.CommandText = query;
         command.CommandTimeout = timeoutSeconds;

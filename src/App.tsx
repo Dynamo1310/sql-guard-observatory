@@ -28,6 +28,7 @@ import OnCallSettings from "./pages/OnCallSettings";
 import SmtpSettings from "./pages/SmtpSettings";
 import ProductionAlerts from "./pages/ProductionAlerts";
 import BackupAlerts from "./pages/BackupAlerts";
+import DiskAlerts from "./pages/DiskAlerts";
 import OverviewSummaryAlerts from "./pages/OverviewSummaryAlerts";
 import ServerRestart from "./pages/ServerRestart";
 import OperationalServersConfig from "./pages/OperationalServersConfig";
@@ -284,6 +285,11 @@ const App = () => (
                       <Route path="/admin/alerts/backups" element={
                         <ProtectedRoute viewName="AlertaBackups">
                           <BackupAlerts />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/alerts/disks" element={
+                        <ProtectedRoute viewName="AlertaDiscosCriticos">
+                          <DiskAlerts />
                         </ProtectedRoute>
                       } />
                       <Route path="/admin/alerts/overview-summary" element={

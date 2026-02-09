@@ -41,6 +41,7 @@ public class MaintenanceCollector : CollectorBase<MaintenanceCollector.Maintenan
 
     public override string CollectorName => "Maintenance";
     public override string DisplayName => "Mantenimientos";
+    protected override bool IncludeAWS => true;
 
     public MaintenanceCollector(
         ILogger<MaintenanceCollector> logger,
@@ -112,7 +113,7 @@ INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 LEFT JOIN sys.dm_hadr_availability_replica_states ars ON ar.replica_id = ars.replica_id
 ORDER BY ag.name, ar.replica_server_name";
 
-                var agData = await ExecuteQueryAsync(instance.InstanceName, agQuery, 10, ct);
+                var agData = await ExecuteQueryAsync(instance.InstanceName, agQuery, 10, ct, instance.HostingSite, instance.Ambiente);
 
                 foreach (DataRow row in agData.Rows)
                 {
@@ -165,6 +166,12 @@ ORDER BY ag.name, ar.replica_server_name";
         }
     }
 
+    /// <summary>
+    /// Prefijos de instancias AWS que se excluyen de la recolección de mantenimiento.
+    /// Read replicas no tienen SQL Agent, restores son temporales.
+    /// </summary>
+    private static readonly string[] _excludedAwsPrefixes = { "readreplica", "restore" };
+
     protected override async Task<MaintenanceMetrics> CollectFromInstanceAsync(
         SqlInstanceInfo instance,
         int timeoutSeconds,
@@ -173,6 +180,23 @@ ORDER BY ag.name, ar.replica_server_name";
     {
         var result = new MaintenanceMetrics();
         var cutoffDate = DateTime.Now.AddDays(-CUTOFF_DAYS);
+
+        // Excluir instancias AWS que no aplican para mantenimiento (read replicas, restores)
+        if (instance.IsAWS)
+        {
+            var lowerName = instance.InstanceName.ToLowerInvariant();
+            foreach (var prefix in _excludedAwsPrefixes)
+            {
+                if (lowerName.StartsWith(prefix))
+                {
+                    _logger.LogDebug("Skipping AWS instance {Instance} (matches excluded prefix '{Prefix}')", 
+                        instance.InstanceName, prefix);
+                    result.CheckdbOk = true;
+                    result.IndexOptimizeOk = true;
+                    return result;
+                }
+            }
+        }
 
         // Asignar AGName si la instancia pertenece a un grupo
         result.AGName = GetAgNameForInstance(instance.InstanceName);
@@ -204,57 +228,70 @@ ORDER BY ag.name, ar.replica_server_name";
 
         try
         {
-            // === QUERY CHECKDB JOBS con retry (como en PowerShell) ===
-            var checkdbQuery = GetCheckdbJobsQuery();
+            // === QUERY CHECKDB JOBS con retry ===
+            var checkdbQuery = instance.IsAWS ? GetCheckdbJobsQueryRDS() : GetCheckdbJobsQuery();
             DataTable? checkdbData = null;
             
             // Intento 1 con timeout normal
             try
             {
-                checkdbData = await ExecuteQueryAsync(instance.InstanceName, checkdbQuery, TIMEOUT_INITIAL, ct);
+                checkdbData = await ExecuteQueryAsync(instance.InstanceName, checkdbQuery, TIMEOUT_INITIAL, ct, instance.HostingSite, instance.Ambiente);
             }
             catch (Exception ex1)
             {
-                _logger.LogDebug("Timeout en CHECKDB {Instance} (intento 1/{Timeout}s), reintentando...", 
-                    instance.InstanceName, TIMEOUT_INITIAL);
+                await Task.Delay(500, ct);
                 
-                await Task.Delay(500, ct); // Pequeña pausa como en PowerShell
-                
-                // Intento 2 con timeout extendido
+                // Intento 2: en AWS usar sp_help_job en C# (no requiere permisos directos en msdb tables)
+                // En on-premise reintentar con timeout extendido
                 try
                 {
-                    checkdbData = await ExecuteQueryAsync(instance.InstanceName, checkdbQuery, TIMEOUT_RETRY, ct);
+                    if (instance.IsAWS)
+                    {
+                        _logger.LogInformation("Query directa CHECKDB falló en RDS {Instance} ({Error}), usando sp_help_job fallback en C#", 
+                            instance.InstanceName, ex1.Message);
+                        checkdbData = await ExecuteSpHelpJobFallbackAsync(instance, "IntegrityCheck", TIMEOUT_RETRY, ct);
+                    }
+                    else
+                    {
+                        checkdbData = await ExecuteQueryAsync(instance.InstanceName, checkdbQuery, TIMEOUT_RETRY, ct, instance.HostingSite, instance.Ambiente);
+                    }
                 }
                 catch (Exception ex2)
                 {
                     _logger.LogWarning("Query CHECKDB falló en {Instance}, asumiendo 0 jobs: {Error}", 
                         instance.InstanceName, ex2.Message);
-                    checkdbData = new DataTable(); // Array vacío como en PowerShell
+                    checkdbData = new DataTable();
                 }
             }
 
             ProcessCheckdbJobs(checkdbData, result, cutoffDate);
 
-            // === QUERY INDEXOPTIMIZE JOBS con retry (como en PowerShell) ===
-            var indexOptQuery = GetIndexOptimizeJobsQuery();
+            // === QUERY INDEXOPTIMIZE JOBS con retry ===
+            var indexOptQuery = instance.IsAWS ? GetIndexOptimizeJobsQueryRDS() : GetIndexOptimizeJobsQuery();
             DataTable? indexOptData = null;
             
             // Intento 1 con timeout normal
             try
             {
-                indexOptData = await ExecuteQueryAsync(instance.InstanceName, indexOptQuery, TIMEOUT_INITIAL, ct);
+                indexOptData = await ExecuteQueryAsync(instance.InstanceName, indexOptQuery, TIMEOUT_INITIAL, ct, instance.HostingSite, instance.Ambiente);
             }
             catch (Exception ex1)
             {
-                _logger.LogDebug("Timeout en IndexOptimize {Instance} (intento 1/{Timeout}s), reintentando...", 
-                    instance.InstanceName, TIMEOUT_INITIAL);
-                
                 await Task.Delay(500, ct);
                 
-                // Intento 2 con timeout extendido
+                // Intento 2: en AWS usar sp_help_job fallback en C#
                 try
                 {
-                    indexOptData = await ExecuteQueryAsync(instance.InstanceName, indexOptQuery, TIMEOUT_RETRY, ct);
+                    if (instance.IsAWS)
+                    {
+                        _logger.LogInformation("Query directa IndexOptimize falló en RDS {Instance} ({Error}), usando sp_help_job fallback en C#", 
+                            instance.InstanceName, ex1.Message);
+                        indexOptData = await ExecuteSpHelpJobFallbackAsync(instance, "IndexOptimize", TIMEOUT_RETRY, ct);
+                    }
+                    else
+                    {
+                        indexOptData = await ExecuteQueryAsync(instance.InstanceName, indexOptQuery, TIMEOUT_RETRY, ct, instance.HostingSite, instance.Ambiente);
+                    }
                 }
                 catch (Exception ex2)
                 {
@@ -1066,6 +1103,265 @@ SELECT
     HasHistory
 FROM RankedExecutions 
 WHERE rn = 1;";
+    }
+
+    /// <summary>
+    /// Query CHECKDB para RDS - Sin acceso a sysjobservers (permission denied en RDS)
+    /// Solo usa sysjobs + sysjobhistory que sí son accesibles
+    /// </summary>
+    private string GetCheckdbJobsQueryRDS()
+    {
+        return @"
+-- IntegrityCheck jobs para RDS (sin sysjobservers)
+WITH JobsWithHistory AS (
+    SELECT 
+        j.job_id,
+        j.name AS JobName,
+        jh.run_date,
+        jh.run_time,
+        jh.run_duration,
+        jh.run_status,
+        DATEADD(SECOND, 
+            (jh.run_duration / 10000) * 3600 + ((jh.run_duration / 100) % 100) * 60 + (jh.run_duration % 100),
+            CAST(CAST(jh.run_date AS VARCHAR) + ' ' + 
+                 STUFF(STUFF(RIGHT('000000' + CAST(jh.run_time AS VARCHAR), 6), 5, 0, ':'), 3, 0, ':') 
+                 AS DATETIME)
+        ) AS FinishTime,
+        (SELECT COUNT(*) 
+         FROM msdb.dbo.sysjobhistory jh2 
+         WHERE jh2.job_id = j.job_id 
+           AND jh2.run_date = jh.run_date 
+           AND jh2.step_id > 0) AS TotalSteps,
+        (SELECT COUNT(*) 
+         FROM msdb.dbo.sysjobhistory jh2 
+         WHERE jh2.job_id = j.job_id 
+           AND jh2.run_date = jh.run_date 
+           AND jh2.step_id > 0 
+           AND jh2.run_status = 1) AS SuccessfulSteps,
+        (SELECT COUNT(*) 
+         FROM msdb.dbo.sysjobhistory jh2 
+         WHERE jh2.job_id = j.job_id 
+           AND jh2.run_date = jh.run_date 
+           AND jh2.step_id > 0 
+           AND jh2.run_status <> 1) AS FailedSteps,
+        1 AS HasHistory
+    FROM msdb.dbo.sysjobs j
+    INNER JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
+    WHERE j.name LIKE '%IntegrityCheck%'
+      AND j.name NOT LIKE '%STOP%'
+      AND j.enabled = 1
+),
+RankedExecutions AS (
+    SELECT 
+        job_id,
+        JobName,
+        run_date AS LastRunDate,
+        run_time AS LastRunTime,
+        run_duration AS LastRunDuration,
+        run_status AS LastRunStatus,
+        FinishTime AS LastFinishTime,
+        TotalSteps,
+        SuccessfulSteps,
+        FailedSteps,
+        HasHistory,
+        CASE WHEN run_status = 1 
+              AND FailedSteps = 0
+             THEN 1 ELSE 0 END AS IsRealSuccess,
+        ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY FinishTime DESC) AS rn
+    FROM JobsWithHistory
+)
+SELECT 
+    JobName,
+    LastRunDate,
+    LastRunTime,
+    LastRunDuration,
+    LastRunStatus,
+    LastFinishTime,
+    TotalSteps,
+    SuccessfulSteps,
+    FailedSteps,
+    IsRealSuccess,
+    HasHistory
+FROM RankedExecutions 
+WHERE rn = 1;";
+    }
+
+    /// <summary>
+    /// Query IndexOptimize para RDS - Sin acceso a sysjobservers (permission denied en RDS)
+    /// Solo usa sysjobs + sysjobhistory que sí son accesibles
+    /// </summary>
+    private string GetIndexOptimizeJobsQueryRDS()
+    {
+        return @"
+-- IndexOptimize jobs para RDS (sin sysjobservers)
+WITH JobsWithHistory AS (
+    SELECT 
+        j.job_id,
+        j.name AS JobName,
+        jh.run_date,
+        jh.run_time,
+        jh.run_duration,
+        jh.run_status,
+        DATEADD(SECOND, 
+            (jh.run_duration / 10000) * 3600 + ((jh.run_duration / 100) % 100) * 60 + (jh.run_duration % 100),
+            CAST(CAST(jh.run_date AS VARCHAR) + ' ' + 
+                 STUFF(STUFF(RIGHT('000000' + CAST(jh.run_time AS VARCHAR), 6), 5, 0, ':'), 3, 0, ':') 
+                 AS DATETIME)
+        ) AS FinishTime,
+        (SELECT COUNT(*) 
+         FROM msdb.dbo.sysjobhistory jh2 
+         WHERE jh2.job_id = j.job_id AND jh2.run_date = jh.run_date AND jh2.step_id > 0) AS TotalSteps,
+        (SELECT COUNT(*) 
+         FROM msdb.dbo.sysjobhistory jh2 
+         WHERE jh2.job_id = j.job_id AND jh2.run_date = jh.run_date AND jh2.step_id > 0 AND jh2.run_status = 1) AS SuccessfulSteps,
+        (SELECT COUNT(*) 
+         FROM msdb.dbo.sysjobhistory jh2 
+         WHERE jh2.job_id = j.job_id AND jh2.run_date = jh.run_date AND jh2.step_id > 0 AND jh2.run_status <> 1) AS FailedSteps,
+        1 AS HasHistory
+    FROM msdb.dbo.sysjobs j
+    INNER JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0
+    WHERE j.name LIKE '%IndexOptimize%'
+      AND j.name NOT LIKE '%STOP%'
+      AND j.enabled = 1
+),
+RankedExecutions AS (
+    SELECT 
+        job_id,
+        JobName,
+        run_date AS LastRunDate,
+        run_time AS LastRunTime,
+        run_duration AS LastRunDuration,
+        run_status AS LastRunStatus,
+        FinishTime AS LastFinishTime,
+        TotalSteps,
+        SuccessfulSteps,
+        FailedSteps,
+        HasHistory,
+        CASE WHEN run_status = 1 
+              AND FailedSteps = 0
+             THEN 1 ELSE 0 END AS IsRealSuccess,
+        ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY FinishTime DESC) AS rn
+    FROM JobsWithHistory
+)
+SELECT 
+    JobName,
+    LastRunDate,
+    LastRunTime,
+    LastRunDuration,
+    LastRunStatus,
+    LastFinishTime,
+    TotalSteps,
+    SuccessfulSteps,
+    FailedSteps,
+    IsRealSuccess,
+    HasHistory
+FROM RankedExecutions 
+WHERE rn = 1;";
+    }
+
+    /// <summary>
+    /// Fallback para RDS cuando ni sysjobservers ni sysjobhistory son accesibles.
+    /// Usa msdb.dbo.sp_help_job que funciona con permisos estándar en RDS.
+    /// No tiene validación a nivel de steps, solo resultado general del job.
+    /// </summary>
+    /// <summary>
+    /// Fallback robusto para RDS: ejecuta sp_help_job directamente y procesa los resultados en C#.
+    /// No usa temp tables ni INSERT...EXEC (que falla si el esquema de sp_help_job varía por versión).
+    /// Accede a las columnas por nombre, lo que es independiente del orden/cantidad de columnas.
+    /// </summary>
+    private async Task<DataTable> ExecuteSpHelpJobFallbackAsync(
+        SqlInstanceInfo instance,
+        string jobPattern,
+        int timeoutSeconds,
+        CancellationToken ct)
+    {
+        // Ejecutar sp_help_job directamente - SqlDataAdapter captura el primer result set
+        var rawData = await ExecuteQueryAsync(
+            instance.InstanceName,
+            "EXEC msdb.dbo.sp_help_job @job_type = N'LOCAL'",
+            timeoutSeconds, ct,
+            instance.HostingSite, instance.Ambiente);
+
+        _logger.LogDebug("sp_help_job en {Instance} devolvió {Count} jobs totales, buscando patrón '{Pattern}'",
+            instance.InstanceName, rawData.Rows.Count, jobPattern);
+
+        // Crear DataTable normalizado con las columnas que esperan ProcessCheckdbJobs/ProcessIndexOptimizeJobs
+        var result = new DataTable();
+        result.Columns.Add("JobName", typeof(string));
+        result.Columns.Add("LastRunDate", typeof(int));
+        result.Columns.Add("LastRunTime", typeof(int));
+        result.Columns.Add("LastRunDuration", typeof(int));
+        result.Columns.Add("LastRunStatus", typeof(int));
+        result.Columns.Add("LastFinishTime", typeof(DateTime));
+        result.Columns.Add("TotalSteps", typeof(int));
+        result.Columns.Add("SuccessfulSteps", typeof(int));
+        result.Columns.Add("FailedSteps", typeof(int));
+        result.Columns.Add("IsRealSuccess", typeof(int));
+        result.Columns.Add("HasHistory", typeof(int));
+
+        foreach (DataRow row in rawData.Rows)
+        {
+            // Acceder por nombre de columna (robusto ante cambios de esquema)
+            var name = row["name"]?.ToString() ?? "";
+            var enabled = Convert.ToInt32(row["enabled"]);
+            var lastRunDate = Convert.ToInt32(row["last_run_date"]);
+            var lastRunTime = Convert.ToInt32(row["last_run_time"]);
+            var lastRunOutcome = Convert.ToInt32(row["last_run_outcome"]);
+
+            // Filtrar: debe coincidir con el patrón, estar habilitado, no ser STOP, y haber ejecutado
+            if (!name.Contains(jobPattern, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (name.Contains("STOP", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (enabled != 1)
+                continue;
+            if (lastRunDate <= 0)
+                continue;
+
+            // Calcular FinishTime en C# (más robusto que en T-SQL)
+            DateTime? finishTime = null;
+            if (lastRunDate > 19000101)
+            {
+                try
+                {
+                    var dateStr = lastRunDate.ToString();
+                    var timeStr = lastRunTime.ToString().PadLeft(6, '0');
+                    finishTime = DateTime.ParseExact(
+                        $"{dateStr} {timeStr[..2]}:{timeStr[2..4]}:{timeStr[4..6]}",
+                        "yyyyMMdd HH:mm:ss",
+                        System.Globalization.CultureInfo.InvariantCulture);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug("Error parseando fecha para job '{JobName}': date={Date}, time={Time}, error={Error}",
+                        name, lastRunDate, lastRunTime, ex.Message);
+                }
+            }
+
+            var isSuccess = lastRunOutcome == 1 ? 1 : 0;
+
+            _logger.LogDebug("sp_help_job fallback - Job '{JobName}': last_run_date={Date}, last_run_time={Time}, outcome={Outcome}, finishTime={FinishTime}",
+                name, lastRunDate, lastRunTime, lastRunOutcome, finishTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "null");
+
+            var newRow = result.NewRow();
+            newRow["JobName"] = name;
+            newRow["LastRunDate"] = lastRunDate;
+            newRow["LastRunTime"] = lastRunTime;
+            newRow["LastRunDuration"] = 0;
+            newRow["LastRunStatus"] = lastRunOutcome;
+            newRow["LastFinishTime"] = finishTime.HasValue ? (object)finishTime.Value : DBNull.Value;
+            newRow["TotalSteps"] = 0;
+            newRow["SuccessfulSteps"] = isSuccess;
+            newRow["FailedSteps"] = isSuccess == 1 ? 0 : 1;
+            newRow["IsRealSuccess"] = isSuccess;
+            newRow["HasHistory"] = 0;
+            result.Rows.Add(newRow);
+        }
+
+        _logger.LogInformation("sp_help_job fallback en {Instance}: encontrados {Count} jobs que coinciden con '{Pattern}'",
+            instance.InstanceName, result.Rows.Count, jobPattern);
+
+        return result;
     }
 
     protected override string GetDefaultQuery(int sqlMajorVersion)

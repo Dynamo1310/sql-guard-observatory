@@ -391,6 +391,7 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             }
 
             // 2. Query optimizada para mantenimiento vencido
+            // Incluye Onpremise + AWS (RDS e Instancia/EC2)
             var query = @"
                 WITH LatestMaintenance AS (
                     SELECT 
@@ -400,13 +401,22 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                         m.AGName,
                         m.LastCheckdb,
                         m.LastIndexOptimize,
+                        m.HostingSite,
                         ROW_NUMBER() OVER (PARTITION BY m.InstanceName ORDER BY m.CollectedAtUtc DESC) AS rn
                     FROM dbo.InstanceHealth_Maintenance m
                     WHERE m.Ambiente = 'Produccion'
                 )
-                SELECT InstanceName, CheckdbOk, IndexOptimizeOk, AGName, LastCheckdb, LastIndexOptimize
-                FROM LatestMaintenance
-                WHERE rn = 1 AND (CheckdbOk = 0 OR IndexOptimizeOk = 0)";
+                SELECT lm.InstanceName, lm.CheckdbOk, lm.IndexOptimizeOk, lm.AGName, lm.LastCheckdb, lm.LastIndexOptimize
+                FROM LatestMaintenance lm
+                LEFT JOIN dbo.SqlServerInstancesCache c ON lm.InstanceName = c.NombreInstancia
+                WHERE lm.rn = 1 
+                  AND (lm.CheckdbOk = 0 OR lm.IndexOptimizeOk = 0)
+                  AND (
+                      lm.HostingSite = 'Onpremise'
+                      OR (lm.HostingSite = 'AWS' AND c.HostingType IN ('RDS', 'Instancia'))
+                  )
+                  AND lm.InstanceName NOT LIKE 'readreplica%'
+                  AND lm.InstanceName NOT LIKE 'restore%'";
 
             await using var connection = new SqlConnection(_connectionString);
             await connection.OpenAsync(ct);

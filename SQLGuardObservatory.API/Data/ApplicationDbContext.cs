@@ -126,6 +126,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BackupAlertConfig> BackupAlertConfigs { get; set; } = null!;
     public DbSet<BackupAlertHistory> BackupAlertHistories { get; set; } = null!;
 
+    // Disk Alerts - Alertas de discos críticos
+    public DbSet<DiskAlertConfig> DiskAlertConfigs { get; set; } = null!;
+    public DbSet<DiskAlertHistory> DiskAlertHistories { get; set; } = null!;
+
     // Health Score v3.0 FINAL - 12 Categorías (métricas de instancias)
     public DbSet<InstanceHealthScore> InstanceHealthScores { get; set; } = null!;
     public DbSet<InstanceHealthBackups> InstanceHealthBackups { get; set; } = null!;

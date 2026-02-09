@@ -170,6 +170,7 @@ const monitoreoSistemaSubItems = [
 const alertsSubItems = [
   { title: 'Servidores Caídos', url: '/admin/alerts/servers-down', icon: Bell, permission: 'AlertaServidoresCaidos' },
   { title: 'Backups Atrasados', url: '/admin/alerts/backups', icon: Save, permission: 'AlertaBackups' },
+  { title: 'Discos Críticos', url: '/admin/alerts/disks', icon: HardDrive, permission: 'AlertaDiscosCriticos' },
   { title: 'Resumen Overview', url: '/admin/alerts/overview-summary', icon: FileText, permission: 'AlertaResumenOverview' },
 ];
 

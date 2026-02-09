@@ -220,6 +220,10 @@ builder.Services.AddScoped<IOverviewAssignmentService, OverviewAssignmentService
 builder.Services.AddScoped<IBackupAlertService, BackupAlertService>();
 builder.Services.AddHostedService<BackupAlertBackgroundService>();
 
+// Disk Alerts - Alertas de discos críticos
+builder.Services.AddScoped<IDiskAlertService, DiskAlertService>();
+builder.Services.AddHostedService<DiskAlertBackgroundService>();
+
 // Overview Summary Alerts - Resumen programado del estado de producción
 builder.Services.AddScoped<IOverviewSummaryAlertService, OverviewSummaryAlertService>();
 builder.Services.AddHostedService<OverviewSummaryBackgroundService>();
