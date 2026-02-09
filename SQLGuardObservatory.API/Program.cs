@@ -249,6 +249,9 @@ builder.Services.AddScoped<IDatabaseOwnersService, DatabaseOwnersService>();
 
 // Gestión de Decomiso de Bases de Datos
 builder.Services.AddScoped<IDecomisoService, DecomisoService>();
+
+// Proyectos - Bases sin Uso
+builder.Services.AddScoped<IBasesSinUsoService, BasesSinUsoService>();
 builder.Services.AddScoped<IPatchConfigService, PatchConfigService>();
 builder.Services.AddHostedService<PatchNotificationBackgroundService>();
 

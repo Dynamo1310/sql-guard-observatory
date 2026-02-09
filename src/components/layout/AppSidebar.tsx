@@ -133,6 +133,12 @@ const operationsSubItems = [
   { title: 'Decomiso de BD', url: '/operations/gestion-decomiso', icon: Database, permission: 'GestionDecomiso' },
 ];
 
+// ==================== PROYECTOS ====================
+
+const projectsSubItems = [
+  { title: 'Bases sin Uso', url: '/projects/bases-sin-uso', icon: Database, permission: 'BasesSinUso' },
+];
+
 // ==================== SEGURIDAD ====================
 
 // Submenús de Vault DBA
@@ -219,6 +225,10 @@ export function AppSidebar() {
   // Operaciones
   const isOperationsActive = location.pathname.startsWith('/operations');
   const [operationsOpen, setOperationsOpen] = useState(isOperationsActive);
+
+  // Proyectos
+  const isProjectsActive = location.pathname.startsWith('/projects');
+  const [projectsOpen, setProjectsOpen] = useState(isProjectsActive);
 
   // Seguridad
   const isVaultActive = location.pathname.startsWith('/vault');
@@ -401,6 +411,11 @@ export function AppSidebar() {
   const hasOperationsMenuPermission = hasPermission('OperationsMenu');
   const visibleOperationsSubItems = operationsSubItems.filter(item => hasPermission(item.permission));
   const showOperationsMenu = hasOperationsMenuPermission && visibleOperationsSubItems.length > 0;
+
+  // Proyectos
+  const hasProjectsMenuPermission = hasPermission('ProjectsMenu');
+  const visibleProjectsSubItems = projectsSubItems.filter(item => hasPermission(item.permission));
+  const showProjectsMenu = hasProjectsMenuPermission && visibleProjectsSubItems.length > 0;
 
   // Seguridad
   const hasVaultMenuPermission = hasPermission('VaultMenu');
@@ -806,6 +821,31 @@ export function AppSidebar() {
                         title="Operaciones"
                         menuKey="OperationsMenu"
                         subItems={visibleOperationsSubItems}
+                      />
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            )}
+
+            {/* ==================== PROYECTOS ==================== */}
+            {showProjectsMenu && (
+              <>
+                {!isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
+                <SidebarGroup className="pb-2">
+                  <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
+                    Proyectos
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      <CollapsibleMenu
+                        isOpen={projectsOpen}
+                        setIsOpen={setProjectsOpen}
+                        isActive={isProjectsActive}
+                        icon={BookOpen}
+                        title="Proyectos"
+                        menuKey="ProjectsMenu"
+                        subItems={visibleProjectsSubItems}
                       />
                     </SidebarMenu>
                   </SidebarGroupContent>

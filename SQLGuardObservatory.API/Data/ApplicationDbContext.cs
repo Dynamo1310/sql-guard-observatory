@@ -102,6 +102,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SqlServerDatabaseCache> SqlServerDatabasesCache { get; set; } = null!;
     public DbSet<InventoryCacheMetadata> InventoryCacheMetadata { get; set; } = null!;
     
+    // Proyectos - Gestión de Bases sin Uso
+    public DbSet<GestionBasesSinUso> GestionBasesSinUso { get; set; } = null!;
+    
     // Inventory Cache - PostgreSQL
     public DbSet<PostgreSqlInstanceCache> PostgreSqlInstancesCache { get; set; } = null!;
     public DbSet<PostgreSqlDatabaseCache> PostgreSqlDatabasesCache { get; set; } = null!;
@@ -1090,6 +1093,22 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.ToTable("InstanceHealth_Waits");
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.InstanceName, e.CollectedAtUtc });
+        });
+
+        // =============================================
+        // Proyectos - Gestión de Bases sin Uso
+        // =============================================
+        
+        builder.Entity<GestionBasesSinUso>(entity =>
+        {
+            entity.ToTable("GestionBasesSinUso", "dbo");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.ServerName, e.DbName }).IsUnique();
+            entity.HasIndex(e => e.ServerName);
+            entity.HasIndex(e => e.DbName);
+            entity.HasIndex(e => e.Offline);
+            entity.HasIndex(e => e.ServerAmbiente);
+            entity.HasIndex(e => e.FechaModificacion);
         });
 
     }

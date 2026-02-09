@@ -5877,6 +5877,178 @@ export const decomisosApi = {
   },
 };
 
+// ==================== BASES SIN USO API (Proyecto) ====================
+
+export interface BasesSinUsoGridDto {
+  gestionId: number | null;
+  cacheId: number | null;
+  serverInstanceId: number;
+  serverName: string;
+  serverAmbiente: string | null;
+  databaseId: number;
+  dbName: string;
+  status: string | null;
+  stateDesc: string | null;
+  dataFiles: number | null;
+  dataMB: number | null;
+  userAccess: string | null;
+  recoveryModel: string | null;
+  compatibilityLevel: string | null;
+  creationDate: string | null;
+  collation: string | null;
+  fulltext: boolean | null;
+  autoClose: boolean | null;
+  readOnly: boolean | null;
+  autoShrink: boolean | null;
+  autoCreateStatistics: boolean | null;
+  autoUpdateStatistics: boolean | null;
+  sourceTimestamp: string | null;
+  cachedAt: string | null;
+  // Campos de gestión
+  compatibilidadMotor: string | null;
+  fechaUltimaActividad: string | null;
+  offline: boolean;
+  fechaBajaMigracion: string | null;
+  motivoBasesSinActividad: boolean;
+  motivoObsolescencia: boolean;
+  motivoEficiencia: boolean;
+  motivoCambioVersionAmbBajos: boolean;
+  fechaUltimoBkp: string | null;
+  ubicacionUltimoBkp: string | null;
+  dbaAsignado: string | null;
+  owner: string | null;
+  comentarios: string | null;
+  fechaCreacion: string | null;
+  fechaModificacion: string | null;
+  enInventarioActual: boolean;
+}
+
+export interface BasesSinUsoResumenDto {
+  totalBases: number;
+  basesOffline: number;
+  basesConGestion: number;
+  pendientesGestion: number;
+  espacioTotalMB: number;
+}
+
+export interface BasesSinUsoGridResponse {
+  items: BasesSinUsoGridDto[];
+  resumen: BasesSinUsoResumenDto;
+}
+
+export interface UpdateBasesSinUsoRequest {
+  serverName: string;
+  dbName: string;
+  serverInstanceId?: number;
+  serverAmbiente?: string;
+  databaseId?: number;
+  status?: string;
+  stateDesc?: string;
+  dataFiles?: number;
+  dataMB?: number;
+  userAccess?: string;
+  recoveryModel?: string;
+  compatibilityLevel?: string;
+  creationDate?: string;
+  collation?: string;
+  fulltext?: boolean;
+  autoClose?: boolean;
+  readOnly?: boolean;
+  autoShrink?: boolean;
+  autoCreateStatistics?: boolean;
+  autoUpdateStatistics?: boolean;
+  sourceTimestamp?: string;
+  cachedAt?: string;
+  compatibilidadMotor?: string;
+  fechaUltimaActividad?: string;
+  offline: boolean;
+  fechaBajaMigracion?: string;
+  motivoBasesSinActividad: boolean;
+  motivoObsolescencia: boolean;
+  motivoEficiencia: boolean;
+  motivoCambioVersionAmbBajos: boolean;
+  fechaUltimoBkp?: string;
+  ubicacionUltimoBkp?: string;
+  dbaAsignado?: string;
+  owner?: string;
+  comentarios?: string;
+}
+
+export interface BasesSinUsoStatsDto {
+  porMotivo: ChartDataItem[];
+  porAmbiente: ChartDataItem[];
+  evolucionTemporal: ChartDataItem[];
+  porCompatibilidad: ChartDataItem[];
+}
+
+export interface ChartDataItem {
+  name: string;
+  value: number;
+}
+
+export interface BasesSinUsoDbaDto {
+  userId: string;
+  displayName: string;
+  email: string | null;
+}
+
+export const basesSinUsoApi = {
+  // Obtener grilla combinada con resumen KPI
+  async getAll(serverName?: string, ambiente?: string): Promise<BasesSinUsoGridResponse> {
+    const params = new URLSearchParams();
+    if (serverName) params.append('serverName', serverName);
+    if (ambiente) params.append('ambiente', ambiente);
+
+    const url = `${API_URL}/api/bases-sin-uso${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<BasesSinUsoGridResponse>(response);
+  },
+
+  // Actualizar campos de gestión por ID
+  async update(id: number, data: UpdateBasesSinUsoRequest): Promise<BasesSinUsoGridDto> {
+    const response = await fetch(`${API_URL}/api/bases-sin-uso/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<BasesSinUsoGridDto>(response);
+  },
+
+  // Crear o actualizar gestión por ServerName + DbName (upsert)
+  async upsert(data: UpdateBasesSinUsoRequest): Promise<BasesSinUsoGridDto> {
+    const response = await fetch(`${API_URL}/api/bases-sin-uso/upsert`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<BasesSinUsoGridDto>(response);
+  },
+
+  // Obtener lista de DBAs disponibles del grupo IDD (General)
+  async getDbas(): Promise<BasesSinUsoDbaDto[]> {
+    const response = await fetch(`${API_URL}/api/bases-sin-uso/dbas`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<BasesSinUsoDbaDto[]>(response);
+  },
+
+  // Obtener estadísticas para gráficos
+  async getStats(): Promise<BasesSinUsoStatsDto> {
+    const response = await fetch(`${API_URL}/api/bases-sin-uso/stats`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<BasesSinUsoStatsDto>(response);
+  },
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 export function isAuthenticated(): boolean {

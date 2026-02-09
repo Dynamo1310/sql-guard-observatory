@@ -81,6 +81,10 @@ public class PermissionService : IPermissionService
         { "OperationsConfig", new ViewInfo { ViewName = "OperationsConfig", DisplayName = "Operaciones - Config. Servidores", Description = "Configuración de servidores para operaciones", Category = "Operaciones" } },
         { "GestionDecomiso", new ViewInfo { ViewName = "GestionDecomiso", DisplayName = "Operaciones - Decomiso de BD", Description = "Gestión de decomiso de bases de datos sin uso", Category = "Operaciones" } },
         
+        // === PROYECTOS ===
+        { "ProjectsMenu", new ViewInfo { ViewName = "ProjectsMenu", DisplayName = "📁 Proyectos (Menú)", Description = "Mostrar/ocultar el menú completo de Proyectos", Category = "Proyectos" } },
+        { "BasesSinUso", new ViewInfo { ViewName = "BasesSinUso", DisplayName = "Proyectos - Bases sin Uso", Description = "Gestión de bases de datos sin uso y seguimiento de bajas", Category = "Proyectos" } },
+        
         // === SEGURIDAD ===
         { "VaultMenu", new ViewInfo { ViewName = "VaultMenu", DisplayName = "📁 Vault DBA (Menú)", Description = "Mostrar/ocultar el menú completo de Vault DBA", Category = "Seguridad" } },
         { "VaultDashboard", new ViewInfo { ViewName = "VaultDashboard", DisplayName = "Vault - Dashboard", Description = "Dashboard del vault de credenciales", Category = "Seguridad" } },
