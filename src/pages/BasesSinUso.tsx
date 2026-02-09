@@ -7,7 +7,8 @@ import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Database, Search, RefreshCw, Edit, ChevronUp, ChevronDown,
-  SlidersHorizontal, BarChart3, Eye, EyeOff, Download
+  SlidersHorizontal, BarChart3, Eye, EyeOff,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import {
   basesSinUsoApi,
@@ -125,8 +126,6 @@ const CHART_COLORS = [
   '#06b6d4', '#ec4899', '#f97316', '#14b8a6', '#6366f1',
 ];
 
-const COMPAT_OPTIONS = ['2005', '2008', '2012', '2014', '2016', '2017', '2019', '2022'];
-
 // ==================== HELPERS ====================
 
 function formatDate(dateStr: string | null | undefined): string {
@@ -187,6 +186,10 @@ export default function BasesSinUso() {
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     () => new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
   );
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 30;
 
   // Tab (table vs charts)
   const [activeTab, setActiveTab] = useState<'table' | 'charts'>('table');
@@ -379,6 +382,16 @@ export default function BasesSinUso() {
     return items;
   }, [data?.items, searchTerm, filterAmbiente, filterOffline, sortField, sortDirection]);
 
+  // Reset page when filters change
+  const totalFilteredItems = filteredAndSortedItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalFilteredItems / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const paginatedItems = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredAndSortedItems.slice(start, start + pageSize);
+  }, [filteredAndSortedItems, safeCurrentPage, pageSize]);
+
   // ==================== CELL RENDER ====================
 
   const renderCellValue = (item: BasesSinUsoGridDto, colKey: string) => {
@@ -426,6 +439,19 @@ export default function BasesSinUso() {
     }
     if (['fechaCreacion', 'fechaModificacion'].includes(colKey)) {
       return formatDateTime(value as string | null);
+    }
+
+    // Compatibility level with red highlight if different from engine
+    if (colKey === 'compatibilityLevel') {
+      if (value == null || value === '') return <span className="text-muted-foreground">—</span>;
+      const isDifferent = item.engineCompatLevel && String(value) !== String(item.engineCompatLevel);
+      return (
+        <span className={isDifferent ? 'text-red-600 dark:text-red-400 font-semibold' : ''} title={
+          isDifferent ? `Motor: ${item.engineVersion} (esperado: ${item.engineCompatLevel})` : undefined
+        }>
+          {String(value)}
+        </span>
+      );
     }
 
     // Numbers
@@ -505,7 +531,10 @@ export default function BasesSinUso() {
           <CardContent className="p-4">
             <div className="text-xs text-muted-foreground font-medium">Espacio Total</div>
             <div className="text-2xl font-bold mt-1">
-              {isLoading ? <Skeleton className="h-8 w-16" /> : `${((resumen?.espacioTotalMB ?? 0) / 1024).toFixed(1)} GB`}
+              {isLoading ? <Skeleton className="h-8 w-16" /> : (() => {
+                const gb = (resumen?.espacioTotalMB ?? 0) / 1024;
+                return gb >= 1024 ? `${(gb / 1024).toFixed(2)} TB` : `${gb.toFixed(1)} GB`;
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -545,13 +574,13 @@ export default function BasesSinUso() {
                   placeholder="Buscar servidor, base, DBA, owner..."
                   className="pl-9"
                   value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 />
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Filter: Ambiente */}
-                <Select value={filterAmbiente} onValueChange={setFilterAmbiente}>
+                <Select value={filterAmbiente} onValueChange={(v) => { setFilterAmbiente(v); setCurrentPage(1); }}>
                   <SelectTrigger className="w-[140px] h-9">
                     <SelectValue placeholder="Ambiente" />
                   </SelectTrigger>
@@ -564,7 +593,7 @@ export default function BasesSinUso() {
                 </Select>
 
                 {/* Filter: Offline */}
-                <Select value={filterOffline} onValueChange={setFilterOffline}>
+                <Select value={filterOffline} onValueChange={(v) => { setFilterOffline(v); setCurrentPage(1); }}>
                   <SelectTrigger className="w-[130px] h-9">
                     <SelectValue placeholder="Baja" />
                   </SelectTrigger>
@@ -626,16 +655,17 @@ export default function BasesSinUso() {
 
             {/* Results count */}
             <div className="text-xs text-muted-foreground mt-2">
-              Mostrando {filteredAndSortedItems.length} de {data?.items.length ?? 0} registros
+              Mostrando {Math.min((safeCurrentPage - 1) * pageSize + 1, totalFilteredItems)}–{Math.min(safeCurrentPage * pageSize, totalFilteredItems)} de {totalFilteredItems} registros
+              {totalFilteredItems !== (data?.items.length ?? 0) && ` (${data?.items.length ?? 0} total)`}
             </div>
           </CardHeader>
 
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-420px)] scrollbar-thin" style={{ scrollbarGutter: 'stable' }}>
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-20 bg-background">
                   <TableRow>
-                    <TableHead className="w-[50px] sticky left-0 bg-background z-10">
+                    <TableHead className="w-[50px] sticky left-0 bg-background z-30">
                       #
                     </TableHead>
                     {ALL_COLUMNS.filter(c => visibleColumns.has(c.key)).map(col => (
@@ -648,7 +678,7 @@ export default function BasesSinUso() {
                         <SortIcon field={col.key as SortField} />
                       </TableHead>
                     ))}
-                    <TableHead className="w-[60px] text-center sticky right-0 bg-background z-10">
+                    <TableHead className="w-[60px] text-center sticky right-0 bg-background z-30">
                       Acciones
                     </TableHead>
                   </TableRow>
@@ -671,7 +701,7 @@ export default function BasesSinUso() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredAndSortedItems.map((item, idx) => (
+                    paginatedItems.map((item, idx) => (
                       <TableRow
                         key={`${item.serverName}-${item.dbName}`}
                         className={cn(
@@ -681,7 +711,7 @@ export default function BasesSinUso() {
                         )}
                       >
                         <TableCell className="sticky left-0 bg-inherit z-10 font-mono text-muted-foreground">
-                          {idx + 1}
+                          {(safeCurrentPage - 1) * pageSize + idx + 1}
                         </TableCell>
                         {ALL_COLUMNS.filter(c => visibleColumns.has(c.key)).map(col => (
                           <TableCell key={col.key} className="whitespace-nowrap max-w-[200px] truncate">
@@ -705,6 +735,77 @@ export default function BasesSinUso() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <div className="text-xs text-muted-foreground">
+                  Página {safeCurrentPage} de {totalPages}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={safeCurrentPage <= 1}
+                    title="Primera página"
+                  >
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={safeCurrentPage <= 1}
+                    title="Página anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+
+                  {/* Page number buttons */}
+                  {(() => {
+                    const pages: number[] = [];
+                    const start = Math.max(1, safeCurrentPage - 2);
+                    const end = Math.min(totalPages, safeCurrentPage + 2);
+                    for (let i = start; i <= end; i++) pages.push(i);
+                    return pages.map(p => (
+                      <Button
+                        key={p}
+                        variant={p === safeCurrentPage ? 'default' : 'outline'}
+                        size="sm"
+                        className="h-8 w-8 p-0 text-xs"
+                        onClick={() => setCurrentPage(p)}
+                      >
+                        {p}
+                      </Button>
+                    ));
+                  })()}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={safeCurrentPage >= totalPages}
+                    title="Página siguiente"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={safeCurrentPage >= totalPages}
+                    title="Última página"
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -831,27 +932,40 @@ export default function BasesSinUso() {
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            {/* Compatibilidad Motor */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Info estática: Compatibilidad Motor y Nivel Compat. BD */}
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Compatibilidad Motor</Label>
-                <Select
-                  value={formData.compatibilidadMotor || ''}
-                  onValueChange={(val) => setFormData(prev => ({ ...prev, compatibilidadMotor: val || undefined }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin asignar</SelectItem>
-                    {COMPAT_OPTIONS.map(opt => (
-                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-muted-foreground">Versión Motor</Label>
+                <div className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
+                  {editingItem?.engineVersion || '—'}
+                </div>
               </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Compat. Level BD</Label>
+                <div className={cn(
+                  "text-sm font-medium px-3 py-2 rounded-md",
+                  editingItem?.engineCompatLevel && editingItem?.compatibilityLevel &&
+                  String(editingItem.compatibilityLevel) !== String(editingItem.engineCompatLevel)
+                    ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                    : "bg-muted"
+                )}>
+                  {editingItem?.compatibilityLevel || '—'}
+                  {editingItem?.engineCompatLevel && editingItem?.compatibilityLevel &&
+                    String(editingItem.compatibilityLevel) !== String(editingItem.engineCompatLevel) &&
+                    <span className="text-xs ml-1">(esperado: {editingItem.engineCompatLevel})</span>
+                  }
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Ambiente</Label>
+                <div className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
+                  {editingItem?.serverAmbiente || '—'}
+                </div>
+              </div>
+            </div>
 
-              {/* DBA Asignado */}
+            {/* DBA Asignado y Owner */}
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>DBA Asignado</Label>
                 <Select
@@ -870,6 +984,14 @@ export default function BasesSinUso() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Owner</Label>
+                <Input
+                  value={formData.owner || ''}
+                  onChange={e => setFormData(prev => ({ ...prev, owner: e.target.value }))}
+                  placeholder="Owner de la base de datos"
+                />
               </div>
             </div>
 
@@ -915,14 +1037,6 @@ export default function BasesSinUso() {
                     ...prev,
                     fechaBajaMigracion: e.target.value || undefined
                   }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Owner</Label>
-                <Input
-                  value={formData.owner || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, owner: e.target.value }))}
-                  placeholder="Owner de la base de datos"
                 />
               </div>
             </div>

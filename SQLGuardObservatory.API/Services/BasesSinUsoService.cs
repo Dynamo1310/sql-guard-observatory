@@ -64,11 +64,13 @@ public class BasesSinUsoService : IBasesSinUsoService
     /// <summary>
     /// GET - Usa Dapper para obtener la unión de SqlServerDatabasesCache + GestionBasesSinUso.
     /// Incluye bases que ya no están en el cache (solo en gestión) mediante FULL OUTER JOIN simulado.
+    /// Cruza con ReporteBasesSinActividad (SQLNova) para obtener ultima_actividad,
+    /// y con SqlServerInstancesCache para obtener la versión del motor.
     /// </summary>
     public async Task<BasesSinUsoGridResponse> GetAllAsync(string? serverName = null, string? ambiente = null)
     {
         // Usamos un UNION para combinar:
-        // 1) Bases en cache (LEFT JOIN con gestión)
+        // 1) Bases en cache (LEFT JOIN con gestión, reporte de actividad e instancias)
         // 2) Bases solo en gestión (que ya no están en cache)
         const string sql = @"
             -- Bases presentes en el inventario actual (cache), con gestión si existe
@@ -99,7 +101,11 @@ public class BasesSinUsoService : IBasesSinUsoService
                 COALESCE(c.CachedAt, g.CachedAt) AS CachedAt,
                 -- Campos de gestión
                 g.CompatibilidadMotor,
-                g.FechaUltimaActividad,
+                -- Fecha Última Actividad: priorizar dato del reporte, luego gestión
+                COALESCE(
+                    TRY_CAST(r.ultima_actividad AS DATETIME2),
+                    g.FechaUltimaActividad
+                ) AS FechaUltimaActividad,
                 ISNULL(g.Offline, 0) AS Offline,
                 g.FechaBajaMigracion,
                 ISNULL(g.MotivoBasesSinActividad, 0) AS MotivoBasesSinActividad,
@@ -113,9 +119,40 @@ public class BasesSinUsoService : IBasesSinUsoService
                 g.Comentarios,
                 g.FechaCreacion,
                 g.FechaModificacion,
-                CAST(CASE WHEN c.Id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS EnInventarioActual
+                CAST(CASE WHEN c.Id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS EnInventarioActual,
+                -- Versión del motor (derivada de la instancia)
+                CASE
+                    WHEN inst.MajorVersion LIKE '9%'  THEN '2005'
+                    WHEN inst.MajorVersion LIKE '10%' THEN '2008'
+                    WHEN inst.MajorVersion LIKE '11%' THEN '2012'
+                    WHEN inst.MajorVersion LIKE '12%' THEN '2014'
+                    WHEN inst.MajorVersion LIKE '13%' THEN '2016'
+                    WHEN inst.MajorVersion LIKE '14%' THEN '2017'
+                    WHEN inst.MajorVersion LIKE '15%' THEN '2019'
+                    WHEN inst.MajorVersion LIKE '16%' THEN '2022'
+                    ELSE inst.MajorVersion
+                END AS EngineVersion,
+                -- Nivel de compatibilidad esperado del motor
+                CASE
+                    WHEN inst.MajorVersion LIKE '9%'  THEN '90'
+                    WHEN inst.MajorVersion LIKE '10%' THEN '100'
+                    WHEN inst.MajorVersion LIKE '11%' THEN '110'
+                    WHEN inst.MajorVersion LIKE '12%' THEN '120'
+                    WHEN inst.MajorVersion LIKE '13%' THEN '130'
+                    WHEN inst.MajorVersion LIKE '14%' THEN '140'
+                    WHEN inst.MajorVersion LIKE '15%' THEN '150'
+                    WHEN inst.MajorVersion LIKE '16%' THEN '160'
+                    ELSE NULL
+                END AS EngineCompatLevel
             FROM SqlServerDatabasesCache c
             LEFT JOIN GestionBasesSinUso g ON c.ServerName = g.ServerName AND c.DbName = g.DbName
+            LEFT JOIN SqlServerInstancesCache inst ON c.ServerInstanceId = inst.Id
+            OUTER APPLY (
+                SELECT TOP 1 r.ultima_actividad
+                FROM [SQLNova].[dbo].[ReporteBasesSinActividad] r
+                WHERE r.ServerName = c.ServerName AND r.DB = c.DbName
+                ORDER BY r.fecha_carga DESC
+            ) r
             WHERE (@ServerName IS NULL OR c.ServerName LIKE '%' + @ServerName + '%')
               AND (@Ambiente IS NULL OR c.ServerAmbiente LIKE '%' + @Ambiente + '%')
 
@@ -162,7 +199,9 @@ public class BasesSinUsoService : IBasesSinUsoService
                 g.Comentarios,
                 g.FechaCreacion,
                 g.FechaModificacion,
-                CAST(0 AS BIT) AS EnInventarioActual
+                CAST(0 AS BIT) AS EnInventarioActual,
+                NULL AS EngineVersion,
+                NULL AS EngineCompatLevel
             FROM GestionBasesSinUso g
             WHERE NOT EXISTS (
                 SELECT 1 FROM SqlServerDatabasesCache c 

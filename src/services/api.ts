@@ -5921,6 +5921,10 @@ export interface BasesSinUsoGridDto {
   fechaCreacion: string | null;
   fechaModificacion: string | null;
   enInventarioActual: boolean;
+  // Versión del motor SQL Server (ej: "2019", "2017")
+  engineVersion: string | null;
+  // Nivel de compatibilidad esperado del motor (ej: "150")
+  engineCompatLevel: string | null;
 }
 
 export interface BasesSinUsoResumenDto {

@@ -59,6 +59,17 @@ public class BasesSinUsoGridDto
     /// Indica si la base sigue presente en el inventario actual (cache)
     /// </summary>
     public bool EnInventarioActual { get; set; }
+
+    /// <summary>
+    /// Versión del motor SQL Server de la instancia (ej: "2019", "2017")
+    /// Derivado de SqlServerInstancesCache.MajorVersion
+    /// </summary>
+    public string? EngineVersion { get; set; }
+
+    /// <summary>
+    /// Nivel de compatibilidad esperado del motor (ej: "150" para SQL 2019)
+    /// </summary>
+    public string? EngineCompatLevel { get; set; }
 }
 
 /// <summary>
