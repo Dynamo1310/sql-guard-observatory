@@ -169,11 +169,11 @@
 
   /* === Fuentes === */
   .font-mono {
-    font-family: 'Geist Mono', 'JetBrains Mono', 'Roboto Mono', 'Courier New', monospace;
+    font-family: ui-monospace, Cascadia Code, Consolas, 'Courier New', monospace;
   }
 
   .font-data {
-    font-family: 'Geist Mono', 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
+    font-family: ui-monospace, Cascadia Code, Consolas, 'Courier New', monospace;
     font-feature-settings: 'tnum' on, 'lnum' on;
   }
 
