@@ -82,6 +82,7 @@ public class BasesSinUsoResumenDto
     public int BasesConGestion { get; set; }
     public int PendientesGestion { get; set; }
     public long EspacioTotalMB { get; set; }
+    public long EspacioEnGestionMB { get; set; }
 }
 
 /// <summary>

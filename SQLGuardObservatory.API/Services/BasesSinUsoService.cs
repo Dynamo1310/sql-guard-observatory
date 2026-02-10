@@ -100,7 +100,12 @@ public class BasesSinUsoService : IBasesSinUsoService
                 COALESCE(c.SourceTimestamp, g.SourceTimestamp) AS SourceTimestamp,
                 COALESCE(c.CachedAt, g.CachedAt) AS CachedAt,
                 -- Campos de gestión
-                g.CompatibilidadMotor,
+                -- CompatibilidadMotor: auto-derivado de la versión del motor (instancia)
+                CASE
+                    WHEN PATINDEX('%20[0-9][0-9]%', inst.MajorVersion) > 0
+                        THEN SUBSTRING(inst.MajorVersion, PATINDEX('%20[0-9][0-9]%', inst.MajorVersion), 4)
+                    ELSE g.CompatibilidadMotor
+                END AS CompatibilidadMotor,
                 -- Fecha Última Actividad: priorizar dato del reporte, luego gestión
                 COALESCE(
                     TRY_CAST(r.ultima_actividad AS DATETIME2),
@@ -120,30 +125,14 @@ public class BasesSinUsoService : IBasesSinUsoService
                 g.FechaCreacion,
                 g.FechaModificacion,
                 CAST(CASE WHEN c.Id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS EnInventarioActual,
-                -- Versión del motor (derivada de la instancia)
+                -- Versión del motor: extraer año de MajorVersion (ej: "2019" de "Microsoft SQL Server 2019")
                 CASE
-                    WHEN inst.MajorVersion LIKE '9%'  THEN '2005'
-                    WHEN inst.MajorVersion LIKE '10%' THEN '2008'
-                    WHEN inst.MajorVersion LIKE '11%' THEN '2012'
-                    WHEN inst.MajorVersion LIKE '12%' THEN '2014'
-                    WHEN inst.MajorVersion LIKE '13%' THEN '2016'
-                    WHEN inst.MajorVersion LIKE '14%' THEN '2017'
-                    WHEN inst.MajorVersion LIKE '15%' THEN '2019'
-                    WHEN inst.MajorVersion LIKE '16%' THEN '2022'
+                    WHEN PATINDEX('%20[0-9][0-9]%', inst.MajorVersion) > 0
+                        THEN SUBSTRING(inst.MajorVersion, PATINDEX('%20[0-9][0-9]%', inst.MajorVersion), 4)
                     ELSE inst.MajorVersion
                 END AS EngineVersion,
-                -- Nivel de compatibilidad esperado del motor
-                CASE
-                    WHEN inst.MajorVersion LIKE '9%'  THEN '90'
-                    WHEN inst.MajorVersion LIKE '10%' THEN '100'
-                    WHEN inst.MajorVersion LIKE '11%' THEN '110'
-                    WHEN inst.MajorVersion LIKE '12%' THEN '120'
-                    WHEN inst.MajorVersion LIKE '13%' THEN '130'
-                    WHEN inst.MajorVersion LIKE '14%' THEN '140'
-                    WHEN inst.MajorVersion LIKE '15%' THEN '150'
-                    WHEN inst.MajorVersion LIKE '16%' THEN '160'
-                    ELSE NULL
-                END AS EngineCompatLevel
+                -- EngineCompatLevel ya no se usa para comparación numérica
+                NULL AS EngineCompatLevel
             FROM SqlServerDatabasesCache c
             LEFT JOIN GestionBasesSinUso g ON c.ServerName = g.ServerName AND c.DbName = g.DbName
             LEFT JOIN SqlServerInstancesCache inst ON c.ServerInstanceId = inst.Id
@@ -200,7 +189,7 @@ public class BasesSinUsoService : IBasesSinUsoService
                 g.FechaCreacion,
                 g.FechaModificacion,
                 CAST(0 AS BIT) AS EnInventarioActual,
-                NULL AS EngineVersion,
+                g.CompatibilidadMotor AS EngineVersion,
                 NULL AS EngineCompatLevel
             FROM GestionBasesSinUso g
             WHERE NOT EXISTS (
@@ -230,7 +219,8 @@ public class BasesSinUsoService : IBasesSinUsoService
             BasesOffline = items.Count(i => i.Offline),
             BasesConGestion = items.Count(i => i.GestionId.HasValue),
             PendientesGestion = items.Count(i => !i.GestionId.HasValue),
-            EspacioTotalMB = items.Sum(i => (long)(i.DataMB ?? 0))
+            EspacioTotalMB = items.Sum(i => (long)(i.DataMB ?? 0)),
+            EspacioEnGestionMB = items.Where(i => i.GestionId.HasValue).Sum(i => (long)(i.DataMB ?? 0))
         };
 
         return new BasesSinUsoGridResponse

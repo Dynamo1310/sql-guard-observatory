@@ -3,12 +3,13 @@
  * Vista combinada de inventario (SqlServerDatabasesCache) + gestión (GestionBasesSinUso)
  * con filtros, ordenamiento, visibilidad de columnas, edición y gráficos.
  */
-import { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Database, Search, RefreshCw, Edit, ChevronUp, ChevronDown,
   SlidersHorizontal, BarChart3, Eye, EyeOff,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Plus, Minus, Server, Expand, Shrink,
 } from 'lucide-react';
 import {
   basesSinUsoApi,
@@ -128,6 +129,21 @@ const CHART_COLORS = [
 
 // ==================== HELPERS ====================
 
+/** Extraer año de un string de versión (ej: "2017" de "SQL Server 2017" o "2019" directo) */
+function extractYear(version: string | null | undefined): string | null {
+  if (!version) return null;
+  const match = version.match(/\b(20\d{2})\b/);
+  return match ? match[1] : null;
+}
+
+/** Comprobar si la compatibilidad de la BD difiere del motor */
+function hasCompatMismatch(item: BasesSinUsoGridDto): boolean {
+  const compatYear = extractYear(item.compatibilityLevel);
+  const engineYear = extractYear(item.compatibilidadMotor);
+  if (!compatYear || !engineYear) return false;
+  return compatYear !== engineYear;
+}
+
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
   try {
@@ -177,6 +193,8 @@ export default function BasesSinUso() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAmbiente, setFilterAmbiente] = useState<string>('all');
   const [filterOffline, setFilterOffline] = useState<string>('all');
+  const [filterEnGestion, setFilterEnGestion] = useState<string>('all');
+  const [filterDbaAsignado, setFilterDbaAsignado] = useState<string>('all');
 
   // Sort
   const [sortField, setSortField] = useState<SortField>('serverName');
@@ -193,6 +211,30 @@ export default function BasesSinUso() {
 
   // Tab (table vs charts)
   const [activeTab, setActiveTab] = useState<'table' | 'charts'>('table');
+
+  // Grouped view: expanded servers
+  const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());
+
+  const toggleServer = useCallback((serverName: string) => {
+    setExpandedServers(prev => {
+      const next = new Set(prev);
+      if (next.has(serverName)) {
+        next.delete(serverName);
+      } else {
+        next.add(serverName);
+      }
+      return next;
+    });
+  }, []);
+
+  const expandAll = useCallback(() => {
+    if (!data?.items) return;
+    setExpandedServers(new Set(data.items.map(i => i.serverName)));
+  }, [data?.items]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedServers(new Set());
+  }, []);
 
   // Dialog state
   const [editingItem, setEditingItem] = useState<BasesSinUsoGridDto | null>(null);
@@ -358,6 +400,16 @@ export default function BasesSinUso() {
       items = items.filter(i => filterOffline === 'yes' ? i.offline : !i.offline);
     }
 
+    // Filter by en gestión
+    if (filterEnGestion !== 'all') {
+      items = items.filter(i => filterEnGestion === 'yes' ? i.gestionId != null : i.gestionId == null);
+    }
+
+    // Filter by DBA asignado
+    if (filterDbaAsignado !== 'all') {
+      items = items.filter(i => i.dbaAsignado === filterDbaAsignado);
+    }
+
     // Sort
     items.sort((a, b) => {
       const aVal = a[sortField];
@@ -380,17 +432,35 @@ export default function BasesSinUso() {
     });
 
     return items;
-  }, [data?.items, searchTerm, filterAmbiente, filterOffline, sortField, sortDirection]);
+  }, [data?.items, searchTerm, filterAmbiente, filterOffline, filterEnGestion, filterDbaAsignado, sortField, sortDirection]);
 
-  // Reset page when filters change
+  // Group items by serverName (preserving sort order)
+  const groupedServers = useMemo(() => {
+    const groups: { serverName: string; items: BasesSinUsoGridDto[] }[] = [];
+    const map = new Map<string, BasesSinUsoGridDto[]>();
+
+    for (const item of filteredAndSortedItems) {
+      let arr = map.get(item.serverName);
+      if (!arr) {
+        arr = [];
+        map.set(item.serverName, arr);
+        groups.push({ serverName: item.serverName, items: arr });
+      }
+      arr.push(item);
+    }
+    return groups;
+  }, [filteredAndSortedItems]);
+
+  // Pagination applies to server groups
   const totalFilteredItems = filteredAndSortedItems.length;
-  const totalPages = Math.max(1, Math.ceil(totalFilteredItems / pageSize));
+  const totalGroups = groupedServers.length;
+  const totalPages = Math.max(1, Math.ceil(totalGroups / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
-  const paginatedItems = useMemo(() => {
+  const paginatedGroups = useMemo(() => {
     const start = (safeCurrentPage - 1) * pageSize;
-    return filteredAndSortedItems.slice(start, start + pageSize);
-  }, [filteredAndSortedItems, safeCurrentPage, pageSize]);
+    return groupedServers.slice(start, start + pageSize);
+  }, [groupedServers, safeCurrentPage, pageSize]);
 
   // ==================== CELL RENDER ====================
 
@@ -444,14 +514,21 @@ export default function BasesSinUso() {
     // Compatibility level with red highlight if different from engine
     if (colKey === 'compatibilityLevel') {
       if (value == null || value === '') return <span className="text-muted-foreground">—</span>;
-      const isDifferent = item.engineCompatLevel && String(value) !== String(item.engineCompatLevel);
+      const mismatch = hasCompatMismatch(item);
       return (
-        <span className={isDifferent ? 'text-red-600 dark:text-red-400 font-semibold' : ''} title={
-          isDifferent ? `Motor: ${item.engineVersion} (esperado: ${item.engineCompatLevel})` : undefined
+        <span className={mismatch ? 'text-red-600 dark:text-red-400 font-semibold' : ''} title={
+          mismatch ? `Motor: SQL ${extractYear(item.compatibilidadMotor)}` : undefined
         }>
           {String(value)}
         </span>
       );
+    }
+
+    // Compat. Motor - show as "SQL YYYY" format
+    if (colKey === 'compatibilidadMotor') {
+      if (value == null || value === '') return <span className="text-muted-foreground">—</span>;
+      const year = extractYear(String(value));
+      return year ? `SQL ${year}` : String(value);
     }
 
     // Numbers
@@ -521,9 +598,12 @@ export default function BasesSinUso() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground font-medium">Sin Gestión</div>
+            <div className="text-xs text-muted-foreground font-medium">Espacio En Gestión</div>
             <div className="text-2xl font-bold mt-1 text-yellow-600">
-              {isLoading ? <Skeleton className="h-8 w-16" /> : resumen?.pendientesGestion.toLocaleString() ?? 0}
+              {isLoading ? <Skeleton className="h-8 w-16" /> : (() => {
+                const gb = (resumen?.espacioEnGestionMB ?? 0) / 1024;
+                return gb >= 1024 ? `${(gb / 1024).toFixed(2)} TB` : `${gb.toFixed(1)} GB`;
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -604,6 +684,33 @@ export default function BasesSinUso() {
                   </SelectContent>
                 </Select>
 
+                {/* Filter: En Gestión */}
+                <Select value={filterEnGestion} onValueChange={(v) => { setFilterEnGestion(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-[140px] h-9">
+                    <SelectValue placeholder="Gestión" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="yes">En Gestión</SelectItem>
+                    <SelectItem value="no">Sin Gestión</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Filter: DBA Asignado */}
+                <Select value={filterDbaAsignado} onValueChange={(v) => { setFilterDbaAsignado(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-[160px] h-9">
+                    <SelectValue placeholder="DBA Asignado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los DBA</SelectItem>
+                    {(dbasData ?? []).map(dba => (
+                      <SelectItem key={dba.userId} value={dba.displayName}>
+                        {dba.displayName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 {/* Column visibility */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -653,21 +760,29 @@ export default function BasesSinUso() {
               </div>
             </div>
 
-            {/* Results count */}
-            <div className="text-xs text-muted-foreground mt-2">
-              Mostrando {Math.min((safeCurrentPage - 1) * pageSize + 1, totalFilteredItems)}–{Math.min(safeCurrentPage * pageSize, totalFilteredItems)} de {totalFilteredItems} registros
-              {totalFilteredItems !== (data?.items.length ?? 0) && ` (${data?.items.length ?? 0} total)`}
+            {/* Results count + Expand/Collapse buttons */}
+            <div className="flex items-center justify-between mt-2">
+              <div className="text-xs text-muted-foreground">
+                {totalFilteredItems} bases en {totalGroups} servidores
+                {totalGroups > pageSize && ` · Mostrando servidores ${(safeCurrentPage - 1) * pageSize + 1}–${Math.min(safeCurrentPage * pageSize, totalGroups)} de ${totalGroups}`}
+              </div>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={expandAll}>
+                  <Expand className="h-3 w-3" /> Expandir todo
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={collapseAll}>
+                  <Shrink className="h-3 w-3" /> Colapsar todo
+                </Button>
+              </div>
             </div>
           </CardHeader>
 
           <CardContent className="p-0">
-            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-420px)] scrollbar-thin" style={{ scrollbarGutter: 'stable' }}>
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-420px)]" style={{ scrollbarGutter: 'stable' }}>
               <Table>
                 <TableHeader className="sticky top-0 z-20 bg-background">
                   <TableRow>
-                    <TableHead className="w-[50px] sticky left-0 bg-background z-30">
-                      #
-                    </TableHead>
+                    <TableHead className="w-[40px] sticky left-0 bg-background z-30" />
                     {ALL_COLUMNS.filter(c => visibleColumns.has(c.key)).map(col => (
                       <TableHead
                         key={col.key}
@@ -694,43 +809,81 @@ export default function BasesSinUso() {
                         <TableCell><Skeleton className="h-4 w-8" /></TableCell>
                       </TableRow>
                     ))
-                  ) : filteredAndSortedItems.length === 0 ? (
+                  ) : paginatedGroups.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={visibleColumns.size + 2} className="text-center py-8 text-muted-foreground">
                         No se encontraron registros
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paginatedItems.map((item, idx) => (
-                      <TableRow
-                        key={`${item.serverName}-${item.dbName}`}
-                        className={cn(
-                          "text-xs",
-                          item.offline && "bg-red-50/50 dark:bg-red-950/20",
-                          !item.enInventarioActual && !item.offline && "bg-yellow-50/50 dark:bg-yellow-950/20"
-                        )}
-                      >
-                        <TableCell className="sticky left-0 bg-inherit z-10 font-mono text-muted-foreground">
-                          {(safeCurrentPage - 1) * pageSize + idx + 1}
-                        </TableCell>
-                        {ALL_COLUMNS.filter(c => visibleColumns.has(c.key)).map(col => (
-                          <TableCell key={col.key} className="whitespace-nowrap max-w-[200px] truncate">
-                            {renderCellValue(item, col.key)}
-                          </TableCell>
-                        ))}
-                        <TableCell className="sticky right-0 bg-inherit z-10 text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => handleEdit(item)}
-                            title="Editar gestión"
+                    paginatedGroups.map((group) => {
+                      const isExpanded = expandedServers.has(group.serverName);
+                      const offlineCount = group.items.filter(i => i.offline).length;
+                      const totalSpaceMB = group.items.reduce((sum, i) => sum + (i.dataMB ?? 0), 0);
+                      const spaceLabel = totalSpaceMB >= 1024 ? `${(totalSpaceMB / 1024).toFixed(1)} GB` : `${totalSpaceMB} MB`;
+                      const ambiente = group.items[0]?.serverAmbiente;
+
+                      return (
+                        <React.Fragment key={`grp-${group.serverName}`}>
+                          {/* Server group header row */}
+                          <TableRow
+                            className="bg-muted/40 hover:bg-muted/70 cursor-pointer border-b"
+                            onClick={() => toggleServer(group.serverName)}
                           >
-                            <Edit className="h-3.5 w-3.5" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                            <TableCell className="sticky left-0 bg-inherit z-10 text-center">
+                              {isExpanded
+                                ? <Minus className="h-4 w-4 text-muted-foreground mx-auto" />
+                                : <Plus className="h-4 w-4 text-muted-foreground mx-auto" />}
+                            </TableCell>
+                            <TableCell colSpan={visibleColumns.size + 1} className="py-2">
+                              <div className="flex items-center gap-3 text-xs font-semibold">
+                                <Server className="h-4 w-4 text-primary flex-shrink-0" />
+                                <span className="text-sm">{group.serverName}</span>
+                                <Badge variant="secondary" className="text-xs">{group.items.length} DBs</Badge>
+                                <span className="text-muted-foreground font-normal">{spaceLabel}</span>
+                                {ambiente && <Badge variant="outline" className="text-xs font-normal">{ambiente}</Badge>}
+                                {offlineCount > 0 && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    {offlineCount} offline
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+
+                          {/* Database detail rows (visible when expanded) */}
+                          {isExpanded && group.items.map((item) => (
+                            <TableRow
+                              key={`${item.serverName}-${item.dbName}`}
+                              className={cn(
+                                "text-xs",
+                                hasCompatMismatch(item) && "bg-red-50/60 dark:bg-red-950/30",
+                                item.offline && !hasCompatMismatch(item) && "bg-red-50/30 dark:bg-red-950/15",
+                                !item.enInventarioActual && !item.offline && !hasCompatMismatch(item) && "bg-yellow-50/50 dark:bg-yellow-950/20"
+                              )}
+                            >
+                              <TableCell className="sticky left-0 bg-inherit z-10" />
+                              {ALL_COLUMNS.filter(c => visibleColumns.has(c.key)).map(col => (
+                                <TableCell key={col.key} className="whitespace-nowrap max-w-[200px] truncate">
+                                  {renderCellValue(item, col.key)}
+                                </TableCell>
+                              ))}
+                              <TableCell className="sticky right-0 bg-inherit z-10 text-center">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                  onClick={(e) => { e.stopPropagation(); handleEdit(item); }}
+                                  title="Editar gestión"
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -740,7 +893,7 @@ export default function BasesSinUso() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t">
                 <div className="text-xs text-muted-foreground">
-                  Página {safeCurrentPage} de {totalPages}
+                  Página {safeCurrentPage} de {totalPages} ({totalGroups} servidores)
                 </div>
                 <div className="flex items-center gap-1">
                   <Button
@@ -932,28 +1085,32 @@ export default function BasesSinUso() {
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            {/* Info estática: Compatibilidad Motor y Nivel Compat. BD */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Info estática: Compatibilidad Motor, Nivel Compat. BD, Ambiente */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-2">
-                <Label className="text-muted-foreground">Versión Motor</Label>
+                <Label className="text-muted-foreground">Compat. Motor</Label>
                 <div className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
-                  {editingItem?.engineVersion || '—'}
+                  {editingItem?.compatibilidadMotor ? `SQL ${extractYear(editingItem.compatibilidadMotor) || editingItem.compatibilidadMotor}` : '—'}
                 </div>
               </div>
               <div className="space-y-2">
-                <Label className="text-muted-foreground">Compat. Level BD</Label>
+                <Label className="text-muted-foreground">Nivel Compat. BD</Label>
                 <div className={cn(
                   "text-sm font-medium px-3 py-2 rounded-md",
-                  editingItem?.engineCompatLevel && editingItem?.compatibilityLevel &&
-                  String(editingItem.compatibilityLevel) !== String(editingItem.engineCompatLevel)
+                  editingItem && hasCompatMismatch(editingItem)
                     ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                     : "bg-muted"
                 )}>
                   {editingItem?.compatibilityLevel || '—'}
-                  {editingItem?.engineCompatLevel && editingItem?.compatibilityLevel &&
-                    String(editingItem.compatibilityLevel) !== String(editingItem.engineCompatLevel) &&
-                    <span className="text-xs ml-1">(esperado: {editingItem.engineCompatLevel})</span>
+                  {editingItem && hasCompatMismatch(editingItem) &&
+                    <span className="text-xs ml-1">(motor: SQL {extractYear(editingItem.compatibilidadMotor)})</span>
                   }
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Versión Motor</Label>
+                <div className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
+                  {editingItem?.engineVersion ? `SQL ${editingItem.engineVersion}` : '—'}
                 </div>
               </div>
               <div className="space-y-2">

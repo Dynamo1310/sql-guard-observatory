@@ -46,7 +46,6 @@ import PatchFreezingConfig from "./pages/PatchFreezingConfig";
 import PatchNotificationsConfig from "./pages/PatchNotificationsConfig";
 import ObsoleteInstances from "./pages/ObsoleteInstances";
 import DatabaseOwners from "./pages/DatabaseOwners";
-import GestionDecomiso from "./pages/GestionDecomiso";
 import BasesSinUso from "./pages/BasesSinUso";
 import VaultDashboard from "./pages/VaultDashboard";
 import VaultCredentials from "./pages/VaultCredentials";
@@ -307,11 +306,6 @@ const App = () => (
                       <Route path="/operations/servers-config" element={
                         <ProtectedRoute viewName="OperationsConfig">
                           <OperationalServersConfig />
-                        </ProtectedRoute>
-                      } />
-                      <Route path="/operations/gestion-decomiso" element={
-                        <ProtectedRoute viewName="GestionDecomiso">
-                          <GestionDecomiso />
                         </ProtectedRoute>
                       } />
                       {/* Proyectos */}

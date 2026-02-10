@@ -5933,6 +5933,7 @@ export interface BasesSinUsoResumenDto {
   basesConGestion: number;
   pendientesGestion: number;
   espacioTotalMB: number;
+  espacioEnGestionMB: number;
 }
 
 export interface BasesSinUsoGridResponse {
