@@ -125,7 +125,7 @@ public class BasesSinUsoService : IBasesSinUsoService
                 g.FechaCreacion,
                 g.FechaModificacion,
                 CAST(CASE WHEN c.Id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS EnInventarioActual,
-                -- Versión del motor: extraer año de MajorVersion (ej: "2019" de "Microsoft SQL Server 2019")
+                -- Versión del motor: extraer año de MajorVersion (ej: 2019 de Microsoft SQL Server 2019)
                 CASE
                     WHEN PATINDEX('%20[0-9][0-9]%', inst.MajorVersion) > 0
                         THEN SUBSTRING(inst.MajorVersion, PATINDEX('%20[0-9][0-9]%', inst.MajorVersion), 4)
