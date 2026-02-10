@@ -402,6 +402,7 @@ public class OnCallEmailTemplateDto
     public string? ScheduleCron { get; set; }
     public string? ScheduleDescription { get; set; }
     public string? Recipients { get; set; }
+    public string? LinkPlanillaGuardias { get; set; }
     public DateTime CreatedAt { get; set; }
     public string? CreatedByDisplayName { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -423,6 +424,7 @@ public class CreateEmailTemplateRequest
     public string? ScheduleCron { get; set; }
     public string? ScheduleDescription { get; set; }
     public string? Recipients { get; set; }
+    public string? LinkPlanillaGuardias { get; set; }
 }
 
 /// <summary>
@@ -439,6 +441,7 @@ public class UpdateEmailTemplateRequest
     public string? ScheduleCron { get; set; }
     public string? ScheduleDescription { get; set; }
     public string? Recipients { get; set; }
+    public string? LinkPlanillaGuardias { get; set; }
 }
 
 /// <summary>

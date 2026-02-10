@@ -1439,13 +1439,17 @@ public class OnCallAlertService : IOnCallAlertService
                 .Replace("{{Tecnico}}", operatorName)
                 .Replace("{{Movil}}", operatorPhone);
 
+            var linkPlanilla = template.LinkPlanillaGuardias ?? "";
+            var linkActivaciones = $"{_appUrl}/oncall/activations";
             var body = template.Body
                 .Replace("{{Tecnico}}", operatorName)
                 .Replace("{{Movil}}", operatorPhone)
                 .Replace("{{Inicio}}", $"{nextSchedule.WeekStartDate:yyyy-MM-dd HH:mm}")
                 .Replace("{{Fin}}", $"{nextSchedule.WeekEndDate:yyyy-MM-dd HH:mm}")
                 .Replace("{{TablaEscalamiento}}", await GenerateEscalationTableHtmlAsync())
-                .Replace("{{TeamEscalamiento}}", await GetEscalationNamesAsync());
+                .Replace("{{TeamEscalamiento}}", await GetEscalationNamesAsync())
+                .Replace("{{LinkPlanillaGuardias}}", linkPlanilla)
+                .Replace("{{LinkActivaciones}}", linkActivaciones);
 
             // Obtener destinatarios: primero del template, si no hay, de las reglas de alerta
             var recipients = GetRecipientsFromTemplate(template);
@@ -1643,13 +1647,16 @@ public class OnCallAlertService : IOnCallAlertService
             .Replace("{{Tecnico}}", operatorName)
             .Replace("{{Movil}}", operatorPhone);
 
+        var linkPlanilla = template.LinkPlanillaGuardias ?? "";
         var body = template.Body
             .Replace("{{Tecnico}}", operatorName)
             .Replace("{{Movil}}", operatorPhone)
             .Replace("{{Inicio}}", $"{guardiaInicio:dd/MM/yyyy HH:mm}")
             .Replace("{{Fin}}", $"{guardiaFin:dd/MM/yyyy HH:mm}")
             .Replace("{{TablaEscalamiento}}", await GenerateEscalationTableHtmlAsync())
-            .Replace("{{TeamEscalamiento}}", await GetEscalationNamesAsync());
+            .Replace("{{TeamEscalamiento}}", await GetEscalationNamesAsync())
+            .Replace("{{LinkPlanillaGuardias}}", linkPlanilla)
+            .Replace("{{LinkActivaciones}}", $"{_appUrl}/oncall/activations");
 
         // Reemplazar placeholders específicos de ScheduleGenerated
         if (template.AlertType == "ScheduleGenerated")

@@ -2763,6 +2763,7 @@ export interface OnCallEmailTemplateDto {
   scheduleCron?: string;
   scheduleDescription?: string;
   recipients?: string;
+  linkPlanillaGuardias?: string;
   createdAt: string;
   createdByDisplayName?: string;
   updatedAt?: string;
@@ -2779,6 +2780,7 @@ export interface CreateEmailTemplateRequest {
   scheduleCron?: string;
   scheduleDescription?: string;
   recipients?: string;
+  linkPlanillaGuardias?: string;
   isEnabled?: boolean;
 }
 
@@ -2792,6 +2794,7 @@ export interface UpdateEmailTemplateRequest {
   scheduleCron?: string;
   scheduleDescription?: string;
   recipients?: string;
+  linkPlanillaGuardias?: string;
 }
 
 export interface PlaceholderDto {

@@ -885,6 +885,12 @@ public class OnCallController : ControllerBase
             new PlaceholderDto { Key = "{{TeamEscalamiento}}", Description = "Lista de nombres del team de escalamiento", Example = "Pablo Morixe, Pablo Rodriguez, Rodrigo Tissera" },
         };
 
+        var preWeekPlaceholders = new List<PlaceholderDto>(guardiaPlaceholders)
+        {
+            new PlaceholderDto { Key = "{{LinkPlanillaGuardias}}", Description = "Link a la planilla de guardias de fin de semana (configurable en el formulario del template)", Example = "https://..." },
+            new PlaceholderDto { Key = "{{LinkActivaciones}}", Description = "Link al registro de activaciones", Example = "http://app/oncall/activations" },
+        };
+
         var placeholders = new List<EmailTemplatePlaceholderInfo>
         {
             new EmailTemplatePlaceholderInfo
@@ -912,7 +918,7 @@ public class OnCallController : ControllerBase
             {
                 AlertType = "PreWeekNotification",
                 AlertTypeName = "Aviso Previo (Martes 16:00)",
-                Placeholders = guardiaPlaceholders.ToList()
+                Placeholders = preWeekPlaceholders
             }
         };
         
