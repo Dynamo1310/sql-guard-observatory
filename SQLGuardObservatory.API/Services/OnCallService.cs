@@ -1680,6 +1680,7 @@ public class OnCallService : IOnCallService
             ScheduleCron = t.ScheduleCron,
             ScheduleDescription = t.ScheduleDescription,
             Recipients = t.Recipients,
+            LinkPlanillaGuardias = t.LinkPlanillaGuardias,
             CreatedAt = t.CreatedAt,
             CreatedByDisplayName = t.CreatedByUser?.DisplayName,
             UpdatedAt = t.UpdatedAt,
@@ -1710,6 +1711,7 @@ public class OnCallService : IOnCallService
             ScheduleCron = template.ScheduleCron,
             ScheduleDescription = template.ScheduleDescription,
             Recipients = template.Recipients,
+            LinkPlanillaGuardias = template.LinkPlanillaGuardias,
             CreatedAt = template.CreatedAt,
             CreatedByDisplayName = template.CreatedByUser?.DisplayName,
             UpdatedAt = template.UpdatedAt,
@@ -1732,6 +1734,7 @@ public class OnCallService : IOnCallService
             ScheduleCron = request.ScheduleCron,
             ScheduleDescription = request.ScheduleDescription,
             Recipients = request.Recipients,
+            LinkPlanillaGuardias = request.LinkPlanillaGuardias,
             CreatedByUserId = userId,
             CreatedAt = Helpers.LocalClockAR.Now
         };
@@ -1759,6 +1762,7 @@ public class OnCallService : IOnCallService
         template.ScheduleCron = request.ScheduleCron;
         template.ScheduleDescription = request.ScheduleDescription;
         template.Recipients = request.Recipients;
+        template.LinkPlanillaGuardias = request.LinkPlanillaGuardias;
         template.UpdatedByUserId = userId;
         template.UpdatedAt = Helpers.LocalClockAR.Now;
 

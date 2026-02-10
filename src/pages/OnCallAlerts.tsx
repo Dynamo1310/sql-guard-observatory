@@ -107,6 +107,7 @@ export default function OnCallAlerts() {
     scheduleCron: '0 12 * * 3',
     scheduleDescription: 'Todos los miércoles a las 12:00',
     recipients: '',
+    linkPlanillaGuardias: '',
   });
 
   // Test email dialog
@@ -339,6 +340,7 @@ export default function OnCallAlerts() {
           scheduleCron: cronExpression,
           scheduleDescription: templateForm.scheduleDescription,
           recipients: templateForm.recipients,
+          linkPlanillaGuardias: templateForm.linkPlanillaGuardias || undefined,
         });
         toast.success('Template actualizado');
       } else {
@@ -424,6 +426,7 @@ export default function OnCallAlerts() {
         scheduleCron: template.scheduleCron,
         scheduleDescription: template.scheduleDescription,
         recipients: template.recipients,
+        linkPlanillaGuardias: template.linkPlanillaGuardias || undefined,
       });
       await loadTemplates();
       toast.success(template.isEnabled ? 'Template deshabilitado' : 'Template habilitado');
@@ -444,6 +447,7 @@ export default function OnCallAlerts() {
       scheduleCron: undefined,
       scheduleDescription: undefined,
       recipients: '',
+      linkPlanillaGuardias: '',
     });
     setScheduleDay(3);
     setScheduleHour(12);
@@ -462,6 +466,7 @@ export default function OnCallAlerts() {
       scheduleCron: template.scheduleCron,
       scheduleDescription: template.scheduleDescription,
       recipients: template.recipients || '',
+      linkPlanillaGuardias: template.linkPlanillaGuardias || '',
     });
     // Parsear el cron existente para los selectores
     parseCronToSelectors(template.scheduleCron);
@@ -1255,6 +1260,22 @@ export default function OnCallAlerts() {
                 </Card>
               </CollapsibleContent>
             </Collapsible>
+
+            {/* Link Planilla Guardias - solo para Aviso Previo */}
+            {templateForm.alertType === 'PreWeekNotification' && (
+              <div className="space-y-2">
+                <Label>Link a la planilla de guardias de fin de semana</Label>
+                <Input
+                  type="url"
+                  value={templateForm.linkPlanillaGuardias || ''}
+                  onChange={(e) => setTemplateForm({ ...templateForm, linkPlanillaGuardias: e.target.value })}
+                  placeholder="https://... (SharePoint, Excel online, etc.)"
+                />
+                <p className="text-xs text-muted-foreground">
+                  URL que aparecerá en el recordatorio del email "GUARDIA MAÑANA" para actualizar la planilla.
+                </p>
+              </div>
+            )}
 
             {/* Configuración de Recipients */}
             <div className="space-y-2">

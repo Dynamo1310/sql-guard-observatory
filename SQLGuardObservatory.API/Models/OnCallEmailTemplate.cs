@@ -66,6 +66,12 @@ public class OnCallEmailTemplate
     /// </summary>
     public string? Recipients { get; set; }
 
+    /// <summary>
+    /// Link a la planilla de guardias de fin de semana (solo para PreWeekNotification).
+    /// Se usa en el recordatorio del email "GUARDIA MAÑANA".
+    /// </summary>
+    public string? LinkPlanillaGuardias { get; set; }
+
     // Auditoría
     public string? CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = LocalClockAR.Now;
