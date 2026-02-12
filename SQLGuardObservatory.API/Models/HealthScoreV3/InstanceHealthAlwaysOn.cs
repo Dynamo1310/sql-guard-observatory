@@ -40,6 +40,12 @@ public class InstanceHealthAlwaysOn
     public int MaxSecondsBehind { get; set; }
     public string? AlwaysOnDetails { get; set; }
     
+    /// <summary>
+    /// Nombre del Availability Group (null si no pertenece a un AG)
+    /// </summary>
+    [MaxLength(255)]
+    public string? AGName { get; set; }
+    
     // v3.1: Métricas de velocidad de replicación
     public long MaxLogSendRateKBps { get; set; }      // KB/sec de envío de log
     public long AvgLogSendRateKBps { get; set; }      // Promedio KB/sec

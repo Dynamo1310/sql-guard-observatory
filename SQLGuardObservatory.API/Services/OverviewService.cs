@@ -63,7 +63,7 @@ public class OverviewService : IOverviewService
                 return new OverviewPageDataDto 
                 { 
                     LastUpdate = DateTime.UtcNow,
-                    CriticalInstances = new(),
+                    AGHealthStatuses = new(),
                     BackupIssues = new(),
                     CriticalDisks = new(),
                     MaintenanceOverdue = new()

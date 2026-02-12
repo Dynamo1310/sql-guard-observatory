@@ -86,6 +86,12 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
 
         foreach (DataRow row in table.Rows)
         {
+            // Capturar AGName del primer row (la query devuelve ag.name AS AGName)
+            if (result.AGName == null)
+            {
+                result.AGName = GetString(row, "AGName");
+            }
+
             var dbName = GetString(row, "DatabaseName") ?? "";
             var syncState = GetString(row, "DBSyncState") ?? "";
             var availabilityMode = GetString(row, "AvailabilityMode") ?? "";
@@ -231,6 +237,7 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
             MaxSendQueueKB = (int)Math.Min(data.MaxSendQueueKB, int.MaxValue),
             MaxRedoQueueKB = (int)Math.Min(data.MaxRedoQueueKB, int.MaxValue),
             AlwaysOnWorstState = data.WorstState,
+            AGName = data.AGName,
             // v3.1: Métricas de velocidad
             MaxLogSendRateKBps = data.MaxLogSendRateKBps,
             AvgLogSendRateKBps = data.AvgLogSendRateKBps,
@@ -310,7 +317,8 @@ END";
             ["WorstState"] = data.WorstState,
             ["LogSendRateKBps"] = data.MaxLogSendRateKBps,
             ["RedoRateKBps"] = data.MaxRedoRateKBps,
-            ["SecsSinceLastHardened"] = data.MaxSecondsSinceLastHardened
+            ["SecsSinceLastHardened"] = data.MaxSecondsSinceLastHardened,
+            ["AGName"] = data.AGName
         };
     }
 
@@ -327,6 +335,11 @@ END";
         public long MaxRedoQueueKB { get; set; }
         public int MaxSecondsBehind { get; set; }
         public string Details { get; set; } = "";
+        
+        /// <summary>
+        /// Nombre del Availability Group (capturado de sys.availability_groups)
+        /// </summary>
+        public string? AGName { get; set; }
         
         // Métricas v3.1 - Log Send y Redo Rate
         public long MaxLogSendRateKBps { get; set; }     // KB/s de envío de log

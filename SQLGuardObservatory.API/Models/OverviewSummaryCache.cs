@@ -51,6 +51,11 @@ public class OverviewSummaryCache
     public int CriticalCount { get; set; }
     
     /// <summary>
+    /// Cantidad de instancias AlwaysOn con estado no saludable
+    /// </summary>
+    public int AGUnhealthyCount { get; set; }
+    
+    /// <summary>
     /// Promedio de HealthScore de todas las instancias
     /// </summary>
     [Column(TypeName = "decimal(5,2)")]
@@ -76,10 +81,10 @@ public class OverviewSummaryCache
     // ========================================
     
     /// <summary>
-    /// Lista de instancias críticas (score menor a 60) serializada en JSON
-    /// Estructura: List&lt;OverviewCriticalInstanceDto&gt;
+    /// Lista de estados de salud AlwaysOn serializada en JSON
+    /// Estructura: List&lt;OverviewAGHealthDto&gt;
     /// </summary>
-    public string? CriticalInstancesJson { get; set; }
+    public string? AGHealthStatusesJson { get; set; }
     
     /// <summary>
     /// Lista de problemas de backup serializada en JSON
