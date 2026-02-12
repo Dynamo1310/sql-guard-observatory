@@ -246,7 +246,7 @@ export default function BasesSinUso() {
   const { data, isLoading, isFetching, refetch } = useQuery<BasesSinUsoGridResponse>({
     queryKey: ['bases-sin-uso'],
     queryFn: () => basesSinUsoApi.getAll(),
-    staleTime: 2 * 60 * 1000,
+    staleTime: 15 * 60 * 1000, // 15 min — datos vienen de tabla cache pre-calculada
   });
 
   const { data: statsData } = useQuery<BasesSinUsoStatsDto>({
@@ -289,6 +289,18 @@ export default function BasesSinUso() {
     },
     onError: (error: Error) => {
       toast.error(`Error al actualizar: ${error.message}`);
+    },
+  });
+
+  const refreshCacheMutation = useMutation({
+    mutationFn: () => basesSinUsoApi.refreshCache(),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['bases-sin-uso'] });
+      queryClient.invalidateQueries({ queryKey: ['bases-sin-uso-stats'] });
+      toast.success(`Cache actualizado: ${result.totalRows} registros`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Error al refrescar cache: ${error.message}`);
     },
   });
 
@@ -574,16 +586,29 @@ export default function BasesSinUso() {
             Gestión de bajas y seguimiento de bases de datos del inventario
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="gap-1"
-        >
-          <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
-          Actualizar
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="gap-1"
+          >
+            <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+            Actualizar
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => refreshCacheMutation.mutate()}
+            disabled={refreshCacheMutation.isPending}
+            className="gap-1"
+            title="Recalcula los datos cruzando inventario, gestión e instancias"
+          >
+            <RefreshCw className={cn("h-4 w-4", refreshCacheMutation.isPending && "animate-spin")} />
+            Recalcular
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards */}

@@ -7,8 +7,9 @@ using SQLGuardObservatory.API.Services;
 namespace SQLGuardObservatory.API.Controllers;
 
 /// <summary>
-/// Controller para la gestión de Bases sin Uso (Proyecto).
-/// GET usa Dapper (performance), PUT usa EF Core (tracking).
+/// Controller para Racionalización SQL (ex Bases sin Uso).
+/// GET lee de tabla cache pre-calculada (RacionalizacionSQLCache).
+/// PUT usa EF Core para escritura + refresco automático del cache.
 /// </summary>
 [ApiController]
 [Route("api/bases-sin-uso")]
@@ -125,7 +126,7 @@ public class BasesSinUsoController : ControllerBase
 
     /// <summary>
     /// GET /api/bases-sin-uso/stats
-    /// Retorna estadísticas para gráficos del proyecto Bases sin Uso.
+    /// Retorna estadísticas para gráficos del proyecto Racionalización SQL.
     /// </summary>
     [HttpGet("stats")]
     public async Task<ActionResult<BasesSinUsoStatsDto>> GetStats()
@@ -137,8 +138,33 @@ public class BasesSinUsoController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al obtener estadísticas de Bases sin Uso");
+            _logger.LogError(ex, "Error al obtener estadísticas de Racionalización SQL");
             return StatusCode(500, new { message = "Error al obtener las estadísticas", detail = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// POST /api/bases-sin-uso/refresh-cache
+    /// Fuerza el refresco completo de la tabla de cache pre-calculada.
+    /// Útil cuando se modifican datos fuera de la app (SQL manual, inventario, etc.)
+    /// </summary>
+    [HttpPost("refresh-cache")]
+    public async Task<ActionResult> RefreshCache()
+    {
+        try
+        {
+            var (totalRows, refreshedAt) = await _service.RefreshCacheAsync();
+            return Ok(new
+            {
+                message = $"Cache refrescado exitosamente: {totalRows} registros.",
+                totalRows,
+                refreshedAt
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al refrescar cache de Racionalización SQL");
+            return StatusCode(500, new { message = "Error al refrescar el cache", detail = ex.Message });
         }
     }
 }

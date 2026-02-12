@@ -8,22 +8,25 @@ using SQLGuardObservatory.API.Models;
 namespace SQLGuardObservatory.API.Services;
 
 /// <summary>
-/// Interfaz del servicio de gestión de Bases sin Uso
+/// Interfaz del servicio de gestión de Racionalización SQL (ex "Bases sin Uso")
 /// </summary>
 public interface IBasesSinUsoService
 {
     /// <summary>
-    /// Obtiene la grilla combinada de inventario (SqlServerDatabasesCache) + gestión (GestionBasesSinUso)
+    /// Obtiene la grilla pre-calculada desde RacionalizacionSQLCache.
+    /// Lectura rápida, sin JOINs en tiempo real.
     /// </summary>
     Task<BasesSinUsoGridResponse> GetAllAsync(string? serverName = null, string? ambiente = null);
 
     /// <summary>
-    /// Actualiza los campos de gestión de un registro existente
+    /// Actualiza los campos de gestión de un registro existente.
+    /// Refresca el cache automáticamente después del update.
     /// </summary>
     Task<BasesSinUsoGridDto?> UpdateAsync(long id, UpdateBasesSinUsoRequest request);
 
     /// <summary>
-    /// Crea o actualiza (upsert) el registro de gestión por ServerName + DbName
+    /// Crea o actualiza (upsert) el registro de gestión por ServerName + DbName.
+    /// Refresca el cache automáticamente después del upsert.
     /// </summary>
     Task<BasesSinUsoGridDto?> UpsertAsync(UpdateBasesSinUsoRequest request);
 
@@ -36,6 +39,12 @@ public interface IBasesSinUsoService
     /// Obtiene estadísticas para gráficos
     /// </summary>
     Task<BasesSinUsoStatsDto> GetStatsAsync();
+
+    /// <summary>
+    /// Fuerza el refresco completo de la tabla de cache RacionalizacionSQLCache.
+    /// Ejecuta sp_RefreshRacionalizacionSQLCache.
+    /// </summary>
+    Task<(int totalRows, DateTime refreshedAt)> RefreshCacheAsync();
 }
 
 /// <summary>
@@ -62,151 +71,49 @@ public class BasesSinUsoService : IBasesSinUsoService
     }
 
     /// <summary>
-    /// GET - Usa Dapper para obtener la unión de SqlServerDatabasesCache + GestionBasesSinUso.
-    /// Incluye bases que ya no están en el cache (solo en gestión) mediante FULL OUTER JOIN simulado.
-    /// Cruza con ReporteBasesSinActividad (SQLNova) para obtener ultima_actividad,
-    /// y con SqlServerInstancesCache para obtener la versión del motor.
+    /// GET - Lee directamente de la tabla pre-calculada RacionalizacionSQLCache.
+    /// Sin JOINs ni subqueries — lectura plana ultra-rápida.
+    /// Si el cache está vacío, lo refresca automáticamente antes de leer.
     /// </summary>
     public async Task<BasesSinUsoGridResponse> GetAllAsync(string? serverName = null, string? ambiente = null)
     {
-        // Usamos un UNION para combinar:
-        // 1) Bases en cache (LEFT JOIN con gestión, reporte de actividad e instancias)
-        // 2) Bases solo en gestión (que ya no están en cache)
-        const string sql = @"
-            -- Bases presentes en el inventario actual (cache), con gestión si existe
-            SELECT
-                g.Id AS GestionId,
-                c.Id AS CacheId,
-                COALESCE(c.ServerInstanceId, g.ServerInstanceId) AS ServerInstanceId,
-                COALESCE(c.ServerName, g.ServerName) AS ServerName,
-                COALESCE(c.ServerAmbiente, g.ServerAmbiente) AS ServerAmbiente,
-                COALESCE(c.DatabaseId, g.DatabaseId) AS DatabaseId,
-                COALESCE(c.DbName, g.DbName) AS DbName,
-                COALESCE(c.[Status], g.[Status]) AS [Status],
-                COALESCE(c.StateDesc, g.StateDesc) AS StateDesc,
-                COALESCE(c.DataFiles, g.DataFiles) AS DataFiles,
-                COALESCE(c.DataMB, g.DataMB) AS DataMB,
-                COALESCE(c.UserAccess, g.UserAccess) AS UserAccess,
-                COALESCE(c.RecoveryModel, g.RecoveryModel) AS RecoveryModel,
-                COALESCE(c.CompatibilityLevel, g.CompatibilityLevel) AS CompatibilityLevel,
-                COALESCE(c.CreationDate, g.CreationDate) AS CreationDate,
-                COALESCE(c.[Collation], g.[Collation]) AS [Collation],
-                COALESCE(c.[Fulltext], g.[Fulltext]) AS [Fulltext],
-                COALESCE(c.AutoClose, g.AutoClose) AS AutoClose,
-                COALESCE(c.[ReadOnly], g.[ReadOnly]) AS [ReadOnly],
-                COALESCE(c.AutoShrink, g.AutoShrink) AS AutoShrink,
-                COALESCE(c.AutoCreateStatistics, g.AutoCreateStatistics) AS AutoCreateStatistics,
-                COALESCE(c.AutoUpdateStatistics, g.AutoUpdateStatistics) AS AutoUpdateStatistics,
-                COALESCE(c.SourceTimestamp, g.SourceTimestamp) AS SourceTimestamp,
-                COALESCE(c.CachedAt, g.CachedAt) AS CachedAt,
-                -- Campos de gestión
-                -- CompatibilidadMotor: auto-derivado de la versión del motor (instancia)
-                CASE
-                    WHEN PATINDEX('%20[0-9][0-9]%', inst.MajorVersion) > 0
-                        THEN SUBSTRING(inst.MajorVersion, PATINDEX('%20[0-9][0-9]%', inst.MajorVersion), 4)
-                    ELSE g.CompatibilidadMotor
-                END AS CompatibilidadMotor,
-                -- Fecha Última Actividad: priorizar dato del reporte, luego gestión
-                COALESCE(
-                    TRY_CAST(r.ultima_actividad AS DATETIME2),
-                    g.FechaUltimaActividad
-                ) AS FechaUltimaActividad,
-                ISNULL(g.Offline, 0) AS Offline,
-                g.FechaBajaMigracion,
-                ISNULL(g.MotivoBasesSinActividad, 0) AS MotivoBasesSinActividad,
-                ISNULL(g.MotivoObsolescencia, 0) AS MotivoObsolescencia,
-                ISNULL(g.MotivoEficiencia, 0) AS MotivoEficiencia,
-                ISNULL(g.MotivoCambioVersionAmbBajos, 0) AS MotivoCambioVersionAmbBajos,
-                g.FechaUltimoBkp,
-                g.UbicacionUltimoBkp,
-                g.DbaAsignado,
-                g.[Owner],
-                g.Celula,
-                g.Comentarios,
-                g.FechaCreacion,
-                g.FechaModificacion,
-                CAST(CASE WHEN c.Id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS EnInventarioActual,
-                -- Versión del motor: extraer año de MajorVersion (ej: ''2019'' de ''Microsoft SQL Server 2019'')
-                CASE
-                    WHEN PATINDEX('%20[0-9][0-9]%', inst.MajorVersion) > 0
-                        THEN SUBSTRING(inst.MajorVersion, PATINDEX('%20[0-9][0-9]%', inst.MajorVersion), 4)
-                    ELSE inst.MajorVersion
-                END AS EngineVersion,
-                -- EngineCompatLevel ya no se usa para comparación numérica
-                NULL AS EngineCompatLevel
-            FROM SqlServerDatabasesCache c
-            LEFT JOIN GestionBasesSinUso g ON c.ServerName = g.ServerName AND c.DbName = g.DbName
-            LEFT JOIN SqlServerInstancesCache inst ON c.ServerInstanceId = inst.Id
-            OUTER APPLY (
-                SELECT TOP 1 r.ultima_actividad
-                FROM [SQLNova].[dbo].[ReporteBasesSinActividad] r
-                WHERE r.ServerName = c.ServerName AND r.DB = c.DbName
-                ORDER BY r.fecha_carga DESC
-            ) r
-            WHERE (@ServerName IS NULL OR c.ServerName LIKE '%' + @ServerName + '%')
-              AND (@Ambiente IS NULL OR c.ServerAmbiente LIKE '%' + @Ambiente + '%')
-
-            UNION ALL
-
-            -- Bases que solo están en gestión (ya no existen en cache)
-            SELECT
-                g.Id AS GestionId,
-                NULL AS CacheId,
-                g.ServerInstanceId,
-                g.ServerName,
-                g.ServerAmbiente,
-                g.DatabaseId,
-                g.DbName,
-                g.[Status],
-                g.StateDesc,
-                g.DataFiles,
-                g.DataMB,
-                g.UserAccess,
-                g.RecoveryModel,
-                g.CompatibilityLevel,
-                g.CreationDate,
-                g.[Collation],
-                g.[Fulltext],
-                g.AutoClose,
-                g.[ReadOnly],
-                g.AutoShrink,
-                g.AutoCreateStatistics,
-                g.AutoUpdateStatistics,
-                g.SourceTimestamp,
-                g.CachedAt,
-                g.CompatibilidadMotor,
-                g.FechaUltimaActividad,
-                g.Offline,
-                g.FechaBajaMigracion,
-                g.MotivoBasesSinActividad,
-                g.MotivoObsolescencia,
-                g.MotivoEficiencia,
-                g.MotivoCambioVersionAmbBajos,
-                g.FechaUltimoBkp,
-                g.UbicacionUltimoBkp,
-                g.DbaAsignado,
-                g.[Owner],
-                g.Celula,
-                g.Comentarios,
-                g.FechaCreacion,
-                g.FechaModificacion,
-                CAST(0 AS BIT) AS EnInventarioActual,
-                g.CompatibilidadMotor AS EngineVersion,
-                NULL AS EngineCompatLevel
-            FROM GestionBasesSinUso g
-            WHERE NOT EXISTS (
-                SELECT 1 FROM SqlServerDatabasesCache c 
-                WHERE c.ServerName = g.ServerName AND c.DbName = g.DbName
-            )
-            AND (@ServerName IS NULL OR g.ServerName LIKE '%' + @ServerName + '%')
-            AND (@Ambiente IS NULL OR g.ServerAmbiente LIKE '%' + @Ambiente + '%')
-
-            ORDER BY ServerName, DbName";
-
         var connectionString = _configuration.GetConnectionString("ApplicationDb");
-
         using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
+
+        // Auto-refresh si el cache está vacío (primer uso o después de deploy)
+        var cacheCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM RacionalizacionSQLCache");
+        if (cacheCount == 0)
+        {
+            _logger.LogInformation("Cache vacío, ejecutando refresh inicial...");
+            await connection.ExecuteAsync("EXEC sp_RefreshRacionalizacionSQLCache",
+                commandTimeout: 120);
+        }
+
+        // Lectura simple y rápida desde tabla plana
+        const string sql = @"
+            SELECT
+                GestionId, CacheId,
+                ServerInstanceId, ServerName, ServerAmbiente,
+                DatabaseId, DbName, [Status], StateDesc,
+                DataFiles, DataMB, UserAccess, RecoveryModel,
+                CompatibilityLevel, CreationDate, [Collation], [Fulltext],
+                AutoClose, [ReadOnly], AutoShrink,
+                AutoCreateStatistics, AutoUpdateStatistics,
+                SourceTimestamp, CachedAt,
+                CompatibilidadMotor, FechaUltimaActividad,
+                Offline, FechaBajaMigracion,
+                MotivoBasesSinActividad, MotivoObsolescencia,
+                MotivoEficiencia, MotivoCambioVersionAmbBajos,
+                FechaUltimoBkp, UbicacionUltimoBkp,
+                DbaAsignado, [Owner], Celula, Comentarios,
+                FechaCreacion, FechaModificacion,
+                EnInventarioActual, EngineVersion, EngineCompatLevel
+            FROM RacionalizacionSQLCache
+            WHERE (@ServerName IS NULL OR ServerName LIKE '%' + @ServerName + '%')
+              AND (@Ambiente IS NULL OR ServerAmbiente LIKE '%' + @Ambiente + '%')
+            ORDER BY ServerName, DbName";
 
         var items = (await connection.QueryAsync<BasesSinUsoGridDto>(sql, new
         {
@@ -214,7 +121,7 @@ public class BasesSinUsoService : IBasesSinUsoService
             Ambiente = ambiente
         })).ToList();
 
-        // Calcular resumen para las KPI cards
+        // KPI resumen (calculado en memoria sobre datos ya leídos — instantáneo)
         var resumen = new BasesSinUsoResumenDto
         {
             TotalBases = items.Count,
@@ -253,6 +160,13 @@ public class BasesSinUsoService : IBasesSinUsoService
         _logger.LogInformation(
             "GestionBasesSinUso actualizado: Id={Id}, Server={Server}, DB={DB}, Offline={Offline}",
             id, gestion.ServerName, gestion.DbName, gestion.Offline);
+
+        // Refrescar cache pre-calculado en background
+        _ = Task.Run(async () =>
+        {
+            try { await RefreshCacheAsync(); }
+            catch (Exception ex) { _logger.LogError(ex, "Error al refrescar cache tras Update"); }
+        });
 
         return MapEntityToDto(gestion);
     }
@@ -350,7 +264,40 @@ public class BasesSinUsoService : IBasesSinUsoService
 
         await _context.SaveChangesAsync();
 
+        // Refrescar cache pre-calculado en background
+        _ = Task.Run(async () =>
+        {
+            try { await RefreshCacheAsync(); }
+            catch (Exception ex) { _logger.LogError(ex, "Error al refrescar cache tras Upsert"); }
+        });
+
         return MapEntityToDto(gestion);
+    }
+
+    /// <summary>
+    /// Fuerza el refresco completo de la tabla de cache RacionalizacionSQLCache.
+    /// Ejecuta el SP sp_RefreshRacionalizacionSQLCache.
+    /// </summary>
+    public async Task<(int totalRows, DateTime refreshedAt)> RefreshCacheAsync()
+    {
+        var connectionString = _configuration.GetConnectionString("ApplicationDb");
+        using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        _logger.LogInformation("Iniciando refresh de RacionalizacionSQLCache...");
+
+        var result = await connection.QueryFirstOrDefaultAsync<dynamic>(
+            "EXEC sp_RefreshRacionalizacionSQLCache",
+            commandTimeout: 120);
+
+        int totalRows = result?.TotalRows ?? 0;
+        DateTime refreshedAt = result?.RefreshedAt ?? DateTime.Now;
+
+        _logger.LogInformation(
+            "Cache RacionalizacionSQLCache refrescado: {TotalRows} registros a las {RefreshedAt}",
+            totalRows, refreshedAt);
+
+        return (totalRows, refreshedAt);
     }
 
     /// <summary>

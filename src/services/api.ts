@@ -6059,6 +6059,15 @@ export const basesSinUsoApi = {
     });
     return handleResponse<BasesSinUsoStatsDto>(response);
   },
+
+  // Forzar refresco del cache pre-calculado
+  async refreshCache(): Promise<{ message: string; totalRows: number; refreshedAt: string }> {
+    const response = await fetch(`${API_URL}/api/bases-sin-uso/refresh-cache`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<{ message: string; totalRows: number; refreshedAt: string }>(response);
+  },
 };
 
 // ==================== HELPER FUNCTIONS ====================
