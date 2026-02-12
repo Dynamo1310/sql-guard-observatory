@@ -611,6 +611,7 @@ export default function AdminGroupDetail() {
                   'Inventario',
                   'Guardias DBA',
                   'Operaciones',
+                  'Intervenciones',
                   'Seguridad',
                   'Administración > Control de Acceso',
                   'Administración > Configuración',
