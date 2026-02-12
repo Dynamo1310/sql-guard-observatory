@@ -6070,6 +6070,118 @@ export const basesSinUsoApi = {
   },
 };
 
+// ==================== INTERVENCIONES WAR ====================
+
+export interface IntervencionWarDto {
+  id: number;
+  fechaHora: string;
+  duracionMinutos: number;
+  dbaParticipantes: string;
+  numeroIncidente: string | null;
+  incidenteLink: string | null;
+  problemLink: string | null;
+  aplicacionSolucion: string | null;
+  servidores: string | null;
+  baseDatos: string | null;
+  celula: string | null;
+  referente: string | null;
+  comentarios: string | null;
+  intervencionesRelacionadas: string | null;
+  fechaCreacion: string;
+  fechaModificacion: string;
+  creadoPor: string | null;
+  duracionFormateada: string;
+}
+
+export interface CreateUpdateIntervencionWarRequest {
+  fechaHora: string;
+  duracionMinutos: number;
+  dbaParticipantes: string;
+  numeroIncidente?: string;
+  incidenteLink?: string;
+  problemLink?: string;
+  aplicacionSolucion?: string;
+  servidores?: string;
+  baseDatos?: string;
+  celula?: string;
+  referente?: string;
+  comentarios?: string;
+  intervencionesRelacionadas?: string;
+}
+
+export interface IntervencionWarResumenDto {
+  totalIntervenciones: number;
+  totalHoras: number;
+  totalMinutos: number;
+  intervencionesEsteMes: number;
+  horasEsteMes: number;
+  minutosEsteMes: number;
+  dbasUnicos: number;
+  incidentesConProblem: number;
+}
+
+export interface IntervencionWarGridResponse {
+  items: IntervencionWarDto[];
+  resumen: IntervencionWarResumenDto;
+}
+
+export interface IntervencionWarStatsDto {
+  porSolucion: { name: string; value: number }[];
+  porDba: { name: string; value: number }[];
+  porDuracion: { name: string; value: number }[];
+  evolucionMensual: { name: string; value: number }[];
+  porCelula: { name: string; value: number }[];
+}
+
+export const intervencionesWarApi = {
+  async getAll(): Promise<IntervencionWarGridResponse> {
+    const response = await fetch(`${API_URL}/api/intervenciones-war`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<IntervencionWarGridResponse>(response);
+  },
+
+  async getById(id: number): Promise<IntervencionWarDto> {
+    const response = await fetch(`${API_URL}/api/intervenciones-war/${id}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<IntervencionWarDto>(response);
+  },
+
+  async create(data: CreateUpdateIntervencionWarRequest): Promise<IntervencionWarDto> {
+    const response = await fetch(`${API_URL}/api/intervenciones-war`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<IntervencionWarDto>(response);
+  },
+
+  async update(id: number, data: CreateUpdateIntervencionWarRequest): Promise<IntervencionWarDto> {
+    const response = await fetch(`${API_URL}/api/intervenciones-war/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<IntervencionWarDto>(response);
+  },
+
+  async delete(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/intervenciones-war/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    await handleResponse<{ message: string }>(response);
+  },
+
+  async getStats(): Promise<IntervencionWarStatsDto> {
+    const response = await fetch(`${API_URL}/api/intervenciones-war/stats`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<IntervencionWarStatsDto>(response);
+  },
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 export function isAuthenticated(): boolean {

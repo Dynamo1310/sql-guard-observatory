@@ -252,6 +252,7 @@ builder.Services.AddScoped<IDecomisoService, DecomisoService>();
 
 // Proyectos - Bases sin Uso
 builder.Services.AddScoped<IBasesSinUsoService, BasesSinUsoService>();
+builder.Services.AddScoped<IIntervencionWarService, IntervencionWarService>();
 builder.Services.AddScoped<IPatchConfigService, PatchConfigService>();
 builder.Services.AddHostedService<PatchNotificationBackgroundService>();
 
