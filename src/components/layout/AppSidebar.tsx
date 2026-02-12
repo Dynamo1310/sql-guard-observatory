@@ -4,7 +4,7 @@ import {
   Phone, Calendar, CalendarDays, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
   ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Settings, Cog, ShieldCheck, Clock,
   Key, Lock, History, KeyRound, Share2, FolderLock, Sparkles, Server, Zap, Tag, AlertTriangle, TrendingUp,
-  Snowflake, Play, BookOpen, LayoutDashboard
+  Snowflake, Play, BookOpen, LayoutDashboard, Swords
 } from 'lucide-react';
 import { menuBadgesApi, MenuBadgeDto, overviewApi } from '@/services/api';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -132,6 +132,12 @@ const operationsSubItems = [
   { title: 'Config. Servidores', url: '/operations/servers-config', icon: Settings, permission: 'OperationsConfig' },
 ];
 
+// ==================== INTERVENCIONES ====================
+
+const intervencionesSubItems = [
+  { title: 'Wars', url: '/intervenciones/wars', icon: Swords, permission: 'IntervencionesWar' },
+];
+
 // ==================== PROYECTOS ====================
 
 const projectsSubItems = [
@@ -224,6 +230,10 @@ export function AppSidebar() {
   // Operaciones
   const isOperationsActive = location.pathname.startsWith('/operations');
   const [operationsOpen, setOperationsOpen] = useState(isOperationsActive);
+
+  // Intervenciones
+  const isIntervencionesActive = location.pathname.startsWith('/intervenciones');
+  const [intervencionesOpen, setIntervencionesOpen] = useState(isIntervencionesActive);
 
   // Proyectos
   const isProjectsActive = location.pathname.startsWith('/projects');
@@ -410,6 +420,11 @@ export function AppSidebar() {
   const hasOperationsMenuPermission = hasPermission('OperationsMenu');
   const visibleOperationsSubItems = operationsSubItems.filter(item => hasPermission(item.permission));
   const showOperationsMenu = hasOperationsMenuPermission && visibleOperationsSubItems.length > 0;
+
+  // Intervenciones
+  const hasIntervencionesMenuPermission = hasPermission('IntervencionesMenu');
+  const visibleIntervencionesSubItems = intervencionesSubItems.filter(item => hasPermission(item.permission));
+  const showIntervencionesMenu = hasIntervencionesMenuPermission && visibleIntervencionesSubItems.length > 0;
 
   // Proyectos
   const hasProjectsMenuPermission = hasPermission('ProjectsMenu');
@@ -820,6 +835,31 @@ export function AppSidebar() {
                         title="Operaciones"
                         menuKey="OperationsMenu"
                         subItems={visibleOperationsSubItems}
+                      />
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            )}
+
+            {/* ==================== INTERVENCIONES ==================== */}
+            {showIntervencionesMenu && (
+              <>
+                {!isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
+                <SidebarGroup className="pb-2">
+                  <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
+                    Intervenciones
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      <CollapsibleMenu
+                        isOpen={intervencionesOpen}
+                        setIsOpen={setIntervencionesOpen}
+                        isActive={isIntervencionesActive}
+                        icon={Swords}
+                        title="Intervenciones"
+                        menuKey="IntervencionesMenu"
+                        subItems={visibleIntervencionesSubItems}
                       />
                     </SidebarMenu>
                   </SidebarGroupContent>

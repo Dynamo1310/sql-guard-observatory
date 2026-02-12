@@ -47,6 +47,7 @@ import PatchNotificationsConfig from "./pages/PatchNotificationsConfig";
 import ObsoleteInstances from "./pages/ObsoleteInstances";
 import DatabaseOwners from "./pages/DatabaseOwners";
 import BasesSinUso from "./pages/BasesSinUso";
+import IntervencionesWar from "./pages/IntervencionesWar";
 import VaultDashboard from "./pages/VaultDashboard";
 import VaultCredentials from "./pages/VaultCredentials";
 import VaultSharedWithMe from "./pages/VaultSharedWithMe";
@@ -306,6 +307,12 @@ const App = () => (
                       <Route path="/operations/servers-config" element={
                         <ProtectedRoute viewName="OperationsConfig">
                           <OperationalServersConfig />
+                        </ProtectedRoute>
+                      } />
+                      {/* Intervenciones */}
+                      <Route path="/intervenciones/wars" element={
+                        <ProtectedRoute viewName="IntervencionesWar">
+                          <IntervencionesWar />
                         </ProtectedRoute>
                       } />
                       {/* Proyectos */}

@@ -105,6 +105,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Proyectos - Gestión de Bases sin Uso
     public DbSet<GestionBasesSinUso> GestionBasesSinUso { get; set; } = null!;
     
+    // Intervenciones War - Seguimiento de incidencias DBA
+    public DbSet<IntervencionWar> IntervencionesWar { get; set; } = null!;
+    
     // Inventory Cache - PostgreSQL
     public DbSet<PostgreSqlInstanceCache> PostgreSqlInstancesCache { get; set; } = null!;
     public DbSet<PostgreSqlDatabaseCache> PostgreSqlDatabasesCache { get; set; } = null!;
@@ -1109,6 +1112,20 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => e.Offline);
             entity.HasIndex(e => e.ServerAmbiente);
             entity.HasIndex(e => e.FechaModificacion);
+        });
+
+        // =============================================
+        // Intervenciones War
+        // =============================================
+        
+        builder.Entity<IntervencionWar>(entity =>
+        {
+            entity.ToTable("IntervencionesWar", "dbo");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.FechaHora);
+            entity.HasIndex(e => e.AplicacionSolucion);
+            entity.HasIndex(e => e.Celula);
+            entity.HasIndex(e => e.NumeroIncidente);
         });
 
     }
