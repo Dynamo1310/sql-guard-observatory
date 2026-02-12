@@ -1,5 +1,5 @@
 /**
- * Bases sin Uso - Proyecto de gestión de bajas de bases de datos
+ * Racionalización SQL - Proyecto de gestión de bajas de bases de datos
  * Vista combinada de inventario (SqlServerDatabasesCache) + gestión (GestionBasesSinUso)
  * con filtros, ordenamiento, visibilidad de columnas, edición y gráficos.
  */
@@ -88,9 +88,9 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: 'dbName', label: 'Base de Datos', group: 'inventario', defaultVisible: true },
   { key: 'status', label: 'Status', group: 'inventario', defaultVisible: true },
   { key: 'stateDesc', label: 'Estado BD', group: 'inventario', defaultVisible: false },
-  { key: 'dataMB', label: 'Tamaño (MB)', group: 'inventario', defaultVisible: true },
+  { key: 'dataMB', label: 'Tamaño (GB)', group: 'inventario', defaultVisible: true },
   { key: 'dataFiles', label: 'Archivos', group: 'inventario', defaultVisible: false },
-  { key: 'recoveryModel', label: 'Recovery Model', group: 'inventario', defaultVisible: true },
+  { key: 'recoveryModel', label: 'Recovery Model', group: 'inventario', defaultVisible: false },
   { key: 'compatibilityLevel', label: 'Nivel Compat.', group: 'inventario', defaultVisible: true },
   { key: 'userAccess', label: 'User Access', group: 'inventario', defaultVisible: false },
   { key: 'creationDate', label: 'Fecha Creación BD', group: 'inventario', defaultVisible: false },
@@ -103,20 +103,21 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: 'autoUpdateStatistics', label: 'AutoUpdateStats', group: 'inventario', defaultVisible: false },
   { key: 'sourceTimestamp', label: 'Source Timestamp', group: 'inventario', defaultVisible: false },
   { key: 'cachedAt', label: 'Cached At', group: 'inventario', defaultVisible: false },
-  { key: 'enInventarioActual', label: 'En Inventario', group: 'inventario', defaultVisible: true },
+  { key: 'enInventarioActual', label: 'En Inventario', group: 'inventario', defaultVisible: false },
   // Gestión
-  { key: 'compatibilidadMotor', label: 'Compat. Motor', group: 'gestion', defaultVisible: true },
+  { key: 'compatibilidadMotor', label: 'Compat. Motor', group: 'gestion', defaultVisible: false },
   { key: 'fechaUltimaActividad', label: 'Última Actividad', group: 'gestion', defaultVisible: true },
-  { key: 'offline', label: 'Baja (Offline)', group: 'gestion', defaultVisible: true },
-  { key: 'fechaBajaMigracion', label: 'Fecha Baja/Migra.', group: 'gestion', defaultVisible: true },
+  { key: 'offline', label: 'Baja (Offline)', group: 'gestion', defaultVisible: false },
+  { key: 'fechaBajaMigracion', label: 'Fecha Baja/Migra.', group: 'gestion', defaultVisible: false },
   { key: 'motivoBasesSinActividad', label: 'Motivo: Sin Actividad', group: 'gestion', defaultVisible: true },
   { key: 'motivoObsolescencia', label: 'Motivo: Obsolescencia', group: 'gestion', defaultVisible: true },
   { key: 'motivoEficiencia', label: 'Motivo: Eficiencia', group: 'gestion', defaultVisible: true },
-  { key: 'motivoCambioVersionAmbBajos', label: 'Motivo: Cambio Versión', group: 'gestion', defaultVisible: false },
-  { key: 'fechaUltimoBkp', label: 'Último BKP', group: 'gestion', defaultVisible: true },
+  { key: 'motivoCambioVersionAmbBajos', label: 'Motivo: Cambio Versión', group: 'gestion', defaultVisible: true },
+  { key: 'fechaUltimoBkp', label: 'Último BKP', group: 'gestion', defaultVisible: false },
   { key: 'ubicacionUltimoBkp', label: 'Ubicación BKP', group: 'gestion', defaultVisible: false },
   { key: 'dbaAsignado', label: 'DBA Asignado', group: 'gestion', defaultVisible: true },
   { key: 'owner', label: 'Owner', group: 'gestion', defaultVisible: true },
+  { key: 'celula', label: 'Célula', group: 'gestion', defaultVisible: true },
   { key: 'comentarios', label: 'Comentarios', group: 'gestion', defaultVisible: false },
 ];
 
@@ -195,6 +196,7 @@ export default function BasesSinUso() {
   const [filterOffline, setFilterOffline] = useState<string>('all');
   const [filterEnGestion, setFilterEnGestion] = useState<string>('all');
   const [filterDbaAsignado, setFilterDbaAsignado] = useState<string>('all');
+  const [filterCelula, setFilterCelula] = useState<string>('all');
 
   // Sort
   const [sortField, setSortField] = useState<SortField>('serverName');
@@ -320,6 +322,7 @@ export default function BasesSinUso() {
       ubicacionUltimoBkp: item.ubicacionUltimoBkp ?? undefined,
       dbaAsignado: item.dbaAsignado ?? undefined,
       owner: item.owner ?? undefined,
+      celula: item.celula ?? undefined,
       comentarios: item.comentarios ?? undefined,
     });
   }, []);
@@ -373,6 +376,11 @@ export default function BasesSinUso() {
     return [...new Set(data.items.map(i => i.serverAmbiente).filter(Boolean))] as string[];
   }, [data?.items]);
 
+  const celulas = useMemo(() => {
+    if (!data?.items) return [];
+    return [...new Set(data.items.map(i => i.celula).filter(Boolean))].sort() as string[];
+  }, [data?.items]);
+
   const filteredAndSortedItems = useMemo(() => {
     if (!data?.items) return [];
 
@@ -386,6 +394,7 @@ export default function BasesSinUso() {
         i.dbName.toLowerCase().includes(lowerSearch) ||
         (i.dbaAsignado?.toLowerCase().includes(lowerSearch)) ||
         (i.owner?.toLowerCase().includes(lowerSearch)) ||
+        (i.celula?.toLowerCase().includes(lowerSearch)) ||
         (i.comentarios?.toLowerCase().includes(lowerSearch))
       );
     }
@@ -410,6 +419,11 @@ export default function BasesSinUso() {
       items = items.filter(i => i.dbaAsignado === filterDbaAsignado);
     }
 
+    // Filter by Célula
+    if (filterCelula !== 'all') {
+      items = items.filter(i => i.celula === filterCelula);
+    }
+
     // Sort
     items.sort((a, b) => {
       const aVal = a[sortField];
@@ -432,7 +446,7 @@ export default function BasesSinUso() {
     });
 
     return items;
-  }, [data?.items, searchTerm, filterAmbiente, filterOffline, filterEnGestion, filterDbaAsignado, sortField, sortDirection]);
+  }, [data?.items, searchTerm, filterAmbiente, filterOffline, filterEnGestion, filterDbaAsignado, filterCelula, sortField, sortDirection]);
 
   // Group items by serverName (preserving sort order)
   const groupedServers = useMemo(() => {
@@ -531,9 +545,10 @@ export default function BasesSinUso() {
       return year ? `SQL ${year}` : String(value);
     }
 
-    // Numbers
+    // Tamaño: convertir MB a GB
     if (colKey === 'dataMB' && value != null) {
-      return (value as number).toLocaleString('es-AR');
+      const gb = (value as number) / 1024;
+      return gb.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     }
 
     // Default
@@ -552,7 +567,7 @@ export default function BasesSinUso() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Database className="h-6 w-6 text-primary" />
-            Bases sin Uso
+            Racionalización SQL
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Gestión de bajas y seguimiento de bases de datos del inventario
@@ -651,7 +666,7 @@ export default function BasesSinUso() {
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar servidor, base, DBA, owner..."
+                  placeholder="Buscar servidor, base, DBA, owner, célula..."
                   className="pl-9"
                   value={searchTerm}
                   onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
@@ -706,6 +721,21 @@ export default function BasesSinUso() {
                     {(dbasData ?? []).map(dba => (
                       <SelectItem key={dba.userId} value={dba.displayName}>
                         {dba.displayName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Filter: Célula */}
+                <Select value={filterCelula} onValueChange={(v) => { setFilterCelula(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-[160px] h-9">
+                    <SelectValue placeholder="Célula" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las Células</SelectItem>
+                    {celulas.map(cel => (
+                      <SelectItem key={cel} value={cel}>
+                        {cel}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -820,7 +850,8 @@ export default function BasesSinUso() {
                       const isExpanded = expandedServers.has(group.serverName);
                       const offlineCount = group.items.filter(i => i.offline).length;
                       const totalSpaceMB = group.items.reduce((sum, i) => sum + (i.dataMB ?? 0), 0);
-                      const spaceLabel = totalSpaceMB >= 1024 ? `${(totalSpaceMB / 1024).toFixed(1)} GB` : `${totalSpaceMB} MB`;
+                      const totalGB = totalSpaceMB / 1024;
+                      const spaceLabel = totalGB >= 1024 ? `${(totalGB / 1024).toFixed(2)} TB` : `${totalGB.toFixed(1)} GB`;
                       const ambiente = group.items[0]?.serverAmbiente;
 
                       return (
@@ -1150,6 +1181,16 @@ export default function BasesSinUso() {
                   placeholder="Owner de la base de datos"
                 />
               </div>
+            </div>
+
+            {/* Célula */}
+            <div className="space-y-2">
+              <Label>Célula</Label>
+              <Input
+                value={formData.celula || ''}
+                onChange={e => setFormData(prev => ({ ...prev, celula: e.target.value }))}
+                placeholder="Célula a la que pertenece"
+              />
             </div>
 
             {/* Fecha Última Actividad y Offline */}

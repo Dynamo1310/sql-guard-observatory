@@ -77,6 +77,9 @@ BEGIN
         -- Owner de la base de datos
         [Owner]                     NVARCHAR(255) NULL,
 
+        -- Célula a la que pertenece la base de datos
+        [Celula]                    NVARCHAR(255) NULL,
+
         -- Comentarios generales
         [Comentarios]               NVARCHAR(MAX) NULL,
 

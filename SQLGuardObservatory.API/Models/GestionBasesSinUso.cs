@@ -143,6 +143,12 @@ public class GestionBasesSinUso
     public string? Owner { get; set; }
 
     /// <summary>
+    /// Célula a la que pertenece la base de datos
+    /// </summary>
+    [MaxLength(255)]
+    public string? Celula { get; set; }
+
+    /// <summary>
     /// Comentarios generales
     /// </summary>
     public string? Comentarios { get; set; }

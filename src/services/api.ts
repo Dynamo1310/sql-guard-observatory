@@ -5920,6 +5920,7 @@ export interface BasesSinUsoGridDto {
   ubicacionUltimoBkp: string | null;
   dbaAsignado: string | null;
   owner: string | null;
+  celula: string | null;
   comentarios: string | null;
   fechaCreacion: string | null;
   fechaModificacion: string | null;
@@ -5979,6 +5980,7 @@ export interface UpdateBasesSinUsoRequest {
   ubicacionUltimoBkp?: string;
   dbaAsignado?: string;
   owner?: string;
+  celula?: string;
   comentarios?: string;
 }
 

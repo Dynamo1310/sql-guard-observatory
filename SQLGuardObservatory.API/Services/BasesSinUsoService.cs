@@ -121,6 +121,7 @@ public class BasesSinUsoService : IBasesSinUsoService
                 g.UbicacionUltimoBkp,
                 g.DbaAsignado,
                 g.[Owner],
+                g.Celula,
                 g.Comentarios,
                 g.FechaCreacion,
                 g.FechaModificacion,
@@ -185,6 +186,7 @@ public class BasesSinUsoService : IBasesSinUsoService
                 g.UbicacionUltimoBkp,
                 g.DbaAsignado,
                 g.[Owner],
+                g.Celula,
                 g.Comentarios,
                 g.FechaCreacion,
                 g.FechaModificacion,
@@ -442,6 +444,7 @@ public class BasesSinUsoService : IBasesSinUsoService
         entity.UbicacionUltimoBkp = request.UbicacionUltimoBkp;
         entity.DbaAsignado = request.DbaAsignado;
         entity.Owner = request.Owner;
+        entity.Celula = request.Celula;
         entity.Comentarios = request.Comentarios;
         entity.FechaModificacion = DateTime.Now;
     }
@@ -488,6 +491,7 @@ public class BasesSinUsoService : IBasesSinUsoService
             UbicacionUltimoBkp = entity.UbicacionUltimoBkp,
             DbaAsignado = entity.DbaAsignado,
             Owner = entity.Owner,
+            Celula = entity.Celula,
             Comentarios = entity.Comentarios,
             FechaCreacion = entity.FechaCreacion,
             FechaModificacion = entity.FechaModificacion

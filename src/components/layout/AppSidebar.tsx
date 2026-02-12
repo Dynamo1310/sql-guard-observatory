@@ -135,7 +135,7 @@ const operationsSubItems = [
 // ==================== PROYECTOS ====================
 
 const projectsSubItems = [
-  { title: 'Bases sin Uso', url: '/projects/bases-sin-uso', icon: Database, permission: 'BasesSinUso' },
+  { title: 'Racionalización SQL', url: '/projects/bases-sin-uso', icon: Database, permission: 'BasesSinUso' },
 ];
 
 // ==================== SEGURIDAD ====================

@@ -51,6 +51,7 @@ public class BasesSinUsoGridDto
     public string? UbicacionUltimoBkp { get; set; }
     public string? DbaAsignado { get; set; }
     public string? Owner { get; set; }
+    public string? Celula { get; set; }
     public string? Comentarios { get; set; }
     public DateTime? FechaCreacion { get; set; }
     public DateTime? FechaModificacion { get; set; }
@@ -128,6 +129,7 @@ public class UpdateBasesSinUsoRequest
     public string? UbicacionUltimoBkp { get; set; }
     public string? DbaAsignado { get; set; }
     public string? Owner { get; set; }
+    public string? Celula { get; set; }
     public string? Comentarios { get; set; }
 }
 
