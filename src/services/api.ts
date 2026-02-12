@@ -1738,9 +1738,10 @@ export interface OverviewDataOptimizedDto {
   backupsOverdue: number;
   criticalDisksCount: number;
   maintenanceOverdueCount: number;
+  agUnhealthyCount: number;
 
   // Listas para tablas
-  criticalInstances: OverviewCriticalInstanceDto[];
+  agHealthStatuses: OverviewAGHealthDto[];
   backupIssues: OverviewBackupIssueDto[];
   criticalDisks: OverviewCriticalDiskDto[];
   maintenanceOverdue: OverviewMaintenanceOverdueDto[];
@@ -1749,17 +1750,18 @@ export interface OverviewDataOptimizedDto {
   lastUpdate?: string;
 }
 
-export interface OverviewCriticalInstanceDto {
+export interface OverviewAGHealthDto {
   instanceName: string;
+  displayName: string; // Nombre del AG para mostrar
   ambiente?: string;
-  healthScore: number;
-  issues: string[];
-  score_Backups?: number;
-  score_AlwaysOn?: number;
-  score_CPU?: number;
-  score_Memoria?: number;
-  score_Discos?: number;
-  score_Maintenance?: number;
+  worstState: string; // HEALTHY, NOT_SYNCHRONIZED, SUSPENDED, NOT_HEALTHY, ERROR, N/A
+  databaseCount: number;
+  synchronizedCount: number;
+  suspendedCount: number;
+  maxSecondsBehind: number;
+  maxSendQueueKB: number;
+  maxRedoQueueKB: number;
+  details?: string;
 }
 
 export interface OverviewBackupIssueDto {

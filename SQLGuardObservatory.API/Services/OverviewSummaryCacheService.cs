@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.DTOs;
+using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Models;
 using SQLGuardObservatory.API.Models.Collectors;
 using System.Text.Json;
@@ -74,18 +75,20 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             using var scope = _serviceProvider.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-            // Ejecutar las 4 queries en paralelo
+            // Ejecutar las 5 queries en paralelo
             var healthScoresTask = GetProductionHealthScoresAsync(ct);
             var criticalDisksTask = GetProductionCriticalDisksAsync(ct);
             var maintenanceTask = GetProductionMaintenanceOverdueAsync(context, ct);
             var backupBreachesTask = GetProductionBackupBreachesAsync(ct);
+            var agHealthTask = GetProductionAGHealthAsync(ct);
 
-            await Task.WhenAll(healthScoresTask, criticalDisksTask, maintenanceTask, backupBreachesTask);
+            await Task.WhenAll(healthScoresTask, criticalDisksTask, maintenanceTask, backupBreachesTask, agHealthTask);
 
             var healthScores = healthScoresTask.Result;
             var criticalDisks = criticalDisksTask.Result;
             var maintenanceOverdue = maintenanceTask.Result;
             var backupBreaches = backupBreachesTask.Result;
+            var agHealthStatuses = agHealthTask.Result;
 
             // Calcular KPIs
             var totalInstances = healthScores.Count;
@@ -101,24 +104,9 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             // Agrupar por AG: para AGs, si al menos un nodo tiene backup OK, el AG no está breached
             var backupIssues = BuildBackupIssuesWithAGGrouping(backupBreaches, healthScores);
 
-            // Instancias críticas (score < 60)
-            var criticalInstances = healthScores
-                .Where(s => s.HealthScore < 60)
-                .Select(s => new OverviewCriticalInstanceDto
-                {
-                    InstanceName = s.InstanceName,
-                    Ambiente = s.Ambiente,
-                    HealthScore = s.HealthScore,
-                    Score_Backups = s.BackupsScore,
-                    Score_AlwaysOn = s.AlwaysOnScore,
-                    Score_CPU = s.CPUScore,
-                    Score_Memoria = s.MemoriaScore,
-                    Score_Discos = s.DiscosScore,
-                    Score_Maintenance = s.MantenimientosScore,
-                    Issues = GetIssuesFromScores(s)
-                })
-                .OrderBy(i => i.HealthScore)
-                .ToList();
+            // Cantidad de instancias AlwaysOn con problemas
+            var agUnhealthyCount = agHealthStatuses.Count(a => 
+                a.WorstState != "HEALTHY" && a.WorstState != "N/A");
 
             // Buscar o crear el registro de caché
             var cache = await context.OverviewSummaryCache
@@ -140,9 +128,10 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             cache.BackupsOverdue = backupIssues.Count;
             cache.CriticalDisksCount = criticalDisks.Count;
             cache.MaintenanceOverdueCount = maintenanceOverdue.Count;
+            cache.AGUnhealthyCount = agUnhealthyCount;
 
             // Serializar listas a JSON
-            cache.CriticalInstancesJson = JsonSerializer.Serialize(criticalInstances, _jsonOptions);
+            cache.AGHealthStatusesJson = JsonSerializer.Serialize(agHealthStatuses, _jsonOptions);
             cache.BackupIssuesJson = JsonSerializer.Serialize(backupIssues, _jsonOptions);
             cache.CriticalDisksJson = JsonSerializer.Serialize(criticalDisks, _jsonOptions);
             cache.MaintenanceOverdueJson = JsonSerializer.Serialize(maintenanceOverdue, _jsonOptions);
@@ -153,10 +142,13 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
 
             await context.SaveChangesAsync(ct);
 
+            // Auto-resolver asignaciones que ya no tienen issue correspondiente
+            await AutoResolveStaleAssignmentsAsync(context, backupIssues, criticalDisks, maintenanceOverdue, ct);
+
             var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
             _logger.LogInformation(
-                "Overview cache refreshed in {Elapsed}ms by {TriggeredBy}: {Total} instancias, {Critical} críticas, {Disks} discos, {Maint} mant.",
-                elapsed, triggeredBy, totalInstances, criticalCount, criticalDisks.Count, maintenanceOverdue.Count);
+                "Overview cache refreshed in {Elapsed}ms by {TriggeredBy}: {Total} instancias, {AGUnhealthy} AG unhealthy, {Disks} discos, {Maint} mant.",
+                elapsed, triggeredBy, totalInstances, agUnhealthyCount, criticalDisks.Count, maintenanceOverdue.Count);
         }
         catch (Exception ex)
         {
@@ -192,14 +184,15 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             BackupsOverdue = cache.BackupsOverdue,
             CriticalDisksCount = cache.CriticalDisksCount,
             MaintenanceOverdueCount = cache.MaintenanceOverdueCount,
+            AGUnhealthyCount = cache.AGUnhealthyCount,
             LastUpdate = cache.LastUpdatedUtc
         };
 
         // Deserializar listas
-        if (!string.IsNullOrEmpty(cache.CriticalInstancesJson))
+        if (!string.IsNullOrEmpty(cache.AGHealthStatusesJson))
         {
-            result.CriticalInstances = JsonSerializer.Deserialize<List<OverviewCriticalInstanceDto>>(
-                cache.CriticalInstancesJson, _jsonOptions) ?? new();
+            result.AGHealthStatuses = JsonSerializer.Deserialize<List<OverviewAGHealthDto>>(
+                cache.AGHealthStatusesJson, _jsonOptions) ?? new();
         }
 
         if (!string.IsNullOrEmpty(cache.BackupIssuesJson))
@@ -504,22 +497,146 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
     }
 
     /// <summary>
-    /// Determina los problemas de una instancia basándose en sus scores
+    /// Obtiene el estado de salud de AlwaysOn para producción, agrupado por Availability Group.
+    /// Solo incluye instancias que tienen AGs reales creados (AGName IS NOT NULL y DatabaseCount > 0).
+    /// Agrupa los nodos de un mismo AG en una sola fila.
     /// </summary>
-    private static List<string> GetIssuesFromScores(OverviewHealthScoreRaw score)
+    private async Task<List<OverviewAGHealthDto>> GetProductionAGHealthAsync(CancellationToken ct)
     {
-        var issues = new List<string>();
-        
-        if (score.BackupsScore < 100) issues.Add("Backups");
-        if (score.AlwaysOnScore < 100) issues.Add("AlwaysOn");
-        if (score.CPUScore < 50) issues.Add("CPU Alto");
-        if (score.MemoriaScore < 50) issues.Add("Memoria");
-        if (score.DiscosScore < 50) issues.Add("Discos");
-        if (score.MantenimientosScore < 100) issues.Add("Mantenimiento");
-        
-        if (issues.Count == 0) issues.Add("Score bajo");
-        
-        return issues;
+        var rawResults = new List<AGHealthRaw>();
+
+        // Traer datos por instancia, solo las que tienen AG real
+        var query = @"
+            WITH LatestAlwaysOn AS (
+                SELECT 
+                    InstanceName,
+                    Ambiente,
+                    AlwaysOnWorstState,
+                    DatabaseCount,
+                    SynchronizedCount,
+                    SuspendedCount,
+                    ISNULL(MaxSendQueueKB, 0) AS MaxSendQueueKB,
+                    ISNULL(MaxRedoQueueKB, 0) AS MaxRedoQueueKB,
+                    ISNULL(MaxSecondsBehind, 0) AS MaxSecondsBehind,
+                    AlwaysOnDetails,
+                    AGName,
+                    ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
+                FROM dbo.InstanceHealth_AlwaysOn
+                WHERE Ambiente = 'Produccion'
+                  AND AlwaysOnEnabled = 1
+                  AND AGName IS NOT NULL
+                  AND DatabaseCount > 0
+            )
+            SELECT 
+                InstanceName,
+                Ambiente,
+                AlwaysOnWorstState,
+                DatabaseCount,
+                SynchronizedCount,
+                SuspendedCount,
+                MaxSendQueueKB,
+                MaxRedoQueueKB,
+                MaxSecondsBehind,
+                AlwaysOnDetails,
+                AGName
+            FROM LatestAlwaysOn
+            WHERE rn = 1";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using var command = new SqlCommand(query, connection);
+        command.CommandTimeout = 30;
+
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            rawResults.Add(new AGHealthRaw
+            {
+                InstanceName = reader.GetString(0),
+                Ambiente = reader.IsDBNull(1) ? null : reader.GetString(1),
+                WorstState = reader.IsDBNull(2) ? "N/A" : reader.GetString(2),
+                DatabaseCount = reader.IsDBNull(3) ? 0 : reader.GetInt32(3),
+                SynchronizedCount = reader.IsDBNull(4) ? 0 : reader.GetInt32(4),
+                SuspendedCount = reader.IsDBNull(5) ? 0 : reader.GetInt32(5),
+                MaxSendQueueKB = reader.IsDBNull(6) ? 0 : reader.GetInt32(6),
+                MaxRedoQueueKB = reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
+                MaxSecondsBehind = reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
+                Details = reader.IsDBNull(9) ? null : reader.GetString(9),
+                AGName = reader.IsDBNull(10) ? null : reader.GetString(10)
+            });
+        }
+
+        // Agrupar por AGName
+        return BuildAGHealthWithGrouping(rawResults);
+    }
+
+    /// <summary>
+    /// Agrupa los nodos de un mismo AG en una sola fila, tomando el peor estado entre nodos.
+    /// </summary>
+    private static List<OverviewAGHealthDto> BuildAGHealthWithGrouping(List<AGHealthRaw> rawResults)
+    {
+        var results = new List<OverviewAGHealthDto>();
+        var stateOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SUSPENDED"] = 1,
+            ["NOT_HEALTHY"] = 2,
+            ["NOT_SYNCHRONIZED"] = 3,
+            ["ERROR"] = 4,
+            ["HEALTHY"] = 5,
+            ["N/A"] = 6
+        };
+
+        var agGroups = rawResults
+            .Where(r => !string.IsNullOrEmpty(r.AGName))
+            .GroupBy(r => r.AGName!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in agGroups)
+        {
+            var agName = group.Key;
+            var nodes = group.ToList();
+
+            // Peor estado entre todos los nodos
+            var worstState = nodes
+                .OrderBy(n => stateOrder.GetValueOrDefault(n.WorstState, 6))
+                .First().WorstState;
+
+            // Max DatabaseCount (todos los nodos del AG tienen las mismas DBs)
+            var dbCount = nodes.Max(n => n.DatabaseCount);
+            // Min SynchronizedCount (peor caso entre nodos)
+            var syncCount = nodes.Min(n => n.SynchronizedCount);
+            // Max SuspendedCount
+            var suspCount = nodes.Max(n => n.SuspendedCount);
+            // Max de métricas de performance
+            var maxSendQueue = nodes.Max(n => n.MaxSendQueueKB);
+            var maxRedoQueue = nodes.Max(n => n.MaxRedoQueueKB);
+            var maxSecsBehind = nodes.Max(n => n.MaxSecondsBehind);
+
+            // Combinar detalles de nodos con problemas
+            var allDetails = string.Join("|",
+                nodes.Where(n => !string.IsNullOrEmpty(n.Details))
+                     .Select(n => n.Details!));
+
+            results.Add(new OverviewAGHealthDto
+            {
+                InstanceName = nodes.First().InstanceName,
+                DisplayName = agName,
+                Ambiente = nodes.First().Ambiente,
+                WorstState = worstState,
+                DatabaseCount = dbCount,
+                SynchronizedCount = syncCount,
+                SuspendedCount = suspCount,
+                MaxSendQueueKB = maxSendQueue,
+                MaxRedoQueueKB = maxRedoQueue,
+                MaxSecondsBehind = maxSecsBehind,
+                Details = string.IsNullOrEmpty(allDetails) ? null : allDetails
+            });
+        }
+
+        return results
+            .OrderBy(r => stateOrder.GetValueOrDefault(r.WorstState, 6))
+            .ThenBy(r => r.DisplayName)
+            .ToList();
     }
 
     /// <summary>
@@ -770,6 +887,73 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
         return breachedDbs;
     }
 
+    /// <summary>
+    /// Auto-resuelve asignaciones activas cuyos issues ya no existen en las listas actuales.
+    /// Esto evita que una asignación vieja reaparezca si el problema se resolvió y luego vuelve.
+    /// </summary>
+    private async Task AutoResolveStaleAssignmentsAsync(
+        ApplicationDbContext context,
+        List<OverviewBackupIssueDto> backupIssues,
+        List<OverviewCriticalDiskDto> criticalDisks,
+        List<OverviewMaintenanceOverdueDto> maintenanceOverdue,
+        CancellationToken ct)
+    {
+        try
+        {
+            var activeAssignments = await context.OverviewIssueAssignments
+                .Where(a => a.ResolvedAt == null)
+                .ToListAsync(ct);
+
+            if (activeAssignments.Count == 0)
+                return;
+
+            // Construir sets de keys actuales para cada tipo
+            var backupKeys = new HashSet<string>(
+                backupIssues.Select(b => b.DisplayName ?? b.InstanceName),
+                StringComparer.OrdinalIgnoreCase);
+
+            var diskKeys = new HashSet<string>(
+                criticalDisks.Select(d => $"{d.InstanceName}|{d.Drive}"),
+                StringComparer.OrdinalIgnoreCase);
+
+            var maintenanceKeys = new HashSet<string>(
+                maintenanceOverdue.Select(m => $"{m.InstanceName}|{m.Tipo}"),
+                StringComparer.OrdinalIgnoreCase);
+
+            var resolvedCount = 0;
+
+            foreach (var assignment in activeAssignments)
+            {
+                bool isStale = assignment.IssueType switch
+                {
+                    "Backup" => !backupKeys.Contains(assignment.InstanceName),
+                    "Disk" => !diskKeys.Contains($"{assignment.InstanceName}|{assignment.DriveOrTipo}"),
+                    "Maintenance" => !maintenanceKeys.Contains($"{assignment.InstanceName}|{assignment.DriveOrTipo}"),
+                    _ => false
+                };
+
+                if (isStale)
+                {
+                    assignment.ResolvedAt = LocalClockAR.Now;
+                    assignment.Notes = "Auto-resuelto: el problema ya no se detecta en el último chequeo";
+                    resolvedCount++;
+                }
+            }
+
+            if (resolvedCount > 0)
+            {
+                await context.SaveChangesAsync(ct);
+                _logger.LogInformation(
+                    "Auto-resueltas {Count} asignaciones cuyo problema ya no existe",
+                    resolvedCount);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error al auto-resolver asignaciones obsoletas");
+        }
+    }
+
     #endregion
 
     /// <summary>
@@ -791,5 +975,23 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
         /// v3.5: Indica si es un disco crítico del sistema (C, E, F, G, H)
         /// </summary>
         public bool? IsCriticalSystemDisk { get; set; }
+    }
+
+    /// <summary>
+    /// Clase auxiliar para datos crudos de AlwaysOn antes de agrupar por AG
+    /// </summary>
+    private class AGHealthRaw
+    {
+        public string InstanceName { get; set; } = string.Empty;
+        public string? Ambiente { get; set; }
+        public string WorstState { get; set; } = "N/A";
+        public int DatabaseCount { get; set; }
+        public int SynchronizedCount { get; set; }
+        public int SuspendedCount { get; set; }
+        public int MaxSendQueueKB { get; set; }
+        public int MaxRedoQueueKB { get; set; }
+        public int MaxSecondsBehind { get; set; }
+        public string? Details { get; set; }
+        public string? AGName { get; set; }
     }
 }

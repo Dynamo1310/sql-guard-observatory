@@ -17,8 +17,11 @@ public class OverviewPageDataDto
     public int CriticalDisksCount { get; set; }
     public int MaintenanceOverdueCount { get; set; }
     
+    // KPI para AlwaysOn
+    public int AGUnhealthyCount { get; set; }
+    
     // Listas para las tablas del Overview
-    public List<OverviewCriticalInstanceDto> CriticalInstances { get; set; } = new();
+    public List<OverviewAGHealthDto> AGHealthStatuses { get; set; } = new();
     public List<OverviewBackupIssueDto> BackupIssues { get; set; } = new();
     public List<OverviewCriticalDiskDto> CriticalDisks { get; set; } = new();
     public List<OverviewMaintenanceOverdueDto> MaintenanceOverdue { get; set; } = new();
@@ -28,22 +31,35 @@ public class OverviewPageDataDto
 }
 
 /// <summary>
-/// Instancia con health score crítico (< 60)
+/// Estado de salud de un Availability Group (agrupado por AGName)
 /// </summary>
-public class OverviewCriticalInstanceDto
+public class OverviewAGHealthDto
 {
     public string InstanceName { get; set; } = string.Empty;
-    public string? Ambiente { get; set; }
-    public int HealthScore { get; set; }
-    public List<string> Issues { get; set; } = new();
     
-    // Scores individuales para determinar problemas
-    public int? Score_Backups { get; set; }
-    public int? Score_AlwaysOn { get; set; }
-    public int? Score_CPU { get; set; }
-    public int? Score_Memoria { get; set; }
-    public int? Score_Discos { get; set; }
-    public int? Score_Maintenance { get; set; }
+    /// <summary>
+    /// Nombre para mostrar: AGName (nombre del Availability Group)
+    /// </summary>
+    public string DisplayName { get; set; } = string.Empty;
+    
+    public string? Ambiente { get; set; }
+    
+    /// <summary>
+    /// Peor estado del AG: HEALTHY, NOT_SYNCHRONIZED, SUSPENDED, NOT_HEALTHY, ERROR, N/A
+    /// </summary>
+    public string WorstState { get; set; } = "N/A";
+    
+    public int DatabaseCount { get; set; }
+    public int SynchronizedCount { get; set; }
+    public int SuspendedCount { get; set; }
+    public int MaxSecondsBehind { get; set; }
+    public long MaxSendQueueKB { get; set; }
+    public long MaxRedoQueueKB { get; set; }
+    
+    /// <summary>
+    /// Detalle de DBs con problemas (formato: "DBName:SUSPENDED|DBName2:NOT_SYNCHRONIZED")
+    /// </summary>
+    public string? Details { get; set; }
 }
 
 /// <summary>

@@ -227,15 +227,6 @@ export default function BasesSinUso() {
     });
   }, []);
 
-  const expandAll = useCallback(() => {
-    if (!data?.items) return;
-    setExpandedServers(new Set(data.items.map(i => i.serverName)));
-  }, [data?.items]);
-
-  const collapseAll = useCallback(() => {
-    setExpandedServers(new Set());
-  }, []);
-
   // Dialog state
   const [editingItem, setEditingItem] = useState<BasesSinUsoGridDto | null>(null);
   const [formData, setFormData] = useState<UpdateBasesSinUsoRequest>({
@@ -268,6 +259,16 @@ export default function BasesSinUso() {
     queryFn: () => basesSinUsoApi.getDbas(),
     staleTime: 10 * 60 * 1000,
   });
+
+  // Expand / collapse (must be after useQuery so `data` is in scope)
+  const expandAll = useCallback(() => {
+    if (!data?.items) return;
+    setExpandedServers(new Set(data.items.map(i => i.serverName)));
+  }, [data?.items]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedServers(new Set());
+  }, []);
 
   // ==================== MUTATIONS ====================
 

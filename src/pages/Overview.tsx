@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { HardDrive, Save, Wrench, Heart, AlertTriangle, LayoutDashboard, RefreshCw, Eye, Database, UserPlus, X } from 'lucide-react';
+import { HardDrive, Save, Wrench, Heart, LayoutDashboard, RefreshCw, Eye, Database, X, ShieldCheck } from 'lucide-react';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -126,7 +126,7 @@ export default function Overview() {
   };
 
   // Ordenamiento para cada tabla
-  const { sortedData: sortedCriticalInstances, requestSort: requestSortCritical, getSortIndicator: getSortIndicatorCritical } = useTableSort(data?.criticalInstances ?? []);
+  const { sortedData: sortedAGHealth, requestSort: requestSortAG, getSortIndicator: getSortIndicatorAG } = useTableSort(data?.agHealthStatuses ?? []);
   const { sortedData: sortedBackupIssues, requestSort: requestSortBackups, getSortIndicator: getSortIndicatorBackups } = useTableSort(data?.backupIssues ?? []);
   const { sortedData: sortedCriticalDisks, requestSort: requestSortDisks, getSortIndicator: getSortIndicatorDisks } = useTableSort(data?.criticalDisks ?? []);
   const { sortedData: sortedMaintenanceOverdue, requestSort: requestSortMaintenance, getSortIndicator: getSortIndicatorMaintenance } = useTableSort(data?.maintenanceOverdue ?? []);
@@ -186,6 +186,29 @@ export default function Overview() {
     );
   }
 
+  // Helper para mapear estado AlwaysOn a color de StatusBadge
+  const getAGStatusBadge = (worstState: string): 'success' | 'warning' | 'critical' | 'info' => {
+    switch (worstState) {
+      case 'HEALTHY': return 'success';
+      case 'NOT_SYNCHRONIZED': return 'warning';
+      case 'SUSPENDED':
+      case 'NOT_HEALTHY':
+      case 'ERROR': return 'critical';
+      default: return 'info';
+    }
+  };
+
+  const getAGStateLabel = (worstState: string): string => {
+    switch (worstState) {
+      case 'HEALTHY': return 'Healthy';
+      case 'NOT_SYNCHRONIZED': return 'No Sincronizado';
+      case 'SUSPENDED': return 'Suspendido';
+      case 'NOT_HEALTHY': return 'No Saludable';
+      case 'ERROR': return 'Error';
+      default: return worstState;
+    }
+  };
+
   // Valores por defecto si no hay datos
   const stats = {
     total: data?.totalInstances ?? 0,
@@ -196,7 +219,9 @@ export default function Overview() {
     avgScore: data?.avgScore ?? 0,
     backupsOverdue: data?.backupsOverdue ?? 0,
     criticalDisks: data?.criticalDisksCount ?? 0,
-    maintenanceOverdue: data?.maintenanceOverdueCount ?? 0
+    maintenanceOverdue: data?.maintenanceOverdueCount ?? 0,
+    agUnhealthy: data?.agUnhealthyCount ?? 0,
+    agTotal: data?.agHealthStatuses?.length ?? 0
   };
 
   return (
@@ -304,38 +329,38 @@ export default function Overview() {
         </Card>
 
         <Card
-          className="group relative overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-destructive/30 animate-slide-up delay-250"
+          className="group relative overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-blue-500/30 animate-slide-up delay-250"
           onClick={() => navigate('/healthscore')}
         >
           <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none" />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-            <CardTitle className="text-sm font-medium">Inst. Críticas</CardTitle>
-            <AlertTriangle className={`h-4 w-4 transition-transform duration-300 group-hover:scale-110 ${stats.critical === 0 ? 'text-emerald-500' : stats.critical < 5 ? 'text-warning' : 'text-red-500'
+            <CardTitle className="text-sm font-medium">AlwaysOn</CardTitle>
+            <ShieldCheck className={`h-4 w-4 transition-transform duration-300 group-hover:scale-110 ${stats.agUnhealthy === 0 ? 'text-emerald-500' : stats.agUnhealthy < 3 ? 'text-warning' : 'text-red-500'
               }`} />
           </CardHeader>
           <CardContent className="relative">
-            <div className={`text-2xl font-bold tabular-nums ${stats.critical === 0 ? 'text-emerald-500' : stats.critical < 5 ? 'text-warning' : 'text-red-500'
-              }`}>{stats.critical}</div>
+            <div className={`text-2xl font-bold tabular-nums ${stats.agUnhealthy === 0 ? 'text-emerald-500' : stats.agUnhealthy < 3 ? 'text-warning' : 'text-red-500'
+              }`}>{stats.agUnhealthy === 0 ? stats.agTotal : stats.agUnhealthy}</div>
             <p className="text-xs text-muted-foreground">
-              Health Score &lt; 60
+              {stats.agUnhealthy === 0 ? `${stats.agTotal} AGs saludables` : `${stats.agUnhealthy} con problemas`}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Primera fila: Instancias Críticas y Backups Atrasados */}
+      {/* Primera fila: Estado AlwaysOn y Backups Atrasados */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         <Card className="animate-slide-up delay-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-              Instancias Críticas
+              <ShieldCheck className="h-5 w-5 text-blue-500" />
+              Estado AlwaysOn
               <Badge variant="outline" className="font-medium text-muted-foreground">
                 Producción
               </Badge>
             </CardTitle>
             <CardDescription>
-              Instancias con Health Score menor a 60 que requieren atención inmediata
+              Estado de salud de los Availability Groups en tiempo real
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -345,41 +370,116 @@ export default function Overview() {
                   <TableRow>
                     <TableHead
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => requestSortCritical('instanceName')}
+                      onClick={() => requestSortAG('displayName')}
                     >
-                      Instancia {getSortIndicatorCritical('instanceName')}
+                      Availability Group {getSortIndicatorAG('displayName')}
                     </TableHead>
                     <TableHead
                       className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
-                      onClick={() => requestSortCritical('healthScore')}
+                      onClick={() => requestSortAG('worstState')}
                     >
-                      Score {getSortIndicatorCritical('healthScore')}
+                      Estado {getSortIndicatorAG('worstState')}
                     </TableHead>
-                    <TableHead>
-                      Problemas
+                    <TableHead className="text-center">
+                      DBs Sync
+                    </TableHead>
+                    <TableHead className="text-center">
+                      Detalle
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedCriticalInstances.length > 0 ? (
-                    sortedCriticalInstances.map((instance, idx) => (
+                  {sortedAGHealth.length > 0 ? (
+                    sortedAGHealth.map((ag, idx) => (
                       <TableRow key={idx}>
-                        <TableCell className="font-medium">{instance.instanceName}</TableCell>
+                        <TableCell className="font-medium">{ag.displayName || ag.instanceName}</TableCell>
                         <TableCell className="text-center">
-                          <StatusBadge status="critical">{instance.healthScore}</StatusBadge>
+                          <StatusBadge status={getAGStatusBadge(ag.worstState)}>
+                            {getAGStateLabel(ag.worstState)}
+                          </StatusBadge>
                         </TableCell>
-                        <TableCell className="text-sm">
-                          {instance.issues.join(', ')}
+                        <TableCell className="text-center text-sm">
+                          <span className={ag.synchronizedCount < ag.databaseCount ? 'text-warning font-medium' : 'text-emerald-500'}>
+                            {ag.synchronizedCount}/{ag.databaseCount}
+                          </span>
+                          {ag.suspendedCount > 0 && (
+                            <span className="ml-1 text-xs text-red-500">
+                              ({ag.suspendedCount} susp.)
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80" align="end">
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                                  <h4 className="font-semibold">Detalle AlwaysOn</h4>
+                                </div>
+                                <div className="text-sm space-y-2">
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Estado:</span>
+                                    <StatusBadge status={getAGStatusBadge(ag.worstState)}>
+                                      {getAGStateLabel(ag.worstState)}
+                                    </StatusBadge>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Bases sincronizadas:</span>
+                                    <span className="font-medium">{ag.synchronizedCount} / {ag.databaseCount}</span>
+                                  </div>
+                                  {ag.suspendedCount > 0 && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Suspendidas:</span>
+                                      <span className="text-red-500 font-medium">{ag.suspendedCount}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Max Send Queue:</span>
+                                    <span>{ag.maxSendQueueKB > 1024 ? `${(ag.maxSendQueueKB / 1024).toFixed(1)} MB` : `${ag.maxSendQueueKB} KB`}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Max Redo Queue:</span>
+                                    <span>{ag.maxRedoQueueKB > 1024 ? `${(ag.maxRedoQueueKB / 1024).toFixed(1)} MB` : `${ag.maxRedoQueueKB} KB`}</span>
+                                  </div>
+                                  {ag.maxSecondsBehind > 0 && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Segundos de lag:</span>
+                                      <span className={ag.maxSecondsBehind > 30 ? 'text-warning font-medium' : ''}>
+                                        {ag.maxSecondsBehind}s
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                                {ag.details && (
+                                  <div className="pt-2 border-t">
+                                    <p className="text-xs text-muted-foreground mb-2">DBs con problemas:</p>
+                                    <div className="max-h-32 overflow-y-auto space-y-1">
+                                      {ag.details.split('|').filter(Boolean).map((detail, i) => (
+                                        <div key={i} className="text-xs bg-muted/50 px-2 py-1 rounded">
+                                          {detail}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-center py-12">
-                        <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                        <h3 className="text-lg font-semibold mb-2">No hay instancias críticas</h3>
+                      <TableCell colSpan={4} className="text-center py-12">
+                        <ShieldCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Sin datos de AlwaysOn</h3>
                         <p className="text-muted-foreground">
-                          Todas las instancias de Producción están saludables.
+                          No se encontraron instancias con AlwaysOn en Producción.
                         </p>
                       </TableCell>
                     </TableRow>
