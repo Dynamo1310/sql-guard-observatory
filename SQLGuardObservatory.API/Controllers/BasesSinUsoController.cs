@@ -161,10 +161,16 @@ public class BasesSinUsoController : ControllerBase
                 refreshedAt
             });
         }
+        catch (InvalidOperationException ex)
+        {
+            // Tabla o SP no existen aún
+            _logger.LogWarning(ex, "Cache de Racionalización SQL no configurado");
+            return BadRequest(new { message = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al refrescar cache de Racionalización SQL");
-            return StatusCode(500, new { message = "Error al refrescar el cache", detail = ex.Message });
+            return StatusCode(500, new { message = $"Error al refrescar el cache: {ex.Message}" });
         }
     }
 }
