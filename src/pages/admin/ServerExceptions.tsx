@@ -5,9 +5,10 @@ import { serverExclusionsApi, ServerAlertExclusion } from '@/services/serverExcl
 import { sqlServerInventoryApi } from '@/services/sqlServerInventoryApi';
 import { SqlServerInstance } from '@/types';
 import { toast } from 'sonner';
+import { formatDateUTC3 } from '@/lib/utils';
 import {
   ShieldOff, Plus, Trash2, RefreshCw, Loader2, Search,
-  ServerOff, AlertTriangle, CheckCircle2
+  ServerOff, AlertTriangle, CheckCircle2, Clock
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -69,6 +70,7 @@ export default function ServerExceptions() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedServer, setSelectedServer] = useState('');
   const [reason, setReason] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
   const [adding, setAdding] = useState(false);
   const [serverPopoverOpen, setServerPopoverOpen] = useState(false);
 
@@ -151,6 +153,7 @@ export default function ServerExceptions() {
   const openAddDialog = () => {
     setSelectedServer('');
     setReason('');
+    setExpiresAt('');
     setAddDialogOpen(true);
     if (inventoryServers.length === 0) {
       loadInventory();
@@ -166,9 +169,16 @@ export default function ServerExceptions() {
 
     setAdding(true);
     try {
+      // Convertir fecha local a UTC ISO si se proporcionó expiración
+      let expiresAtUtc: string | undefined;
+      if (expiresAt) {
+        expiresAtUtc = new Date(expiresAt).toISOString();
+      }
+
       await serverExclusionsApi.addExclusion({
         serverName: selectedServer.trim(),
         reason: reason.trim() || undefined,
+        expiresAtUtc,
       });
       toast.success('Servidor excluido', {
         description: `${selectedServer} ya no generará alertas`,
@@ -205,22 +215,6 @@ export default function ServerExceptions() {
       toast.error('Error al eliminar exclusión', { description: error.message });
     } finally {
       setDeleting(false);
-    }
-  };
-
-  // Formatear fecha
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-';
-    try {
-      return new Date(dateStr).toLocaleDateString('es-AR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateStr;
     }
   };
 
@@ -359,10 +353,10 @@ export default function ServerExceptions() {
                           {exclusion.reason || <span className="text-muted-foreground italic">Sin motivo</span>}
                         </TableCell>
                         <TableCell>{exclusion.createdBy || '-'}</TableCell>
-                        <TableCell className="text-sm">{formatDate(exclusion.createdAtUtc)}</TableCell>
+                        <TableCell className="text-sm">{formatDateUTC3(exclusion.createdAtUtc)}</TableCell>
                         <TableCell className="text-sm">
                           {exclusion.expiresAtUtc 
-                            ? formatDate(exclusion.expiresAtUtc)
+                            ? formatDateUTC3(exclusion.expiresAtUtc)
                             : <span className="text-muted-foreground">Permanente</span>}
                         </TableCell>
                         <TableCell>
@@ -484,6 +478,22 @@ export default function ServerExceptions() {
                 onChange={(e) => setReason(e.target.value)}
                 rows={3}
               />
+            </div>
+
+            {/* Expiración */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Expiración (opcional)
+              </Label>
+              <Input
+                type="datetime-local"
+                value={expiresAt}
+                onChange={(e) => setExpiresAt(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Si se deja vacío, la excepción es permanente. Útil para ventanas de mantenimiento programadas.
+              </p>
             </div>
           </div>
 
