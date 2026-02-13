@@ -48,15 +48,18 @@ public class DiskAlertService : IDiskAlertService
 {
     private readonly ApplicationDbContext _context;
     private readonly ISmtpService _smtpService;
+    private readonly IServerExclusionService _serverExclusionService;
     private readonly ILogger<DiskAlertService> _logger;
 
     public DiskAlertService(
         ApplicationDbContext context,
         ISmtpService smtpService,
+        IServerExclusionService serverExclusionService,
         ILogger<DiskAlertService> logger)
     {
         _context = context;
         _smtpService = smtpService;
+        _serverExclusionService = serverExclusionService;
         _logger = logger;
     }
 
@@ -204,6 +207,23 @@ public class DiskAlertService : IDiskAlertService
                 catch (JsonException jsonEx)
                 {
                     _logger.LogWarning(jsonEx, "Error parseando VolumesJson para {Instance}", row.InstanceName);
+                }
+            }
+
+            // Filtrar servidores excluidos globalmente (dados de baja)
+            var excludedServers = await _serverExclusionService.GetExcludedServerNamesAsync();
+            if (excludedServers.Count > 0)
+            {
+                var beforeCount = allCriticalDisks.Count;
+                allCriticalDisks = allCriticalDisks
+                    .Where(d => !excludedServers.Contains(d.InstanceName) 
+                             && !excludedServers.Contains(d.InstanceName.Split('\\')[0]))
+                    .ToList();
+                
+                if (beforeCount != allCriticalDisks.Count)
+                {
+                    _logger.LogInformation("Excluded {Count} critical disks from alert (server alert exclusions)", 
+                        beforeCount - allCriticalDisks.Count);
                 }
             }
 

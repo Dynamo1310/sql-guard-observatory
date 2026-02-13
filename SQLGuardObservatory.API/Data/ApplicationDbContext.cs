@@ -125,6 +125,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<CollectorExecutionLog> CollectorExecutionLogs { get; set; } = null!;
     public DbSet<CollectorException> CollectorExceptions { get; set; } = null!;
 
+    // Server Alert Exclusions - Exclusiones globales de servidores para alertas
+    public DbSet<ServerAlertExclusion> ServerAlertExclusions { get; set; } = null!;
+
     // Overview Issue Assignments - Asignaciones de problemas del Overview
     public DbSet<OverviewIssueAssignment> OverviewIssueAssignments { get; set; } = null!;
     
@@ -1112,6 +1115,17 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => e.Offline);
             entity.HasIndex(e => e.ServerAmbiente);
             entity.HasIndex(e => e.FechaModificacion);
+        });
+
+        // =============================================
+        // Server Alert Exclusions - Exclusiones globales de servidores
+        // =============================================
+        
+        builder.Entity<ServerAlertExclusion>(entity =>
+        {
+            entity.ToTable("ServerAlertExclusions");
+            entity.HasIndex(e => e.ServerName).IsUnique();
+            entity.HasIndex(e => e.IsActive);
         });
 
         // =============================================

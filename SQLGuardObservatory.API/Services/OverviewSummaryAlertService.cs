@@ -11,17 +11,20 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
 {
     private readonly ApplicationDbContext _appContext;
     private readonly ISmtpService _smtpService;
+    private readonly IServerExclusionService _serverExclusionService;
     private readonly ILogger<OverviewSummaryAlertService> _logger;
     private readonly string _appDbConnectionString;
 
     public OverviewSummaryAlertService(
         ApplicationDbContext appContext,
         ISmtpService smtpService,
+        IServerExclusionService serverExclusionService,
         IConfiguration configuration,
         ILogger<OverviewSummaryAlertService> logger)
     {
         _appContext = appContext;
         _smtpService = smtpService;
+        _serverExclusionService = serverExclusionService;
         _logger = logger;
         // Las métricas ahora están en SQLGuardObservatoryAuth (ApplicationDb)
         _appDbConnectionString = configuration.GetConnectionString("ApplicationDb") 
@@ -202,6 +205,23 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
             var productionScores = healthScores
                 .Where(s => string.Equals(s.Ambiente, "Produccion", StringComparison.OrdinalIgnoreCase))
                 .ToList();
+
+            // Filtrar servidores excluidos globalmente (dados de baja)
+            var excludedServers = await _serverExclusionService.GetExcludedServerNamesAsync();
+            if (excludedServers.Count > 0)
+            {
+                var beforeCount = productionScores.Count;
+                productionScores = productionScores
+                    .Where(s => !excludedServers.Contains(s.InstanceName) 
+                             && !excludedServers.Contains(s.InstanceName.Split('\\')[0]))
+                    .ToList();
+                
+                if (beforeCount != productionScores.Count)
+                {
+                    _logger.LogInformation("Excluded {Count} instances from overview summary (server alert exclusions)", 
+                        beforeCount - productionScores.Count);
+                }
+            }
             
             _logger.LogInformation("Health Scores: Total={Total}, Producción={Prod}", healthScores.Count, productionScores.Count);
 
@@ -490,6 +510,23 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
                     AgName = agName
                 });
             }
+
+            // Filtrar servidores excluidos globalmente (dados de baja)
+            var excludedServersForMaint = await _serverExclusionService.GetExcludedServerNamesAsync();
+            if (excludedServersForMaint.Count > 0)
+            {
+                var beforeCount = results.Count;
+                results = results
+                    .Where(m => !excludedServersForMaint.Contains(m.InstanceName) 
+                             && !excludedServersForMaint.Contains(m.InstanceName.Split('\\')[0]))
+                    .ToList();
+                
+                if (beforeCount != results.Count)
+                {
+                    _logger.LogInformation("Excluded {Count} maintenance overdue from overview summary (server alert exclusions)", 
+                        beforeCount - results.Count);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -578,6 +615,23 @@ public class OverviewSummaryAlertService : IOverviewSummaryAlertService
                 }
             }
             
+            // Filtrar servidores excluidos globalmente (dados de baja)
+            var excludedServers = await _serverExclusionService.GetExcludedServerNamesAsync();
+            if (excludedServers.Count > 0)
+            {
+                var beforeCount = results.Count;
+                results = results
+                    .Where(d => !excludedServers.Contains(d.InstanceName) 
+                             && !excludedServers.Contains(d.InstanceName.Split('\\')[0]))
+                    .ToList();
+                
+                if (beforeCount != results.Count)
+                {
+                    _logger.LogInformation("Excluded {Count} critical disks from overview summary (server alert exclusions)", 
+                        beforeCount - results.Count);
+                }
+            }
+
             // Ordenar por porcentaje libre (menor primero)
             results = results.OrderBy(d => d.RealPorcentajeLibre).ToList();
         }

@@ -59,6 +59,7 @@ import VaultNotificationSettings from "./pages/VaultNotificationSettings";
 import SystemCredentials from "./pages/SystemCredentials";
 import AdminMenuBadges from "./pages/AdminMenuBadges";
 import CollectorConfig from "./pages/admin/CollectorConfig";
+import ServerExceptions from "./pages/admin/ServerExceptions";
 import AdminLogs from "./pages/admin/AdminLogs";
 import SqlServerInstances from "./pages/SqlServerInstances";
 import SqlServerDatabases from "./pages/SqlServerDatabases";
@@ -296,6 +297,11 @@ const App = () => (
                       <Route path="/admin/alerts/overview-summary" element={
                         <ProtectedRoute viewName="AlertaResumenOverview">
                           <OverviewSummaryAlerts />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/server-exceptions" element={
+                        <ProtectedRoute viewName="AdminServerExceptions">
+                          <ServerExceptions />
                         </ProtectedRoute>
                       } />
                       {/* Operaciones */}

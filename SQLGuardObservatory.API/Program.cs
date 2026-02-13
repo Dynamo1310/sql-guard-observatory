@@ -208,6 +208,9 @@ builder.Services.AddHttpClient("GraphAuth", client =>
 });
 builder.Services.AddScoped<ITeamsNotificationService, TeamsNotificationService>();
 
+// Server Alert Exclusions - Exclusiones globales de servidores para alertas
+builder.Services.AddScoped<IServerExclusionService, ServerExclusionService>();
+
 // Production Alerts - Monitoreo de servidores caídos
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<IProductionAlertService, ProductionAlertService>();

@@ -118,6 +118,7 @@ public class PermissionService : IPermissionService
         { "AlertaBackups", new ViewInfo { ViewName = "AlertaBackups", DisplayName = "Alertas - Backups Atrasados", Description = "Configurar alertas de backups vencidos en Producción", Category = "Administración > Monitoreo Sistema" } },
         { "AlertaDiscosCriticos", new ViewInfo { ViewName = "AlertaDiscosCriticos", DisplayName = "Alertas - Discos Críticos", Description = "Configurar alertas de discos con espacio crítico en Producción", Category = "Administración > Monitoreo Sistema" } },
         { "AlertaResumenOverview", new ViewInfo { ViewName = "AlertaResumenOverview", DisplayName = "Alertas - Resumen Overview", Description = "Configurar envío programado de resumen del estado de producción", Category = "Administración > Monitoreo Sistema" } },
+        { "AdminServerExceptions", new ViewInfo { ViewName = "AdminServerExceptions", DisplayName = "Alertas - Excepciones de Servidores", Description = "Gestionar servidores excluidos de todas las alertas (dados de baja)", Category = "Administración > Monitoreo Sistema" } },
     };
 
     public PermissionService(ApplicationDbContext context, UserManager<ApplicationUser> userManager)

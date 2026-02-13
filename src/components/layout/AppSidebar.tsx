@@ -183,6 +183,7 @@ const alertsSubItems = [
   { title: 'Backups Atrasados', url: '/admin/alerts/backups', icon: Save, permission: 'AlertaBackups' },
   { title: 'Discos Críticos', url: '/admin/alerts/disks', icon: HardDrive, permission: 'AlertaDiscosCriticos' },
   { title: 'Resumen Overview', url: '/admin/alerts/overview-summary', icon: FileText, permission: 'AlertaResumenOverview' },
+  { title: 'Excepciones', url: '/admin/server-exceptions', icon: ShieldAlert, permission: 'AdminServerExceptions' },
 ];
 
 export function AppSidebar() {
@@ -253,7 +254,7 @@ export function AppSidebar() {
   const isMonitoreoSistemaActive = location.pathname === '/admin/logs';
   const [monitoreoSistemaOpen, setMonitoreoSistemaOpen] = useState(isMonitoreoSistemaActive);
 
-  const isAlertsActive = location.pathname.startsWith('/admin/alerts');
+  const isAlertsActive = location.pathname.startsWith('/admin/alerts') || location.pathname === '/admin/server-exceptions';
   const [alertsOpen, setAlertsOpen] = useState(isAlertsActive);
 
   // Estado para los badges de menú "Nuevo"

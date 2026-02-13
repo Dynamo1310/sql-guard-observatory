@@ -47,15 +47,18 @@ public class BackupAlertService : IBackupAlertService
 {
     private readonly ApplicationDbContext _context;
     private readonly ISmtpService _smtpService;
+    private readonly IServerExclusionService _serverExclusionService;
     private readonly ILogger<BackupAlertService> _logger;
 
     public BackupAlertService(
         ApplicationDbContext context,
         ISmtpService smtpService,
+        IServerExclusionService serverExclusionService,
         ILogger<BackupAlertService> logger)
     {
         _context = context;
         _smtpService = smtpService;
+        _serverExclusionService = serverExclusionService;
         _logger = logger;
     }
 
@@ -370,6 +373,7 @@ public class BackupAlertService : IBackupAlertService
 
     /// <summary>
     /// Obtiene los backups atrasados del caché de Overview
+    /// Filtra servidores excluidos globalmente (dados de baja)
     /// </summary>
     private async Task<List<OverviewBackupIssueDto>> GetBackupIssuesFromCacheAsync()
     {
@@ -385,7 +389,28 @@ public class BackupAlertService : IBackupAlertService
         {
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var backupIssues = JsonSerializer.Deserialize<List<OverviewBackupIssueDto>>(cache.BackupIssuesJson, options);
-            return backupIssues ?? new List<OverviewBackupIssueDto>();
+            
+            if (backupIssues == null)
+                return new List<OverviewBackupIssueDto>();
+
+            // Filtrar servidores excluidos globalmente (dados de baja)
+            var excludedServers = await _serverExclusionService.GetExcludedServerNamesAsync();
+            if (excludedServers.Count > 0)
+            {
+                var beforeCount = backupIssues.Count;
+                backupIssues = backupIssues
+                    .Where(b => !excludedServers.Contains(b.InstanceName) 
+                             && !excludedServers.Contains(b.InstanceName.Split('\\')[0]))
+                    .ToList();
+                
+                if (beforeCount != backupIssues.Count)
+                {
+                    _logger.LogInformation("Excluded {Count} backup issues from alert (server alert exclusions)", 
+                        beforeCount - backupIssues.Count);
+                }
+            }
+
+            return backupIssues;
         }
         catch (Exception ex)
         {

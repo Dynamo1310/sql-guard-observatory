@@ -10,6 +10,7 @@ public class ProductionAlertService : IProductionAlertService
 {
     private readonly ApplicationDbContext _context;
     private readonly ISmtpService _smtpService;
+    private readonly IServerExclusionService _serverExclusionService;
     private readonly ILogger<ProductionAlertService> _logger;
     private readonly IConfiguration _configuration;
     private readonly HttpClient _httpClient;
@@ -19,12 +20,14 @@ public class ProductionAlertService : IProductionAlertService
     public ProductionAlertService(
         ApplicationDbContext context,
         ISmtpService smtpService,
+        IServerExclusionService serverExclusionService,
         ILogger<ProductionAlertService> logger,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory)
     {
         _context = context;
         _smtpService = smtpService;
+        _serverExclusionService = serverExclusionService;
         _logger = logger;
         _configuration = configuration;
         _httpClient = httpClientFactory.CreateClient();
@@ -167,6 +170,24 @@ public class ProductionAlertService : IProductionAlertService
                 .Where(i => !i.NombreInstancia.Contains("DMZ", StringComparison.OrdinalIgnoreCase))
                 .Where(i => ambientesPermitidos.Any(a => string.Equals(i.ambiente, a, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
+
+            // Filtrar servidores excluidos globalmente (dados de baja)
+            var excludedServers = await _serverExclusionService.GetExcludedServerNamesAsync();
+            if (excludedServers.Count > 0)
+            {
+                var beforeCount = filteredInstances.Count;
+                filteredInstances = filteredInstances
+                    .Where(i => !excludedServers.Contains(i.NombreInstancia) 
+                             && !excludedServers.Contains(i.ServerName)
+                             && !excludedServers.Contains(i.NombreInstancia.Split('\\')[0]))
+                    .ToList();
+                
+                if (beforeCount != filteredInstances.Count)
+                {
+                    _logger.LogInformation("Excluded {Count} instances from production check (server alert exclusions)", 
+                        beforeCount - filteredInstances.Count);
+                }
+            }
 
             _logger.LogInformation("Checking {Count} instances (filtered from {Total})", 
                 filteredInstances.Count, instances.Count);

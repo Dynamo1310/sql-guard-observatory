@@ -93,6 +93,7 @@ public static class PermissionInitializer
             "AlertaBackups",
             "AlertaDiscosCriticos",
             "AlertaResumenOverview",
+            "AdminServerExceptions",
             "ServerRestart",
             "OperationsConfig",
             "HealthScore",
