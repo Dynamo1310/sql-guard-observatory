@@ -67,7 +67,6 @@ export default function ServerExceptions() {
 
   // Estado del dialog de agregar
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [serverSearch, setServerSearch] = useState('');
   const [selectedServer, setSelectedServer] = useState('');
   const [reason, setReason] = useState('');
   const [adding, setAdding] = useState(false);
@@ -152,7 +151,6 @@ export default function ServerExceptions() {
   const openAddDialog = () => {
     setSelectedServer('');
     setReason('');
-    setServerSearch('');
     setAddDialogOpen(true);
     if (inventoryServers.length === 0) {
       loadInventory();
@@ -417,7 +415,7 @@ export default function ServerExceptions() {
             {/* Selector de servidor con búsqueda */}
             <div className="space-y-2">
               <Label>Servidor</Label>
-              <Popover open={serverPopoverOpen} onOpenChange={setServerPopoverOpen}>
+              <Popover open={serverPopoverOpen} onOpenChange={setServerPopoverOpen} modal={true}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
@@ -429,14 +427,12 @@ export default function ServerExceptions() {
                     <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align="start">
-                  <Command>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start" sideOffset={4}>
+                  <Command shouldFilter={true}>
                     <CommandInput
                       placeholder="Buscar servidor..."
-                      value={serverSearch}
-                      onValueChange={setServerSearch}
                     />
-                    <CommandList>
+                    <CommandList className="max-h-[250px] overflow-y-auto">
                       {loadingInventory ? (
                         <div className="flex items-center justify-center py-6">
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -450,10 +446,11 @@ export default function ServerExceptions() {
                               <CommandItem
                                 key={server.NombreInstancia}
                                 value={server.NombreInstancia || ''}
-                                onSelect={(value) => {
-                                  setSelectedServer(value);
+                                onSelect={() => {
+                                  setSelectedServer(server.NombreInstancia || '');
                                   setServerPopoverOpen(false);
                                 }}
+                                className="cursor-pointer"
                               >
                                 <div className="flex flex-col">
                                   <span className="font-medium">{server.NombreInstancia}</span>
@@ -475,7 +472,6 @@ export default function ServerExceptions() {
                 placeholder="O escribir el nombre manualmente..."
                 value={selectedServer}
                 onChange={(e) => setSelectedServer(e.target.value)}
-                className="mt-1"
               />
             </div>
 
