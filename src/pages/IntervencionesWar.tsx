@@ -2,13 +2,13 @@
  * Intervenciones - Seguimiento de incidencias DBA
  * Registro de intervenciones con métricas de tiempo, participantes y gráficos.
  */
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Swords, Search, RefreshCw, Edit, Plus, Trash2,
   ChevronUp, ChevronDown, BarChart3, ExternalLink,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Clock, Users, Link2,
+  Clock, Users, Link2, Database,
 } from 'lucide-react';
 import {
   intervencionesWarApi,
@@ -67,9 +67,6 @@ type SortDirection = 'asc' | 'desc';
 
 // ==================== HELPERS ====================
 
-/**
- * Convierte un date string a formato local para mostrar en la grilla.
- */
 function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-';
   try {
@@ -82,10 +79,6 @@ function formatDateTime(dateStr: string | null | undefined): string {
   }
 }
 
-/**
- * Convierte un date string a formato yyyy-MM-ddTHH:mm para el input datetime-local.
- * Usa componentes locales para evitar el desfase de timezone.
- */
 function formatDateTimeForInput(dateStr: string | null | undefined): string {
   if (!dateStr) return '';
   try {
@@ -101,14 +94,8 @@ function formatDateTimeForInput(dateStr: string | null | undefined): string {
   }
 }
 
-/**
- * Convierte el valor del input datetime-local a un ISO string local (sin offset UTC).
- * El input devuelve "2026-02-18T14:30" — lo parseamos manualmente como hora local.
- */
 function inputToLocalIso(value: string): string {
   if (!value) return new Date().toISOString();
-  // value viene como "yyyy-MM-ddTHH:mm"
-  // Construimos la fecha usando componentes locales
   const [datePart, timePart] = value.split('T');
   const [year, month, day] = datePart.split('-').map(Number);
   const [hours, minutes] = timePart.split(':').map(Number);
@@ -123,6 +110,17 @@ function formatDuration(mins: number): string {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   }
   return `${mins}m`;
+}
+
+// ==================== AUTOCOMPLETE HOOK ====================
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
 }
 
 // ==================== COMPONENT ====================
@@ -151,6 +149,7 @@ export default function IntervencionesWar() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<IntervencionWarDto | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
 
   const emptyForm: CreateUpdateIntervencionWarRequest = {
     fechaHora: new Date().toISOString(),
@@ -159,6 +158,44 @@ export default function IntervencionesWar() {
     tipoIntervencion: 'War',
   };
   const [formData, setFormData] = useState<CreateUpdateIntervencionWarRequest>(emptyForm);
+
+  // Autocomplete bases
+  const [dbSearchTerm, setDbSearchTerm] = useState('');
+  const debouncedDbSearch = useDebounce(dbSearchTerm, 350);
+  const [dbSuggestions, setDbSuggestions] = useState<string[]>([]);
+  const [showDbSuggestions, setShowDbSuggestions] = useState(false);
+  const dbInputRef = useRef<HTMLInputElement>(null);
+  const dbSuggestionsRef = useRef<HTMLDivElement>(null);
+
+  // Fetch autocomplete suggestions
+  useEffect(() => {
+    if (!debouncedDbSearch || debouncedDbSearch.length < 2) {
+      setDbSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    intervencionesWarApi.searchDatabases(debouncedDbSearch).then(results => {
+      if (!cancelled) {
+        setDbSuggestions(results);
+        setShowDbSuggestions(results.length > 0);
+      }
+    }).catch(() => {
+      if (!cancelled) setDbSuggestions([]);
+    });
+    return () => { cancelled = true; };
+  }, [debouncedDbSearch]);
+
+  // Close autocomplete on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dbSuggestionsRef.current && !dbSuggestionsRef.current.contains(e.target as Node) &&
+          dbInputRef.current && !dbInputRef.current.contains(e.target as Node)) {
+        setShowDbSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // ==================== QUERIES ====================
 
@@ -196,6 +233,7 @@ export default function IntervencionesWar() {
       toast.success(editingItem ? 'Intervención actualizada' : 'Intervención creada');
       setDialogOpen(false);
       setEditingItem(null);
+      setFormErrors({});
     },
     onError: (error: Error) => {
       toast.error(`Error: ${error.message}`);
@@ -236,7 +274,6 @@ export default function IntervencionesWar() {
     if (!data?.items) return [];
     let items = [...data.items];
 
-    // Search
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       items = items.filter(i =>
@@ -251,7 +288,6 @@ export default function IntervencionesWar() {
       );
     }
 
-    // Filters
     if (filterCelula !== 'all') items = items.filter(i => i.celula === filterCelula);
     if (filterTipo !== 'all') items = items.filter(i => i.tipoIntervencion === filterTipo);
     if (filterDba !== 'all') {
@@ -260,7 +296,6 @@ export default function IntervencionesWar() {
       );
     }
 
-    // Sort
     items.sort((a, b) => {
       const aVal = a[sortField];
       const bVal = b[sortField];
@@ -274,7 +309,6 @@ export default function IntervencionesWar() {
     return items;
   }, [data?.items, searchTerm, filterCelula, filterDba, filterTipo, sortField, sortDirection]);
 
-  // Pagination
   const totalPages = Math.ceil(filteredItems.length / pageSize);
   const paginatedItems = filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
@@ -302,6 +336,9 @@ export default function IntervencionesWar() {
       ...emptyForm,
       fechaHora: new Date().toISOString(),
     });
+    setFormErrors({});
+    setDbSearchTerm('');
+    setDbSuggestions([]);
     setDialogOpen(true);
   }, []);
 
@@ -321,22 +358,45 @@ export default function IntervencionesWar() {
       comentarios: item.comentarios ?? undefined,
       intervencionesRelacionadas: item.intervencionesRelacionadas ?? undefined,
     });
+    setFormErrors({});
+    setDbSearchTerm('');
+    setDbSuggestions([]);
     setDialogOpen(true);
   }, []);
 
+  const validateForm = (): boolean => {
+    const errors: Record<string, boolean> = {};
+    if (formData.duracionMinutos <= 0) errors.duracionMinutos = true;
+    if (!formData.dbaParticipantes?.trim()) errors.dbaParticipantes = true;
+    if (!formData.servidores?.trim()) errors.servidores = true;
+    if (!formData.baseDatos?.trim()) errors.baseDatos = true;
+    if (!formData.referente?.trim()) errors.referente = true;
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = () => {
-    if (!formData.dbaParticipantes.trim()) {
-      toast.error('Debe indicar al menos un DBA participante');
-      return;
-    }
-    if (formData.duracionMinutos <= 0) {
-      toast.error('La duración debe ser mayor a 0 minutos');
+    if (!validateForm()) {
+      toast.error('Complete todos los campos obligatorios marcados con *');
       return;
     }
     saveMutation.mutate({
       id: editingItem?.id,
       data: formData,
     });
+  };
+
+  /** Selecciona una sugerencia de base de datos y la agrega al campo */
+  const selectDbSuggestion = (dbName: string) => {
+    const current = formData.baseDatos || '';
+    const existing = current.split(',').map(s => s.trim()).filter(Boolean);
+    if (!existing.includes(dbName)) {
+      const updated = existing.length > 0 ? `${current}, ${dbName}` : dbName;
+      setFormData(prev => ({ ...prev, baseDatos: updated }));
+    }
+    setDbSearchTerm('');
+    setShowDbSuggestions(false);
+    setFormErrors(prev => ({ ...prev, baseDatos: false }));
   };
 
   // ==================== RENDER ====================
@@ -604,7 +664,6 @@ export default function IntervencionesWar() {
       {/* Charts Tab */}
       {activeTab === 'charts' && statsData && (
         <div className="grid gap-4 md:grid-cols-2">
-          {/* Por Tipo de Intervención */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Por Tipo de Intervención</CardTitle>
@@ -625,7 +684,6 @@ export default function IntervencionesWar() {
             </CardContent>
           </Card>
 
-          {/* Horas por DBA */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Horas por DBA</CardTitle>
@@ -643,7 +701,6 @@ export default function IntervencionesWar() {
             </CardContent>
           </Card>
 
-          {/* Distribución por Duración */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Distribución por Duración</CardTitle>
@@ -664,7 +721,6 @@ export default function IntervencionesWar() {
             </CardContent>
           </Card>
 
-          {/* Evolución Mensual */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Evolución Mensual (Horas)</CardTitle>
@@ -682,7 +738,6 @@ export default function IntervencionesWar() {
             </CardContent>
           </Card>
 
-          {/* Horas por Célula */}
           {statsData.porCelula.length > 0 && (
             <Card className="md:col-span-2">
               <CardHeader className="pb-2">
@@ -704,8 +759,8 @@ export default function IntervencionesWar() {
         </div>
       )}
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* ==================== CREATE/EDIT DIALOG ==================== */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setFormErrors({}); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingItem ? `Editar Intervención #${editingItem.id}` : 'Nueva Intervención'}</DialogTitle>
@@ -718,7 +773,7 @@ export default function IntervencionesWar() {
             {/* Fecha/Hora + Duración + Tipo */}
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Fecha y Hora *</Label>
+                <Label>Fecha y Hora</Label>
                 <Input
                   type="datetime-local"
                   value={formatDateTimeForInput(formData.fechaHora)}
@@ -726,20 +781,24 @@ export default function IntervencionesWar() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Duración (minutos) *</Label>
+                <Label>Duración (minutos) <span className="text-red-500">*</span></Label>
                 <Input
                   type="number"
                   min={1}
                   value={formData.duracionMinutos || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, duracionMinutos: parseInt(e.target.value) || 0 }))}
+                  onChange={e => {
+                    setFormData(prev => ({ ...prev, duracionMinutos: parseInt(e.target.value) || 0 }));
+                    setFormErrors(prev => ({ ...prev, duracionMinutos: false }));
+                  }}
                   placeholder="Ej: 90"
+                  className={cn(formErrors.duracionMinutos && "border-red-500 focus-visible:ring-red-500")}
                 />
                 {formData.duracionMinutos > 0 && (
                   <span className="text-xs text-muted-foreground">{formatDuration(formData.duracionMinutos)}</span>
                 )}
               </div>
               <div className="space-y-2">
-                <Label>Tipo de Intervención *</Label>
+                <Label>Tipo de Intervención</Label>
                 <Select
                   value={formData.tipoIntervencion || 'War'}
                   onValueChange={v => setFormData(prev => ({ ...prev, tipoIntervencion: v }))}
@@ -754,11 +813,15 @@ export default function IntervencionesWar() {
 
             {/* DBA Participantes */}
             <div className="space-y-2">
-              <Label>DBA Participante(s) *</Label>
+              <Label>DBA Participante(s) <span className="text-red-500">*</span></Label>
               <Input
                 value={formData.dbaParticipantes}
-                onChange={e => setFormData(prev => ({ ...prev, dbaParticipantes: e.target.value }))}
+                onChange={e => {
+                  setFormData(prev => ({ ...prev, dbaParticipantes: e.target.value }));
+                  setFormErrors(prev => ({ ...prev, dbaParticipantes: false }));
+                }}
                 placeholder="Nombre DBA (separar con coma si son varios)"
+                className={cn(formErrors.dbaParticipantes && "border-red-500 focus-visible:ring-red-500")}
               />
               {dbasData && dbasData.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
@@ -775,6 +838,7 @@ export default function IntervencionesWar() {
                           ...prev,
                           dbaParticipantes: current ? `${current}, ${name}` : name
                         }));
+                        setFormErrors(prev => ({ ...prev, dbaParticipantes: false }));
                       }}
                     >
                       + {dba.displayName}
@@ -804,44 +868,103 @@ export default function IntervencionesWar() {
               </div>
             </div>
 
-            {/* Servidores + DBs */}
+            {/* Servidores */}
+            <div className="space-y-2">
+              <Label>Servidor(es) <span className="text-red-500">*</span></Label>
+              <Input
+                value={formData.servidores || ''}
+                onChange={e => {
+                  setFormData(prev => ({ ...prev, servidores: e.target.value }));
+                  setFormErrors(prev => ({ ...prev, servidores: false }));
+                }}
+                placeholder="Servidores (separar con coma si son varios)"
+                className={cn(formErrors.servidores && "border-red-500 focus-visible:ring-red-500")}
+              />
+            </div>
+
+            {/* Base(s) de Datos con Autocompletado */}
+            <div className="space-y-2">
+              <Label>Base(s) de Datos <span className="text-red-500">*</span></Label>
+              <div className="relative">
+                <Input
+                  value={formData.baseDatos || ''}
+                  onChange={e => {
+                    setFormData(prev => ({ ...prev, baseDatos: e.target.value }));
+                    setFormErrors(prev => ({ ...prev, baseDatos: false }));
+                  }}
+                  placeholder="Bases de datos (separar con coma)"
+                  className={cn(formErrors.baseDatos && "border-red-500 focus-visible:ring-red-500")}
+                />
+              </div>
+              {/* Buscador de autocompletado */}
+              <div className="relative">
+                <div className="relative">
+                  <Database className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    ref={dbInputRef}
+                    className="pl-8 h-8 text-xs"
+                    placeholder="Buscar base en inventario..."
+                    value={dbSearchTerm}
+                    onChange={e => {
+                      setDbSearchTerm(e.target.value);
+                      if (e.target.value.length >= 2) setShowDbSuggestions(true);
+                    }}
+                    onFocus={() => { if (dbSuggestions.length > 0) setShowDbSuggestions(true); }}
+                  />
+                </div>
+                {showDbSuggestions && dbSuggestions.length > 0 && (
+                  <div
+                    ref={dbSuggestionsRef}
+                    className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-40 overflow-auto"
+                  >
+                    {dbSuggestions.map(name => (
+                      <button
+                        key={name}
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                        onClick={() => selectDbSuggestion(name)}
+                      >
+                        <Database className="inline h-3 w-3 mr-2 text-muted-foreground" />
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Célula + Referente */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Servidor(es)</Label>
+                <Label>Célula</Label>
                 <Input
-                  value={formData.servidores || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, servidores: e.target.value }))}
-                  placeholder="Servidores (separar con coma)"
+                  value={formData.celula || ''}
+                  onChange={e => setFormData(prev => ({ ...prev, celula: e.target.value }))}
+                  placeholder="Célula"
                 />
               </div>
               <div className="space-y-2">
-                <Label>Base(s) de Datos</Label>
+                <Label>Referente <span className="text-red-500">*</span></Label>
                 <Input
-                  value={formData.baseDatos || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, baseDatos: e.target.value }))}
-                  placeholder="Bases de datos (separar con coma)"
+                  value={formData.referente || ''}
+                  onChange={e => {
+                    setFormData(prev => ({ ...prev, referente: e.target.value }));
+                    setFormErrors(prev => ({ ...prev, referente: false }));
+                  }}
+                  placeholder="Referente del área"
+                  className={cn(formErrors.referente && "border-red-500 focus-visible:ring-red-500")}
                 />
               </div>
             </div>
 
-            {/* Referente + Relacionadas */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Referente</Label>
-                <Input
-                  value={formData.referente || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, referente: e.target.value }))}
-                  placeholder="Referente del área"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Intervenciones Relacionadas</Label>
-                <Input
-                  value={formData.intervencionesRelacionadas || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, intervencionesRelacionadas: e.target.value }))}
-                  placeholder="IDs separados por coma (ej: 12, 45)"
-                />
-              </div>
+            {/* Intervenciones Relacionadas */}
+            <div className="space-y-2">
+              <Label>Intervenciones Relacionadas</Label>
+              <Input
+                value={formData.intervencionesRelacionadas || ''}
+                onChange={e => setFormData(prev => ({ ...prev, intervencionesRelacionadas: e.target.value }))}
+                placeholder="IDs separados por coma (ej: 12, 45)"
+              />
             </div>
 
             {/* Comentarios */}

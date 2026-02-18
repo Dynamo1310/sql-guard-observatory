@@ -76,10 +76,9 @@ public class IntervencionWarController : ControllerBase
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(request.DbaParticipantes))
-                return BadRequest(new { message = "Debe indicar al menos un DBA participante." });
-            if (request.DuracionMinutos <= 0)
-                return BadRequest(new { message = "La duración debe ser mayor a 0 minutos." });
+            var errors = ValidateRequest(request);
+            if (errors.Count > 0)
+                return BadRequest(new { message = string.Join(" ", errors) });
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                          ?? User.FindFirst("sub")?.Value;
@@ -103,6 +102,10 @@ public class IntervencionWarController : ControllerBase
     {
         try
         {
+            var errors = ValidateRequest(request);
+            if (errors.Count > 0)
+                return BadRequest(new { message = string.Join(" ", errors) });
+
             var result = await _service.UpdateAsync(id, request);
             if (result == null) return NotFound(new { message = $"Intervención {id} no encontrada." });
             return Ok(result);
@@ -151,6 +154,47 @@ public class IntervencionWarController : ControllerBase
             _logger.LogError(ex, "Error al obtener estadísticas de intervenciones War");
             return StatusCode(500, new { message = "Error al obtener las estadísticas", detail = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// GET /api/intervenciones-war/search-databases?q=nombre
+    /// Búsqueda de bases de datos para autocompletado.
+    /// </summary>
+    [HttpGet("search-databases")]
+    public async Task<ActionResult<List<string>>> SearchDatabases([FromQuery] string q)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+                return Ok(new List<string>());
+
+            var results = await _service.SearchDatabaseNamesAsync(q, 20);
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al buscar bases de datos con query={Query}", q);
+            return StatusCode(500, new { message = "Error en la búsqueda", detail = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Valida los campos obligatorios del request.
+    /// </summary>
+    private static List<string> ValidateRequest(CreateUpdateIntervencionWarRequest request)
+    {
+        var errors = new List<string>();
+        if (request.DuracionMinutos <= 0)
+            errors.Add("La duración debe ser mayor a 0 minutos.");
+        if (string.IsNullOrWhiteSpace(request.DbaParticipantes))
+            errors.Add("Debe indicar al menos un DBA participante.");
+        if (string.IsNullOrWhiteSpace(request.Servidores))
+            errors.Add("Debe indicar al menos un servidor.");
+        if (string.IsNullOrWhiteSpace(request.BaseDatos))
+            errors.Add("Debe indicar al menos una base de datos.");
+        if (string.IsNullOrWhiteSpace(request.Referente))
+            errors.Add("Debe indicar un referente.");
+        return errors;
     }
 }
 

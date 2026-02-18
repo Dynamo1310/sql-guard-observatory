@@ -6178,6 +6178,14 @@ export const intervencionesWarApi = {
     });
     return handleResponse<IntervencionWarStatsDto>(response);
   },
+
+  async searchDatabases(query: string): Promise<string[]> {
+    if (!query || query.length < 2) return [];
+    const response = await fetch(`${API_URL}/api/intervenciones-war/search-databases?q=${encodeURIComponent(query)}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<string[]>(response);
+  },
 };
 
 // ==================== HELPER FUNCTIONS ====================

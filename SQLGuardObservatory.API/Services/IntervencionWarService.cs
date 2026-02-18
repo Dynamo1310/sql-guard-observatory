@@ -16,6 +16,7 @@ public interface IIntervencionWarService
     Task<IntervencionWarDto?> UpdateAsync(long id, CreateUpdateIntervencionWarRequest request);
     Task<bool> DeleteAsync(long id);
     Task<IntervencionWarStatsDto> GetStatsAsync();
+    Task<List<string>> SearchDatabaseNamesAsync(string query, int maxResults = 20);
 }
 
 /// <summary>
@@ -230,6 +231,26 @@ public class IntervencionWarService : IIntervencionWarService
             .ToList();
 
         return stats;
+    }
+
+    /// <summary>
+    /// Busca nombres de bases de datos en el inventario (SqlServerDatabasesCache)
+    /// para autocompletado. Devuelve nombres únicos que coincidan con el término de búsqueda.
+    /// </summary>
+    public async Task<List<string>> SearchDatabaseNamesAsync(string query, int maxResults = 20)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+            return new List<string>();
+
+        var results = await _context.SqlServerDatabasesCache
+            .Where(d => d.DbName.Contains(query))
+            .Select(d => d.DbName)
+            .Distinct()
+            .OrderBy(n => n)
+            .Take(maxResults)
+            .ToListAsync();
+
+        return results;
     }
 
     /// <summary>
