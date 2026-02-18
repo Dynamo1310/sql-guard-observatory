@@ -1,6 +1,6 @@
-import { Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { track, AnalyticsEventNames } from '@/services/analyticsService';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -14,9 +14,7 @@ interface ProtectedRouteProps {
  */
 export function ProtectedRoute({ children, viewName, redirectTo }: ProtectedRouteProps) {
   const { hasPermission, loading } = useAuth();
-  
-  // Nota: refreshSession() se llama manualmente solo cuando un Admin actualiza su propio perfil
-  // No lo llamamos automáticamente aquí para evitar errores 401 si el token expiró
+  const location = useLocation();
 
   // Mostrar loading mientras se cargan los permisos
   if (loading) {
@@ -32,7 +30,10 @@ export function ProtectedRoute({ children, viewName, redirectTo }: ProtectedRout
 
   // Verificar si el usuario tiene permiso para esta vista
   if (!hasPermission(viewName)) {
-    // Redirigir a la ruta especificada o a la página de no autorizado
+    track(AnalyticsEventNames.PERMISSION_DENIED, {
+      viewName,
+      requiredPermission: viewName,
+    }, { route: location.pathname });
     return <Navigate to={redirectTo || '/unauthorized'} replace />;
   }
 

@@ -4,7 +4,7 @@ import {
   Phone, Calendar, CalendarDays, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
   ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Settings, Cog, ShieldCheck, Clock,
   Key, Lock, History, KeyRound, Share2, FolderLock, Sparkles, Server, Zap, Tag, AlertTriangle, TrendingUp,
-  Snowflake, Play, BookOpen, LayoutDashboard, Swords
+  Snowflake, Play, BookOpen, LayoutDashboard, Swords, BarChart3
 } from 'lucide-react';
 import { menuBadgesApi, MenuBadgeDto, overviewApi } from '@/services/api';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -175,6 +175,7 @@ const configuracionSubItems = [
 // Submenús de Monitoreo Sistema
 const monitoreoSistemaSubItems = [
   { title: 'Logs API', url: '/admin/logs', icon: FileText, permission: 'AdminLogs' },
+  { title: 'Analytics', url: '/admin/analytics', icon: BarChart3, permission: 'AdminAnalytics' },
 ];
 
 // Submenús de Alertas (dentro de Monitoreo Sistema)
@@ -251,7 +252,7 @@ export function AppSidebar() {
   const isConfiguracionActive = ['/admin/smtp', '/admin/menu-badges'].includes(location.pathname);
   const [configuracionOpen, setConfiguracionOpen] = useState(isConfiguracionActive);
 
-  const isMonitoreoSistemaActive = location.pathname === '/admin/logs';
+  const isMonitoreoSistemaActive = location.pathname === '/admin/logs' || location.pathname === '/admin/analytics';
   const [monitoreoSistemaOpen, setMonitoreoSistemaOpen] = useState(isMonitoreoSistemaActive);
 
   const isAlertsActive = location.pathname.startsWith('/admin/alerts') || location.pathname === '/admin/server-exceptions';

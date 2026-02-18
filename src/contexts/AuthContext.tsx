@@ -16,6 +16,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '@/types';
 import { permissionsApi, adminRolesApi, UserAuthorizationDto, AdminRoleSimpleDto } from '@/services/api';
+import { track, AnalyticsEventNames } from '@/services/analyticsService';
 
 // Información de autorización administrativa
 interface AuthorizationInfo {
@@ -248,6 +249,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 
   const logout = () => {
+    track(AnalyticsEventNames.LOGOUT);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem(CACHE_KEYS.PERMISSIONS);

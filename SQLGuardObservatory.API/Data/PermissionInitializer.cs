@@ -110,7 +110,8 @@ public static class PermissionInitializer
             "InventarioPostgreSqlInstances",
             "InventarioPostgreSqlDatabases",
             "InventarioRedisInstances",
-            "InventarioDocumentDbInstances"
+            "InventarioDocumentDbInstances",
+            "AdminAnalytics"
         };
 
         foreach (var view in superAdminOnlyViews)
