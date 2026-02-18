@@ -203,18 +203,28 @@ public class AnalyticsService : IAnalyticsService
                 .ToListAsync();
         }
 
-        var dailyTrend = await _db.AnalyticsEvents
+        var dailyTrendRaw = await _db.AnalyticsEvents
             .Where(e => e.OccurredAt >= from && e.OccurredAt <= to)
-            .GroupBy(e => e.OccurredAt.Date)
-            .Select(g => new DailyTrendDto
+            .GroupBy(e => new { e.OccurredAt.Year, e.OccurredAt.Month, e.OccurredAt.Day })
+            .Select(g => new
             {
-                Date = g.Key.ToString("yyyy-MM-dd"),
+                g.Key.Year,
+                g.Key.Month,
+                g.Key.Day,
                 ActiveUsers = g.Select(e => e.UserId).Distinct().Count(),
                 Sessions = g.Select(e => e.SessionId).Distinct().Count(),
                 PageViews = g.Count(e => e.EventName == "page_view")
             })
-            .OrderBy(d => d.Date)
+            .OrderBy(d => d.Year).ThenBy(d => d.Month).ThenBy(d => d.Day)
             .ToListAsync();
+
+        var dailyTrend = dailyTrendRaw.Select(d => new DailyTrendDto
+        {
+            Date = $"{d.Year:D4}-{d.Month:D2}-{d.Day:D2}",
+            ActiveUsers = d.ActiveUsers,
+            Sessions = d.Sessions,
+            PageViews = d.PageViews
+        }).ToList();
 
         return new AnalyticsOverviewDto
         {
@@ -405,17 +415,21 @@ public class AnalyticsService : IAnalyticsService
 
     public async Task<AnalyticsHeatmapDto> GetHeatmapAsync(DateTime from, DateTime to)
     {
-        var events = await _db.AnalyticsEvents
+        var rawData = await _db.AnalyticsEvents
             .Where(e => e.OccurredAt >= from && e.OccurredAt <= to)
-            .GroupBy(e => new { DayOfWeek = e.OccurredAt.DayOfWeek, Hour = e.OccurredAt.Hour })
+            .Select(e => new { e.OccurredAt, e.UserId })
+            .ToListAsync();
+
+        var events = rawData
+            .GroupBy(e => new { DayOfWeek = (int)e.OccurredAt.DayOfWeek, Hour = e.OccurredAt.Hour })
             .Select(g => new HeatmapCellDto
             {
-                DayOfWeek = (int)g.Key.DayOfWeek,
+                DayOfWeek = g.Key.DayOfWeek,
                 Hour = g.Key.Hour,
                 EventCount = g.Count(),
                 UniqueUsers = g.Select(e => e.UserId).Distinct().Count()
             })
-            .ToListAsync();
+            .ToList();
 
         return new AnalyticsHeatmapDto { Cells = events };
     }

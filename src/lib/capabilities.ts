@@ -64,6 +64,8 @@ export const Capabilities = {
   SystemManageMenuBadges: 'System.ManageMenuBadges',
   /** Gestionar logs de API */
   SystemManageLogs: 'System.ManageLogs',
+  /** Ver dashboard de analytics */
+  SystemViewAnalytics: 'System.ViewAnalytics',
 } as const;
 
 export type CapabilityKey = typeof Capabilities[keyof typeof Capabilities];
@@ -209,6 +211,11 @@ export const CapabilityInfo: Record<string, { label: string; description: string
   [Capabilities.SystemManageLogs]: {
     label: 'Gestionar Logs API',
     description: 'Ver y gestionar los logs del backend',
+    category: 'Sistema',
+  },
+  [Capabilities.SystemViewAnalytics]: {
+    label: 'Ver Analytics',
+    description: 'Acceder al dashboard de telemetría de uso y fricción',
     category: 'Sistema',
   },
 };

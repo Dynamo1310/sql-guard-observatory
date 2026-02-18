@@ -58,7 +58,8 @@ INSERT INTO @Capabilities (CapabilityKey, Category) VALUES
 ('System.ManageCredentials', 'Sistema'),
 ('System.ViewAudit', 'Sistema'),
 ('System.ManageMenuBadges', 'Sistema'),
-('System.ManageLogs', 'Sistema');
+('System.ManageLogs', 'Sistema'),
+('System.ViewAnalytics', 'Sistema');
 
 -- Insertar capacidades faltantes para SuperAdmin
 INSERT INTO AdminRoleCapabilities (RoleId, CapabilityKey, IsEnabled)

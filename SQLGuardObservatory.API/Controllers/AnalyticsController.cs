@@ -52,7 +52,7 @@ public class AnalyticsController : ControllerBase
     /// DAU/WAU/MAU, sesiones, top rutas y acciones.
     /// </summary>
     [HttpGet("overview")]
-    [RequireCapability("ViewAnalytics")]
+    [RequireCapability("System.ViewAnalytics")]
     public async Task<ActionResult<AnalyticsOverviewDto>> GetOverview(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
@@ -73,7 +73,7 @@ public class AnalyticsController : ControllerBase
     /// Top errores, empty states, screens lentas, endpoints lentos.
     /// </summary>
     [HttpGet("friction")]
-    [RequireCapability("ViewAnalytics")]
+    [RequireCapability("System.ViewAnalytics")]
     public async Task<ActionResult<AnalyticsFrictionDto>> GetFriction(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
@@ -94,7 +94,7 @@ public class AnalyticsController : ControllerBase
     /// Funnels y paths comunes de navegación.
     /// </summary>
     [HttpGet("journeys")]
-    [RequireCapability("ViewAnalytics")]
+    [RequireCapability("System.ViewAnalytics")]
     public async Task<ActionResult<AnalyticsJourneysDto>> GetJourneys(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
@@ -115,7 +115,7 @@ public class AnalyticsController : ControllerBase
     /// Heatmap de uso por día de la semana y hora.
     /// </summary>
     [HttpGet("heatmap")]
-    [RequireCapability("ViewAnalytics")]
+    [RequireCapability("System.ViewAnalytics")]
     public async Task<ActionResult<AnalyticsHeatmapDto>> GetHeatmap(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
@@ -136,7 +136,7 @@ public class AnalyticsController : ControllerBase
     /// Detalle de un usuario específico.
     /// </summary>
     [HttpGet("user/{userId}")]
-    [RequireCapability("ViewAnalytics")]
+    [RequireCapability("System.ViewAnalytics")]
     public async Task<ActionResult<AnalyticsUserDetailDto>> GetUserDetail(
         string userId, [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {

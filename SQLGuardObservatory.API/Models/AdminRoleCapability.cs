@@ -69,6 +69,7 @@ public static class CapabilityDefinitions
     public const string SystemViewAudit = "System.ViewAudit";
     public const string SystemManageMenuBadges = "System.ManageMenuBadges";
     public const string SystemManageLogs = "System.ManageLogs";
+    public const string SystemViewAnalytics = "System.ViewAnalytics";
 
     /// <summary>
     /// Obtiene todas las capacidades disponibles agrupadas por categoría
@@ -116,7 +117,8 @@ public static class CapabilityDefinitions
                 new(SystemManageCredentials, "Gestionar credenciales", "Gestionar credenciales de sistema"),
                 new(SystemViewAudit, "Ver auditoría", "Ver logs de auditoría del sistema"),
                 new(SystemManageMenuBadges, "Gestionar indicadores", "Gestionar indicadores de menú (badges)"),
-                new(SystemManageLogs, "Gestionar Logs API", "Ver y gestionar los logs del backend")
+                new(SystemManageLogs, "Gestionar Logs API", "Ver y gestionar los logs del backend"),
+                new(SystemViewAnalytics, "Ver Analytics", "Acceder al dashboard de telemetría de uso y fricción")
             }
         };
     }
