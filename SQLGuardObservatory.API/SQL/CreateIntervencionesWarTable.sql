@@ -27,13 +27,12 @@ BEGIN
         -- DBA(s) participantes (separados por coma si son varios)
         [DbaParticipantes]              NVARCHAR(500) NOT NULL,
 
+        -- Tipo de intervención: War, Degradación, Chat, Llamado, Mail
+        [TipoIntervencion]              NVARCHAR(50) NULL,
+
         -- Datos del incidente
         [NumeroIncidente]               NVARCHAR(100) NULL,
         [IncidenteLink]                 NVARCHAR(1000) NULL,
-        [ProblemLink]                   NVARCHAR(1000) NULL,
-
-        -- Aplicación/Solución afectada
-        [AplicacionSolucion]            NVARCHAR(255) NULL,
 
         -- Servidores involucrados (separados por coma)
         [Servidores]                    NVARCHAR(1000) NULL,
@@ -76,10 +75,10 @@ BEGIN
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_IntervencionesWar_AplicacionSolucion' AND object_id = OBJECT_ID('dbo.IntervencionesWar'))
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_IntervencionesWar_TipoIntervencion' AND object_id = OBJECT_ID('dbo.IntervencionesWar'))
 BEGIN
-    CREATE INDEX [IX_IntervencionesWar_AplicacionSolucion] ON [dbo].[IntervencionesWar]([AplicacionSolucion]);
-    PRINT 'Índice IX_IntervencionesWar_AplicacionSolucion creado.';
+    CREATE INDEX [IX_IntervencionesWar_TipoIntervencion] ON [dbo].[IntervencionesWar]([TipoIntervencion]);
+    PRINT 'Índice IX_IntervencionesWar_TipoIntervencion creado.';
 END
 GO
 

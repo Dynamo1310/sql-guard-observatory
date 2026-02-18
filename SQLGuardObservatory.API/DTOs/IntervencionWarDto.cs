@@ -9,10 +9,9 @@ public class IntervencionWarDto
     public DateTime FechaHora { get; set; }
     public int DuracionMinutos { get; set; }
     public string DbaParticipantes { get; set; } = string.Empty;
+    public string? TipoIntervencion { get; set; }
     public string? NumeroIncidente { get; set; }
     public string? IncidenteLink { get; set; }
-    public string? ProblemLink { get; set; }
-    public string? AplicacionSolucion { get; set; }
     public string? Servidores { get; set; }
     public string? BaseDatos { get; set; }
     public string? Celula { get; set; }
@@ -40,10 +39,9 @@ public class CreateUpdateIntervencionWarRequest
     public DateTime FechaHora { get; set; }
     public int DuracionMinutos { get; set; }
     public string DbaParticipantes { get; set; } = string.Empty;
+    public string? TipoIntervencion { get; set; }
     public string? NumeroIncidente { get; set; }
     public string? IncidenteLink { get; set; }
-    public string? ProblemLink { get; set; }
-    public string? AplicacionSolucion { get; set; }
     public string? Servidores { get; set; }
     public string? BaseDatos { get; set; }
     public string? Celula { get; set; }
@@ -73,7 +71,7 @@ public class IntervencionWarResumenDto
     public int HorasEsteMes { get; set; }
     public int MinutosEsteMes { get; set; }
     public int DbasUnicos { get; set; }
-    public int IncidentesConProblem { get; set; }
+    public int IntervencionesWar { get; set; }
 }
 
 /// <summary>
@@ -82,9 +80,9 @@ public class IntervencionWarResumenDto
 public class IntervencionWarStatsDto
 {
     /// <summary>
-    /// Horas de intervención por solución/aplicación
+    /// Intervenciones por tipo (War, Degradación, Chat, Llamado, Mail)
     /// </summary>
-    public List<ChartDataItem> PorSolucion { get; set; } = new();
+    public List<ChartDataItem> PorTipo { get; set; } = new();
 
     /// <summary>
     /// Horas de intervención por DBA

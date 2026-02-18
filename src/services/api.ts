@@ -6077,10 +6077,9 @@ export interface IntervencionWarDto {
   fechaHora: string;
   duracionMinutos: number;
   dbaParticipantes: string;
+  tipoIntervencion: string | null;
   numeroIncidente: string | null;
   incidenteLink: string | null;
-  problemLink: string | null;
-  aplicacionSolucion: string | null;
   servidores: string | null;
   baseDatos: string | null;
   celula: string | null;
@@ -6097,10 +6096,9 @@ export interface CreateUpdateIntervencionWarRequest {
   fechaHora: string;
   duracionMinutos: number;
   dbaParticipantes: string;
+  tipoIntervencion?: string;
   numeroIncidente?: string;
   incidenteLink?: string;
-  problemLink?: string;
-  aplicacionSolucion?: string;
   servidores?: string;
   baseDatos?: string;
   celula?: string;
@@ -6117,7 +6115,7 @@ export interface IntervencionWarResumenDto {
   horasEsteMes: number;
   minutosEsteMes: number;
   dbasUnicos: number;
-  incidentesConProblem: number;
+  intervencionesWar: number;
 }
 
 export interface IntervencionWarGridResponse {
@@ -6126,7 +6124,7 @@ export interface IntervencionWarGridResponse {
 }
 
 export interface IntervencionWarStatsDto {
-  porSolucion: { name: string; value: number }[];
+  porTipo: { name: string; value: number }[];
   porDba: { name: string; value: number }[];
   porDuracion: { name: string; value: number }[];
   evolucionMensual: { name: string; value: number }[];

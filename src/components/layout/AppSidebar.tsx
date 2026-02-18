@@ -135,7 +135,7 @@ const operationsSubItems = [
 // ==================== INTERVENCIONES ====================
 
 const intervencionesSubItems = [
-  { title: 'Wars', url: '/intervenciones/wars', icon: Swords, permission: 'IntervencionesWar' },
+  { title: 'Intervenciones', url: '/intervenciones', icon: Swords, permission: 'IntervencionesWar' },
 ];
 
 // ==================== PROYECTOS ====================

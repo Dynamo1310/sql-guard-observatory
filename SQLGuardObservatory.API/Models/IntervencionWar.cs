@@ -44,16 +44,10 @@ public class IntervencionWar
     public string? IncidenteLink { get; set; }
 
     /// <summary>
-    /// Link al Problem (cuando el incidente se convierte en reiterativo)
+    /// Tipo de intervención: War, Degradación, Chat, Llamado, Mail
     /// </summary>
-    [MaxLength(1000)]
-    public string? ProblemLink { get; set; }
-
-    /// <summary>
-    /// Aplicación o solución afectada
-    /// </summary>
-    [MaxLength(255)]
-    public string? AplicacionSolucion { get; set; }
+    [MaxLength(50)]
+    public string? TipoIntervencion { get; set; }
 
     /// <summary>
     /// Servidor(es) involucrado(s) (separados por coma si son varios)

@@ -1137,7 +1137,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.ToTable("IntervencionesWar", "dbo");
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.FechaHora);
-            entity.HasIndex(e => e.AplicacionSolucion);
+            entity.HasIndex(e => e.TipoIntervencion);
             entity.HasIndex(e => e.Celula);
             entity.HasIndex(e => e.NumeroIncidente);
         });

@@ -1,5 +1,5 @@
 /**
- * Intervenciones War - Seguimiento de incidencias DBA
+ * Intervenciones - Seguimiento de incidencias DBA
  * Registro de intervenciones con métricas de tiempo, participantes y gráficos.
  */
 import React, { useState, useMemo, useCallback } from 'react';
@@ -8,7 +8,7 @@ import {
   Swords, Search, RefreshCw, Edit, Plus, Trash2,
   ChevronUp, ChevronDown, BarChart3, ExternalLink,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Clock, Users, AlertTriangle, Link2,
+  Clock, Users, Link2,
 } from 'lucide-react';
 import {
   intervencionesWarApi,
@@ -49,7 +49,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -61,11 +60,16 @@ import {
 
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
+const TIPOS_INTERVENCION = ['War', 'Degradación', 'Chat', 'Llamado', 'Mail'] as const;
+
 type SortField = keyof IntervencionWarDto;
 type SortDirection = 'asc' | 'desc';
 
 // ==================== HELPERS ====================
 
+/**
+ * Convierte un date string a formato local para mostrar en la grilla.
+ */
 function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-';
   try {
@@ -78,15 +82,38 @@ function formatDateTime(dateStr: string | null | undefined): string {
   }
 }
 
+/**
+ * Convierte un date string a formato yyyy-MM-ddTHH:mm para el input datetime-local.
+ * Usa componentes locales para evitar el desfase de timezone.
+ */
 function formatDateTimeForInput(dateStr: string | null | undefined): string {
   if (!dateStr) return '';
   try {
     const d = new Date(dateStr);
-    // yyyy-MM-ddTHH:mm
-    return d.toISOString().slice(0, 16);
+    const yyyy = d.getFullYear();
+    const MM = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
   } catch {
     return '';
   }
+}
+
+/**
+ * Convierte el valor del input datetime-local a un ISO string local (sin offset UTC).
+ * El input devuelve "2026-02-18T14:30" — lo parseamos manualmente como hora local.
+ */
+function inputToLocalIso(value: string): string {
+  if (!value) return new Date().toISOString();
+  // value viene como "yyyy-MM-ddTHH:mm"
+  // Construimos la fecha usando componentes locales
+  const [datePart, timePart] = value.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hours, minutes] = timePart.split(':').map(Number);
+  const d = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  return d.toISOString();
 }
 
 function formatDuration(mins: number): string {
@@ -107,7 +134,7 @@ export default function IntervencionesWar() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCelula, setFilterCelula] = useState<string>('all');
   const [filterDba, setFilterDba] = useState<string>('all');
-  const [filterSolucion, setFilterSolucion] = useState<string>('all');
+  const [filterTipo, setFilterTipo] = useState<string>('all');
 
   // Sort
   const [sortField, setSortField] = useState<SortField>('fechaHora');
@@ -129,6 +156,7 @@ export default function IntervencionesWar() {
     fechaHora: new Date().toISOString(),
     duracionMinutos: 0,
     dbaParticipantes: '',
+    tipoIntervencion: 'War',
   };
   const [formData, setFormData] = useState<CreateUpdateIntervencionWarRequest>(emptyForm);
 
@@ -194,11 +222,6 @@ export default function IntervencionesWar() {
     return [...new Set(data.items.map(i => i.celula).filter(Boolean))].sort() as string[];
   }, [data?.items]);
 
-  const soluciones = useMemo(() => {
-    if (!data?.items) return [];
-    return [...new Set(data.items.map(i => i.aplicacionSolucion).filter(Boolean))].sort() as string[];
-  }, [data?.items]);
-
   const dbasEnIntervenciones = useMemo(() => {
     if (!data?.items) return [];
     const all = data.items.flatMap(i =>
@@ -219,7 +242,7 @@ export default function IntervencionesWar() {
       items = items.filter(i =>
         i.dbaParticipantes?.toLowerCase().includes(lower) ||
         i.numeroIncidente?.toLowerCase().includes(lower) ||
-        i.aplicacionSolucion?.toLowerCase().includes(lower) ||
+        i.tipoIntervencion?.toLowerCase().includes(lower) ||
         i.servidores?.toLowerCase().includes(lower) ||
         i.baseDatos?.toLowerCase().includes(lower) ||
         i.celula?.toLowerCase().includes(lower) ||
@@ -230,7 +253,7 @@ export default function IntervencionesWar() {
 
     // Filters
     if (filterCelula !== 'all') items = items.filter(i => i.celula === filterCelula);
-    if (filterSolucion !== 'all') items = items.filter(i => i.aplicacionSolucion === filterSolucion);
+    if (filterTipo !== 'all') items = items.filter(i => i.tipoIntervencion === filterTipo);
     if (filterDba !== 'all') {
       items = items.filter(i =>
         i.dbaParticipantes.split(',').map(d => d.trim()).includes(filterDba)
@@ -249,7 +272,7 @@ export default function IntervencionesWar() {
     });
 
     return items;
-  }, [data?.items, searchTerm, filterCelula, filterDba, filterSolucion, sortField, sortDirection]);
+  }, [data?.items, searchTerm, filterCelula, filterDba, filterTipo, sortField, sortDirection]);
 
   // Pagination
   const totalPages = Math.ceil(filteredItems.length / pageSize);
@@ -288,10 +311,9 @@ export default function IntervencionesWar() {
       fechaHora: item.fechaHora,
       duracionMinutos: item.duracionMinutos,
       dbaParticipantes: item.dbaParticipantes,
+      tipoIntervencion: item.tipoIntervencion ?? undefined,
       numeroIncidente: item.numeroIncidente ?? undefined,
       incidenteLink: item.incidenteLink ?? undefined,
-      problemLink: item.problemLink ?? undefined,
-      aplicacionSolucion: item.aplicacionSolucion ?? undefined,
       servidores: item.servidores ?? undefined,
       baseDatos: item.baseDatos ?? undefined,
       celula: item.celula ?? undefined,
@@ -340,7 +362,7 @@ export default function IntervencionesWar() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Swords className="h-6 w-6 text-primary" />
-            Wars - Intervenciones
+            Intervenciones
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Seguimiento de intervenciones DBA en incidencias
@@ -387,8 +409,8 @@ export default function IntervencionesWar() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground font-medium">Con Problem</div>
-            <div className="text-2xl font-bold mt-1">{resumen?.incidentesConProblem ?? 0}</div>
+            <div className="text-xs text-muted-foreground font-medium">Wars</div>
+            <div className="text-2xl font-bold mt-1">{resumen?.intervencionesWar ?? 0}</div>
             <div className="text-xs text-muted-foreground">{resumen?.dbasUnicos ?? 0} DBAs únicos</div>
           </CardContent>
         </Card>
@@ -418,11 +440,11 @@ export default function IntervencionesWar() {
               />
             </div>
 
-            <Select value={filterCelula} onValueChange={v => { setFilterCelula(v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Célula" /></SelectTrigger>
+            <Select value={filterTipo} onValueChange={v => { setFilterTipo(v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Tipo" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas las Células</SelectItem>
-                {celulas.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                <SelectItem value="all">Todos los Tipos</SelectItem>
+                {TIPOS_INTERVENCION.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
 
@@ -434,11 +456,11 @@ export default function IntervencionesWar() {
               </SelectContent>
             </Select>
 
-            <Select value={filterSolucion} onValueChange={v => { setFilterSolucion(v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Solución" /></SelectTrigger>
+            <Select value={filterCelula} onValueChange={v => { setFilterCelula(v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Célula" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas las Soluciones</SelectItem>
-                {soluciones.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                <SelectItem value="all">Todas las Células</SelectItem>
+                {celulas.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
 
@@ -458,6 +480,9 @@ export default function IntervencionesWar() {
                   <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('fechaHora')}>
                     Fecha/Hora <SortIcon field="fechaHora" />
                   </TableHead>
+                  <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('tipoIntervencion')}>
+                    Tipo <SortIcon field="tipoIntervencion" />
+                  </TableHead>
                   <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('duracionMinutos')}>
                     Duración <SortIcon field="duracionMinutos" />
                   </TableHead>
@@ -465,15 +490,11 @@ export default function IntervencionesWar() {
                   <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('numeroIncidente')}>
                     Incidente <SortIcon field="numeroIncidente" />
                   </TableHead>
-                  <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('aplicacionSolucion')}>
-                    Solución <SortIcon field="aplicacionSolucion" />
-                  </TableHead>
                   <TableHead className="whitespace-nowrap">Servidores</TableHead>
                   <TableHead className="whitespace-nowrap">DBs</TableHead>
                   <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('celula')}>
                     Célula <SortIcon field="celula" />
                   </TableHead>
-                  <TableHead className="whitespace-nowrap">Problem</TableHead>
                   <TableHead className="whitespace-nowrap">Relacionadas</TableHead>
                   <TableHead className="whitespace-nowrap text-right">Acciones</TableHead>
                 </TableRow>
@@ -481,7 +502,7 @@ export default function IntervencionesWar() {
               <TableBody>
                 {paginatedItems.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                       No se encontraron intervenciones
                     </TableCell>
                   </TableRow>
@@ -490,6 +511,13 @@ export default function IntervencionesWar() {
                     <TableRow key={item.id} className="hover:bg-muted/30">
                       <TableCell className="font-mono text-xs">{item.id}</TableCell>
                       <TableCell className="whitespace-nowrap text-sm">{formatDateTime(item.fechaHora)}</TableCell>
+                      <TableCell>
+                        {item.tipoIntervencion ? (
+                          <Badge variant={item.tipoIntervencion === 'War' ? 'destructive' : 'secondary'} className="text-xs">
+                            {item.tipoIntervencion}
+                          </Badge>
+                        ) : '-'}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="font-mono">
                           {formatDuration(item.duracionMinutos)}
@@ -515,9 +543,6 @@ export default function IntervencionesWar() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm max-w-[150px] truncate" title={item.aplicacionSolucion ?? ''}>
-                        {item.aplicacionSolucion ?? '-'}
-                      </TableCell>
                       <TableCell className="text-xs max-w-[120px] truncate" title={item.servidores ?? ''}>
                         {item.servidores ?? '-'}
                       </TableCell>
@@ -525,17 +550,6 @@ export default function IntervencionesWar() {
                         {item.baseDatos ?? '-'}
                       </TableCell>
                       <TableCell className="text-sm">{item.celula ?? '-'}</TableCell>
-                      <TableCell>
-                        {item.problemLink ? (
-                          <a href={item.problemLink} target="_blank" rel="noopener noreferrer"
-                            className="text-orange-500 hover:text-orange-700 flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" />
-                            <span className="text-xs">Problem</span>
-                          </a>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
                       <TableCell>
                         {item.intervencionesRelacionadas ? (
                           <Badge variant="outline" className="text-xs">
@@ -590,20 +604,23 @@ export default function IntervencionesWar() {
       {/* Charts Tab */}
       {activeTab === 'charts' && statsData && (
         <div className="grid gap-4 md:grid-cols-2">
-          {/* Horas por Solución */}
+          {/* Por Tipo de Intervención */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Horas por Solución/Aplicación</CardTitle>
+              <CardTitle className="text-sm font-medium">Por Tipo de Intervención</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={statsData.porSolucion} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v: number) => [`${v}h`, 'Horas']} />
-                  <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                </BarChart>
+                <PieChart>
+                  <Pie data={statsData.porTipo.filter(d => d.value > 0)} dataKey="value" nameKey="name"
+                    cx="50%" cy="50%" outerRadius={100} label={({ name, value }) => `${name}: ${value}`}>
+                    {statsData.porTipo.map((_, idx) => (
+                      <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
@@ -698,14 +715,14 @@ export default function IntervencionesWar() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Fecha/Hora + Duración */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Fecha/Hora + Duración + Tipo */}
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Fecha y Hora *</Label>
                 <Input
                   type="datetime-local"
                   value={formatDateTimeForInput(formData.fechaHora)}
-                  onChange={e => setFormData(prev => ({ ...prev, fechaHora: e.target.value ? new Date(e.target.value).toISOString() : prev.fechaHora }))}
+                  onChange={e => setFormData(prev => ({ ...prev, fechaHora: e.target.value ? inputToLocalIso(e.target.value) : prev.fechaHora }))}
                 />
               </div>
               <div className="space-y-2">
@@ -720,6 +737,18 @@ export default function IntervencionesWar() {
                 {formData.duracionMinutos > 0 && (
                   <span className="text-xs text-muted-foreground">{formatDuration(formData.duracionMinutos)}</span>
                 )}
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo de Intervención *</Label>
+                <Select
+                  value={formData.tipoIntervencion || 'War'}
+                  onValueChange={v => setFormData(prev => ({ ...prev, tipoIntervencion: v }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+                  <SelectContent>
+                    {TIPOS_INTERVENCION.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -766,41 +795,11 @@ export default function IntervencionesWar() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Link Incidente</Label>
+                <Label>Link</Label>
                 <Input
                   value={formData.incidenteLink || ''}
                   onChange={e => setFormData(prev => ({ ...prev, incidenteLink: e.target.value }))}
                   placeholder="https://..."
-                />
-              </div>
-            </div>
-
-            {/* Problem Link */}
-            <div className="space-y-2">
-              <Label>Link Problem (si es incidente reiterativo)</Label>
-              <Input
-                value={formData.problemLink || ''}
-                onChange={e => setFormData(prev => ({ ...prev, problemLink: e.target.value }))}
-                placeholder="https://..."
-              />
-            </div>
-
-            {/* Aplicación/Solución + Célula */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Aplicación / Solución</Label>
-                <Input
-                  value={formData.aplicacionSolucion || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, aplicacionSolucion: e.target.value }))}
-                  placeholder="Nombre de la aplicación"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Célula</Label>
-                <Input
-                  value={formData.celula || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, celula: e.target.value }))}
-                  placeholder="Célula"
                 />
               </div>
             </div>
@@ -887,4 +886,3 @@ export default function IntervencionesWar() {
     </div>
   );
 }
-

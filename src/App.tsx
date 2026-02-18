@@ -316,7 +316,7 @@ const App = () => (
                         </ProtectedRoute>
                       } />
                       {/* Intervenciones */}
-                      <Route path="/intervenciones/wars" element={
+                      <Route path="/intervenciones" element={
                         <ProtectedRoute viewName="IntervencionesWar">
                           <IntervencionesWar />
                         </ProtectedRoute>

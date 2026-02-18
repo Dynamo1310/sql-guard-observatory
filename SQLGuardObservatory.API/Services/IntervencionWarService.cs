@@ -59,7 +59,7 @@ public class IntervencionWarService : IIntervencionWarService
                 .SelectMany(i => i.DbaParticipantes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Count(),
-            IncidentesConProblem = items.Count(i => !string.IsNullOrWhiteSpace(i.ProblemLink))
+            IntervencionesWar = items.Count(i => string.Equals(i.TipoIntervencion, "War", StringComparison.OrdinalIgnoreCase))
         };
 
         return new IntervencionWarGridResponse
@@ -88,10 +88,9 @@ public class IntervencionWarService : IIntervencionWarService
             FechaHora = request.FechaHora,
             DuracionMinutos = request.DuracionMinutos,
             DbaParticipantes = request.DbaParticipantes,
+            TipoIntervencion = request.TipoIntervencion,
             NumeroIncidente = request.NumeroIncidente,
             IncidenteLink = request.IncidenteLink,
-            ProblemLink = request.ProblemLink,
-            AplicacionSolucion = request.AplicacionSolucion,
             Servidores = request.Servidores,
             BaseDatos = request.BaseDatos,
             Celula = request.Celula,
@@ -128,10 +127,9 @@ public class IntervencionWarService : IIntervencionWarService
         entity.FechaHora = request.FechaHora;
         entity.DuracionMinutos = request.DuracionMinutos;
         entity.DbaParticipantes = request.DbaParticipantes;
+        entity.TipoIntervencion = request.TipoIntervencion;
         entity.NumeroIncidente = request.NumeroIncidente;
         entity.IncidenteLink = request.IncidenteLink;
-        entity.ProblemLink = request.ProblemLink;
-        entity.AplicacionSolucion = request.AplicacionSolucion;
         entity.Servidores = request.Servidores;
         entity.BaseDatos = request.BaseDatos;
         entity.Celula = request.Celula;
@@ -172,17 +170,16 @@ public class IntervencionWarService : IIntervencionWarService
         var items = await _context.IntervencionesWar.ToListAsync();
         var stats = new IntervencionWarStatsDto();
 
-        // Por Solución/Aplicación (horas)
-        stats.PorSolucion = items
-            .Where(i => !string.IsNullOrWhiteSpace(i.AplicacionSolucion))
-            .GroupBy(i => i.AplicacionSolucion!)
+        // Por Tipo de Intervención (cantidad)
+        stats.PorTipo = items
+            .Where(i => !string.IsNullOrWhiteSpace(i.TipoIntervencion))
+            .GroupBy(i => i.TipoIntervencion!)
             .Select(g => new ChartDataItem
             {
                 Name = g.Key,
-                Value = g.Sum(x => x.DuracionMinutos) / 60
+                Value = g.Count()
             })
             .OrderByDescending(x => x.Value)
-            .Take(15)
             .ToList();
 
         // Por DBA (horas) — cada DBA separado
@@ -244,10 +241,9 @@ public class IntervencionWarService : IIntervencionWarService
         FechaHora = entity.FechaHora,
         DuracionMinutos = entity.DuracionMinutos,
         DbaParticipantes = entity.DbaParticipantes,
+        TipoIntervencion = entity.TipoIntervencion,
         NumeroIncidente = entity.NumeroIncidente,
         IncidenteLink = entity.IncidenteLink,
-        ProblemLink = entity.ProblemLink,
-        AplicacionSolucion = entity.AplicacionSolucion,
         Servidores = entity.Servidores,
         BaseDatos = entity.BaseDatos,
         Celula = entity.Celula,
