@@ -70,9 +70,6 @@ import DocumentDbInstances from "./pages/DocumentDbInstances";
 import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
-import AnalyticsDashboard from "./pages/admin/AnalyticsDashboard";
-import { AnalyticsProvider } from "./contexts/AnalyticsContext";
-import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
 
 // ========== REACT QUERY - Configuración optimizada para alta concurrencia ==========
 const queryClient = new QueryClient({
@@ -124,8 +121,6 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <AnalyticsProvider>
-            <GlobalErrorBoundary>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="*" element={
@@ -413,11 +408,6 @@ const App = () => (
                           <AdminLogs />
                         </ProtectedRoute>
                       } />
-                      <Route path="/admin/analytics" element={
-                        <ProtectedRoute viewName="AdminAnalytics">
-                          <AnalyticsDashboard />
-                        </ProtectedRoute>
-                      } />
                       {/* Inventario SQL Server */}
                       <Route path="/inventory/sqlserver/instances" element={
                         <ProtectedRoute viewName="InventarioSqlServerInstances">
@@ -459,8 +449,6 @@ const App = () => (
                 </AuthGate>
               } />
             </Routes>
-            </GlobalErrorBoundary>
-            </AnalyticsProvider>
           </BrowserRouter>
         </TooltipProvider>
       </SignalRProvider>

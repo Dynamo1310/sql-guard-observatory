@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SQLGuardObservatory.API.Models;
-using SQLGuardObservatory.API.Models.Analytics;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
 
@@ -132,11 +131,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Overview Issue Assignments - Asignaciones de problemas del Overview
     public DbSet<OverviewIssueAssignment> OverviewIssueAssignments { get; set; } = null!;
 
-    // Analytics - Telemetría de uso (product analytics)
-    public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; } = null!;
-    public DbSet<AnalyticsSession> AnalyticsSessions { get; set; } = null!;
-    public DbSet<AnalyticsDaily> AnalyticsDaily { get; set; } = null!;
-    
     // Backup Alerts - Alertas de backups atrasados
     public DbSet<BackupAlertConfig> BackupAlertConfigs { get; set; } = null!;
     public DbSet<BackupAlertHistory> BackupAlertHistories { get; set; } = null!;
@@ -1146,39 +1140,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => e.AplicacionSolucion);
             entity.HasIndex(e => e.Celula);
             entity.HasIndex(e => e.NumeroIncidente);
-        });
-
-        // =============================================
-        // Analytics - Telemetría de uso
-        // =============================================
-
-        builder.Entity<AnalyticsEvent>(entity =>
-        {
-            entity.ToTable("AnalyticsEvents");
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.OccurredAt);
-            entity.HasIndex(e => new { e.EventName, e.OccurredAt });
-            entity.HasIndex(e => new { e.UserId, e.OccurredAt });
-            entity.HasIndex(e => e.SessionId);
-            entity.HasIndex(e => new { e.Route, e.OccurredAt });
-        });
-
-        builder.Entity<AnalyticsSession>(entity =>
-        {
-            entity.ToTable("AnalyticsSessions");
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.SessionId).IsUnique();
-            entity.HasIndex(e => new { e.UserId, e.StartedAt });
-            entity.HasIndex(e => e.StartedAt);
-        });
-
-        builder.Entity<AnalyticsDaily>(entity =>
-        {
-            entity.ToTable("AnalyticsDaily");
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.Date);
-            entity.HasIndex(e => new { e.EventName, e.Date });
-            entity.HasIndex(e => new { e.Date, e.EventName, e.Route }).IsUnique();
         });
 
     }

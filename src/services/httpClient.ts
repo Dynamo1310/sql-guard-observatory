@@ -136,44 +136,17 @@ export async function fetchWithRetry(
 }
 
 /**
- * Reporta eventos de analytics (api_error, slow_request) de forma fire-and-forget.
- * Importación dinámica para evitar dependencias circulares.
- */
-function reportAnalyticsEvent(eventName: string, props: Record<string, unknown>, extra?: Record<string, unknown>) {
-  import('./analyticsService').then(({ track }) => {
-    track(eventName, props, extra);
-  }).catch(() => {});
-}
-
-const SLOW_THRESHOLD_MS = 5000;
-
-/**
  * GET request con reintentos
  */
 export async function get<T>(url: string, options: FetchOptions = {}): Promise<T> {
-  const start = Date.now();
   const response = await fetchWithRetry(url, {
     ...options,
     method: 'GET',
   });
-  const elapsed = Date.now() - start;
-  
-  const logicalEndpoint = new URL(url, window.location.origin).pathname;
 
   if (!response.ok) {
     const errorText = await response.text();
-    reportAnalyticsEvent('api_error', {
-      status: response.status,
-      endpoint: logicalEndpoint,
-    }, { route: logicalEndpoint, success: false });
     throw new Error(`HTTP ${response.status}: ${errorText}`);
-  }
-
-  if (elapsed > SLOW_THRESHOLD_MS) {
-    reportAnalyticsEvent('slow_request', {
-      endpoint: logicalEndpoint,
-      durationMs: elapsed,
-    }, { route: logicalEndpoint, durationMs: elapsed });
   }
   
   return response.json();
@@ -187,7 +160,6 @@ export async function post<T>(
   data: unknown, 
   options: FetchOptions = {}
 ): Promise<T> {
-  const start = Date.now();
   const response = await fetchWithRetry(url, {
     ...options,
     method: 'POST',
@@ -197,26 +169,10 @@ export async function post<T>(
     },
     body: JSON.stringify(data),
   });
-  const elapsed = Date.now() - start;
-  
-  const logicalEndpoint = new URL(url, window.location.origin).pathname;
 
   if (!response.ok) {
     const errorText = await response.text();
-    if (!logicalEndpoint.includes('/api/analytics/')) {
-      reportAnalyticsEvent('api_error', {
-        status: response.status,
-        endpoint: logicalEndpoint,
-      }, { route: logicalEndpoint, success: false });
-    }
     throw new Error(`HTTP ${response.status}: ${errorText}`);
-  }
-
-  if (elapsed > SLOW_THRESHOLD_MS && !logicalEndpoint.includes('/api/analytics/')) {
-    reportAnalyticsEvent('slow_request', {
-      endpoint: logicalEndpoint,
-      durationMs: elapsed,
-    }, { route: logicalEndpoint, durationMs: elapsed });
   }
   
   return response.json();

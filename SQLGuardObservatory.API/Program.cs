@@ -279,10 +279,6 @@ builder.Services.AddScoped<ISystemCredentialService, SystemCredentialService>();
 // Security Groups - Grupos de seguridad para organizar usuarios
 builder.Services.AddScoped<IGroupService, GroupService>();
 
-// Analytics - Telemetría de uso (product analytics)
-builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
-builder.Services.AddHostedService<AnalyticsAggregationService>();
-
 // Admin Authorization Service - Permisos administrativos basados en roles
 builder.Services.AddScoped<IAdminAuthorizationService, AdminAuthorizationService>();
 
