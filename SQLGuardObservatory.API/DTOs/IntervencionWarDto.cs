@@ -18,6 +18,8 @@ public class IntervencionWarDto
     public string? Referente { get; set; }
     public string? Comentarios { get; set; }
     public string? IntervencionesRelacionadas { get; set; }
+    public bool EsProblema { get; set; }
+    public bool RecomendacionMejoraEnviada { get; set; }
     public DateTime FechaCreacion { get; set; }
     public DateTime FechaModificacion { get; set; }
     public string? CreadoPor { get; set; }
@@ -48,6 +50,8 @@ public class CreateUpdateIntervencionWarRequest
     public string? Referente { get; set; }
     public string? Comentarios { get; set; }
     public string? IntervencionesRelacionadas { get; set; }
+    public bool EsProblema { get; set; }
+    public bool RecomendacionMejoraEnviada { get; set; }
 }
 
 /// <summary>
@@ -90,18 +94,18 @@ public class IntervencionWarStatsDto
     public List<ChartDataItem> PorDba { get; set; } = new();
 
     /// <summary>
-    /// Distribución por rango de duración (0-30m, 30m-1h, 1h-2h, 2h-4h, 4h+)
-    /// </summary>
-    public List<ChartDataItem> PorDuracion { get; set; } = new();
-
-    /// <summary>
     /// Evolución mensual (horas por mes)
     /// </summary>
     public List<ChartDataItem> EvolucionMensual { get; set; } = new();
 
     /// <summary>
-    /// Intervenciones por célula
+    /// Cantidad de intervenciones por célula
     /// </summary>
     public List<ChartDataItem> PorCelula { get; set; } = new();
+
+    /// <summary>
+    /// Cantidad de intervenciones por base de datos
+    /// </summary>
+    public List<ChartDataItem> PorBaseDatos { get; set; } = new();
 }
 

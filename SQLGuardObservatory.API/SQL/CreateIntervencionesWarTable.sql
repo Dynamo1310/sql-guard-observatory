@@ -52,6 +52,10 @@ BEGIN
         -- Intervenciones relacionadas (IDs separados por coma)
         [IntervencionesRelacionadas]    NVARCHAR(500) NULL,
 
+        -- Flags booleanos
+        [EsProblema]                    BIT NOT NULL CONSTRAINT DF_IntervencionesWar_EsProblema DEFAULT(0),
+        [RecomendacionMejoraEnviada]    BIT NOT NULL CONSTRAINT DF_IntervencionesWar_RecomendacionMejoraEnviada DEFAULT(0),
+
         -- Auditoría
         [FechaCreacion]                 DATETIME2 NOT NULL CONSTRAINT DF_IntervencionesWar_FechaCreacion DEFAULT (GETDATE()),
         [FechaModificacion]             DATETIME2 NOT NULL CONSTRAINT DF_IntervencionesWar_FechaModificacion DEFAULT (GETDATE()),

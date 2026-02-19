@@ -85,6 +85,16 @@ public class IntervencionWar
     public string? IntervencionesRelacionadas { get; set; }
 
     /// <summary>
+    /// Indica si la intervención escala a un Problem Ticket
+    /// </summary>
+    public bool EsProblema { get; set; }
+
+    /// <summary>
+    /// Indica si se notificó una recomendación de mejora/optimización a la célula
+    /// </summary>
+    public bool RecomendacionMejoraEnviada { get; set; }
+
+    /// <summary>
     /// Fecha de creación del registro
     /// </summary>
     public DateTime FechaCreacion { get; set; } = DateTime.Now;

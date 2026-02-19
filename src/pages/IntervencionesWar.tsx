@@ -8,7 +8,7 @@ import {
   Swords, Search, RefreshCw, Edit, Plus, Trash2,
   ChevronUp, ChevronDown, BarChart3, ExternalLink,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Clock, Users, Link2, Database,
+  Clock, Users, Link2, Database, Copy, Eye, X,
 } from 'lucide-react';
 import {
   intervencionesWarApi,
@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -67,18 +68,26 @@ type SortDirection = 'asc' | 'desc';
 
 // ==================== HELPERS ====================
 
+/**
+ * Formatea un date string al formato 24h estricto para mostrar en la grilla.
+ */
 function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-';
   try {
     return new Date(dateStr).toLocaleString('es-AR', {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
+      hour12: false,
     });
   } catch {
     return dateStr;
   }
 }
 
+/**
+ * Convierte un date string a formato yyyy-MM-ddTHH:mm para el input datetime-local.
+ * Usa componentes locales para evitar el desfase de timezone.
+ */
 function formatDateTimeForInput(dateStr: string | null | undefined): string {
   if (!dateStr) return '';
   try {
@@ -94,6 +103,9 @@ function formatDateTimeForInput(dateStr: string | null | undefined): string {
   }
 }
 
+/**
+ * Convierte el valor del input datetime-local a un ISO string local (sin offset UTC).
+ */
 function inputToLocalIso(value: string): string {
   if (!value) return new Date().toISOString();
   const [datePart, timePart] = value.split('T');
@@ -112,7 +124,7 @@ function formatDuration(mins: number): string {
   return `${mins}m`;
 }
 
-// ==================== AUTOCOMPLETE HOOK ====================
+// ==================== DEBOUNCE HOOK ====================
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -151,11 +163,16 @@ export default function IntervencionesWar() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
 
+  // View dialog
+  const [viewItem, setViewItem] = useState<IntervencionWarDto | null>(null);
+
   const emptyForm: CreateUpdateIntervencionWarRequest = {
     fechaHora: new Date().toISOString(),
     duracionMinutos: 0,
     dbaParticipantes: '',
     tipoIntervencion: 'War',
+    esProblema: false,
+    recomendacionMejoraEnviada: false,
   };
   const [formData, setFormData] = useState<CreateUpdateIntervencionWarRequest>(emptyForm);
 
@@ -330,6 +347,7 @@ export default function IntervencionesWar() {
       <ChevronDown className="inline h-3 w-3 ml-1" />;
   };
 
+  /** Abre formulario vacío para crear */
   const openCreate = useCallback(() => {
     setEditingItem(null);
     setFormData({
@@ -342,6 +360,7 @@ export default function IntervencionesWar() {
     setDialogOpen(true);
   }, []);
 
+  /** Abre formulario con datos del item para editar */
   const openEdit = useCallback((item: IntervencionWarDto) => {
     setEditingItem(item);
     setFormData({
@@ -357,11 +376,39 @@ export default function IntervencionesWar() {
       referente: item.referente ?? undefined,
       comentarios: item.comentarios ?? undefined,
       intervencionesRelacionadas: item.intervencionesRelacionadas ?? undefined,
+      esProblema: item.esProblema ?? false,
+      recomendacionMejoraEnviada: item.recomendacionMejoraEnviada ?? false,
     });
     setFormErrors({});
     setDbSearchTerm('');
     setDbSuggestions([]);
     setDialogOpen(true);
+  }, []);
+
+  /** Clona un registro: abre formulario con todos los datos copiados, sin ID */
+  const openClone = useCallback((item: IntervencionWarDto) => {
+    setEditingItem(null); // null = modo creación
+    setFormData({
+      fechaHora: new Date().toISOString(), // nueva fecha por defecto
+      duracionMinutos: item.duracionMinutos,
+      dbaParticipantes: item.dbaParticipantes,
+      tipoIntervencion: item.tipoIntervencion ?? undefined,
+      numeroIncidente: item.numeroIncidente ?? undefined,
+      incidenteLink: item.incidenteLink ?? undefined,
+      servidores: item.servidores ?? undefined,
+      baseDatos: item.baseDatos ?? undefined,
+      celula: item.celula ?? undefined,
+      referente: item.referente ?? undefined,
+      comentarios: item.comentarios ?? undefined,
+      intervencionesRelacionadas: item.intervencionesRelacionadas ?? undefined,
+      esProblema: item.esProblema ?? false,
+      recomendacionMejoraEnviada: item.recomendacionMejoraEnviada ?? false,
+    });
+    setFormErrors({});
+    setDbSearchTerm('');
+    setDbSuggestions([]);
+    setDialogOpen(true);
+    toast.info('Registro clonado. Ajuste los campos necesarios y guarde.');
   }, []);
 
   const validateForm = (): boolean => {
@@ -529,7 +576,7 @@ export default function IntervencionesWar() {
             </span>
           </div>
 
-          {/* Table */}
+          {/* Table — Columnas: ID, Fecha/Hora, Tipo, Duración, DBA(s), Servidores, DBs, Célula, Acciones */}
           <div className="border rounded-md overflow-auto">
             <Table>
               <TableHeader>
@@ -547,22 +594,18 @@ export default function IntervencionesWar() {
                     Duración <SortIcon field="duracionMinutos" />
                   </TableHead>
                   <TableHead className="whitespace-nowrap">DBA(s)</TableHead>
-                  <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('numeroIncidente')}>
-                    Incidente <SortIcon field="numeroIncidente" />
-                  </TableHead>
                   <TableHead className="whitespace-nowrap">Servidores</TableHead>
                   <TableHead className="whitespace-nowrap">DBs</TableHead>
                   <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('celula')}>
                     Célula <SortIcon field="celula" />
                   </TableHead>
-                  <TableHead className="whitespace-nowrap">Relacionadas</TableHead>
                   <TableHead className="whitespace-nowrap text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedItems.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No se encontraron intervenciones
                     </TableCell>
                   </TableRow>
@@ -590,19 +633,6 @@ export default function IntervencionesWar() {
                           ))}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {item.numeroIncidente && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm">{item.numeroIncidente}</span>
-                            {item.incidenteLink && (
-                              <a href={item.incidenteLink} target="_blank" rel="noopener noreferrer"
-                                className="text-blue-500 hover:text-blue-700">
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
-                          </div>
-                        )}
-                      </TableCell>
                       <TableCell className="text-xs max-w-[120px] truncate" title={item.servidores ?? ''}>
                         {item.servidores ?? '-'}
                       </TableCell>
@@ -610,22 +640,19 @@ export default function IntervencionesWar() {
                         {item.baseDatos ?? '-'}
                       </TableCell>
                       <TableCell className="text-sm">{item.celula ?? '-'}</TableCell>
-                      <TableCell>
-                        {item.intervencionesRelacionadas ? (
-                          <Badge variant="outline" className="text-xs">
-                            <Link2 className="h-3 w-3 mr-1" />
-                            {item.intervencionesRelacionadas}
-                          </Badge>
-                        ) : '-'}
-                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(item)}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver detalle"
+                            onClick={() => setViewItem(item)}>
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar"
+                            onClick={() => openEdit(item)}>
                             <Edit className="h-3.5 w-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700"
-                            onClick={() => setDeleteConfirmId(item.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Clonar"
+                            onClick={() => openClone(item)}>
+                            <Copy className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       </TableCell>
@@ -661,9 +688,10 @@ export default function IntervencionesWar() {
         </>
       )}
 
-      {/* Charts Tab */}
+      {/* ==================== CHARTS TAB ==================== */}
       {activeTab === 'charts' && statsData && (
         <div className="grid gap-4 md:grid-cols-2">
+          {/* Por Tipo de Intervención */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Por Tipo de Intervención</CardTitle>
@@ -684,6 +712,7 @@ export default function IntervencionesWar() {
             </CardContent>
           </Card>
 
+          {/* Horas por DBA */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Horas por DBA</CardTitle>
@@ -701,26 +730,7 @@ export default function IntervencionesWar() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Distribución por Duración</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie data={statsData.porDuracion.filter(d => d.value > 0)} dataKey="value" nameKey="name"
-                    cx="50%" cy="50%" outerRadius={100} label={({ name, value }) => `${name}: ${value}`}>
-                    {statsData.porDuracion.map((_, idx) => (
-                      <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
+          {/* Evolución Mensual */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Evolución Mensual (Horas)</CardTitle>
@@ -738,10 +748,11 @@ export default function IntervencionesWar() {
             </CardContent>
           </Card>
 
+          {/* Intervenciones por Célula (cantidad) */}
           {statsData.porCelula.length > 0 && (
-            <Card className="md:col-span-2">
+            <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Horas por Célula</CardTitle>
+                <CardTitle className="text-sm font-medium">Intervenciones por Célula</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -749,8 +760,28 @@ export default function IntervencionesWar() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                     <YAxis />
-                    <Tooltip formatter={(v: number) => [`${v}h`, 'Horas']} />
+                    <Tooltip formatter={(v: number) => [v, 'Intervenciones']} />
                     <Bar dataKey="value" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Intervenciones por Database Name (cantidad) */}
+          {statsData.porBaseDatos && statsData.porBaseDatos.length > 0 && (
+            <Card className="md:col-span-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Intervenciones por Base de Datos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={statsData.porBaseDatos} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={150} />
+                    <Tooltip formatter={(v: number) => [v, 'Intervenciones']} />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -758,6 +789,75 @@ export default function IntervencionesWar() {
           )}
         </div>
       )}
+
+      {/* ==================== VIEW DETAIL DIALOG ==================== */}
+      <Dialog open={viewItem !== null} onOpenChange={() => setViewItem(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalle Intervención #{viewItem?.id}</DialogTitle>
+            <DialogDescription>
+              Vista completa del registro
+            </DialogDescription>
+          </DialogHeader>
+          {viewItem && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                <div><span className="text-muted-foreground">Fecha/Hora:</span> <strong>{formatDateTime(viewItem.fechaHora)}</strong></div>
+                <div><span className="text-muted-foreground">Duración:</span> <strong>{formatDuration(viewItem.duracionMinutos)}</strong></div>
+                <div><span className="text-muted-foreground">Tipo:</span>{' '}
+                  <Badge variant={viewItem.tipoIntervencion === 'War' ? 'destructive' : 'secondary'} className="text-xs">
+                    {viewItem.tipoIntervencion ?? '-'}
+                  </Badge>
+                </div>
+                <div><span className="text-muted-foreground">DBA(s):</span> <strong>{viewItem.dbaParticipantes}</strong></div>
+                <div><span className="text-muted-foreground">Nro Incidente:</span> <strong>{viewItem.numeroIncidente ?? '-'}</strong></div>
+                <div><span className="text-muted-foreground">Link:</span>{' '}
+                  {viewItem.incidenteLink ? (
+                    <a href={viewItem.incidenteLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                      {viewItem.incidenteLink.length > 40 ? viewItem.incidenteLink.slice(0, 40) + '...' : viewItem.incidenteLink}
+                    </a>
+                  ) : '-'}
+                </div>
+                <div><span className="text-muted-foreground">Servidor(es):</span> <strong>{viewItem.servidores ?? '-'}</strong></div>
+                <div><span className="text-muted-foreground">Base(s) de Datos:</span> <strong>{viewItem.baseDatos ?? '-'}</strong></div>
+                <div><span className="text-muted-foreground">Célula:</span> <strong>{viewItem.celula ?? '-'}</strong></div>
+                <div><span className="text-muted-foreground">Referente:</span> <strong>{viewItem.referente ?? '-'}</strong></div>
+                <div><span className="text-muted-foreground">Es Problema:</span>{' '}
+                  <Badge variant={viewItem.esProblema ? 'destructive' : 'outline'} className="text-xs">
+                    {viewItem.esProblema ? 'Sí' : 'No'}
+                  </Badge>
+                </div>
+                <div><span className="text-muted-foreground">Rec. Mejora Enviada:</span>{' '}
+                  <Badge variant={viewItem.recomendacionMejoraEnviada ? 'default' : 'outline'} className="text-xs">
+                    {viewItem.recomendacionMejoraEnviada ? 'Sí' : 'No'}
+                  </Badge>
+                </div>
+                <div><span className="text-muted-foreground">Relacionadas:</span> <strong>{viewItem.intervencionesRelacionadas ?? '-'}</strong></div>
+                <div><span className="text-muted-foreground">Creado por:</span> <strong>{viewItem.creadoPor ?? '-'}</strong></div>
+              </div>
+              {viewItem.comentarios && (
+                <div className="pt-2 border-t">
+                  <span className="text-muted-foreground">Comentarios:</span>
+                  <p className="mt-1 whitespace-pre-wrap">{viewItem.comentarios}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewItem(null)}>Cerrar</Button>
+            {viewItem && (
+              <>
+                <Button variant="outline" onClick={() => { openEdit(viewItem); setViewItem(null); }}>
+                  <Edit className="h-4 w-4 mr-1" /> Editar
+                </Button>
+                <Button variant="outline" onClick={() => { openClone(viewItem); setViewItem(null); }}>
+                  <Copy className="h-4 w-4 mr-1" /> Clonar
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ==================== CREATE/EDIT DIALOG ==================== */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setFormErrors({}); }}>
@@ -773,12 +873,14 @@ export default function IntervencionesWar() {
             {/* Fecha/Hora + Duración + Tipo */}
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Fecha y Hora</Label>
+                <Label>Fecha y Hora (24hs)</Label>
                 <Input
                   type="datetime-local"
                   value={formatDateTimeForInput(formData.fechaHora)}
                   onChange={e => setFormData(prev => ({ ...prev, fechaHora: e.target.value ? inputToLocalIso(e.target.value) : prev.fechaHora }))}
+                  step="60"
                 />
+                <span className="text-xs text-muted-foreground">Inicio real de la intervención</span>
               </div>
               <div className="space-y-2">
                 <Label>Duración (minutos) <span className="text-red-500">*</span></Label>
@@ -954,6 +1056,34 @@ export default function IntervencionesWar() {
                   placeholder="Referente del área"
                   className={cn(formErrors.referente && "border-red-500 focus-visible:ring-red-500")}
                 />
+              </div>
+            </div>
+
+            {/* Checkboxes: Es Problema + Recomendación de Mejora */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="esProblema"
+                  checked={formData.esProblema ?? false}
+                  onCheckedChange={(checked) =>
+                    setFormData(prev => ({ ...prev, esProblema: checked === true }))
+                  }
+                />
+                <Label htmlFor="esProblema" className="text-sm cursor-pointer">
+                  Es Problema <span className="text-muted-foreground text-xs">(escala a Problem Ticket)</span>
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="recomendacionMejora"
+                  checked={formData.recomendacionMejoraEnviada ?? false}
+                  onCheckedChange={(checked) =>
+                    setFormData(prev => ({ ...prev, recomendacionMejoraEnviada: checked === true }))
+                  }
+                />
+                <Label htmlFor="recomendacionMejora" className="text-sm cursor-pointer">
+                  Recomendación de Mejora enviada
+                </Label>
               </div>
             </div>
 

@@ -98,6 +98,8 @@ public class IntervencionWarService : IIntervencionWarService
             Referente = request.Referente,
             Comentarios = request.Comentarios,
             IntervencionesRelacionadas = request.IntervencionesRelacionadas,
+            EsProblema = request.EsProblema,
+            RecomendacionMejoraEnviada = request.RecomendacionMejoraEnviada,
             FechaCreacion = DateTime.Now,
             FechaModificacion = DateTime.Now,
             CreadoPor = userId
@@ -137,6 +139,8 @@ public class IntervencionWarService : IIntervencionWarService
         entity.Referente = request.Referente;
         entity.Comentarios = request.Comentarios;
         entity.IntervencionesRelacionadas = request.IntervencionesRelacionadas;
+        entity.EsProblema = request.EsProblema;
+        entity.RecomendacionMejoraEnviada = request.RecomendacionMejoraEnviada;
         entity.FechaModificacion = DateTime.Now;
 
         await _context.SaveChangesAsync();
@@ -197,16 +201,6 @@ public class IntervencionWarService : IIntervencionWarService
             .OrderByDescending(x => x.Value)
             .ToList();
 
-        // Por rango de duración (cantidad de intervenciones)
-        stats.PorDuracion = new List<ChartDataItem>
-        {
-            new() { Name = "0-30 min", Value = items.Count(i => i.DuracionMinutos <= 30) },
-            new() { Name = "30m-1h", Value = items.Count(i => i.DuracionMinutos > 30 && i.DuracionMinutos <= 60) },
-            new() { Name = "1h-2h", Value = items.Count(i => i.DuracionMinutos > 60 && i.DuracionMinutos <= 120) },
-            new() { Name = "2h-4h", Value = items.Count(i => i.DuracionMinutos > 120 && i.DuracionMinutos <= 240) },
-            new() { Name = "4h+", Value = items.Count(i => i.DuracionMinutos > 240) },
-        };
-
         // Evolución mensual (horas por mes)
         stats.EvolucionMensual = items
             .GroupBy(i => i.FechaHora.ToString("yyyy-MM"))
@@ -218,16 +212,32 @@ public class IntervencionWarService : IIntervencionWarService
             .OrderBy(x => x.Name)
             .ToList();
 
-        // Por Célula (horas)
+        // Por Célula (cantidad de intervenciones)
         stats.PorCelula = items
             .Where(i => !string.IsNullOrWhiteSpace(i.Celula))
             .GroupBy(i => i.Celula!)
             .Select(g => new ChartDataItem
             {
                 Name = g.Key,
-                Value = g.Sum(x => x.DuracionMinutos) / 60
+                Value = g.Count()
             })
             .OrderByDescending(x => x.Value)
+            .ToList();
+
+        // Por Base de Datos (cantidad de intervenciones)
+        stats.PorBaseDatos = items
+            .Where(i => !string.IsNullOrWhiteSpace(i.BaseDatos))
+            .SelectMany(i => i.BaseDatos!
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(db => db))
+            .GroupBy(db => db, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new ChartDataItem
+            {
+                Name = g.Key,
+                Value = g.Count()
+            })
+            .OrderByDescending(x => x.Value)
+            .Take(15)
             .ToList();
 
         return stats;
@@ -271,6 +281,8 @@ public class IntervencionWarService : IIntervencionWarService
         Referente = entity.Referente,
         Comentarios = entity.Comentarios,
         IntervencionesRelacionadas = entity.IntervencionesRelacionadas,
+        EsProblema = entity.EsProblema,
+        RecomendacionMejoraEnviada = entity.RecomendacionMejoraEnviada,
         FechaCreacion = entity.FechaCreacion,
         FechaModificacion = entity.FechaModificacion,
         CreadoPor = entity.CreadoPor
