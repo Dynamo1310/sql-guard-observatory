@@ -36,9 +36,9 @@ function getGreeting(): string {
   if (month === 4 && dayOfMonth === 1) return '💪 ¡Feliz Día del Trabajador!';
   // Halloween
   if (month === 9 && dayOfMonth === 31) return '🎃 ¡Feliz Halloween!';
-  
+
   // Mensajes por día de la semana
-  if (dayOfWeek === 5) return '🎉 ¡Feliz viernes!';
+  if (dayOfWeek === 5) return 'NO A LA REFORMA LABORAL‼️';
   if (dayOfWeek === 1) return '💪 ¡Arrancamos la semana!';
   if (dayOfWeek === 0) return '😴 ¿Trabajando un domingo?';
   if (dayOfWeek === 6) return '🤔 ¿Trabajando un sábado?';
@@ -121,7 +121,7 @@ export default function Login() {
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
-    
+
     setTheme(initialTheme);
     document.documentElement.classList.toggle('dark', initialTheme === 'dark');
   }, []);
@@ -176,109 +176,109 @@ export default function Login() {
         </p>
 
         <Card className="w-full max-w-md relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/50 dark:border-slate-700/50 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50">
-        <CardHeader className="space-y-1 pb-2">
-          {/* Logo Supervielle */}
-          <div className="flex items-center justify-center mb-2">
-            <img 
-              src={logoSupervielleNegro} 
-              alt="Supervielle" 
-              className="logo-light h-9 w-auto"
-            />
-            <img 
-              src={logoSupervielleBlanco} 
-              alt="Supervielle" 
-              className="logo-dark h-9 w-auto"
-            />
-          </div>
-          
-          {/* Logo SQLNova con animación hover */}
-          <div className="flex items-center justify-center py-6 group cursor-default">
-            <img 
-              src={sqlNovaBlackLogo} 
-              alt="SQL Nova" 
-              className="logo-light h-16 w-auto transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-lg"
-            />
-            <img 
-              src={sqlNovaWhiteLogo} 
-              alt="SQL Nova" 
-              className="logo-dark h-16 w-auto transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]"
-            />
-          </div>
-        </CardHeader>
-        
-        <CardContent className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {loading ? (
-            <div className="flex flex-col items-center justify-center space-y-4 py-6">
-              <div className="relative">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              </div>
-              <p className="text-sm text-muted-foreground text-center">{status}</p>
+          <CardHeader className="space-y-1 pb-2">
+            {/* Logo Supervielle */}
+            <div className="flex items-center justify-center mb-2">
+              <img
+                src={logoSupervielleNegro}
+                alt="Supervielle"
+                className="logo-light h-9 w-auto"
+              />
+              <img
+                src={logoSupervielleBlanco}
+                alt="Supervielle"
+                className="logo-dark h-9 w-auto"
+              />
             </div>
-          ) : (
-            <div className="flex flex-col items-center space-y-4 py-2">
-              <Button
-                onClick={handleWindowsLogin}
-                className="w-full"
-                disabled={loading}
-                size="lg"
-              >
-                <img 
-                  src={windowsIconWhite} 
-                  alt="Windows" 
-                  className="logo-light h-5 w-5 mr-2" 
-                />
-                <img 
-                  src={windowsIconBlack} 
-                  alt="Windows" 
-                  className="logo-dark h-5 w-5 mr-2" 
-                />
-                Iniciar Sesión con Windows
-              </Button>
-              
-              <p className="text-xs text-muted-foreground text-center">
-                Usa tu cuenta del dominio gscorp.ad
-              </p>
 
-              {error && (
-                <div className="text-xs text-muted-foreground text-center space-y-2">
-                  <p className="font-medium">Verifica que:</p>
-                  <ul className="list-disc list-inside space-y-0.5 text-left">
-                    <li>Estés conectado al dominio gscorp.ad</li>
-                    <li>Tu usuario esté en la lista blanca</li>
-                    <li>Windows Authentication esté habilitado</li>
-                  </ul>
+            {/* Logo SQLNova con animación hover */}
+            <div className="flex items-center justify-center py-6 group cursor-default">
+              <img
+                src={sqlNovaBlackLogo}
+                alt="SQL Nova"
+                className="logo-light h-16 w-auto transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-lg"
+              />
+              <img
+                src={sqlNovaWhiteLogo}
+                alt="SQL Nova"
+                className="logo-dark h-16 w-auto transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+              />
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {loading ? (
+              <div className="flex flex-col items-center justify-center space-y-4 py-6">
+                <div className="relative">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
                 </div>
-              )}
-            </div>
-          )}
+                <p className="text-sm text-muted-foreground text-center">{status}</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center space-y-4 py-2">
+                <Button
+                  onClick={handleWindowsLogin}
+                  className="w-full"
+                  disabled={loading}
+                  size="lg"
+                >
+                  <img
+                    src={windowsIconWhite}
+                    alt="Windows"
+                    className="logo-light h-5 w-5 mr-2"
+                  />
+                  <img
+                    src={windowsIconBlack}
+                    alt="Windows"
+                    className="logo-dark h-5 w-5 mr-2"
+                  />
+                  Iniciar Sesión con Windows
+                </Button>
 
-          {/* Qué hay de nuevo */}
-          <div className="pt-2 border-t border-border">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium text-foreground">Qué hay de nuevo</span>
+                <p className="text-xs text-muted-foreground text-center">
+                  Usa tu cuenta del dominio gscorp.ad
+                </p>
+
+                {error && (
+                  <div className="text-xs text-muted-foreground text-center space-y-2">
+                    <p className="font-medium">Verifica que:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-left">
+                      <li>Estés conectado al dominio gscorp.ad</li>
+                      <li>Tu usuario esté en la lista blanca</li>
+                      <li>Windows Authentication esté habilitado</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Qué hay de nuevo */}
+            <div className="pt-2 border-t border-border">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-foreground">Qué hay de nuevo</span>
+              </div>
+              <ul className="space-y-2">
+                {whatsNew.map((item, index) => (
+                  <li key={index} className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <span className="text-primary mt-0.5">•</span>
+                    <span className="flex-1">{item.text}</span>
+                    {item.isNew && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium bg-primary text-primary-foreground rounded">
+                        NUEVO
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="space-y-2">
-              {whatsNew.map((item, index) => (
-                <li key={index} className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span className="flex-1">{item.text}</span>
-                  {item.isNew && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-primary text-primary-foreground rounded">
-                      NUEVO
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </CardContent>
+          </CardContent>
         </Card>
       </div>
     </div>
