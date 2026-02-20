@@ -38,7 +38,7 @@ function getGreeting(): string {
   if (month === 9 && dayOfMonth === 31) return '🎃 ¡Feliz Halloween!';
 
   // Mensajes por día de la semana
-  if (dayOfWeek === 5) return 'NO A LA REFORMA LABORAL‼️';
+  if (dayOfWeek === 5) return '🎉 ¡Feliz viernes!';
   if (dayOfWeek === 1) return '💪 ¡Arrancamos la semana!';
   if (dayOfWeek === 0) return '😴 ¿Trabajando un domingo?';
   if (dayOfWeek === 6) return '🤔 ¿Trabajando un sábado?';
