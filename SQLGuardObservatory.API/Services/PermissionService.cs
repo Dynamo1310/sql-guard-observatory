@@ -54,6 +54,7 @@ public class PermissionService : IPermissionService
         // === INVENTARIO ===
         { "InventarioMenu", new ViewInfo { ViewName = "InventarioMenu", DisplayName = "📁 Inventario (Menú)", Description = "Mostrar/ocultar el menú completo de Inventario", Category = "Inventario" } },
         // SQL Server
+        { "InventarioSqlServerDashboard", new ViewInfo { ViewName = "InventarioSqlServerDashboard", DisplayName = "SQL Server - Dashboard", Description = "Dashboard visual del inventario de instancias SQL Server", Category = "Inventario" } },
         { "InventarioSqlServerInstances", new ViewInfo { ViewName = "InventarioSqlServerInstances", DisplayName = "SQL Server - Instancias", Description = "Listado de instancias SQL Server registradas", Category = "Inventario" } },
         { "InventarioSqlServerDatabases", new ViewInfo { ViewName = "InventarioSqlServerDatabases", DisplayName = "SQL Server - DBs", Description = "Listado de bases de datos SQL Server registradas", Category = "Inventario" } },
         // PostgreSQL

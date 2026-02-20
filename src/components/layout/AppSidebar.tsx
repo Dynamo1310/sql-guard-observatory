@@ -65,6 +65,7 @@ const infraestructuraSubItems = [
 
 // Submenús de Inventario SQL Server (usan el ícono personalizado de SQL Server)
 const inventarioSqlServerSubItems = [
+  { title: 'Dashboard', url: '/inventory/sqlserver/dashboard', icon: SqlServerIcon, permission: 'InventarioSqlServerDashboard' },
   { title: 'Instancias', url: '/inventory/sqlserver/instances', icon: SqlServerIcon, permission: 'InventarioSqlServerInstances' },
   { title: 'DBs', url: '/inventory/sqlserver/databases', icon: SqlServerIcon, permission: 'InventarioSqlServerDatabases' },
 ];

@@ -105,6 +105,7 @@ public static class PermissionInitializer
             "VaultAudit",
             // Inventario
             "InventarioMenu",
+            "InventarioSqlServerDashboard",
             "InventarioSqlServerInstances",
             "InventarioSqlServerDatabases",
             "InventarioPostgreSqlInstances",

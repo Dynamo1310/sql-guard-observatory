@@ -61,6 +61,7 @@ import AdminMenuBadges from "./pages/AdminMenuBadges";
 import CollectorConfig from "./pages/admin/CollectorConfig";
 import ServerExceptions from "./pages/admin/ServerExceptions";
 import AdminLogs from "./pages/admin/AdminLogs";
+import SqlServerInventoryDashboard from "./pages/SqlServerInventoryDashboard";
 import SqlServerInstances from "./pages/SqlServerInstances";
 import SqlServerDatabases from "./pages/SqlServerDatabases";
 import PostgreSqlInstances from "./pages/PostgreSqlInstances";
@@ -409,6 +410,11 @@ const App = () => (
                         </ProtectedRoute>
                       } />
                       {/* Inventario SQL Server */}
+                      <Route path="/inventory/sqlserver/dashboard" element={
+                        <ProtectedRoute viewName="InventarioSqlServerDashboard">
+                          <SqlServerInventoryDashboard />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/inventory/sqlserver/instances" element={
                         <ProtectedRoute viewName="InventarioSqlServerInstances">
                           <SqlServerInstances />
