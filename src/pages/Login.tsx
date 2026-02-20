@@ -51,10 +51,10 @@ function getGreeting(): string {
 
 // Novedades / Changelog
 const whatsNew = [
-  { text: "Nuevo sistema de inventario de servidores y BBDD", isNew: true },
+  { text: "Registro de intervenciones y wars", isNew: true },
   //{ text: "Vault DBA para gestión segura de credenciales", isNew: true },
   //{ text: "Nuevo sistema de guardias DBA con intercambios", isNew: true },
-  { text: "Dashboard de parcheos y compliance", isNew: true },
+  { text: "Gestión de proyectos: Racionalización SQL", isNew: true },
 ];
 
 // Componente de partículas flotantes - MÁS Y MÁS VISIBLES
