@@ -91,4 +91,94 @@ public class ActiveDirectoryService : IActiveDirectoryService
 
         return users.OrderBy(u => u.DisplayName).ToList();
     }
+
+    public async Task<Dictionary<string, ActiveDirectoryUserDto?>> FindUsersByEmailAsync(List<string> emails)
+    {
+        return await Task.Run(() => FindUsersByEmail(emails));
+    }
+
+    private Dictionary<string, ActiveDirectoryUserDto?> FindUsersByEmail(List<string> emails)
+    {
+        var results = new Dictionary<string, ActiveDirectoryUserDto?>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            _logger.LogInformation("Buscando {Count} usuarios en AD por email", emails.Count);
+
+            using var context = new PrincipalContext(ContextType.Domain, _domainName);
+
+            foreach (var email in emails)
+            {
+                var trimmed = email.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed))
+                    continue;
+
+                if (results.ContainsKey(trimmed))
+                    continue;
+
+                try
+                {
+                    var adUser = FindUserByEmail(context, trimmed);
+                    results[trimmed] = adUser;
+
+                    if (adUser != null)
+                        _logger.LogInformation("Email {Email} -> usuario AD {Sam}", trimmed, adUser.SamAccountName);
+                    else
+                        _logger.LogWarning("Email {Email} no encontrado en AD", trimmed);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error buscando email {Email} en AD", trimmed);
+                    results[trimmed] = null;
+                }
+            }
+        }
+        catch (PrincipalServerDownException ex)
+        {
+            _logger.LogError(ex, "No se pudo conectar al servidor de dominio");
+            throw new Exception("No se pudo conectar al servidor de Active Directory. Verifica la conectividad de red.", ex);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al buscar usuarios por email en AD");
+            throw new Exception($"Error al consultar Active Directory: {ex.Message}", ex);
+        }
+
+        return results;
+    }
+
+    private ActiveDirectoryUserDto? FindUserByEmail(PrincipalContext context, string email)
+    {
+        // Intento 1: buscar por atributo mail (EmailAddress)
+        using (var userPrincipal = new UserPrincipal(context) { EmailAddress = email })
+        using (var searcher = new PrincipalSearcher(userPrincipal))
+        {
+            if (searcher.FindOne() is UserPrincipal result)
+            {
+                var dto = MapUserPrincipalToDto(result);
+                result.Dispose();
+                return dto;
+            }
+        }
+
+        // Intento 2: buscar por UserPrincipalName (algunos usuarios tienen el email como UPN)
+        using (var byUpn = UserPrincipal.FindByIdentity(context, IdentityType.UserPrincipalName, email))
+        {
+            if (byUpn != null)
+                return MapUserPrincipalToDto(byUpn);
+        }
+
+        return null;
+    }
+
+    private static ActiveDirectoryUserDto MapUserPrincipalToDto(UserPrincipal user)
+    {
+        return new ActiveDirectoryUserDto
+        {
+            SamAccountName = user.SamAccountName ?? string.Empty,
+            DisplayName = user.DisplayName ?? user.Name ?? string.Empty,
+            Email = user.EmailAddress ?? string.Empty,
+            DistinguishedName = user.DistinguishedName ?? string.Empty
+        };
+    }
 }

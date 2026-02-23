@@ -219,6 +219,11 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<bool> UserExistsByEmailAsync(string email)
+    {
+        return await _context.Users.AnyAsync(u => u.Email != null && u.Email.ToLower() == email.ToLower());
+    }
+
     public async Task<UserDto?> CreateUserAsync(CreateUserRequest request)
     {
         var existingUser = await _userManager.FindByNameAsync(request.DomainUser);

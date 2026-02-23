@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Pencil, Trash2, UserPlus, Search, Loader2, Shield, ShieldCheck, Eye, Lock, Upload, RefreshCw } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, UserPlus, Search, Loader2, Shield, ShieldCheck, Eye, Lock, Upload, RefreshCw, Mail, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { Capabilities } from '@/lib/capabilities';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
@@ -28,6 +28,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -37,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { authApi, groupsApi, adminRolesApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto, AdminRoleSimpleDto } from '@/services/api';
+import { authApi, groupsApi, adminRolesApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto, AdminRoleSimpleDto, EmailSearchResult } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import { UserAvatar } from '@/components/UserAvatar';
@@ -75,6 +76,15 @@ export default function AdminUsers() {
   const [importingUsers, setImportingUsers] = useState(false);
   const [importRoleId, setImportRoleId] = useState<number | undefined>(undefined);
   
+  // Email Import states
+  const [showImportEmailDialog, setShowImportEmailDialog] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [emailSearchResults, setEmailSearchResults] = useState<EmailSearchResult[]>([]);
+  const [selectedEmailUsers, setSelectedEmailUsers] = useState<Set<string>>(new Set());
+  const [searchingByEmail, setSearchingByEmail] = useState(false);
+  const [importingByEmail, setImportingByEmail] = useState(false);
+  const [emailImportRoleId, setEmailImportRoleId] = useState<number | undefined>(undefined);
+  
   // Photo upload states
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -98,9 +108,11 @@ export default function AdminUsers() {
       if (readerRole && !formData.roleId) {
         setFormData(prev => ({ ...prev, roleId: readerRole.id }));
         setImportRoleId(readerRole.id);
+        setEmailImportRoleId(readerRole.id);
       } else if (roles.length > 0 && !formData.roleId) {
         setFormData(prev => ({ ...prev, roleId: roles[roles.length - 1].id }));
         setImportRoleId(roles[roles.length - 1].id);
+        setEmailImportRoleId(roles[roles.length - 1].id);
       }
     } catch (err) {
       console.error('Error fetching roles:', err);
@@ -371,6 +383,93 @@ export default function AdminUsers() {
     }
   };
 
+  // Funciones para importación por email
+  const handleSearchByEmail = async () => {
+    const emails = emailInput
+      .split(/[\n,;]+/)
+      .map(e => e.trim())
+      .filter(e => e.length > 0);
+
+    if (emails.length === 0) {
+      toast.error('Ingresa al menos un correo electrónico');
+      return;
+    }
+
+    setSearchingByEmail(true);
+    try {
+      const response = await authApi.searchByEmail(emails);
+      setEmailSearchResults(response.results);
+
+      const importable = response.results.filter(r => r.found && !r.alreadyExists);
+      setSelectedEmailUsers(new Set(importable.map(r => r.email)));
+
+      if (response.foundCount === 0) {
+        toast.error('No se encontró ningún usuario en Active Directory');
+      } else {
+        toast.success(`${response.foundCount} de ${response.results.length} correos encontrados en AD`);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Error al buscar en Active Directory');
+      setEmailSearchResults([]);
+      setSelectedEmailUsers(new Set());
+    } finally {
+      setSearchingByEmail(false);
+    }
+  };
+
+  const handleToggleEmailUser = (email: string) => {
+    const newSelected = new Set(selectedEmailUsers);
+    if (newSelected.has(email)) {
+      newSelected.delete(email);
+    } else {
+      newSelected.add(email);
+    }
+    setSelectedEmailUsers(newSelected);
+  };
+
+  const handleImportByEmail = async () => {
+    if (selectedEmailUsers.size === 0) {
+      toast.error('Selecciona al menos un usuario para importar');
+      return;
+    }
+
+    if (!emailImportRoleId) {
+      toast.error('Selecciona un rol para los usuarios importados');
+      return;
+    }
+
+    const selectedRole = availableRoles.find(r => r.id === emailImportRoleId);
+    const roleName = selectedRole?.name || 'Reader';
+
+    setImportingByEmail(true);
+    try {
+      const response = await authApi.importByEmail({
+        emails: Array.from(selectedEmailUsers),
+        roleId: emailImportRoleId,
+        defaultRole: roleName,
+      });
+
+      toast.success(response.message + ' Recuerda agregarlos a un grupo para darles permisos de vistas.');
+
+      if (response.errors.length > 0) {
+        console.error('Errores durante la importación por email:', response.errors);
+      }
+
+      await fetchUsers();
+
+      setShowImportEmailDialog(false);
+      setEmailInput('');
+      setEmailSearchResults([]);
+      setSelectedEmailUsers(new Set());
+      const readerRole = availableRoles.find(r => r.name === 'Reader');
+      setEmailImportRoleId(readerRole?.id || availableRoles[availableRoles.length - 1]?.id);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al importar usuarios');
+    } finally {
+      setImportingByEmail(false);
+    }
+  };
+
   const resetForm = () => {
     const readerRole = availableRoles.find(r => r.name === 'Reader');
     setFormData({
@@ -548,6 +647,12 @@ export default function AdminUsers() {
             <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
+          {canImportFromAD && (
+            <Button onClick={() => setShowImportEmailDialog(true)} variant="outline" className="w-full sm:w-auto">
+              <Mail className="mr-2 h-4 w-4" />
+              Importar por Email
+            </Button>
+          )}
           {canImportFromAD && (
             <Button onClick={() => setShowImportAdDialog(true)} variant="outline" className="w-full sm:w-auto">
               <UserPlus className="mr-2 h-4 w-4" />
@@ -1175,6 +1280,204 @@ export default function AdminUsers() {
                 </>
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Importar por Email */}
+      <Dialog open={showImportEmailDialog} onOpenChange={(open) => {
+        setShowImportEmailDialog(open);
+        if (!open) {
+          setEmailInput('');
+          setEmailSearchResults([]);
+          setSelectedEmailUsers(new Set());
+        }
+      }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Importar Usuarios por Correo Electrónico</DialogTitle>
+            <DialogDescription>
+              Ingresa los correos electrónicos de los usuarios que deseas agregar. Se buscarán automáticamente en Active Directory.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="emailInput">Correos electrónicos</Label>
+              <Textarea
+                id="emailInput"
+                className="min-h-[120px]"
+                placeholder={"juan.perez@supervielle.com.ar\nmaria.garcia@supervielle.com.ar\npedro.lopez@supervielle.com.ar"}
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                disabled={searchingByEmail}
+              />
+              <p className="text-xs text-muted-foreground">
+                Un correo por línea, o separados por coma o punto y coma.
+              </p>
+            </div>
+
+            <Button 
+              onClick={handleSearchByEmail} 
+              disabled={searchingByEmail || !emailInput.trim()}
+              className="w-full"
+            >
+              {searchingByEmail ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Buscando en Active Directory...
+                </>
+              ) : (
+                <>
+                  <Search className="mr-2 h-4 w-4" />
+                  Buscar en Active Directory
+                </>
+              )}
+            </Button>
+
+            {emailSearchResults.length > 0 && (
+              <>
+                <div className="space-y-2">
+                  <Label>
+                    Resultados ({emailSearchResults.filter(r => r.found && !r.alreadyExists).length} importables de {emailSearchResults.length})
+                  </Label>
+                  
+                  <div className="border rounded-md max-h-60 overflow-y-auto">
+                    <div className="p-2 space-y-1">
+                      {emailSearchResults.map((result) => (
+                        <div 
+                          key={result.email}
+                          className={`flex items-center space-x-3 p-2 rounded ${
+                            result.found && !result.alreadyExists 
+                              ? 'hover:bg-accent cursor-pointer' 
+                              : 'opacity-60'
+                          }`}
+                          onClick={() => {
+                            if (result.found && !result.alreadyExists) {
+                              handleToggleEmailUser(result.email);
+                            }
+                          }}
+                        >
+                          {result.found && !result.alreadyExists && (
+                            <Checkbox
+                              checked={selectedEmailUsers.has(result.email)}
+                              onCheckedChange={() => handleToggleEmailUser(result.email)}
+                            />
+                          )}
+
+                          {result.found && !result.alreadyExists && (
+                            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                          )}
+                          {result.found && result.alreadyExists && (
+                            <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                          )}
+                          {!result.found && (
+                            <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                          )}
+
+                          <div className="flex-1 min-w-0">
+                            {result.found && result.adUser ? (
+                              <>
+                                <div className="text-sm font-medium truncate">{result.adUser.displayName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  <span className="font-mono">{result.adUser.samAccountName}</span>
+                                  <span className="mx-1">·</span>
+                                  <span>{result.email}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-sm truncate">{result.email}</div>
+                            )}
+                            {result.alreadyExists && (
+                              <div className="text-xs text-yellow-600 dark:text-yellow-400">Ya existe en la aplicación</div>
+                            )}
+                            {!result.found && (
+                              <div className="text-xs text-red-600 dark:text-red-400">No encontrado en Active Directory</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {emailSearchResults.some(r => r.found && !r.alreadyExists) && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Rol a asignar</Label>
+                      <Select
+                        value={emailImportRoleId?.toString() || ''}
+                        onValueChange={(value) => setEmailImportRoleId(parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar rol" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableRoles.map((role) => {
+                            const IconComponent = getRoleIcon(role.name);
+                            return (
+                              <SelectItem key={role.id} value={role.id.toString()}>
+                                <div className="flex items-center gap-2">
+                                  <IconComponent className="h-4 w-4" style={{ color: role.color }} />
+                                  {role.name}
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="bg-accent/50 p-3 rounded-md">
+                      <p className="text-sm">
+                        <strong>{selectedEmailUsers.size}</strong> usuario{selectedEmailUsers.size !== 1 ? 's' : ''} seleccionado{selectedEmailUsers.size !== 1 ? 's' : ''} para importar con rol <strong>{availableRoles.find(r => r.id === emailImportRoleId)?.name || 'Reader'}</strong>
+                      </p>
+                    </div>
+
+                    <div className="bg-muted/50 p-3 rounded-md border border-border">
+                      <p className="text-sm text-muted-foreground">
+                        <strong className="text-foreground">Nota:</strong> Después de importar, agrega los usuarios a un grupo para asignarles permisos de vistas.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowImportEmailDialog(false);
+                setEmailInput('');
+                setEmailSearchResults([]);
+                setSelectedEmailUsers(new Set());
+              }}
+              disabled={importingByEmail}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            {emailSearchResults.some(r => r.found && !r.alreadyExists) && (
+              <Button 
+                onClick={handleImportByEmail}
+                disabled={importingByEmail || selectedEmailUsers.size === 0}
+                className="w-full sm:w-auto"
+              >
+                {importingByEmail ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Importando...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Importar {selectedEmailUsers.size} Usuario{selectedEmailUsers.size !== 1 ? 's' : ''}
+                  </>
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

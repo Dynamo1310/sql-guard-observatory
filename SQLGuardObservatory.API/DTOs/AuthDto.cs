@@ -127,6 +127,38 @@ public class ImportUsersFromGroupRequest
 }
 
 // =============================================
+// DTOs para Importación por Email
+// =============================================
+
+public class SearchByEmailRequest
+{
+    public List<string> Emails { get; set; } = new();
+}
+
+public class SearchByEmailResponse
+{
+    public List<EmailSearchResult> Results { get; set; } = new();
+    public int FoundCount { get; set; }
+    public int NotFoundCount { get; set; }
+}
+
+public class EmailSearchResult
+{
+    public string Email { get; set; } = string.Empty;
+    public bool Found { get; set; }
+    public ActiveDirectoryUserDto? AdUser { get; set; }
+    public bool AlreadyExists { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
+public class ImportByEmailRequest
+{
+    public List<string> Emails { get; set; } = new();
+    public int? RoleId { get; set; }
+    public string DefaultRole { get; set; } = "Reader";
+}
+
+// =============================================
 // DTOs para Fotos de Perfil
 // =============================================
 

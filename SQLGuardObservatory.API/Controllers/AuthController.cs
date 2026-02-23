@@ -510,6 +510,195 @@ public class AuthController : ControllerBase
     }
 
     // =============================================
+    // Endpoints de Importación por Email
+    // =============================================
+
+    /// <summary>
+    /// Busca usuarios en Active Directory por correo electrónico.
+    /// Retorna un preview con los resultados de búsqueda para cada email.
+    /// </summary>
+    [HttpPost("search-by-email")]
+    [RequireCapability("Users.ImportFromAD")]
+    [SupportedOSPlatform("windows")]
+    public async Task<IActionResult> SearchByEmail([FromBody] SearchByEmailRequest request)
+    {
+        try
+        {
+            if (request.Emails == null || !request.Emails.Any())
+            {
+                return BadRequest(new { message = "Debe proporcionar al menos un correo electrónico" });
+            }
+
+            var cleanEmails = request.Emails
+                .Select(e => e.Trim())
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (!cleanEmails.Any())
+            {
+                return BadRequest(new { message = "No se encontraron correos válidos en la solicitud" });
+            }
+
+            _logger.LogInformation("Buscando {Count} emails en AD", cleanEmails.Count);
+
+            var adResults = await _activeDirectoryService.FindUsersByEmailAsync(cleanEmails);
+
+            var results = new List<EmailSearchResult>();
+
+            foreach (var email in cleanEmails)
+            {
+                var adUser = adResults.GetValueOrDefault(email);
+                var result = new EmailSearchResult
+                {
+                    Email = email,
+                    Found = adUser != null,
+                    AdUser = adUser
+                };
+
+                if (adUser != null)
+                {
+                    var existingUser = await _authService.GetUserByDomainUserAsync(adUser.SamAccountName);
+                    result.AlreadyExists = existingUser != null;
+                }
+
+                results.Add(result);
+            }
+
+            return Ok(new SearchByEmailResponse
+            {
+                Results = results,
+                FoundCount = results.Count(r => r.Found),
+                NotFoundCount = results.Count(r => !r.Found)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al buscar usuarios por email en AD");
+            return StatusCode(500, new { message = $"Error al buscar en Active Directory: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Importa usuarios encontrados por email desde Active Directory.
+    /// </summary>
+    [HttpPost("import-by-email")]
+    [RequireCapability("Users.ImportFromAD")]
+    [SupportedOSPlatform("windows")]
+    public async Task<IActionResult> ImportByEmail([FromBody] ImportByEmailRequest request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            if (!await _adminAuthService.CanCreateUsersAsync(currentUserId))
+            {
+                return Forbid();
+            }
+
+            if (request.Emails == null || !request.Emails.Any())
+            {
+                return BadRequest(new { message = "Debe proporcionar al menos un correo electrónico" });
+            }
+
+            // Verificar que puede asignar el rol
+            bool canAssignRole = false;
+            if (request.RoleId.HasValue)
+            {
+                canAssignRole = await _adminAuthService.CanAssignRoleByIdAsync(currentUserId, request.RoleId.Value);
+            }
+            else
+            {
+                canAssignRole = await _adminAuthService.CanAssignRoleAsync(currentUserId, request.DefaultRole);
+            }
+
+            if (!canAssignRole)
+            {
+                return StatusCode(403, new { message = "No tiene permisos para asignar el rol especificado" });
+            }
+
+            var cleanEmails = request.Emails
+                .Select(e => e.Trim())
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            _logger.LogInformation("Importando {Count} usuarios por email con rol {Role}", 
+                cleanEmails.Count, request.RoleId?.ToString() ?? request.DefaultRole);
+
+            var adResults = await _activeDirectoryService.FindUsersByEmailAsync(cleanEmails);
+
+            var importedCount = 0;
+            var skippedCount = 0;
+            var errors = new List<string>();
+
+            foreach (var email in cleanEmails)
+            {
+                try
+                {
+                    var adUser = adResults.GetValueOrDefault(email);
+
+                    if (adUser == null)
+                    {
+                        errors.Add($"{email}: No encontrado en Active Directory");
+                        skippedCount++;
+                        continue;
+                    }
+
+                    var existingUser = await _authService.GetUserByDomainUserAsync(adUser.SamAccountName);
+                    if (existingUser != null)
+                    {
+                        _logger.LogInformation("Usuario {Sam} (email: {Email}) ya existe, se omite", adUser.SamAccountName, email);
+                        skippedCount++;
+                        continue;
+                    }
+
+                    var createRequest = new CreateUserRequest
+                    {
+                        DomainUser = adUser.SamAccountName,
+                        DisplayName = adUser.DisplayName,
+                        Email = !string.IsNullOrEmpty(adUser.Email) ? adUser.Email : email,
+                        RoleId = request.RoleId,
+                        Role = request.DefaultRole
+                    };
+
+                    var created = await _authService.CreateUserAsync(createRequest);
+
+                    if (created != null)
+                    {
+                        importedCount++;
+                        _logger.LogInformation("Usuario {Sam} importado por email {Email}", adUser.SamAccountName, email);
+                    }
+                    else
+                    {
+                        errors.Add($"{email} ({adUser.SamAccountName}): Error al crear en la base de datos");
+                        skippedCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al importar usuario con email {Email}", email);
+                    errors.Add($"{email}: {ex.Message}");
+                    skippedCount++;
+                }
+            }
+
+            return Ok(new
+            {
+                message = $"Importación completada: {importedCount} usuarios importados, {skippedCount} omitidos",
+                imported = importedCount,
+                skipped = skippedCount,
+                errors = errors
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al importar usuarios por email");
+            return StatusCode(500, new { message = $"Error al importar usuarios: {ex.Message}" });
+        }
+    }
+
+    // =============================================
     // Endpoints de Fotos de Perfil
     // =============================================
 

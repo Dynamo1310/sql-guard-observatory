@@ -135,6 +135,37 @@ export interface ImportUsersFromGroupResponse {
   errors: string[];
 }
 
+export interface SearchByEmailRequest {
+  emails: string[];
+}
+
+export interface EmailSearchResult {
+  email: string;
+  found: boolean;
+  adUser: ActiveDirectoryUserDto | null;
+  alreadyExists: boolean;
+  errorMessage: string | null;
+}
+
+export interface SearchByEmailResponse {
+  results: EmailSearchResult[];
+  foundCount: number;
+  notFoundCount: number;
+}
+
+export interface ImportByEmailRequest {
+  emails: string[];
+  roleId?: number;
+  defaultRole: string;
+}
+
+export interface ImportByEmailResponse {
+  message: string;
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
 // =============================================
 // Tipos de Foto de Perfil
 // =============================================
@@ -343,6 +374,30 @@ export const authApi = {
       body: JSON.stringify(request),
     });
     return handleResponse<ImportUsersFromGroupResponse>(response);
+  },
+
+  async searchByEmail(emails: string[]): Promise<SearchByEmailResponse> {
+    const response = await fetch(`${API_URL}/api/auth/search-by-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ emails }),
+    });
+    return handleResponse<SearchByEmailResponse>(response);
+  },
+
+  async importByEmail(request: ImportByEmailRequest): Promise<ImportByEmailResponse> {
+    const response = await fetch(`${API_URL}/api/auth/import-by-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<ImportByEmailResponse>(response);
   },
 
   // =============================================

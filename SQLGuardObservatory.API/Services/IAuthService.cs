@@ -9,6 +9,7 @@ public interface IAuthService
     Task<List<UserDto>> GetUsersAsync();
     Task<UserDto?> GetUserByIdAsync(string userId);
     Task<UserDto?> GetUserByDomainUserAsync(string domainUser);
+    Task<bool> UserExistsByEmailAsync(string email);
     Task<UserDto?> CreateUserAsync(CreateUserRequest request);
     Task<UserDto?> UpdateUserAsync(string userId, UpdateUserRequest request);
     Task<bool> DeleteUserAsync(string userId);
