@@ -85,14 +85,26 @@ public class IntervencionWar
     public string? IntervencionesRelacionadas { get; set; }
 
     /// <summary>
-    /// Indica si la intervención escala a un Problem Ticket
+    /// Estado del escalamiento a Problem: NoEscalado, EscaladoPendiente, ProblemResuelto
     /// </summary>
-    public bool EsProblema { get; set; }
+    [MaxLength(30)]
+    public string EstadoProblem { get; set; } = "NoEscalado";
 
     /// <summary>
-    /// Indica si se notificó una recomendación de mejora/optimización a la célula
+    /// Fecha en que el Problem fue resuelto (capturada automáticamente)
     /// </summary>
-    public bool RecomendacionMejoraEnviada { get; set; }
+    public DateTime? FechaResolucionProblem { get; set; }
+
+    /// <summary>
+    /// Estado de la recomendación de mejora: NoEnviada, Enviada, EnImplementacion, Aplicada
+    /// </summary>
+    [MaxLength(30)]
+    public string EstadoRecomendacion { get; set; } = "NoEnviada";
+
+    /// <summary>
+    /// Fecha en que la recomendación fue aplicada/finalizada (capturada automáticamente)
+    /// </summary>
+    public DateTime? FechaFinalizacionRecomendacion { get; set; }
 
     /// <summary>
     /// Fecha de creación del registro

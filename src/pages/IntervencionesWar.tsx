@@ -25,7 +25,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -52,6 +51,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, LineChart, Line,
@@ -62,6 +62,19 @@ import {
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
 const TIPOS_INTERVENCION = ['War', 'Degradación', 'Chat', 'Llamado', 'Mail'] as const;
+
+const ESTADOS_PROBLEM = [
+  { value: 'NoEscalado', label: 'No Escalado' },
+  { value: 'EscaladoPendiente', label: 'Escalado (Pendiente)' },
+  { value: 'ProblemResuelto', label: 'Problem Resuelto' },
+] as const;
+
+const ESTADOS_RECOMENDACION = [
+  { value: 'NoEnviada', label: 'No Enviada' },
+  { value: 'Enviada', label: 'Enviada' },
+  { value: 'EnImplementacion', label: 'En Implementación' },
+  { value: 'Aplicada', label: 'Aplicada' },
+] as const;
 
 type SortField = keyof IntervencionWarDto;
 type SortDirection = 'asc' | 'desc';
@@ -139,6 +152,8 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export default function IntervencionesWar() {
   const queryClient = useQueryClient();
+  const { isSuperAdmin, isAdmin } = useAuth();
+  const canDelete = isSuperAdmin || isAdmin;
 
   // Search / filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -171,8 +186,8 @@ export default function IntervencionesWar() {
     duracionMinutos: 0,
     dbaParticipantes: '',
     tipoIntervencion: 'War',
-    esProblema: false,
-    recomendacionMejoraEnviada: false,
+    estadoProblem: 'NoEscalado',
+    estadoRecomendacion: 'NoEnviada',
   };
   const [formData, setFormData] = useState<CreateUpdateIntervencionWarRequest>(emptyForm);
 
@@ -376,8 +391,8 @@ export default function IntervencionesWar() {
       referente: item.referente ?? undefined,
       comentarios: item.comentarios ?? undefined,
       intervencionesRelacionadas: item.intervencionesRelacionadas ?? undefined,
-      esProblema: item.esProblema ?? false,
-      recomendacionMejoraEnviada: item.recomendacionMejoraEnviada ?? false,
+      estadoProblem: item.estadoProblem ?? 'NoEscalado',
+      estadoRecomendacion: item.estadoRecomendacion ?? 'NoEnviada',
     });
     setFormErrors({});
     setDbSearchTerm('');
@@ -387,9 +402,9 @@ export default function IntervencionesWar() {
 
   /** Clona un registro: abre formulario con todos los datos copiados, sin ID */
   const openClone = useCallback((item: IntervencionWarDto) => {
-    setEditingItem(null); // null = modo creación
+    setEditingItem(null);
     setFormData({
-      fechaHora: new Date().toISOString(), // nueva fecha por defecto
+      fechaHora: new Date().toISOString(),
       duracionMinutos: item.duracionMinutos,
       dbaParticipantes: item.dbaParticipantes,
       tipoIntervencion: item.tipoIntervencion ?? undefined,
@@ -401,8 +416,8 @@ export default function IntervencionesWar() {
       referente: item.referente ?? undefined,
       comentarios: item.comentarios ?? undefined,
       intervencionesRelacionadas: item.intervencionesRelacionadas ?? undefined,
-      esProblema: item.esProblema ?? false,
-      recomendacionMejoraEnviada: item.recomendacionMejoraEnviada ?? false,
+      estadoProblem: item.estadoProblem ?? 'NoEscalado',
+      estadoRecomendacion: item.estadoRecomendacion ?? 'NoEnviada',
     });
     setFormErrors({});
     setDbSearchTerm('');
@@ -654,6 +669,12 @@ export default function IntervencionesWar() {
                             onClick={() => openClone(item)}>
                             <Copy className="h-3.5 w-3.5" />
                           </Button>
+                          {canDelete && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Eliminar"
+                              onClick={() => setDeleteConfirmId(item.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -691,6 +712,74 @@ export default function IntervencionesWar() {
       {/* ==================== CHARTS TAB ==================== */}
       {activeTab === 'charts' && statsData && (
         <div className="grid gap-4 md:grid-cols-2">
+
+          {/* Seguimiento de Problems */}
+          {statsData.seguimientoProblems && statsData.seguimientoProblems.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Seguimiento de Problems</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={statsData.seguimientoProblems}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {statsData.seguimientoProblems.map((entry, idx) => (
+                        <Cell key={idx} fill={
+                          entry.name === 'No Escalado' ? '#94a3b8' :
+                          entry.name === 'Escalado (Pendiente)' ? '#ef4444' :
+                          '#10b981'
+                        } />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {(() => {
+                  const escalados = statsData.seguimientoProblems.filter(p => p.name !== 'No Escalado');
+                  const totalEscalados = escalados.reduce((s, p) => s + p.value, 0);
+                  const resueltos = statsData.seguimientoProblems.find(p => p.name === 'Problem Resuelto')?.value ?? 0;
+                  const pctResueltos = totalEscalados > 0 ? Math.round((resueltos / totalEscalados) * 100) : 0;
+                  return totalEscalados > 0 ? (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      {resueltos} de {totalEscalados} escalados resueltos ({pctResueltos}%)
+                    </p>
+                  ) : null;
+                })()}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Seguimiento de Recomendaciones */}
+          {statsData.seguimientoRecomendaciones && statsData.seguimientoRecomendaciones.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Seguimiento de Recomendaciones</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie data={statsData.seguimientoRecomendaciones.filter(d => d.value > 0)} dataKey="value" nameKey="name"
+                      cx="50%" cy="50%" outerRadius={100} label={({ name, value }) => `${name}: ${value}`}>
+                      {statsData.seguimientoRecomendaciones.filter(d => d.value > 0).map((entry, idx) => (
+                        <Cell key={idx} fill={
+                          entry.name === 'No Enviada' ? '#94a3b8' :
+                          entry.name === 'Enviada' ? '#f59e0b' :
+                          entry.name === 'En Implementación' ? '#3b82f6' :
+                          '#10b981'
+                        } />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Por Tipo de Intervención */}
           <Card>
             <CardHeader className="pb-2">
@@ -822,15 +911,32 @@ export default function IntervencionesWar() {
                 <div><span className="text-muted-foreground">Base(s) de Datos:</span> <strong>{viewItem.baseDatos ?? '-'}</strong></div>
                 <div><span className="text-muted-foreground">Célula:</span> <strong>{viewItem.celula ?? '-'}</strong></div>
                 <div><span className="text-muted-foreground">Referente:</span> <strong>{viewItem.referente ?? '-'}</strong></div>
-                <div><span className="text-muted-foreground">Es Problema:</span>{' '}
-                  <Badge variant={viewItem.esProblema ? 'destructive' : 'outline'} className="text-xs">
-                    {viewItem.esProblema ? 'Sí' : 'No'}
+                <div><span className="text-muted-foreground">Escalado a Problem:</span>{' '}
+                  <Badge variant={
+                    viewItem.estadoProblem === 'ProblemResuelto' ? 'default' :
+                    viewItem.estadoProblem === 'EscaladoPendiente' ? 'destructive' : 'outline'
+                  } className="text-xs">
+                    {ESTADOS_PROBLEM.find(e => e.value === viewItem.estadoProblem)?.label ?? viewItem.estadoProblem}
                   </Badge>
+                  {viewItem.fechaResolucionProblem && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (Resuelto: {formatDateTime(viewItem.fechaResolucionProblem)})
+                    </span>
+                  )}
                 </div>
-                <div><span className="text-muted-foreground">Rec. Mejora Enviada:</span>{' '}
-                  <Badge variant={viewItem.recomendacionMejoraEnviada ? 'default' : 'outline'} className="text-xs">
-                    {viewItem.recomendacionMejoraEnviada ? 'Sí' : 'No'}
+                <div><span className="text-muted-foreground">Recomendación de Mejora:</span>{' '}
+                  <Badge variant={
+                    viewItem.estadoRecomendacion === 'Aplicada' ? 'default' :
+                    viewItem.estadoRecomendacion === 'EnImplementacion' ? 'secondary' :
+                    viewItem.estadoRecomendacion === 'Enviada' ? 'destructive' : 'outline'
+                  } className="text-xs">
+                    {ESTADOS_RECOMENDACION.find(e => e.value === viewItem.estadoRecomendacion)?.label ?? viewItem.estadoRecomendacion}
                   </Badge>
+                  {viewItem.fechaFinalizacionRecomendacion && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (Finalizada: {formatDateTime(viewItem.fechaFinalizacionRecomendacion)})
+                    </span>
+                  )}
                 </div>
                 <div><span className="text-muted-foreground">Relacionadas:</span> <strong>{viewItem.intervencionesRelacionadas ?? '-'}</strong></div>
                 <div><span className="text-muted-foreground">Creado por:</span> <strong>{viewItem.creadoPor ?? '-'}</strong></div>
@@ -1059,31 +1165,35 @@ export default function IntervencionesWar() {
               </div>
             </div>
 
-            {/* Checkboxes: Es Problema + Recomendación de Mejora */}
+            {/* Estado Problem + Estado Recomendación */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="esProblema"
-                  checked={formData.esProblema ?? false}
-                  onCheckedChange={(checked) =>
-                    setFormData(prev => ({ ...prev, esProblema: checked === true }))
-                  }
-                />
-                <Label htmlFor="esProblema" className="text-sm cursor-pointer">
-                  Es Problema <span className="text-muted-foreground text-xs">(escala a Problem Ticket)</span>
-                </Label>
+              <div className="space-y-2">
+                <Label>Escalado a Problem</Label>
+                <Select
+                  value={formData.estadoProblem || 'NoEscalado'}
+                  onValueChange={v => setFormData(prev => ({ ...prev, estadoProblem: v }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Estado" /></SelectTrigger>
+                  <SelectContent>
+                    {ESTADOS_PROBLEM.map(e => (
+                      <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="recomendacionMejora"
-                  checked={formData.recomendacionMejoraEnviada ?? false}
-                  onCheckedChange={(checked) =>
-                    setFormData(prev => ({ ...prev, recomendacionMejoraEnviada: checked === true }))
-                  }
-                />
-                <Label htmlFor="recomendacionMejora" className="text-sm cursor-pointer">
-                  Recomendación de Mejora enviada
-                </Label>
+              <div className="space-y-2">
+                <Label>Recomendación de Mejora</Label>
+                <Select
+                  value={formData.estadoRecomendacion || 'NoEnviada'}
+                  onValueChange={v => setFormData(prev => ({ ...prev, estadoRecomendacion: v }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Estado" /></SelectTrigger>
+                  <SelectContent>
+                    {ESTADOS_RECOMENDACION.map(e => (
+                      <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

@@ -98,8 +98,12 @@ public class IntervencionWarService : IIntervencionWarService
             Referente = request.Referente,
             Comentarios = request.Comentarios,
             IntervencionesRelacionadas = request.IntervencionesRelacionadas,
-            EsProblema = request.EsProblema,
-            RecomendacionMejoraEnviada = request.RecomendacionMejoraEnviada,
+            EstadoProblem = request.EstadoProblem ?? "NoEscalado",
+            FechaResolucionProblem = string.Equals(request.EstadoProblem, "ProblemResuelto", StringComparison.OrdinalIgnoreCase)
+                ? DateTime.Now : null,
+            EstadoRecomendacion = request.EstadoRecomendacion ?? "NoEnviada",
+            FechaFinalizacionRecomendacion = string.Equals(request.EstadoRecomendacion, "Aplicada", StringComparison.OrdinalIgnoreCase)
+                ? DateTime.Now : null,
             FechaCreacion = DateTime.Now,
             FechaModificacion = DateTime.Now,
             CreadoPor = userId
@@ -139,8 +143,31 @@ public class IntervencionWarService : IIntervencionWarService
         entity.Referente = request.Referente;
         entity.Comentarios = request.Comentarios;
         entity.IntervencionesRelacionadas = request.IntervencionesRelacionadas;
-        entity.EsProblema = request.EsProblema;
-        entity.RecomendacionMejoraEnviada = request.RecomendacionMejoraEnviada;
+
+        var newEstadoProblem = request.EstadoProblem ?? "NoEscalado";
+        if (string.Equals(newEstadoProblem, "ProblemResuelto", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(entity.EstadoProblem, "ProblemResuelto", StringComparison.OrdinalIgnoreCase))
+        {
+            entity.FechaResolucionProblem = DateTime.Now;
+        }
+        else if (!string.Equals(newEstadoProblem, "ProblemResuelto", StringComparison.OrdinalIgnoreCase))
+        {
+            entity.FechaResolucionProblem = null;
+        }
+        entity.EstadoProblem = newEstadoProblem;
+
+        var newEstadoRecomendacion = request.EstadoRecomendacion ?? "NoEnviada";
+        if (string.Equals(newEstadoRecomendacion, "Aplicada", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(entity.EstadoRecomendacion, "Aplicada", StringComparison.OrdinalIgnoreCase))
+        {
+            entity.FechaFinalizacionRecomendacion = DateTime.Now;
+        }
+        else if (!string.Equals(newEstadoRecomendacion, "Aplicada", StringComparison.OrdinalIgnoreCase))
+        {
+            entity.FechaFinalizacionRecomendacion = null;
+        }
+        entity.EstadoRecomendacion = newEstadoRecomendacion;
+
         entity.FechaModificacion = DateTime.Now;
 
         await _context.SaveChangesAsync();
@@ -240,6 +267,39 @@ public class IntervencionWarService : IIntervencionWarService
             .Take(15)
             .ToList();
 
+        var problemLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NoEscalado"] = "No Escalado",
+            ["EscaladoPendiente"] = "Escalado (Pendiente)",
+            ["ProblemResuelto"] = "Problem Resuelto"
+        };
+        stats.SeguimientoProblems = items
+            .GroupBy(i => i.EstadoProblem ?? "NoEscalado", StringComparer.OrdinalIgnoreCase)
+            .Select(g => new ChartDataItem
+            {
+                Name = problemLabels.GetValueOrDefault(g.Key, g.Key),
+                Value = g.Count()
+            })
+            .OrderBy(x => x.Name)
+            .ToList();
+
+        var recomLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NoEnviada"] = "No Enviada",
+            ["Enviada"] = "Enviada",
+            ["EnImplementacion"] = "En Implementación",
+            ["Aplicada"] = "Aplicada"
+        };
+        stats.SeguimientoRecomendaciones = items
+            .GroupBy(i => i.EstadoRecomendacion ?? "NoEnviada", StringComparer.OrdinalIgnoreCase)
+            .Select(g => new ChartDataItem
+            {
+                Name = recomLabels.GetValueOrDefault(g.Key, g.Key),
+                Value = g.Count()
+            })
+            .OrderBy(x => x.Name)
+            .ToList();
+
         return stats;
     }
 
@@ -281,8 +341,10 @@ public class IntervencionWarService : IIntervencionWarService
         Referente = entity.Referente,
         Comentarios = entity.Comentarios,
         IntervencionesRelacionadas = entity.IntervencionesRelacionadas,
-        EsProblema = entity.EsProblema,
-        RecomendacionMejoraEnviada = entity.RecomendacionMejoraEnviada,
+        EstadoProblem = entity.EstadoProblem,
+        FechaResolucionProblem = entity.FechaResolucionProblem,
+        EstadoRecomendacion = entity.EstadoRecomendacion,
+        FechaFinalizacionRecomendacion = entity.FechaFinalizacionRecomendacion,
         FechaCreacion = entity.FechaCreacion,
         FechaModificacion = entity.FechaModificacion,
         CreadoPor = entity.CreadoPor

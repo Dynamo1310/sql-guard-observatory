@@ -18,13 +18,16 @@ namespace SQLGuardObservatory.API.Controllers;
 public class IntervencionWarController : ControllerBase
 {
     private readonly IIntervencionWarService _service;
+    private readonly IAdminAuthorizationService _authService;
     private readonly ILogger<IntervencionWarController> _logger;
 
     public IntervencionWarController(
         IIntervencionWarService service,
+        IAdminAuthorizationService authService,
         ILogger<IntervencionWarController> logger)
     {
         _service = service;
+        _authService = authService;
         _logger = logger;
     }
 
@@ -126,6 +129,16 @@ public class IntervencionWarController : ControllerBase
     {
         try
         {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                         ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { message = "Usuario no autenticado." });
+
+            var isAdmin = await _authService.IsAdminAsync(userId);
+            var isSuperAdmin = await _authService.IsSuperAdminAsync(userId);
+            if (!isAdmin && !isSuperAdmin)
+                return StatusCode(403, new { message = "Solo Administradores o Supervisores pueden eliminar intervenciones." });
+
             var deleted = await _service.DeleteAsync(id);
             if (!deleted) return NotFound(new { message = $"Intervención {id} no encontrada." });
             return Ok(new { message = "Intervención eliminada correctamente." });

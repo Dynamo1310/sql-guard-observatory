@@ -6278,8 +6278,10 @@ export interface IntervencionWarDto {
   referente: string | null;
   comentarios: string | null;
   intervencionesRelacionadas: string | null;
-  esProblema: boolean;
-  recomendacionMejoraEnviada: boolean;
+  estadoProblem: string;
+  fechaResolucionProblem: string | null;
+  estadoRecomendacion: string;
+  fechaFinalizacionRecomendacion: string | null;
   fechaCreacion: string;
   fechaModificacion: string;
   creadoPor: string | null;
@@ -6299,8 +6301,8 @@ export interface CreateUpdateIntervencionWarRequest {
   referente?: string;
   comentarios?: string;
   intervencionesRelacionadas?: string;
-  esProblema?: boolean;
-  recomendacionMejoraEnviada?: boolean;
+  estadoProblem?: string;
+  estadoRecomendacion?: string;
 }
 
 export interface IntervencionWarResumenDto {
@@ -6325,6 +6327,8 @@ export interface IntervencionWarStatsDto {
   evolucionMensual: { name: string; value: number }[];
   porCelula: { name: string; value: number }[];
   porBaseDatos: { name: string; value: number }[];
+  seguimientoProblems: { name: string; value: number }[];
+  seguimientoRecomendaciones: { name: string; value: number }[];
 }
 
 export const intervencionesWarApi = {

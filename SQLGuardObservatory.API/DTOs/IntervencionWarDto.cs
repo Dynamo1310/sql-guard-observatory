@@ -18,8 +18,10 @@ public class IntervencionWarDto
     public string? Referente { get; set; }
     public string? Comentarios { get; set; }
     public string? IntervencionesRelacionadas { get; set; }
-    public bool EsProblema { get; set; }
-    public bool RecomendacionMejoraEnviada { get; set; }
+    public string EstadoProblem { get; set; } = "NoEscalado";
+    public DateTime? FechaResolucionProblem { get; set; }
+    public string EstadoRecomendacion { get; set; } = "NoEnviada";
+    public DateTime? FechaFinalizacionRecomendacion { get; set; }
     public DateTime FechaCreacion { get; set; }
     public DateTime FechaModificacion { get; set; }
     public string? CreadoPor { get; set; }
@@ -50,8 +52,8 @@ public class CreateUpdateIntervencionWarRequest
     public string? Referente { get; set; }
     public string? Comentarios { get; set; }
     public string? IntervencionesRelacionadas { get; set; }
-    public bool EsProblema { get; set; }
-    public bool RecomendacionMejoraEnviada { get; set; }
+    public string EstadoProblem { get; set; } = "NoEscalado";
+    public string EstadoRecomendacion { get; set; } = "NoEnviada";
 }
 
 /// <summary>
@@ -107,5 +109,15 @@ public class IntervencionWarStatsDto
     /// Cantidad de intervenciones por base de datos
     /// </summary>
     public List<ChartDataItem> PorBaseDatos { get; set; } = new();
+
+    /// <summary>
+    /// Distribución de estados de Problem (NoEscalado, EscaladoPendiente, ProblemResuelto)
+    /// </summary>
+    public List<ChartDataItem> SeguimientoProblems { get; set; } = new();
+
+    /// <summary>
+    /// Distribución de estados de Recomendación (NoEnviada, Enviada, EnImplementacion, Aplicada)
+    /// </summary>
+    public List<ChartDataItem> SeguimientoRecomendaciones { get; set; } = new();
 }
 
