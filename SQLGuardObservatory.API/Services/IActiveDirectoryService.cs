@@ -18,5 +18,13 @@ public interface IActiveDirectoryService
     /// <param name="emails">Lista de correos electrónicos a buscar</param>
     /// <returns>Diccionario email -> ActiveDirectoryUserDto (null si no se encontró)</returns>
     Task<Dictionary<string, ActiveDirectoryUserDto?>> FindUsersByEmailAsync(List<string> emails);
+
+    /// <summary>
+    /// Busca una lista de distribución (grupo mail-enabled) en AD por su correo electrónico
+    /// y retorna su información junto con los miembros.
+    /// </summary>
+    /// <param name="email">Correo electrónico de la lista de distribución</param>
+    /// <returns>Información del grupo y sus miembros, o null si no se encontró</returns>
+    Task<DistributionListSearchResult?> FindDistributionListByEmailAsync(string email);
 }
 

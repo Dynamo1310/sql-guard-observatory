@@ -167,6 +167,80 @@ export interface ImportByEmailResponse {
 }
 
 // =============================================
+// Tipos de Listas de Distribución y Sync
+// =============================================
+
+export interface DistributionListMember extends ActiveDirectoryUserDto {
+  alreadyExists: boolean;
+}
+
+export interface DistributionListSearchResponse {
+  groupName: string;
+  samAccountName: string;
+  email: string;
+  distinguishedName: string;
+  memberCount: number;
+  members: DistributionListMember[];
+  existingSyncId: number | null;
+  hasExistingSync: boolean;
+}
+
+export interface ImportFromDistributionListRequest {
+  dlEmail: string;
+  selectedSamAccountNames: string[];
+  roleId?: number;
+  defaultRole: string;
+  enableSync: boolean;
+  syncIntervalHours: number;
+}
+
+export interface ImportFromDistributionListResponse {
+  message: string;
+  imported: number;
+  skipped: number;
+  errors: string[];
+  syncId: number | null;
+  syncEnabled: boolean;
+}
+
+export interface UserImportSyncDto {
+  id: number;
+  sourceType: string;
+  sourceIdentifier: string;
+  sourceDisplayName: string | null;
+  adGroupName: string;
+  defaultRoleId: number | null;
+  defaultRoleName: string | null;
+  autoSync: boolean;
+  syncIntervalHours: number;
+  lastSyncAt: string | null;
+  lastSyncResult: string | null;
+  lastSyncAddedCount: number | null;
+  lastSyncRemovedCount: number | null;
+  lastSyncSkippedCount: number | null;
+  managedUsersCount: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface UpdateUserImportSyncRequest {
+  autoSync: boolean;
+  syncIntervalHours: number;
+  defaultRoleId?: number;
+}
+
+export interface UserImportSyncExecuteResult {
+  success: boolean;
+  message: string;
+  addedCount: number;
+  removedCount: number;
+  skippedCount: number;
+  addedUsers: string[];
+  removedUsers: string[];
+  errors: string[];
+}
+
+// =============================================
 // Tipos de Foto de Perfil
 // =============================================
 
@@ -398,6 +472,69 @@ export const authApi = {
       body: JSON.stringify(request),
     });
     return handleResponse<ImportByEmailResponse>(response);
+  },
+
+  // =============================================
+  // Listas de Distribución y Sync
+  // =============================================
+
+  async searchDistributionList(email: string): Promise<DistributionListSearchResponse> {
+    const response = await fetch(`${API_URL}/api/auth/search-distribution-list`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ email }),
+    });
+    return handleResponse<DistributionListSearchResponse>(response);
+  },
+
+  async importFromDistributionList(request: ImportFromDistributionListRequest): Promise<ImportFromDistributionListResponse> {
+    const response = await fetch(`${API_URL}/api/auth/import-from-distribution-list`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<ImportFromDistributionListResponse>(response);
+  },
+
+  async getUserImportSyncs(): Promise<UserImportSyncDto[]> {
+    const response = await fetch(`${API_URL}/api/auth/user-import-syncs`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<UserImportSyncDto[]>(response);
+  },
+
+  async updateUserImportSync(id: number, request: UpdateUserImportSyncRequest): Promise<UserImportSyncDto> {
+    const response = await fetch(`${API_URL}/api/auth/user-import-syncs/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<UserImportSyncDto>(response);
+  },
+
+  async deleteUserImportSync(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/auth/user-import-syncs/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<void>(response);
+  },
+
+  async executeUserImportSync(id: number): Promise<UserImportSyncExecuteResult> {
+    const response = await fetch(`${API_URL}/api/auth/user-import-syncs/${id}/execute`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<UserImportSyncExecuteResult>(response);
   },
 
   // =============================================

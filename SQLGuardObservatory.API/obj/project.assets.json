@@ -11814,6 +11814,7 @@
       "Serilog.Sinks.File >= 5.0.0",
       "Swashbuckle.AspNetCore >= 6.5.0",
       "System.Data.SqlClient >= 4.9.0",
+      "System.DirectoryServices >= 8.0.0",
       "System.DirectoryServices.AccountManagement >= 8.0.0",
       "System.Management >= 10.0.1"
     ]
@@ -11916,6 +11917,10 @@
           "System.Data.SqlClient": {
             "target": "Package",
             "version": "[4.9.0, )"
+          },
+          "System.DirectoryServices": {
+            "target": "Package",
+            "version": "[8.0.0, )"
           },
           "System.DirectoryServices.AccountManagement": {
             "target": "Package",

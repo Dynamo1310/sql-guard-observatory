@@ -159,6 +159,75 @@ public class ImportByEmailRequest
 }
 
 // =============================================
+// DTOs para Listas de Distribución e Import Sync
+// =============================================
+
+public class DistributionListSearchResult
+{
+    public string GroupName { get; set; } = string.Empty;
+    public string SamAccountName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string DistinguishedName { get; set; } = string.Empty;
+    public int MemberCount { get; set; }
+    public List<ActiveDirectoryUserDto> Members { get; set; } = new();
+}
+
+public class SearchDistributionListRequest
+{
+    public string Email { get; set; } = string.Empty;
+}
+
+public class ImportFromDistributionListRequest
+{
+    public string DLEmail { get; set; } = string.Empty;
+    public List<string> SelectedSamAccountNames { get; set; } = new();
+    public int? RoleId { get; set; }
+    public string DefaultRole { get; set; } = "Reader";
+    public bool EnableSync { get; set; } = false;
+    public int SyncIntervalHours { get; set; } = 24;
+}
+
+public class UserImportSyncDto
+{
+    public int Id { get; set; }
+    public string SourceType { get; set; } = string.Empty;
+    public string SourceIdentifier { get; set; } = string.Empty;
+    public string? SourceDisplayName { get; set; }
+    public string ADGroupName { get; set; } = string.Empty;
+    public int? DefaultRoleId { get; set; }
+    public string? DefaultRoleName { get; set; }
+    public bool AutoSync { get; set; }
+    public int SyncIntervalHours { get; set; }
+    public string? LastSyncAt { get; set; }
+    public string? LastSyncResult { get; set; }
+    public int? LastSyncAddedCount { get; set; }
+    public int? LastSyncRemovedCount { get; set; }
+    public int? LastSyncSkippedCount { get; set; }
+    public int ManagedUsersCount { get; set; }
+    public bool IsActive { get; set; }
+    public string CreatedAt { get; set; } = string.Empty;
+}
+
+public class UpdateUserImportSyncRequest
+{
+    public bool AutoSync { get; set; }
+    public int SyncIntervalHours { get; set; } = 24;
+    public int? DefaultRoleId { get; set; }
+}
+
+public class UserImportSyncExecuteResult
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public int AddedCount { get; set; }
+    public int RemovedCount { get; set; }
+    public int SkippedCount { get; set; }
+    public List<string> AddedUsers { get; set; } = new();
+    public List<string> RemovedUsers { get; set; } = new();
+    public List<string> Errors { get; set; } = new();
+}
+
+// =============================================
 // DTOs para Fotos de Perfil
 // =============================================
 

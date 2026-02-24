@@ -18,17 +18,20 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly IActiveDirectoryService _activeDirectoryService;
     private readonly IAdminAuthorizationService _adminAuthService;
+    private readonly IUserImportSyncService _syncService;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IAuthService authService, 
         IActiveDirectoryService activeDirectoryService,
         IAdminAuthorizationService adminAuthService,
+        IUserImportSyncService syncService,
         ILogger<AuthController> logger)
     {
         _authService = authService;
         _activeDirectoryService = activeDirectoryService;
         _adminAuthService = adminAuthService;
+        _syncService = syncService;
         _logger = logger;
     }
     
@@ -695,6 +698,293 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Error al importar usuarios por email");
             return StatusCode(500, new { message = $"Error al importar usuarios: {ex.Message}" });
+        }
+    }
+
+    // =============================================
+    // Endpoints de Listas de Distribución y Sync
+    // =============================================
+
+    /// <summary>
+    /// Busca una lista de distribución en AD por su correo electrónico.
+    /// Retorna la información del grupo y sus miembros.
+    /// </summary>
+    [HttpPost("search-distribution-list")]
+    [RequireCapability("Users.ImportFromAD")]
+    [SupportedOSPlatform("windows")]
+    public async Task<IActionResult> SearchDistributionList([FromBody] SearchDistributionListRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Email))
+            {
+                return BadRequest(new { message = "Debe proporcionar el correo de la lista de distribución" });
+            }
+
+            var result = await _activeDirectoryService.FindDistributionListByEmailAsync(request.Email.Trim());
+
+            if (result == null)
+            {
+                return NotFound(new { message = $"No se encontró una lista de distribución con el correo '{request.Email}'" });
+            }
+
+            // Enriquecer con info de existencia en la app
+            var enrichedMembers = new List<object>();
+            foreach (var member in result.Members)
+            {
+                var existingUser = await _authService.GetUserByDomainUserAsync(member.SamAccountName);
+                enrichedMembers.Add(new
+                {
+                    member.SamAccountName,
+                    member.DisplayName,
+                    member.Email,
+                    member.DistinguishedName,
+                    AlreadyExists = existingUser != null
+                });
+            }
+
+            // Verificar si ya existe un sync para esta DL
+            var existingSync = (await _syncService.GetAllSyncsAsync())
+                .FirstOrDefault(s => s.SourceIdentifier.Equals(request.Email.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            return Ok(new
+            {
+                result.GroupName,
+                result.SamAccountName,
+                result.Email,
+                result.DistinguishedName,
+                result.MemberCount,
+                Members = enrichedMembers,
+                ExistingSyncId = existingSync?.Id,
+                HasExistingSync = existingSync != null
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al buscar lista de distribución {Email}", request.Email);
+            return StatusCode(500, new { message = $"Error al buscar en Active Directory: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Importa usuarios desde una lista de distribución y opcionalmente configura sincronización.
+    /// </summary>
+    [HttpPost("import-from-distribution-list")]
+    [RequireCapability("Users.ImportFromAD")]
+    [SupportedOSPlatform("windows")]
+    public async Task<IActionResult> ImportFromDistributionList([FromBody] ImportFromDistributionListRequest request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            if (!await _adminAuthService.CanCreateUsersAsync(currentUserId))
+            {
+                return Forbid();
+            }
+
+            if (string.IsNullOrWhiteSpace(request.DLEmail))
+            {
+                return BadRequest(new { message = "Debe proporcionar el correo de la lista de distribución" });
+            }
+
+            if (request.SelectedSamAccountNames == null || !request.SelectedSamAccountNames.Any())
+            {
+                return BadRequest(new { message = "Debe seleccionar al menos un usuario para importar" });
+            }
+
+            // Verificar permisos de rol
+            bool canAssignRole = false;
+            if (request.RoleId.HasValue)
+                canAssignRole = await _adminAuthService.CanAssignRoleByIdAsync(currentUserId, request.RoleId.Value);
+            else
+                canAssignRole = await _adminAuthService.CanAssignRoleAsync(currentUserId, request.DefaultRole);
+
+            if (!canAssignRole)
+            {
+                return StatusCode(403, new { message = "No tiene permisos para asignar el rol especificado" });
+            }
+
+            // Buscar la DL en AD para obtener datos
+            var dlInfo = await _activeDirectoryService.FindDistributionListByEmailAsync(request.DLEmail.Trim());
+            if (dlInfo == null)
+            {
+                return NotFound(new { message = "No se encontró la lista de distribución en Active Directory" });
+            }
+
+            var importedCount = 0;
+            var skippedCount = 0;
+            var errors = new List<string>();
+            var importedSamNames = new List<string>();
+
+            foreach (var sam in request.SelectedSamAccountNames)
+            {
+                try
+                {
+                    var adMember = dlInfo.Members.FirstOrDefault(m =>
+                        m.SamAccountName.Equals(sam, StringComparison.OrdinalIgnoreCase));
+
+                    if (adMember == null)
+                    {
+                        errors.Add($"{sam}: No encontrado en la lista de distribución");
+                        skippedCount++;
+                        continue;
+                    }
+
+                    var existingUser = await _authService.GetUserByDomainUserAsync(sam);
+                    if (existingUser != null)
+                    {
+                        skippedCount++;
+                        importedSamNames.Add(sam);
+                        continue;
+                    }
+
+                    var createRequest = new CreateUserRequest
+                    {
+                        DomainUser = adMember.SamAccountName,
+                        DisplayName = adMember.DisplayName,
+                        Email = adMember.Email,
+                        RoleId = request.RoleId,
+                        Role = request.DefaultRole
+                    };
+
+                    var created = await _authService.CreateUserAsync(createRequest);
+                    if (created != null)
+                    {
+                        importedCount++;
+                        importedSamNames.Add(sam);
+                    }
+                    else
+                    {
+                        errors.Add($"{sam}: Error al crear en la base de datos");
+                        skippedCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"{sam}: {ex.Message}");
+                    skippedCount++;
+                }
+            }
+
+            // Si se habilitó sync, crear la configuración
+            int? syncId = null;
+            if (request.EnableSync)
+            {
+                var sync = await _syncService.CreateSyncAsync(
+                    "DistributionList",
+                    request.DLEmail.Trim(),
+                    dlInfo.GroupName,
+                    dlInfo.SamAccountName,
+                    request.RoleId,
+                    true,
+                    request.SyncIntervalHours,
+                    importedSamNames,
+                    currentUserId);
+
+                syncId = sync?.Id;
+            }
+
+            return Ok(new
+            {
+                message = $"Importación completada: {importedCount} usuarios importados, {skippedCount} omitidos",
+                imported = importedCount,
+                skipped = skippedCount,
+                errors,
+                syncId,
+                syncEnabled = request.EnableSync
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al importar desde lista de distribución");
+            return StatusCode(500, new { message = $"Error al importar usuarios: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Lista todas las sincronizaciones activas de importación de usuarios.
+    /// </summary>
+    [HttpGet("user-import-syncs")]
+    [RequireCapability("Users.ImportFromAD")]
+    public async Task<IActionResult> GetUserImportSyncs()
+    {
+        try
+        {
+            var syncs = await _syncService.GetAllSyncsAsync();
+            return Ok(syncs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener sincronizaciones de importación");
+            return StatusCode(500, new { message = $"Error: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Actualiza la configuración de una sincronización.
+    /// </summary>
+    [HttpPut("user-import-syncs/{id}")]
+    [RequireCapability("Users.ImportFromAD")]
+    public async Task<IActionResult> UpdateUserImportSync(int id, [FromBody] UpdateUserImportSyncRequest request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var result = await _syncService.UpdateSyncAsync(id, request, currentUserId);
+
+            if (result == null)
+                return NotFound(new { message = "Sincronización no encontrada" });
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar sync {Id}", id);
+            return StatusCode(500, new { message = $"Error: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Elimina una sincronización (soft delete).
+    /// </summary>
+    [HttpDelete("user-import-syncs/{id}")]
+    [RequireCapability("Users.ImportFromAD")]
+    public async Task<IActionResult> DeleteUserImportSync(int id)
+    {
+        try
+        {
+            var deleted = await _syncService.DeleteSyncAsync(id);
+            if (!deleted)
+                return NotFound(new { message = "Sincronización no encontrada" });
+
+            return Ok(new { message = "Sincronización eliminada exitosamente" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar sync {Id}", id);
+            return StatusCode(500, new { message = $"Error: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Ejecuta manualmente una sincronización.
+    /// </summary>
+    [HttpPost("user-import-syncs/{id}/execute")]
+    [RequireCapability("Users.ImportFromAD")]
+    [SupportedOSPlatform("windows")]
+    public async Task<IActionResult> ExecuteUserImportSync(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var result = await _syncService.ExecuteSyncAsync(id, currentUserId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al ejecutar sync {Id}", id);
+            return StatusCode(500, new { message = $"Error: {ex.Message}" });
         }
     }
 

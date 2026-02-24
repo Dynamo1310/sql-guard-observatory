@@ -1,3 +1,4 @@
+using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 using System.Runtime.Versioning;
 using SQLGuardObservatory.API.DTOs;
@@ -169,6 +170,88 @@ public class ActiveDirectoryService : IActiveDirectoryService
         }
 
         return null;
+    }
+
+    public async Task<DistributionListSearchResult?> FindDistributionListByEmailAsync(string email)
+    {
+        return await Task.Run(() => FindDistributionListByEmail(email));
+    }
+
+    private DistributionListSearchResult? FindDistributionListByEmail(string email)
+    {
+        try
+        {
+            _logger.LogInformation("Buscando lista de distribución con email {Email}", email);
+
+            using var entry = new DirectoryEntry($"LDAP://{_domainName}");
+            using var searcher = new DirectorySearcher(entry)
+            {
+                Filter = $"(&(objectCategory=group)(mail={email}))"
+            };
+            searcher.PropertiesToLoad.AddRange(new[] { "distinguishedName", "cn", "mail", "sAMAccountName", "displayName" });
+
+            var searchResult = searcher.FindOne();
+            if (searchResult == null)
+            {
+                _logger.LogWarning("Lista de distribución con email {Email} no encontrada en AD", email);
+                return null;
+            }
+
+            var dn = searchResult.Properties["distinguishedName"][0]?.ToString() ?? string.Empty;
+            var samAccountName = searchResult.Properties["sAMAccountName"][0]?.ToString() ?? string.Empty;
+            var displayName = searchResult.Properties.Contains("displayName") && searchResult.Properties["displayName"].Count > 0
+                ? searchResult.Properties["displayName"][0]?.ToString() ?? string.Empty
+                : searchResult.Properties["cn"][0]?.ToString() ?? string.Empty;
+            var groupEmail = searchResult.Properties["mail"][0]?.ToString() ?? email;
+
+            _logger.LogInformation("Lista de distribución encontrada: {Name} ({Sam})", displayName, samAccountName);
+
+            var members = new List<ActiveDirectoryUserDto>();
+            using var context = new PrincipalContext(ContextType.Domain, _domainName);
+            using var group = GroupPrincipal.FindByIdentity(context, IdentityType.DistinguishedName, dn);
+
+            if (group != null)
+            {
+                var groupMembers = group.GetMembers(false);
+                foreach (var member in groupMembers)
+                {
+                    if (member is UserPrincipal userPrincipal)
+                    {
+                        try
+                        {
+                            members.Add(MapUserPrincipalToDto(userPrincipal));
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Error al procesar miembro {Sam} de la DL", userPrincipal.SamAccountName);
+                        }
+                    }
+                    member.Dispose();
+                }
+            }
+
+            _logger.LogInformation("DL {Name}: {Count} miembros encontrados", displayName, members.Count);
+
+            return new DistributionListSearchResult
+            {
+                GroupName = displayName,
+                SamAccountName = samAccountName,
+                Email = groupEmail,
+                DistinguishedName = dn,
+                MemberCount = members.Count,
+                Members = members.OrderBy(m => m.DisplayName).ToList()
+            };
+        }
+        catch (PrincipalServerDownException ex)
+        {
+            _logger.LogError(ex, "No se pudo conectar al servidor de dominio buscando DL");
+            throw new Exception("No se pudo conectar al servidor de Active Directory. Verifica la conectividad de red.", ex);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al buscar lista de distribución {Email}", email);
+            throw new Exception($"Error al consultar Active Directory: {ex.Message}", ex);
+        }
     }
 
     private static ActiveDirectoryUserDto MapUserPrincipalToDto(UserPrincipal user)

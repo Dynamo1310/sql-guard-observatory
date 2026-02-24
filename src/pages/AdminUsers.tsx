@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Pencil, Trash2, UserPlus, Search, Loader2, Shield, ShieldCheck, Eye, Lock, Upload, RefreshCw, Mail, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, UserPlus, Search, Loader2, Shield, ShieldCheck, Eye, Lock, Upload, RefreshCw, Mail, CheckCircle2, XCircle, AlertTriangle, ListChecks, RefreshCcw, Trash, Clock } from 'lucide-react';
 import { Capabilities } from '@/lib/capabilities';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
@@ -38,7 +38,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { authApi, groupsApi, adminRolesApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto, AdminRoleSimpleDto, EmailSearchResult } from '@/services/api';
+import { authApi, groupsApi, adminRolesApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto, AdminRoleSimpleDto, EmailSearchResult, DistributionListSearchResponse, DistributionListMember, UserImportSyncDto } from '@/services/api';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import { UserAvatar } from '@/components/UserAvatar';
@@ -67,8 +69,11 @@ export default function AdminUsers() {
   // Available roles from API
   const [availableRoles, setAvailableRoles] = useState<AdminRoleSimpleDto[]>([]);
   
+  // Unified Import Dialog
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [activeImportTab, setActiveImportTab] = useState('ad-group');
+  
   // AD Import states
-  const [showImportAdDialog, setShowImportAdDialog] = useState(false);
   const [adGroupName, setAdGroupName] = useState('GSCORP\\SQL_admins');
   const [adGroupMembers, setAdGroupMembers] = useState<ActiveDirectoryUserDto[]>([]);
   const [selectedAdUsers, setSelectedAdUsers] = useState<Set<string>>(new Set());
@@ -77,13 +82,26 @@ export default function AdminUsers() {
   const [importRoleId, setImportRoleId] = useState<number | undefined>(undefined);
   
   // Email Import states
-  const [showImportEmailDialog, setShowImportEmailDialog] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [emailSearchResults, setEmailSearchResults] = useState<EmailSearchResult[]>([]);
   const [selectedEmailUsers, setSelectedEmailUsers] = useState<Set<string>>(new Set());
   const [searchingByEmail, setSearchingByEmail] = useState(false);
   const [importingByEmail, setImportingByEmail] = useState(false);
   const [emailImportRoleId, setEmailImportRoleId] = useState<number | undefined>(undefined);
+
+  // Distribution List Import states
+  const [dlEmail, setDlEmail] = useState('');
+  const [dlSearchResult, setDlSearchResult] = useState<DistributionListSearchResponse | null>(null);
+  const [selectedDlUsers, setSelectedDlUsers] = useState<Set<string>>(new Set());
+  const [searchingDl, setSearchingDl] = useState(false);
+  const [importingDl, setImportingDl] = useState(false);
+  const [dlImportRoleId, setDlImportRoleId] = useState<number | undefined>(undefined);
+  const [enableDlSync, setEnableDlSync] = useState(false);
+  const [dlSyncIntervalHours, setDlSyncIntervalHours] = useState(24);
+
+  // Sync management states
+  const [importSyncs, setImportSyncs] = useState<UserImportSyncDto[]>([]);
+  const [executingSync, setExecutingSync] = useState<number | null>(null);
   
   // Photo upload states
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
@@ -109,10 +127,12 @@ export default function AdminUsers() {
         setFormData(prev => ({ ...prev, roleId: readerRole.id }));
         setImportRoleId(readerRole.id);
         setEmailImportRoleId(readerRole.id);
+        setDlImportRoleId(readerRole.id);
       } else if (roles.length > 0 && !formData.roleId) {
         setFormData(prev => ({ ...prev, roleId: roles[roles.length - 1].id }));
         setImportRoleId(roles[roles.length - 1].id);
         setEmailImportRoleId(roles[roles.length - 1].id);
+        setDlImportRoleId(roles[roles.length - 1].id);
       }
     } catch (err) {
       console.error('Error fetching roles:', err);
@@ -121,9 +141,19 @@ export default function AdminUsers() {
     }
   };
 
+  const fetchImportSyncs = async () => {
+    try {
+      const syncs = await authApi.getUserImportSyncs();
+      setImportSyncs(syncs);
+    } catch (err) {
+      console.error('Error fetching import syncs:', err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchAvailableRoles();
+    fetchImportSyncs();
   }, []);
 
   const fetchUsers = async (showLoading = true) => {
@@ -368,8 +398,7 @@ export default function AdminUsers() {
       // Recargar la lista de usuarios
       await fetchUsers();
       
-      // Cerrar el diálogo y resetear
-      setShowImportAdDialog(false);
+      // Resetear pestaña AD
       setAdGroupMembers([]);
       setSelectedAdUsers(new Set());
       setAdGroupName('GSCORP\\SQL_admins');
@@ -457,7 +486,7 @@ export default function AdminUsers() {
 
       await fetchUsers();
 
-      setShowImportEmailDialog(false);
+      // Resetear pestaña email
       setEmailInput('');
       setEmailSearchResults([]);
       setSelectedEmailUsers(new Set());
@@ -468,6 +497,165 @@ export default function AdminUsers() {
     } finally {
       setImportingByEmail(false);
     }
+  };
+
+  // Funciones para importación desde listas de distribución
+  const handleSearchDl = async () => {
+    if (!dlEmail.trim()) {
+      toast.error('Ingresa el correo de la lista de distribución');
+      return;
+    }
+
+    setSearchingDl(true);
+    try {
+      const response = await authApi.searchDistributionList(dlEmail.trim());
+      setDlSearchResult(response);
+
+      const importable = response.members.filter((m: DistributionListMember) => !m.alreadyExists);
+      setSelectedDlUsers(new Set(importable.map((m: DistributionListMember) => m.samAccountName)));
+
+      if (response.memberCount === 0) {
+        toast.error('La lista de distribución no tiene miembros');
+      } else {
+        toast.success(`Lista "${response.groupName}" encontrada con ${response.memberCount} miembros`);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Error al buscar la lista de distribución');
+      setDlSearchResult(null);
+      setSelectedDlUsers(new Set());
+    } finally {
+      setSearchingDl(false);
+    }
+  };
+
+  const handleToggleDlUser = (samAccountName: string) => {
+    const newSelected = new Set(selectedDlUsers);
+    if (newSelected.has(samAccountName)) {
+      newSelected.delete(samAccountName);
+    } else {
+      newSelected.add(samAccountName);
+    }
+    setSelectedDlUsers(newSelected);
+  };
+
+  const handleSelectAllDlUsers = (checked: boolean) => {
+    if (!dlSearchResult) return;
+    if (checked) {
+      const importable = dlSearchResult.members.filter((m: DistributionListMember) => !m.alreadyExists);
+      setSelectedDlUsers(new Set(importable.map((m: DistributionListMember) => m.samAccountName)));
+    } else {
+      setSelectedDlUsers(new Set());
+    }
+  };
+
+  const handleImportFromDl = async () => {
+    if (selectedDlUsers.size === 0) {
+      toast.error('Selecciona al menos un usuario para importar');
+      return;
+    }
+
+    if (!dlImportRoleId) {
+      toast.error('Selecciona un rol para los usuarios importados');
+      return;
+    }
+
+    const selectedRole = availableRoles.find(r => r.id === dlImportRoleId);
+    const roleName = selectedRole?.name || 'Reader';
+
+    setImportingDl(true);
+    try {
+      const response = await authApi.importFromDistributionList({
+        dlEmail: dlEmail.trim(),
+        selectedSamAccountNames: Array.from(selectedDlUsers),
+        roleId: dlImportRoleId,
+        defaultRole: roleName,
+        enableSync: enableDlSync,
+        syncIntervalHours: dlSyncIntervalHours,
+      });
+
+      toast.success(response.message + ' Recuerda agregarlos a un grupo para darles permisos de vistas.');
+
+      if (response.errors.length > 0) {
+        console.error('Errores durante la importación desde DL:', response.errors);
+      }
+
+      await fetchUsers();
+      if (response.syncEnabled) {
+        await fetchImportSyncs();
+      }
+
+      // Resetear pestaña DL
+      setDlEmail('');
+      setDlSearchResult(null);
+      setSelectedDlUsers(new Set());
+      setEnableDlSync(false);
+      setDlSyncIntervalHours(24);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al importar usuarios');
+    } finally {
+      setImportingDl(false);
+    }
+  };
+
+  // Funciones de gestión de syncs
+  const handleToggleSync = async (syncId: number, currentAutoSync: boolean) => {
+    try {
+      const sync = importSyncs.find(s => s.id === syncId);
+      if (!sync) return;
+
+      await authApi.updateUserImportSync(syncId, {
+        autoSync: !currentAutoSync,
+        syncIntervalHours: sync.syncIntervalHours,
+        defaultRoleId: sync.defaultRoleId ?? undefined,
+      });
+
+      toast.success(!currentAutoSync ? 'Sincronización automática activada' : 'Sincronización automática desactivada');
+      await fetchImportSyncs();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al actualizar sincronización');
+    }
+  };
+
+  const handleExecuteSync = async (syncId: number) => {
+    setExecutingSync(syncId);
+    try {
+      const result = await authApi.executeUserImportSync(syncId);
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+      await fetchUsers();
+      await fetchImportSyncs();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al ejecutar sincronización');
+    } finally {
+      setExecutingSync(null);
+    }
+  };
+
+  const handleDeleteSync = async (syncId: number) => {
+    try {
+      await authApi.deleteUserImportSync(syncId);
+      toast.success('Sincronización eliminada');
+      await fetchImportSyncs();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al eliminar sincronización');
+    }
+  };
+
+  const resetImportDialog = () => {
+    setAdGroupMembers([]);
+    setSelectedAdUsers(new Set());
+    setAdGroupName('GSCORP\\SQL_admins');
+    setEmailInput('');
+    setEmailSearchResults([]);
+    setSelectedEmailUsers(new Set());
+    setDlEmail('');
+    setDlSearchResult(null);
+    setSelectedDlUsers(new Set());
+    setEnableDlSync(false);
+    setDlSyncIntervalHours(24);
   };
 
   const resetForm = () => {
@@ -648,15 +836,9 @@ export default function AdminUsers() {
             Actualizar
           </Button>
           {canImportFromAD && (
-            <Button onClick={() => setShowImportEmailDialog(true)} variant="outline" className="w-full sm:w-auto">
-              <Mail className="mr-2 h-4 w-4" />
-              Importar por Email
-            </Button>
-          )}
-          {canImportFromAD && (
-            <Button onClick={() => setShowImportAdDialog(true)} variant="outline" className="w-full sm:w-auto">
+            <Button onClick={() => setShowImportDialog(true)} variant="outline" className="w-full sm:w-auto">
               <UserPlus className="mr-2 h-4 w-4" />
-              Importar desde Grupo AD
+              Importar Usuarios
             </Button>
           )}
           {canCreateUsers && (
@@ -712,6 +894,75 @@ export default function AdminUsers() {
           variant={usersWithoutGroups > 0 ? "warning" : "default"}
         />
       </div>
+
+      {/* Panel de Sincronizaciones Activas */}
+      {canImportFromAD && importSyncs.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <RefreshCcw className="h-4 w-4" />
+              Sincronizaciones de Listas de Distribución ({importSyncs.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {importSyncs.map((sync) => (
+                <div key={sync.id} className="flex items-center justify-between p-3 border rounded-md bg-muted/20">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{sync.sourceDisplayName || sync.adGroupName}</div>
+                    <div className="text-xs text-muted-foreground">{sync.sourceIdentifier}</div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span>{sync.managedUsersCount} usuarios gestionados</span>
+                      {sync.lastSyncAt && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          Último sync: {new Date(sync.lastSyncAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                      {sync.lastSyncResult && (
+                        <span className={sync.lastSyncResult === 'Success' ? 'text-green-600' : 'text-red-600'}>
+                          {sync.lastSyncResult === 'Success' ? 'OK' : sync.lastSyncResult}
+                        </span>
+                      )}
+                      {sync.lastSyncAddedCount != null && sync.lastSyncAddedCount > 0 && (
+                        <span className="text-green-600">+{sync.lastSyncAddedCount}</span>
+                      )}
+                      {sync.lastSyncRemovedCount != null && sync.lastSyncRemovedCount > 0 && (
+                        <span className="text-red-600">-{sync.lastSyncRemovedCount}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Auto</span>
+                      <Switch
+                        checked={sync.autoSync}
+                        onCheckedChange={() => handleToggleSync(sync.id, sync.autoSync)}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleExecuteSync(sync.id)}
+                      disabled={executingSync === sync.id}
+                    >
+                      {executingSync === sync.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteSync(sync.id)}
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -1108,376 +1359,337 @@ export default function AdminUsers() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog Importar desde Grupo AD */}
-      <Dialog open={showImportAdDialog} onOpenChange={setShowImportAdDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Importar Usuarios desde Grupo de Active Directory</DialogTitle>
-            <DialogDescription>
-              Busca un grupo de AD y selecciona los usuarios que deseas agregar a la lista blanca de la aplicación.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            {/* Input para nombre del grupo */}
-            <div className="space-y-2">
-              <Label htmlFor="adGroupName">Nombre del Grupo AD</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="adGroupName"
-                  placeholder="GSCORP\SQL_admins"
-                  value={adGroupName}
-                  onChange={(e) => setAdGroupName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearchAdGroup()}
-                  disabled={searchingAdGroup}
-                  className="flex-1"
-                />
-                <Button 
-                  onClick={handleSearchAdGroup} 
-                  disabled={searchingAdGroup || !adGroupName.trim()}
-                >
-                  {searchingAdGroup ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Buscando...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="mr-2 h-4 w-4" />
-                      Buscar
-                    </>
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Ingresa el nombre del grupo con o sin el dominio (ej: GSCORP\SQL_admins o SQL_admins)
-              </p>
-            </div>
-
-            {/* Lista de usuarios encontrados */}
-            {adGroupMembers.length > 0 && (
-              <>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Label>Usuarios encontrados ({adGroupMembers.length})</Label>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="selectAll"
-                        checked={selectedAdUsers.size === adGroupMembers.length}
-                        onCheckedChange={handleSelectAllAdUsers}
-                      />
-                      <label
-                        htmlFor="selectAll"
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        Seleccionar todos
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <div className="border rounded-md max-h-60 overflow-y-auto">
-                    <div className="p-2 space-y-2">
-                      {adGroupMembers.map((member) => (
-                        <div 
-                          key={member.samAccountName}
-                          className="flex items-start space-x-2 p-2 rounded hover:bg-accent"
-                        >
-                          <Checkbox
-                            id={member.samAccountName}
-                            checked={selectedAdUsers.has(member.samAccountName)}
-                            onCheckedChange={() => handleToggleAdUser(member.samAccountName)}
-                          />
-                          <label
-                            htmlFor={member.samAccountName}
-                            className="flex-1 cursor-pointer"
-                          >
-                            <div className="text-sm font-medium">{member.displayName}</div>
-                            <div className="text-xs text-muted-foreground font-mono">{member.samAccountName}</div>
-                            {member.email && (
-                              <div className="text-xs text-muted-foreground">{member.email}</div>
-                            )}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Selección de rol */}
-                <div className="space-y-2">
-                  <Label>Rol a asignar</Label>
-                  <Select
-                    value={importRoleId?.toString() || ''}
-                    onValueChange={(value) => setImportRoleId(parseInt(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar rol" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableRoles.map((role) => {
-                        const IconComponent = getRoleIcon(role.name);
-                        return (
-                          <SelectItem key={role.id} value={role.id.toString()}>
-                            <div className="flex items-center gap-2">
-                              <IconComponent className="h-4 w-4" style={{ color: role.color }} />
-                              {role.name}
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Información de importación */}
-                <div className="bg-accent/50 p-3 rounded-md">
-                  <p className="text-sm">
-                    <strong>{selectedAdUsers.size}</strong> de <strong>{adGroupMembers.length}</strong> usuarios seleccionados para importar con rol <strong>{availableRoles.find(r => r.id === importRoleId)?.name || 'Reader'}</strong>
-                  </p>
-                  {selectedAdUsers.size > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Los usuarios ya existentes en la base de datos serán omitidos.
-                    </p>
-                  )}
-                </div>
-                
-                <div className="bg-muted/50 p-3 rounded-md border border-border">
-                  <p className="text-sm text-muted-foreground">
-                    <strong className="text-foreground">Nota:</strong> Después de importar, agrega los usuarios a un grupo para asignarles permisos de vistas.
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setShowImportAdDialog(false);
-                setAdGroupMembers([]);
-                setSelectedAdUsers(new Set());
-              }}
-              disabled={importingUsers}
-              className="w-full sm:w-auto"
-            >
-              Cancelar
-            </Button>
-            <Button 
-              onClick={handleImportFromAdGroup}
-              disabled={importingUsers || selectedAdUsers.size === 0}
-              className="w-full sm:w-auto"
-            >
-              {importingUsers ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Importando...
-                </>
-              ) : (
-                <>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Importar {selectedAdUsers.size} Usuario{selectedAdUsers.size !== 1 ? 's' : ''}
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog Importar por Email */}
-      <Dialog open={showImportEmailDialog} onOpenChange={(open) => {
-        setShowImportEmailDialog(open);
-        if (!open) {
-          setEmailInput('');
-          setEmailSearchResults([]);
-          setSelectedEmailUsers(new Set());
-        }
+      {/* Dialog Unificado de Importación */}
+      <Dialog open={showImportDialog} onOpenChange={(open) => {
+        setShowImportDialog(open);
+        if (!open) resetImportDialog();
       }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Importar Usuarios por Correo Electrónico</DialogTitle>
+            <DialogTitle>Importar Usuarios</DialogTitle>
             <DialogDescription>
-              Ingresa los correos electrónicos de los usuarios que deseas agregar. Se buscarán automáticamente en Active Directory.
+              Importa usuarios desde Active Directory por grupo, correos individuales o lista de distribución.
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="emailInput">Correos electrónicos</Label>
-              <Textarea
-                id="emailInput"
-                className="min-h-[120px]"
-                placeholder={"juan.perez@supervielle.com.ar\nmaria.garcia@supervielle.com.ar\npedro.lopez@supervielle.com.ar"}
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                disabled={searchingByEmail}
-              />
-              <p className="text-xs text-muted-foreground">
-                Un correo por línea, o separados por coma o punto y coma.
-              </p>
-            </div>
 
-            <Button 
-              onClick={handleSearchByEmail} 
-              disabled={searchingByEmail || !emailInput.trim()}
-              className="w-full"
-            >
-              {searchingByEmail ? (
+          <Tabs value={activeImportTab} onValueChange={setActiveImportTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="ad-group">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Grupo AD
+              </TabsTrigger>
+              <TabsTrigger value="emails">
+                <Mail className="mr-2 h-4 w-4" />
+                Correos
+              </TabsTrigger>
+              <TabsTrigger value="distribution-list">
+                <ListChecks className="mr-2 h-4 w-4" />
+                Lista de Dist.
+              </TabsTrigger>
+            </TabsList>
+
+            {/* ============ TAB: GRUPO AD ============ */}
+            <TabsContent value="ad-group" className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="adGroupName">Nombre del Grupo AD</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="adGroupName"
+                    placeholder="GSCORP\SQL_admins"
+                    value={adGroupName}
+                    onChange={(e) => setAdGroupName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearchAdGroup()}
+                    disabled={searchingAdGroup}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSearchAdGroup} disabled={searchingAdGroup || !adGroupName.trim()}>
+                    {searchingAdGroup ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Buscando...</> : <><Search className="mr-2 h-4 w-4" />Buscar</>}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Ingresa el nombre del grupo con o sin el dominio (ej: GSCORP\SQL_admins o SQL_admins)
+                </p>
+              </div>
+
+              {adGroupMembers.length > 0 && (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Buscando en Active Directory...
-                </>
-              ) : (
-                <>
-                  <Search className="mr-2 h-4 w-4" />
-                  Buscar en Active Directory
-                </>
-              )}
-            </Button>
-
-            {emailSearchResults.length > 0 && (
-              <>
-                <div className="space-y-2">
-                  <Label>
-                    Resultados ({emailSearchResults.filter(r => r.found && !r.alreadyExists).length} importables de {emailSearchResults.length})
-                  </Label>
-                  
-                  <div className="border rounded-md max-h-60 overflow-y-auto">
-                    <div className="p-2 space-y-1">
-                      {emailSearchResults.map((result) => (
-                        <div 
-                          key={result.email}
-                          className={`flex items-center space-x-3 p-2 rounded ${
-                            result.found && !result.alreadyExists 
-                              ? 'hover:bg-accent cursor-pointer' 
-                              : 'opacity-60'
-                          }`}
-                          onClick={() => {
-                            if (result.found && !result.alreadyExists) {
-                              handleToggleEmailUser(result.email);
-                            }
-                          }}
-                        >
-                          {result.found && !result.alreadyExists && (
-                            <Checkbox
-                              checked={selectedEmailUsers.has(result.email)}
-                              onCheckedChange={() => handleToggleEmailUser(result.email)}
-                            />
-                          )}
-
-                          {result.found && !result.alreadyExists && (
-                            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                          )}
-                          {result.found && result.alreadyExists && (
-                            <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
-                          )}
-                          {!result.found && (
-                            <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-                          )}
-
-                          <div className="flex-1 min-w-0">
-                            {result.found && result.adUser ? (
-                              <>
-                                <div className="text-sm font-medium truncate">{result.adUser.displayName}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  <span className="font-mono">{result.adUser.samAccountName}</span>
-                                  <span className="mx-1">·</span>
-                                  <span>{result.email}</span>
-                                </div>
-                              </>
-                            ) : (
-                              <div className="text-sm truncate">{result.email}</div>
-                            )}
-                            {result.alreadyExists && (
-                              <div className="text-xs text-yellow-600 dark:text-yellow-400">Ya existe en la aplicación</div>
-                            )}
-                            {!result.found && (
-                              <div className="text-xs text-red-600 dark:text-red-400">No encontrado en Active Directory</div>
-                            )}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Label>Usuarios encontrados ({adGroupMembers.length})</Label>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox id="selectAllAd" checked={selectedAdUsers.size === adGroupMembers.length} onCheckedChange={handleSelectAllAdUsers} />
+                        <label htmlFor="selectAllAd" className="text-sm font-medium leading-none">Seleccionar todos</label>
+                      </div>
+                    </div>
+                    <div className="border rounded-md max-h-60 overflow-y-auto">
+                      <div className="p-2 space-y-2">
+                        {adGroupMembers.map((member) => (
+                          <div key={member.samAccountName} className="flex items-start space-x-2 p-2 rounded hover:bg-accent">
+                            <Checkbox id={`ad-${member.samAccountName}`} checked={selectedAdUsers.has(member.samAccountName)} onCheckedChange={() => handleToggleAdUser(member.samAccountName)} />
+                            <label htmlFor={`ad-${member.samAccountName}`} className="flex-1 cursor-pointer">
+                              <div className="text-sm font-medium">{member.displayName}</div>
+                              <div className="text-xs text-muted-foreground font-mono">{member.samAccountName}</div>
+                              {member.email && <div className="text-xs text-muted-foreground">{member.email}</div>}
+                            </label>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {emailSearchResults.some(r => r.found && !r.alreadyExists) && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Rol a asignar</Label>
-                      <Select
-                        value={emailImportRoleId?.toString() || ''}
-                        onValueChange={(value) => setEmailImportRoleId(parseInt(value))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar rol" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableRoles.map((role) => {
-                            const IconComponent = getRoleIcon(role.name);
-                            return (
-                              <SelectItem key={role.id} value={role.id.toString()}>
-                                <div className="flex items-center gap-2">
-                                  <IconComponent className="h-4 w-4" style={{ color: role.color }} />
-                                  {role.name}
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Rol a asignar</Label>
+                    <Select value={importRoleId?.toString() || ''} onValueChange={(value) => setImportRoleId(parseInt(value))}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar rol" /></SelectTrigger>
+                      <SelectContent>
+                        {availableRoles.map((role) => {
+                          const IconComponent = getRoleIcon(role.name);
+                          return (
+                            <SelectItem key={role.id} value={role.id.toString()}>
+                              <div className="flex items-center gap-2"><IconComponent className="h-4 w-4" style={{ color: role.color }} />{role.name}</div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                    <div className="bg-accent/50 p-3 rounded-md">
-                      <p className="text-sm">
-                        <strong>{selectedEmailUsers.size}</strong> usuario{selectedEmailUsers.size !== 1 ? 's' : ''} seleccionado{selectedEmailUsers.size !== 1 ? 's' : ''} para importar con rol <strong>{availableRoles.find(r => r.id === emailImportRoleId)?.name || 'Reader'}</strong>
-                      </p>
-                    </div>
+                  <div className="bg-accent/50 p-3 rounded-md">
+                    <p className="text-sm">
+                      <strong>{selectedAdUsers.size}</strong> de <strong>{adGroupMembers.length}</strong> usuarios seleccionados para importar con rol <strong>{availableRoles.find(r => r.id === importRoleId)?.name || 'Reader'}</strong>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">Los usuarios ya existentes serán omitidos.</p>
+                  </div>
 
-                    <div className="bg-muted/50 p-3 rounded-md border border-border">
-                      <p className="text-sm text-muted-foreground">
-                        <strong className="text-foreground">Nota:</strong> Después de importar, agrega los usuarios a un grupo para asignarles permisos de vistas.
-                      </p>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
+                  <div className="flex justify-end">
+                    <Button onClick={handleImportFromAdGroup} disabled={importingUsers || selectedAdUsers.size === 0}>
+                      {importingUsers ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Importando...</> : <><UserPlus className="mr-2 h-4 w-4" />Importar {selectedAdUsers.size} Usuario{selectedAdUsers.size !== 1 ? 's' : ''}</>}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </TabsContent>
 
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setShowImportEmailDialog(false);
-                setEmailInput('');
-                setEmailSearchResults([]);
-                setSelectedEmailUsers(new Set());
-              }}
-              disabled={importingByEmail}
-              className="w-full sm:w-auto"
-            >
-              Cancelar
-            </Button>
-            {emailSearchResults.some(r => r.found && !r.alreadyExists) && (
-              <Button 
-                onClick={handleImportByEmail}
-                disabled={importingByEmail || selectedEmailUsers.size === 0}
-                className="w-full sm:w-auto"
-              >
-                {importingByEmail ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Importando...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Importar {selectedEmailUsers.size} Usuario{selectedEmailUsers.size !== 1 ? 's' : ''}
-                  </>
-                )}
+            {/* ============ TAB: CORREOS ============ */}
+            <TabsContent value="emails" className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="emailInput">Correos electrónicos</Label>
+                <Textarea
+                  id="emailInput"
+                  className="min-h-[120px]"
+                  placeholder={"juan.perez@supervielle.com.ar\nmaria.garcia@supervielle.com.ar\npedro.lopez@supervielle.com.ar"}
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  disabled={searchingByEmail}
+                />
+                <p className="text-xs text-muted-foreground">Un correo por línea, o separados por coma o punto y coma.</p>
+              </div>
+
+              <Button onClick={handleSearchByEmail} disabled={searchingByEmail || !emailInput.trim()} className="w-full">
+                {searchingByEmail ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Buscando en Active Directory...</> : <><Search className="mr-2 h-4 w-4" />Buscar en Active Directory</>}
               </Button>
-            )}
+
+              {emailSearchResults.length > 0 && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Resultados ({emailSearchResults.filter(r => r.found && !r.alreadyExists).length} importables de {emailSearchResults.length})</Label>
+                    <div className="border rounded-md max-h-60 overflow-y-auto">
+                      <div className="p-2 space-y-1">
+                        {emailSearchResults.map((result) => (
+                          <div key={result.email} className={`flex items-center space-x-3 p-2 rounded ${result.found && !result.alreadyExists ? 'hover:bg-accent cursor-pointer' : 'opacity-60'}`}
+                            onClick={() => { if (result.found && !result.alreadyExists) handleToggleEmailUser(result.email); }}>
+                            {result.found && !result.alreadyExists && <Checkbox checked={selectedEmailUsers.has(result.email)} onCheckedChange={() => handleToggleEmailUser(result.email)} />}
+                            {result.found && !result.alreadyExists && <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />}
+                            {result.found && result.alreadyExists && <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />}
+                            {!result.found && <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                              {result.found && result.adUser ? (
+                                <>
+                                  <div className="text-sm font-medium truncate">{result.adUser.displayName}</div>
+                                  <div className="text-xs text-muted-foreground"><span className="font-mono">{result.adUser.samAccountName}</span><span className="mx-1">·</span><span>{result.email}</span></div>
+                                </>
+                              ) : (
+                                <div className="text-sm truncate">{result.email}</div>
+                              )}
+                              {result.alreadyExists && <div className="text-xs text-yellow-600 dark:text-yellow-400">Ya existe en la aplicación</div>}
+                              {!result.found && <div className="text-xs text-red-600 dark:text-red-400">No encontrado en Active Directory</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {emailSearchResults.some(r => r.found && !r.alreadyExists) && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Rol a asignar</Label>
+                        <Select value={emailImportRoleId?.toString() || ''} onValueChange={(value) => setEmailImportRoleId(parseInt(value))}>
+                          <SelectTrigger><SelectValue placeholder="Seleccionar rol" /></SelectTrigger>
+                          <SelectContent>
+                            {availableRoles.map((role) => {
+                              const IconComponent = getRoleIcon(role.name);
+                              return (
+                                <SelectItem key={role.id} value={role.id.toString()}>
+                                  <div className="flex items-center gap-2"><IconComponent className="h-4 w-4" style={{ color: role.color }} />{role.name}</div>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="bg-accent/50 p-3 rounded-md">
+                        <p className="text-sm"><strong>{selectedEmailUsers.size}</strong> usuario{selectedEmailUsers.size !== 1 ? 's' : ''} seleccionado{selectedEmailUsers.size !== 1 ? 's' : ''} para importar con rol <strong>{availableRoles.find(r => r.id === emailImportRoleId)?.name || 'Reader'}</strong></p>
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button onClick={handleImportByEmail} disabled={importingByEmail || selectedEmailUsers.size === 0}>
+                          {importingByEmail ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Importando...</> : <><Mail className="mr-2 h-4 w-4" />Importar {selectedEmailUsers.size} Usuario{selectedEmailUsers.size !== 1 ? 's' : ''}</>}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </TabsContent>
+
+            {/* ============ TAB: LISTA DE DISTRIBUCIÓN ============ */}
+            <TabsContent value="distribution-list" className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="dlEmail">Correo de la lista de distribución</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="dlEmail"
+                    placeholder="equipo-dba@supervielle.com.ar"
+                    value={dlEmail}
+                    onChange={(e) => setDlEmail(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearchDl()}
+                    disabled={searchingDl}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSearchDl} disabled={searchingDl || !dlEmail.trim()}>
+                    {searchingDl ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Buscando...</> : <><Search className="mr-2 h-4 w-4" />Buscar</>}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Ingresa el correo electrónico de la lista de distribución de AD.
+                </p>
+              </div>
+
+              {dlSearchResult && (
+                <>
+                  <div className="bg-accent/50 p-3 rounded-md">
+                    <p className="text-sm font-medium">{dlSearchResult.groupName}</p>
+                    <p className="text-xs text-muted-foreground">{dlSearchResult.email} · {dlSearchResult.memberCount} miembros</p>
+                    {dlSearchResult.hasExistingSync && (
+                      <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Esta lista ya tiene sincronización configurada.</p>
+                    )}
+                  </div>
+
+                  {dlSearchResult.members.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label>Miembros ({dlSearchResult.members.filter((m: DistributionListMember) => !m.alreadyExists).length} importables de {dlSearchResult.members.length})</Label>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="selectAllDl"
+                            checked={selectedDlUsers.size === dlSearchResult.members.filter((m: DistributionListMember) => !m.alreadyExists).length && selectedDlUsers.size > 0}
+                            onCheckedChange={handleSelectAllDlUsers}
+                          />
+                          <label htmlFor="selectAllDl" className="text-sm font-medium leading-none">Seleccionar importables</label>
+                        </div>
+                      </div>
+                      <div className="border rounded-md max-h-60 overflow-y-auto">
+                        <div className="p-2 space-y-1">
+                          {dlSearchResult.members.map((member: DistributionListMember) => (
+                            <div key={member.samAccountName}
+                              className={`flex items-center space-x-3 p-2 rounded ${!member.alreadyExists ? 'hover:bg-accent cursor-pointer' : 'opacity-60'}`}
+                              onClick={() => { if (!member.alreadyExists) handleToggleDlUser(member.samAccountName); }}>
+                              {!member.alreadyExists && <Checkbox checked={selectedDlUsers.has(member.samAccountName)} onCheckedChange={() => handleToggleDlUser(member.samAccountName)} />}
+                              {!member.alreadyExists ? <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" /> : <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{member.displayName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  <span className="font-mono">{member.samAccountName}</span>
+                                  {member.email && <><span className="mx-1">·</span><span>{member.email}</span></>}
+                                </div>
+                                {member.alreadyExists && <div className="text-xs text-yellow-600 dark:text-yellow-400">Ya existe en la aplicación</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label>Rol a asignar</Label>
+                    <Select value={dlImportRoleId?.toString() || ''} onValueChange={(value) => setDlImportRoleId(parseInt(value))}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar rol" /></SelectTrigger>
+                      <SelectContent>
+                        {availableRoles.map((role) => {
+                          const IconComponent = getRoleIcon(role.name);
+                          return (
+                            <SelectItem key={role.id} value={role.id.toString()}>
+                              <div className="flex items-center gap-2"><IconComponent className="h-4 w-4" style={{ color: role.color }} />{role.name}</div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {!dlSearchResult.hasExistingSync && (
+                    <div className="space-y-3 p-4 border rounded-md bg-muted/30">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-sm font-medium">Mantener sincronizado</Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">Sincronizar automáticamente con la lista de distribución</p>
+                        </div>
+                        <Switch checked={enableDlSync} onCheckedChange={setEnableDlSync} />
+                      </div>
+
+                      {enableDlSync && (
+                        <>
+                          <div className="space-y-2">
+                            <Label className="text-xs">Intervalo de sincronización</Label>
+                            <Select value={dlSyncIntervalHours.toString()} onValueChange={(value) => setDlSyncIntervalHours(parseInt(value))}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="6">Cada 6 horas</SelectItem>
+                                <SelectItem value="12">Cada 12 horas</SelectItem>
+                                <SelectItem value="24">Cada 24 horas</SelectItem>
+                                <SelectItem value="48">Cada 48 horas</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Los nuevos miembros de la lista serán importados automáticamente. Los miembros removidos serán desactivados solo si fueron importados exclusivamente desde esta lista.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <Button onClick={handleImportFromDl} disabled={importingDl || selectedDlUsers.size === 0}>
+                      {importingDl ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Importando...</>
+                      ) : (
+                        <><ListChecks className="mr-2 h-4 w-4" />{enableDlSync ? 'Importar y Sincronizar' : `Importar ${selectedDlUsers.size} Usuario${selectedDlUsers.size !== 1 ? 's' : ''}`}</>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowImportDialog(false); resetImportDialog(); }}>
+              Cerrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

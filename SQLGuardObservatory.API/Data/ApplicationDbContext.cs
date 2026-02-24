@@ -85,7 +85,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<UserGroup> UserGroups { get; set; } = null!;
     public DbSet<GroupPermission> GroupPermissions { get; set; } = null!;
     public DbSet<ADGroupSync> ADGroupSyncs { get; set; } = null!;
-    
+
+    // User Import Syncs - Sincronización de usuarios desde listas de distribución
+    public DbSet<UserImportSync> UserImportSyncs { get; set; } = null!;
+    public DbSet<UserImportSyncMember> UserImportSyncMembers { get; set; } = null!;
+
     // Admin Group Assignments - Asignaciones de grupos a admins
     public DbSet<AdminGroupAssignment> AdminGroupAssignments { get; set; } = null!;
     
@@ -798,6 +802,56 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany()
                 .HasForeignKey(s => s.UpdatedByUserId)
                 .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // =============================================
+        // User Import Syncs - Sincronización desde DLs
+        // =============================================
+
+        builder.Entity<UserImportSync>(entity =>
+        {
+            entity.ToTable("UserImportSyncs");
+
+            entity.Property(s => s.SourceType).HasMaxLength(50).IsRequired();
+            entity.Property(s => s.SourceIdentifier).HasMaxLength(500).IsRequired();
+            entity.Property(s => s.SourceDisplayName).HasMaxLength(200);
+            entity.Property(s => s.ADGroupName).HasMaxLength(200).IsRequired();
+            entity.Property(s => s.LastSyncResult).HasMaxLength(500);
+
+            entity.HasOne(s => s.DefaultRole)
+                .WithMany()
+                .HasForeignKey(s => s.DefaultRoleId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(s => s.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(s => s.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasMany(s => s.Members)
+                .WithOne(m => m.Sync)
+                .HasForeignKey(m => m.SyncId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<UserImportSyncMember>(entity =>
+        {
+            entity.ToTable("UserImportSyncMembers");
+
+            entity.HasIndex(m => new { m.SyncId, m.UserId });
+            entity.HasIndex(m => m.UserId);
+
+            entity.Property(m => m.SamAccountName).HasMaxLength(100).IsRequired();
+
+            entity.HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // =============================================

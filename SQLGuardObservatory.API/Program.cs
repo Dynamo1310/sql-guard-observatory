@@ -182,7 +182,11 @@ builder.Services.AddScoped<IDisksService, DisksService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IActiveDirectoryService, ActiveDirectoryService>();
+builder.Services.AddScoped<IUserImportSyncService, UserImportSyncService>();
 builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
+
+// Background service para sincronización de listas de distribución
+builder.Services.AddHostedService<UserImportSyncBackgroundService>();
 
 // Servicios de Guardias DBA (OnCall)
 builder.Services.AddScoped<IEmailService, EmailService>();

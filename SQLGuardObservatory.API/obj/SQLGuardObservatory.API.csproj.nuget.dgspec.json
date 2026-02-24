@@ -100,6 +100,10 @@
               "target": "Package",
               "version": "[4.9.0, )"
             },
+            "System.DirectoryServices": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
             "System.DirectoryServices.AccountManagement": {
               "target": "Package",
               "version": "[8.0.0, )"
