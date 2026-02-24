@@ -75,6 +75,10 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             using var scope = _serviceProvider.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
+            // Obtener servidores excluidos globalmente (dados de baja)
+            var exclusionService = scope.ServiceProvider.GetRequiredService<IServerExclusionService>();
+            var excludedServers = await exclusionService.GetExcludedServerNamesAsync(ct);
+
             // Ejecutar las 5 queries en paralelo
             var healthScoresTask = GetProductionHealthScoresAsync(ct);
             var criticalDisksTask = GetProductionCriticalDisksAsync(ct);
@@ -89,6 +93,30 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             var maintenanceOverdue = maintenanceTask.Result;
             var backupBreaches = backupBreachesTask.Result;
             var agHealthStatuses = agHealthTask.Result;
+
+            // Filtrar instancias excluidas globalmente de todos los resultados
+            if (excludedServers.Count > 0)
+            {
+                healthScores = healthScores
+                    .Where(s => !IsInstanceExcluded(s.InstanceName, excludedServers))
+                    .ToList();
+                criticalDisks = criticalDisks
+                    .Where(d => !IsInstanceExcluded(d.InstanceName, excludedServers))
+                    .ToList();
+                maintenanceOverdue = maintenanceOverdue
+                    .Where(m => !IsInstanceExcluded(m.InstanceName, excludedServers))
+                    .ToList();
+                backupBreaches = backupBreaches
+                    .Where(b => !IsInstanceExcluded(b.InstanceName, excludedServers))
+                    .ToList();
+                agHealthStatuses = agHealthStatuses
+                    .Where(a => !IsInstanceExcluded(a.InstanceName, excludedServers))
+                    .ToList();
+
+                _logger.LogDebug(
+                    "Filtered {ExcludedCount} excluded servers from Overview cache data",
+                    excludedServers.Count);
+            }
 
             // Calcular KPIs
             var totalInstances = healthScores.Count;
@@ -952,6 +980,16 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
         {
             _logger.LogWarning(ex, "Error al auto-resolver asignaciones obsoletas");
         }
+    }
+
+    /// <summary>
+    /// Verifica si una instancia está en la lista de servidores excluidos,
+    /// comparando nombre completo y hostname.
+    /// </summary>
+    private static bool IsInstanceExcluded(string instanceName, HashSet<string> excludedServers)
+    {
+        return excludedServers.Contains(instanceName)
+            || excludedServers.Contains(instanceName.Split('\\')[0]);
     }
 
     #endregion

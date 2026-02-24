@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SQLGuardObservatory.API.Services;
 
 namespace SQLGuardObservatory.API.Services.Collectors;
 
@@ -10,6 +11,7 @@ public class InstanceProvider : IInstanceProvider
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<InstanceProvider> _logger;
+    private readonly IServerExclusionService _serverExclusionService;
     
     // Cache de instancias con TTL de 5 minutos
     private static List<SqlInstanceInfo>? _cachedInstances;
@@ -19,11 +21,13 @@ public class InstanceProvider : IInstanceProvider
     public InstanceProvider(
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        ILogger<InstanceProvider> logger)
+        ILogger<InstanceProvider> logger,
+        IServerExclusionService serverExclusionService)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
+        _serverExclusionService = serverExclusionService;
     }
 
     public async Task<List<SqlInstanceInfo>> GetActiveInstancesAsync(CancellationToken ct = default)
@@ -74,9 +78,14 @@ public class InstanceProvider : IInstanceProvider
             filtered = filtered.Where(i => !i.IsAWS);
         }
         
-        // Excluir instancias dadas de baja (hardcoded por ahora, podría ser configurable)
-        var excludedInstances = new[] { "SSISC-01" };
-        filtered = filtered.Where(i => !excludedInstances.Contains(i.InstanceName));
+        // Excluir instancias dadas de baja (desde tabla ServerAlertExclusions)
+        var excludedServers = await _serverExclusionService.GetExcludedServerNamesAsync(ct);
+        if (excludedServers.Count > 0)
+        {
+            filtered = filtered.Where(i =>
+                !excludedServers.Contains(i.InstanceName)
+                && !excludedServers.Contains(i.InstanceName.Split('\\')[0]));
+        }
         
         return filtered.ToList();
     }
