@@ -143,6 +143,7 @@ const intervencionesSubItems = [
 
 const projectsSubItems = [
   { title: 'Racionalización SQL', url: '/projects/bases-sin-uso', icon: Database, permission: 'BasesSinUso' },
+  { title: 'Comparativa Servers', url: '/projects/server-comparison', icon: ArrowRightLeft, permission: 'ServerComparison' },
 ];
 
 // ==================== SEGURIDAD ====================

@@ -89,6 +89,7 @@ public class PermissionService : IPermissionService
         // === PROYECTOS ===
         { "ProjectsMenu", new ViewInfo { ViewName = "ProjectsMenu", DisplayName = "📁 Proyectos (Menú)", Description = "Mostrar/ocultar el menú completo de Proyectos", Category = "Proyectos" } },
         { "BasesSinUso", new ViewInfo { ViewName = "BasesSinUso", DisplayName = "Proyectos - Bases sin Uso", Description = "Gestión de bases de datos sin uso y seguimiento de bajas", Category = "Proyectos" } },
+        { "ServerComparison", new ViewInfo { ViewName = "ServerComparison", DisplayName = "Proyectos - Comparativa Servers", Description = "Comparativa de objetos entre instancias SQL Server para migración de licencias", Category = "Proyectos" } },
         
         // === SEGURIDAD ===
         { "VaultMenu", new ViewInfo { ViewName = "VaultMenu", DisplayName = "📁 Vault DBA (Menú)", Description = "Mostrar/ocultar el menú completo de Vault DBA", Category = "Seguridad" } },

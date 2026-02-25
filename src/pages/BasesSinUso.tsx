@@ -145,6 +145,15 @@ function hasCompatMismatch(item: BasesSinUsoGridDto): boolean {
   return compatYear !== engineYear;
 }
 
+function isDefaultDate(dateStr: string): boolean {
+  try {
+    const d = new Date(dateStr);
+    return d.getFullYear() === 1900 && d.getMonth() === 0 && d.getDate() === 1;
+  } catch {
+    return false;
+  }
+}
+
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
   try {
@@ -530,8 +539,32 @@ export default function BasesSinUso() {
       return value ? 'Si' : 'No';
     }
 
+    // Última Actividad con etiquetas semánticas y colores
+    if (colKey === 'fechaUltimaActividad') {
+      const dateVal = value as string | null;
+      if (!dateVal) {
+        return (
+          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+            Activa
+          </Badge>
+        );
+      }
+      if (isDefaultDate(dateVal)) {
+        return (
+          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+            Base sin actividad registrada
+          </Badge>
+        );
+      }
+      return (
+        <span className="text-muted-foreground">
+          {formatDate(dateVal)}
+        </span>
+      );
+    }
+
     // Dates
-    if (['creationDate', 'fechaUltimaActividad', 'fechaBajaMigracion', 'fechaUltimoBkp', 'sourceTimestamp', 'cachedAt'].includes(colKey)) {
+    if (['creationDate', 'fechaBajaMigracion', 'fechaUltimoBkp', 'sourceTimestamp', 'cachedAt'].includes(colKey)) {
       return formatDate(value as string | null);
     }
     if (['fechaCreacion', 'fechaModificacion'].includes(colKey)) {

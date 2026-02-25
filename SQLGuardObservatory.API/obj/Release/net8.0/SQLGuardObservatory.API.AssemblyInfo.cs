@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SQLGuardObservatory.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b79c3b8bded1a33c360e66b876108f1f339acb5b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ac06e99a50b11633d347bbff7df1db646fe29de3")]
 [assembly: System.Reflection.AssemblyProductAttribute("SQLGuardObservatory.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SQLGuardObservatory.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

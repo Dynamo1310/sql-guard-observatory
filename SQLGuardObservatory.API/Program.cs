@@ -259,6 +259,9 @@ builder.Services.AddScoped<IDecomisoService, DecomisoService>();
 
 // Proyectos - Bases sin Uso
 builder.Services.AddScoped<IBasesSinUsoService, BasesSinUsoService>();
+
+// Proyectos - Comparativa de Servidores (migración de licencias)
+builder.Services.AddScoped<IServerComparisonService, ServerComparisonService>();
 builder.Services.AddScoped<IIntervencionWarService, IntervencionWarService>();
 builder.Services.AddScoped<IPatchConfigService, PatchConfigService>();
 builder.Services.AddHostedService<PatchNotificationBackgroundService>();

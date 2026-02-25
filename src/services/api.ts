@@ -6388,6 +6388,112 @@ export const intervencionesWarApi = {
   },
 };
 
+// ==================== SERVER COMPARISON API ====================
+
+export interface ComparisonInstanceDto {
+  id: number;
+  serverName: string;
+  nombreInstancia: string;
+  ambiente?: string;
+  hostingSite?: string;
+  majorVersion?: string;
+  edition?: string;
+}
+
+export interface ServerComparisonRequest {
+  instanceNames: string[];
+}
+
+export interface DatabaseInfoCompDto {
+  name: string;
+  state?: string;
+  recoveryModel?: string;
+  compatibilityLevel?: string;
+  collation?: string;
+  sizeMB: number;
+  createDate?: string;
+}
+
+export interface LoginInfoDto {
+  name: string;
+  type?: string;
+  isDisabled: boolean;
+  defaultDatabase?: string;
+  createDate?: string;
+}
+
+export interface LinkedServerInfoDto {
+  name: string;
+  provider?: string;
+  dataSource?: string;
+  product?: string;
+}
+
+export interface AgentJobInfoDto {
+  name: string;
+  enabled: boolean;
+  description?: string;
+  createDate?: string;
+  ownerLoginName?: string;
+}
+
+export interface ServerObjectsDto {
+  instanceName: string;
+  connectionSuccess: boolean;
+  errorMessage?: string;
+  sqlVersion?: string;
+  databases: DatabaseInfoCompDto[];
+  logins: LoginInfoDto[];
+  linkedServers: LinkedServerInfoDto[];
+  jobs: AgentJobInfoDto[];
+}
+
+export interface ComparisonSummaryDto {
+  totalServers: number;
+  serversConnected: number;
+  serversFailed: number;
+  totalDatabases: number;
+  duplicateDatabases: number;
+  totalLogins: number;
+  duplicateLogins: number;
+  totalLinkedServers: number;
+  duplicateLinkedServers: number;
+  totalJobs: number;
+  duplicateJobs: number;
+}
+
+export interface DuplicateGroupDto {
+  objectName: string;
+  objectType: string;
+  foundInServers: string[];
+  count: number;
+}
+
+export interface ServerComparisonResponse {
+  servers: ServerObjectsDto[];
+  summary: ComparisonSummaryDto;
+  duplicates: DuplicateGroupDto[];
+  generatedAt: string;
+}
+
+export const serverComparisonApi = {
+  async getInstances(): Promise<ComparisonInstanceDto[]> {
+    const response = await fetch(`${API_URL}/api/server-comparison/instances`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ComparisonInstanceDto[]>(response);
+  },
+
+  async compare(instanceNames: string[]): Promise<ServerComparisonResponse> {
+    const response = await fetch(`${API_URL}/api/server-comparison/compare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ instanceNames }),
+    });
+    return handleResponse<ServerComparisonResponse>(response);
+  },
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 export function isAuthenticated(): boolean {

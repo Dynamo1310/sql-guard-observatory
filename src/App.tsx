@@ -47,6 +47,7 @@ import PatchNotificationsConfig from "./pages/PatchNotificationsConfig";
 import ObsoleteInstances from "./pages/ObsoleteInstances";
 import DatabaseOwners from "./pages/DatabaseOwners";
 import BasesSinUso from "./pages/BasesSinUso";
+import ServerComparison from "./pages/ServerComparison";
 import IntervencionesWar from "./pages/IntervencionesWar";
 import VaultDashboard from "./pages/VaultDashboard";
 import VaultCredentials from "./pages/VaultCredentials";
@@ -326,6 +327,11 @@ const App = () => (
                       <Route path="/projects/bases-sin-uso" element={
                         <ProtectedRoute viewName="BasesSinUso">
                           <BasesSinUso />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/projects/server-comparison" element={
+                        <ProtectedRoute viewName="ServerComparison">
+                          <ServerComparison />
                         </ProtectedRoute>
                       } />
                       {/* Vault DBA */}
