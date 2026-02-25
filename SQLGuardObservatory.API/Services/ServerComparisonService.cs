@@ -107,15 +107,10 @@ public class ServerComparisonService : IServerComparisonService
             var versionObj = await versionCmd.ExecuteScalarAsync(ct);
             result.SqlVersion = versionObj?.ToString()?.Split('\n').FirstOrDefault()?.Trim();
 
-            var tasks = new[]
-            {
-                CollectDatabasesAsync(connection, result, ct),
-                CollectLoginsAsync(connection, result, ct),
-                CollectLinkedServersAsync(connection, result, ct),
-                CollectJobsAsync(connection, result, ct)
-            };
-
-            await Task.WhenAll(tasks);
+            await CollectDatabasesAsync(connection, result, ct);
+            await CollectLoginsAsync(connection, result, ct);
+            await CollectLinkedServersAsync(connection, result, ct);
+            await CollectJobsAsync(connection, result, ct);
 
             _logger.LogInformation(
                 "Servidor {Instance}: {Dbs} DBs, {Logins} logins, {LS} linked servers, {Jobs} jobs",
@@ -164,9 +159,9 @@ public class ServerComparisonService : IServerComparisonService
                     Name = name,
                     State = reader.IsDBNull(1) ? null : reader.GetString(1),
                     RecoveryModel = reader.IsDBNull(2) ? null : reader.GetString(2),
-                    CompatibilityLevel = reader.IsDBNull(3) ? null : reader.GetInt32(3).ToString(),
+                    CompatibilityLevel = reader.IsDBNull(3) ? null : Convert.ToInt32(reader.GetValue(3)).ToString(),
                     Collation = reader.IsDBNull(4) ? null : reader.GetString(4),
-                    SizeMB = reader.IsDBNull(5) ? 0 : reader.GetDecimal(5),
+                    SizeMB = reader.IsDBNull(5) ? 0 : Convert.ToDecimal(reader.GetValue(5)),
                     CreateDate = reader.IsDBNull(6) ? null : reader.GetDateTime(6)
                 });
             }
@@ -281,7 +276,7 @@ public class ServerComparisonService : IServerComparisonService
                 result.Jobs.Add(new AgentJobInfoDto
                 {
                     Name = reader.GetString(0),
-                    Enabled = reader.GetInt32(1) == 1,
+                    Enabled = Convert.ToInt32(reader.GetValue(1)) == 1,
                     Description = reader.IsDBNull(2) ? null : reader.GetString(2),
                     CreateDate = reader.IsDBNull(3) ? null : reader.GetDateTime(3),
                     OwnerLoginName = reader.IsDBNull(4) ? null : reader.GetString(4)
