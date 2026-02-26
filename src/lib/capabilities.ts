@@ -45,6 +45,14 @@ export const Capabilities = {
   /** Asignar capacidades a roles */
   RolesAssignCapabilities: 'Roles.AssignCapabilities',
 
+  // === Guardias DBA ===
+  /** Ver y gestionar operadores de guardia en el planificador */
+  OnCallManageOperators: 'OnCall.ManageOperators',
+  /** Generar el calendario de guardias automáticamente */
+  OnCallGenerateCalendar: 'OnCall.GenerateCalendar',
+  /** Crear activaciones clickeando en el calendario de guardias */
+  OnCallCreateActivations: 'OnCall.CreateActivations',
+
   // === Parcheos ===
   /** Configurar compliance de parcheos */
   PatchingConfigureCompliance: 'Patching.ConfigureCompliance',
@@ -166,6 +174,23 @@ export const CapabilityInfo: Record<string, { label: string; description: string
     label: 'Asignar capacidades',
     description: 'Modificar las capacidades de los roles',
     category: 'Roles',
+  },
+
+  // Guardias DBA
+  [Capabilities.OnCallManageOperators]: {
+    label: 'Gestionar Operadores',
+    description: 'Ver y gestionar operadores de guardia en el planificador',
+    category: 'Guardias DBA',
+  },
+  [Capabilities.OnCallGenerateCalendar]: {
+    label: 'Generar Calendario',
+    description: 'Generar el calendario de guardias automáticamente',
+    category: 'Guardias DBA',
+  },
+  [Capabilities.OnCallCreateActivations]: {
+    label: 'Crear Activaciones',
+    description: 'Crear activaciones clickeando en el calendario de guardias',
+    category: 'Guardias DBA',
   },
 
   // Parcheos

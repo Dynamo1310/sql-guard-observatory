@@ -52,7 +52,8 @@ public class PermissionsController : ControllerBase
             }
 
             var permissions = await _permissionService.GetUserPermissionsAsync(userId);
-            return Ok(new { permissions });
+            var groupNames = await _permissionService.GetUserGroupNamesAsync(userId);
+            return Ok(new { permissions, groupNames });
         }
         catch (Exception ex)
         {

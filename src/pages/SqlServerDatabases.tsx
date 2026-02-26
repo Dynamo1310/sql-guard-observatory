@@ -264,11 +264,24 @@ export default function SqlServerDatabases() {
       workbook.created = new Date();
 
       // Crear una hoja por cada servidor
+      const usedSheetNames = new Set<string>();
       for (const serverData of exportData.servers) {
         // Limpiar nombre del servidor para usarlo como nombre de hoja (max 31 chars)
-        const sheetName = serverData.serverName
+        let sheetName = serverData.serverName
           .replace(/[\\/*?[\]:]/g, '_')
           .substring(0, 31);
+
+        if (usedSheetNames.has(sheetName)) {
+          let counter = 2;
+          let candidate: string;
+          do {
+            const suffix = `_${counter}`;
+            candidate = sheetName.substring(0, 31 - suffix.length) + suffix;
+            counter++;
+          } while (usedSheetNames.has(candidate));
+          sheetName = candidate;
+        }
+        usedSheetNames.add(sheetName);
         
         const worksheet = workbook.addWorksheet(sheetName);
 

@@ -111,6 +111,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     
     // Intervenciones War - Seguimiento de incidencias DBA
     public DbSet<IntervencionWar> IntervencionesWar { get; set; } = null!;
+
+    // TempDB Analyzer - Caché de análisis de best practices
+    public DbSet<TempDbAnalysisCache> TempDbAnalysisCache { get; set; } = null!;
     
     // Inventory Cache - PostgreSQL
     public DbSet<PostgreSqlInstanceCache> PostgreSqlInstancesCache { get; set; } = null!;

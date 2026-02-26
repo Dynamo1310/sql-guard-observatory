@@ -34,6 +34,7 @@ public class PermissionService : IPermissionService
         { "RendimientoMenu", new ViewInfo { ViewName = "RendimientoMenu", DisplayName = "📁 Rendimiento (Menú)", Description = "Mostrar/ocultar el menú de Rendimiento", Category = "Observabilidad > Rendimiento" } },
         { "Jobs", new ViewInfo { ViewName = "Jobs", DisplayName = "Rendimiento - Mantenimiento", Description = "Gestión de SQL Agent Jobs", Category = "Observabilidad > Rendimiento" } },
         { "Indexes", new ViewInfo { ViewName = "Indexes", DisplayName = "Rendimiento - Índices", Description = "Fragmentación de índices", Category = "Observabilidad > Rendimiento" } },
+        { "TempDbAnalyzer", new ViewInfo { ViewName = "TempDbAnalyzer", DisplayName = "Rendimiento - TempDB Analyzer", Description = "Análisis de mejores prácticas de TempDB en todas las instancias SQL Server", Category = "Observabilidad > Rendimiento" } },
         
         // === PARCHEOS ===
         { "PatchingMenu", new ViewInfo { ViewName = "PatchingMenu", DisplayName = "📁 Parcheos (Menú)", Description = "Mostrar/ocultar el menú completo de Parcheos", Category = "Observabilidad > Parcheos" } },
@@ -90,7 +91,8 @@ public class PermissionService : IPermissionService
         { "ProjectsMenu", new ViewInfo { ViewName = "ProjectsMenu", DisplayName = "📁 Proyectos (Menú)", Description = "Mostrar/ocultar el menú completo de Proyectos", Category = "Proyectos" } },
         { "BasesSinUso", new ViewInfo { ViewName = "BasesSinUso", DisplayName = "Proyectos - Bases sin Uso", Description = "Gestión de bases de datos sin uso y seguimiento de bajas", Category = "Proyectos" } },
         { "ServerComparison", new ViewInfo { ViewName = "ServerComparison", DisplayName = "Proyectos - Comparativa Servers", Description = "Comparativa de objetos entre instancias SQL Server para migración de licencias", Category = "Proyectos" } },
-        
+        { "MigrationSimulator", new ViewInfo { ViewName = "MigrationSimulator", DisplayName = "Proyectos - Simulador Migración", Description = "Simulador de volúmenes para calcular espacio en disco al consolidar instancias SQL Server", Category = "Proyectos" } },
+
         // === SEGURIDAD ===
         { "VaultMenu", new ViewInfo { ViewName = "VaultMenu", DisplayName = "📁 Vault DBA (Menú)", Description = "Mostrar/ocultar el menú completo de Vault DBA", Category = "Seguridad" } },
         { "VaultDashboard", new ViewInfo { ViewName = "VaultDashboard", DisplayName = "Vault - Dashboard", Description = "Dashboard del vault de credenciales", Category = "Seguridad" } },
@@ -158,6 +160,21 @@ public class PermissionService : IPermissionService
                 gp => gp.GroupId,
                 g => g.Id,
                 (gp, g) => gp.ViewName)
+            .Distinct()
+            .ToListAsync();
+    }
+
+    public async Task<List<string>> GetUserGroupNamesAsync(string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null) return new List<string>();
+
+        return await _context.UserGroups
+            .Where(ug => ug.UserId == userId)
+            .Join(_context.SecurityGroups.Where(g => g.IsActive && !g.IsDeleted),
+                ug => ug.GroupId,
+                g => g.Id,
+                (ug, g) => g.Name)
             .Distinct()
             .ToListAsync();
     }

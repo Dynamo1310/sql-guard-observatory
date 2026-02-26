@@ -30,6 +30,7 @@ import {
 } from '@/components/oncall';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { Capabilities } from '@/lib/capabilities';
 import { cn } from '@/lib/utils';
 import {
   onCallApi,
@@ -42,7 +43,7 @@ import {
 } from '@/services/api';
 
 export default function OnCallSchedule() {
-  const { user } = useAuth();
+  const { user, hasCapability, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [operators, setOperators] = useState<OnCallOperatorDto[]>([]);
@@ -628,9 +629,11 @@ export default function OnCallSchedule() {
       {/* Header Compacto */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-2 sm:gap-3">
-          <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => navigate('/oncall')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+          {hasPermission('OnCallDashboard') && (
+            <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => navigate('/oncall')}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
           <div>
             <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight flex items-center gap-2">
               <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
@@ -649,20 +652,24 @@ export default function OnCallSchedule() {
             <Download className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline text-xs">Exportar</span>
           </Button>
-          <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setShowOperatorDialog(true)}>
-            <Users className="h-4 w-4 sm:mr-1.5" />
-            <span className="hidden md:inline text-xs">Operadores</span>
-          </Button>
+          {hasCapability(Capabilities.OnCallManageOperators) && (
+            <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setShowOperatorDialog(true)}>
+              <Users className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden md:inline text-xs">Operadores</span>
+            </Button>
+          )}
           {isEscalation && (
             <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setShowEscalationDialog(true)}>
               <ShieldAlert className="h-4 w-4 sm:mr-1.5" />
               <span className="hidden lg:inline text-xs">Escalamiento</span>
             </Button>
           )}
-          <Button size="sm" className="h-8 px-2 sm:px-3" onClick={() => setShowGenerateDialog(true)}>
-            <Wand2 className="h-4 w-4 sm:mr-1.5" />
-            <span className="hidden xs:inline text-xs">Generar</span>
-          </Button>
+          {hasCapability(Capabilities.OnCallGenerateCalendar) && (
+            <Button size="sm" className="h-8 px-2 sm:px-3" onClick={() => setShowGenerateDialog(true)}>
+              <Wand2 className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden xs:inline text-xs">Generar</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -679,10 +686,12 @@ export default function OnCallSchedule() {
                 </span>
               </p>
             </div>
-            <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs w-full sm:w-auto" onClick={() => setShowGenerateDialog(true)}>
-              <Wand2 className="h-3 w-3 mr-1" />
-              Generar semanas
-            </Button>
+            {hasCapability(Capabilities.OnCallGenerateCalendar) && (
+              <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs w-full sm:w-auto" onClick={() => setShowGenerateDialog(true)}>
+                <Wand2 className="h-3 w-3 mr-1" />
+                Generar semanas
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
@@ -696,7 +705,7 @@ export default function OnCallSchedule() {
             loading={loading}
             onMonthChange={handleMonthChange}
             onWeekClick={handleWeekClick}
-            onDayClick={handleDayClick}
+            onDayClick={hasCapability(Capabilities.OnCallCreateActivations) ? handleDayClick : undefined}
             currentUserId={user?.id}
             isEscalation={isEscalation}
           />

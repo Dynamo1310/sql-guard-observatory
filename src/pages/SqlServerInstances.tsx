@@ -3,7 +3,7 @@
  * Con caché local y paginación del lado del servidor
  */
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Database, RefreshCw, Search, Shield, CheckCircle2, XCircle, Clock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Database, RefreshCw, Search, Shield, CheckCircle2, XCircle, Clock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, FileSpreadsheet } from 'lucide-react';
 import { SqlServerIcon } from '@/components/icons/SqlServerIcon';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -133,6 +133,154 @@ export default function SqlServerInstances() {
       setIsRefreshing(false);
     }
   }, [toast, fetchData, pagination.pageSize]);
+
+  // Estado para exportación
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Exportar a Excel
+  const exportToExcel = async () => {
+    setIsExporting(true);
+    try {
+      toast({
+        title: 'Generando Excel',
+        description: 'Exportando inventario de instancias SQL Server...',
+      });
+
+      const response = await sqlServerInventoryApi.getInstances({
+        page: 1,
+        pageSize: 10000,
+        search: debouncedSearch || undefined,
+        ambiente: selectedAmbiente !== 'All' ? selectedAmbiente : undefined,
+        version: selectedVersion !== 'All' ? selectedVersion : undefined,
+        alwaysOn: selectedAlwaysOn !== 'All' ? selectedAlwaysOn : undefined,
+      });
+
+      const allInstances = response.data;
+
+      if (allInstances.length === 0) {
+        toast({
+          title: 'Sin datos',
+          description: 'No hay instancias para exportar con los filtros actuales',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const ExcelJS = await import('exceljs');
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'SQL Guard Observatory';
+      workbook.created = new Date();
+
+      const worksheet = workbook.addWorksheet('Instancias SQL Server');
+
+      worksheet.columns = [
+        { header: 'Servidor', key: 'serverName', width: 35 },
+        { header: 'Instancia', key: 'instance', width: 35 },
+        { header: 'Versión', key: 'majorVersion', width: 25 },
+        { header: 'Edición', key: 'edition', width: 30 },
+        { header: 'Product Version', key: 'productVersion', width: 18 },
+        { header: 'Product Level', key: 'productLevel', width: 15 },
+        { header: 'Product Update', key: 'productUpdate', width: 15 },
+        { header: 'Collation', key: 'collation', width: 25 },
+        { header: 'AlwaysOn', key: 'alwaysOn', width: 12 },
+        { header: 'Hosting Site', key: 'hostingSite', width: 20 },
+        { header: 'Hosting Type', key: 'hostingType', width: 15 },
+        { header: 'Ambiente', key: 'ambiente', width: 15 },
+      ];
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0066CC' },
+      };
+      headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      allInstances.forEach(inst => {
+        worksheet.addRow({
+          serverName: inst.ServerName,
+          instance: inst.NombreInstancia,
+          majorVersion: inst.MajorVersion,
+          edition: inst.Edition,
+          productVersion: inst.ProductVersion,
+          productLevel: inst.ProductLevel,
+          productUpdate: inst.ProductUpdateLevel,
+          collation: inst.Collation,
+          alwaysOn: inst.AlwaysOn === 'Enabled' ? 'Sí' : 'No',
+          hostingSite: inst.hostingSite,
+          hostingType: inst.hostingType,
+          ambiente: inst.ambiente,
+        });
+      });
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          row.eachCell(cell => {
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+              bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+              left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+              right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            };
+          });
+          if (rowNumber % 2 === 0) {
+            row.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF5F5F5' },
+            };
+          }
+        }
+      });
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          const alwaysOnCell = row.getCell(9);
+          if (alwaysOnCell.value === 'Sí') {
+            alwaysOnCell.font = { color: { argb: 'FF008000' }, bold: true };
+          } else {
+            alwaysOnCell.font = { color: { argb: 'FF888888' } };
+          }
+        }
+      });
+
+      worksheet.addRow([]);
+      const totalRow = worksheet.addRow([`Total: ${allInstances.length} instancias`]);
+      totalRow.font = { bold: true };
+      totalRow.getCell(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFE599' },
+      };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Inventario_Instancias_SQLServer_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: 'Exportación completada',
+        description: `Se exportaron ${allInstances.length} instancias SQL Server`,
+      });
+    } catch (error) {
+      console.error('Error al exportar:', error);
+      toast({
+        title: 'Error al exportar',
+        description: 'No se pudo generar el archivo Excel',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Cargar datos al cambiar filtros o página
   useEffect(() => {
@@ -264,6 +412,24 @@ export default function SqlServerInstances() {
               </Tooltip>
             </TooltipProvider>
           )}
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={exportToExcel}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Generando...
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet className="h-4 w-4" />
+                Exportar Excel
+              </>
+            )}
+          </Button>
           <Button
             variant="outline"
             onClick={refreshData}

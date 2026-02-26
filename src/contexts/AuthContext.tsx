@@ -58,6 +58,9 @@ interface AuthContextType {
   // Permisos de vistas (grupos)
   permissions: string[];
   hasPermission: (viewName: string) => boolean;
+  // Grupos del usuario
+  groupNames: string[];
+  isInGroup: (groupName: string) => boolean;
   // Capacidades administrativas (dinámicas)
   capabilities: string[];
   hasCapability: (capabilityKey: string) => boolean;
@@ -96,6 +99,7 @@ const defaultAuthorizationInfo: AuthorizationInfo = {
 const CACHE_KEYS = {
   PERMISSIONS: 'cached_permissions',
   AUTHORIZATION: 'cached_authorization',
+  GROUP_NAMES: 'cached_group_names',
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -106,6 +110,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Cargar permisos desde caché al iniciar
     try {
       const cached = localStorage.getItem(CACHE_KEYS.PERMISSIONS);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [groupNames, setGroupNames] = useState<string[]>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEYS.GROUP_NAMES);
       return cached ? JSON.parse(cached) : [];
     } catch {
       return [];
@@ -127,13 +139,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    */
   const loadPermissions = async (): Promise<void> => {
     try {
-      const { permissions: userPerms } = await permissionsApi.getMyPermissions();
+      const { permissions: userPerms, groupNames: userGroups } = await permissionsApi.getMyPermissions();
       setPermissions(userPerms);
-      // Guardar en caché
+      setGroupNames(userGroups || []);
       localStorage.setItem(CACHE_KEYS.PERMISSIONS, JSON.stringify(userPerms));
+      localStorage.setItem(CACHE_KEYS.GROUP_NAMES, JSON.stringify(userGroups || []));
     } catch (error) {
       console.error('[AuthContext] Error al cargar permisos:', error);
-      // No limpiar permisos cacheados si falla la llamada
     }
   };
 
@@ -231,15 +243,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // No hay sesión activa - limpiar todo incluyendo caché
         setUser(null);
         setPermissions([]);
+        setGroupNames([]);
         setAuthorizationInfo(defaultAuthorizationInfo);
         localStorage.removeItem(CACHE_KEYS.PERMISSIONS);
         localStorage.removeItem(CACHE_KEYS.AUTHORIZATION);
+        localStorage.removeItem(CACHE_KEYS.GROUP_NAMES);
         setLoading(false);
       }
     } catch (error) {
       setError('Error al verificar autenticación');
       setUser(null);
       setPermissions([]);
+      setGroupNames([]);
       setAuthorizationInfo(defaultAuthorizationInfo);
       console.error('[AuthContext] Error en checkAuth:', error);
       setLoading(false);
@@ -252,8 +267,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('user');
     localStorage.removeItem(CACHE_KEYS.PERMISSIONS);
     localStorage.removeItem(CACHE_KEYS.AUTHORIZATION);
+    localStorage.removeItem(CACHE_KEYS.GROUP_NAMES);
     setUser(null);
     setPermissions([]);
+    setGroupNames([]);
     setAuthorizationInfo(defaultAuthorizationInfo);
   };
 
@@ -263,6 +280,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    */
   const hasPermission = (viewName: string): boolean => {
     return permissions.includes(viewName);
+  };
+
+  /**
+   * Verifica si el usuario pertenece a un grupo de seguridad específico.
+   */
+  const isInGroup = (groupName: string): boolean => {
+    return groupNames.includes(groupName);
   };
 
   /**
@@ -326,6 +350,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Permisos de vistas
       permissions,
       hasPermission,
+      // Grupos del usuario
+      groupNames,
+      isInGroup,
       // Capacidades administrativas
       capabilities: authorizationInfo.capabilities,
       hasCapability,

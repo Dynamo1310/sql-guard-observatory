@@ -4,7 +4,7 @@ import {
   Phone, Calendar, CalendarDays, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
   ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Settings, Cog, ShieldCheck, Clock,
   Key, Lock, History, KeyRound, Share2, FolderLock, Sparkles, Server, Zap, Tag, AlertTriangle, TrendingUp,
-  Snowflake, Play, BookOpen, LayoutDashboard, Swords
+  Snowflake, Play, BookOpen, LayoutDashboard, Swords, Calculator
 } from 'lucide-react';
 import { menuBadgesApi, MenuBadgeDto, overviewApi } from '@/services/api';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -90,6 +90,7 @@ const inventarioDocumentDbSubItems = [
 const rendimientoSubItems = [
   { title: 'Mantenimiento', url: '/jobs', icon: Activity, permission: 'Jobs' },
   { title: 'Índices', url: '/indexes', icon: ListTree, permission: 'Indexes' },
+  { title: 'TempDB Analyzer', url: '/tempdb-analyzer', icon: Database, permission: 'TempDbAnalyzer' },
 ];
 
 // Submenús de Parcheos
@@ -144,6 +145,7 @@ const intervencionesSubItems = [
 const projectsSubItems = [
   { title: 'Racionalización SQL', url: '/projects/bases-sin-uso', icon: Database, permission: 'BasesSinUso' },
   { title: 'Comparativa Servers', url: '/projects/server-comparison', icon: ArrowRightLeft, permission: 'ServerComparison' },
+  { title: 'Simulador Migración', url: '/projects/migration-simulator', icon: Calculator, permission: 'MigrationSimulator' },
 ];
 
 // ==================== SEGURIDAD ====================
@@ -216,7 +218,7 @@ export function AppSidebar() {
   const isInventarioDocumentDbActive = location.pathname.startsWith('/inventory/documentdb');
   const [inventarioDocumentDbOpen, setInventarioDocumentDbOpen] = useState(isInventarioDocumentDbActive);
 
-  const isRendimientoActive = ['/jobs', '/indexes'].includes(location.pathname);
+  const isRendimientoActive = ['/jobs', '/indexes', '/tempdb-analyzer'].includes(location.pathname);
   const [rendimientoOpen, setRendimientoOpen] = useState(isRendimientoActive);
 
   const isPatchingActive = location.pathname.startsWith('/patching');

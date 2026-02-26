@@ -322,6 +322,7 @@ export const authApi = {
 
         // Guardar en caché (mismas claves que AuthContext)
         localStorage.setItem('cached_permissions', JSON.stringify(permissionsData.permissions));
+        localStorage.setItem('cached_group_names', JSON.stringify(permissionsData.groupNames || []));
         localStorage.setItem('cached_authorization', JSON.stringify({
           roleId: authData.roleId,
           roleName: authData.roleName,
@@ -807,13 +808,13 @@ export const permissionsApi = {
     return handleResponse<AvailableViewsDto>(response);
   },
 
-  async getMyPermissions(): Promise<{ permissions: string[] }> {
+  async getMyPermissions(): Promise<{ permissions: string[]; groupNames: string[] }> {
     const response = await fetch(`${API_URL}/api/permissions/my-permissions`, {
       headers: {
         ...getAuthHeader(),
       },
     });
-    return handleResponse<{ permissions: string[] }>(response);
+    return handleResponse<{ permissions: string[]; groupNames: string[] }>(response);
   },
 };
 
@@ -6491,6 +6492,143 @@ export const serverComparisonApi = {
       body: JSON.stringify({ instanceNames }),
     });
     return handleResponse<ServerComparisonResponse>(response);
+  },
+};
+
+// ==================== MIGRATION SIMULATOR API ====================
+
+export interface MigrationSourceRequest {
+  instanceNames: string[];
+}
+
+export interface MigrationDatabaseDto {
+  name: string;
+  dataSizeMB: number;
+  logSizeMB: number;
+  totalSizeMB: number;
+  state?: string;
+  recoveryModel?: string;
+  compatibilityLevel?: string;
+  collation?: string;
+  dataFileCount: number;
+  logFileCount: number;
+}
+
+export interface MigrationServerDto {
+  instanceName: string;
+  connectionSuccess: boolean;
+  errorMessage?: string;
+  sqlVersion?: string;
+  databases: MigrationDatabaseDto[];
+  totalDataSizeMB: number;
+  totalLogSizeMB: number;
+  totalSizeMB: number;
+}
+
+export interface MigrationSourceResponse {
+  servers: MigrationServerDto[];
+  generatedAt: string;
+}
+
+export interface ExistingInstanceInfo {
+  name: string;
+  connectionSuccess: boolean;
+  errorMessage?: string;
+  currentDataSizeMB: number;
+  currentLogSizeMB: number;
+  currentDatabaseCount: number;
+  currentDatabaseNames: string[];
+  currentDataDiskCount: number;
+  lastDataDiskLetter?: string;
+}
+
+export interface NamingSuggestionResponse {
+  baseName: string;
+  nextAvailableNumber: number;
+  environment: string;
+  targetVersion: string;
+  existingInstances: string[];
+  existingInstancesInfo: ExistingInstanceInfo[];
+}
+
+export const migrationSimulatorApi = {
+  async getInstances(): Promise<ComparisonInstanceDto[]> {
+    const response = await fetch(`${API_URL}/api/migration-simulator/instances`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ComparisonInstanceDto[]>(response);
+  },
+
+  async getSourceDatabases(instanceNames: string[]): Promise<MigrationSourceResponse> {
+    const response = await fetch(`${API_URL}/api/migration-simulator/sources`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ instanceNames }),
+    });
+    return handleResponse<MigrationSourceResponse>(response);
+  },
+
+  async getNamingSuggestion(targetVersion: string, environment: string): Promise<NamingSuggestionResponse> {
+    const response = await fetch(
+      `${API_URL}/api/migration-simulator/naming-suggestion?targetVersion=${encodeURIComponent(targetVersion)}&environment=${encodeURIComponent(environment)}`,
+      { headers: { ...getAuthHeader() } },
+    );
+    return handleResponse<NamingSuggestionResponse>(response);
+  },
+};
+
+// ==================== TEMPDB ANALYZER ====================
+
+export interface TempDbRecommendationDto {
+  name: string;
+  status: string;
+  details: string;
+  suggestion?: string;
+  sqlScript?: string;
+}
+
+export interface TempDbCheckResultDto {
+  instanceName: string;
+  ambiente?: string;
+  majorVersion?: string;
+  connectionSuccess: boolean;
+  errorMessage?: string;
+  recommendations: TempDbRecommendationDto[];
+  overallScore: number;
+  analyzedAt: string;
+}
+
+export interface TempDbAnalysisResponse {
+  results: TempDbCheckResultDto[];
+  lastFullScanAt?: string;
+  totalInstances: number;
+  complianceCount: number;
+  warningCount: number;
+  failCount: number;
+}
+
+export const tempDbAnalyzerApi = {
+  async getCachedResults(): Promise<TempDbAnalysisResponse> {
+    const response = await fetch(`${API_URL}/api/tempdb-analyzer`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<TempDbAnalysisResponse>(response);
+  },
+
+  async analyzeAll(): Promise<TempDbAnalysisResponse> {
+    const response = await fetch(`${API_URL}/api/tempdb-analyzer/analyze-all`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<TempDbAnalysisResponse>(response);
+  },
+
+  async analyzeInstance(instanceName: string): Promise<TempDbCheckResultDto> {
+    const response = await fetch(`${API_URL}/api/tempdb-analyzer/analyze/${encodeURIComponent(instanceName)}`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<TempDbCheckResultDto>(response);
   },
 };
 

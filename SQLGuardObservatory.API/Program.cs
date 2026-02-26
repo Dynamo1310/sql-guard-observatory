@@ -262,6 +262,12 @@ builder.Services.AddScoped<IBasesSinUsoService, BasesSinUsoService>();
 
 // Proyectos - Comparativa de Servidores (migración de licencias)
 builder.Services.AddScoped<IServerComparisonService, ServerComparisonService>();
+
+// Proyectos - Simulador de Migración (cálculo de volúmenes)
+builder.Services.AddScoped<IMigrationSimulatorService, MigrationSimulatorService>();
+
+// Rendimiento - Analizador TempDB Best Practices
+builder.Services.AddScoped<ITempDbAnalyzerService, TempDbAnalyzerService>();
 builder.Services.AddScoped<IIntervencionWarService, IntervencionWarService>();
 builder.Services.AddScoped<IPatchConfigService, PatchConfigService>();
 builder.Services.AddHostedService<PatchNotificationBackgroundService>();

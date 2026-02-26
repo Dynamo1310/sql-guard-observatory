@@ -48,6 +48,8 @@ import ObsoleteInstances from "./pages/ObsoleteInstances";
 import DatabaseOwners from "./pages/DatabaseOwners";
 import BasesSinUso from "./pages/BasesSinUso";
 import ServerComparison from "./pages/ServerComparison";
+import MigrationSimulator from "./pages/MigrationSimulator";
+import TempDbAnalyzer from "./pages/TempDbAnalyzer";
 import IntervencionesWar from "./pages/IntervencionesWar";
 import VaultDashboard from "./pages/VaultDashboard";
 import VaultCredentials from "./pages/VaultCredentials";
@@ -170,6 +172,11 @@ const App = () => (
                           <Indexes />
                         </ProtectedRoute>
                       } />
+                      <Route path="/tempdb-analyzer" element={
+                        <ProtectedRoute viewName="TempDbAnalyzer">
+                          <TempDbAnalyzer />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/patching" element={
                         <ProtectedRoute viewName="Patching">
                           <PatchStatus />
@@ -222,52 +229,52 @@ const App = () => (
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallDashboard">
                           <OnCallDashboard />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall/dashboard" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallDashboard">
                           <OnCallDashboard />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall/planner" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallPlanner">
                           <OnCallSchedule />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall/operators" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallOperators">
                           <OnCallOperators />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall/escalation" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallEscalation">
                           <OnCallEscalation />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall/activations" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallActivations">
                           <OnCallActivations />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall/alerts" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallAlerts">
                           <OnCallAlerts />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall/settings" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallConfig">
                           <OnCallSettings />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall/reports" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallReports">
                           <OnCallReports />
                         </ProtectedRoute>
                       } />
                       <Route path="/oncall/swaps" element={
-                        <ProtectedRoute viewName="OnCall">
+                        <ProtectedRoute viewName="OnCallSwaps">
                           <OnCallSwaps />
                         </ProtectedRoute>
                       } />
@@ -332,6 +339,11 @@ const App = () => (
                       <Route path="/projects/server-comparison" element={
                         <ProtectedRoute viewName="ServerComparison">
                           <ServerComparison />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/projects/migration-simulator" element={
+                        <ProtectedRoute viewName="MigrationSimulator">
+                          <MigrationSimulator />
                         </ProtectedRoute>
                       } />
                       {/* Vault DBA */}

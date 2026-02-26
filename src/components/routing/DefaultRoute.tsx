@@ -13,7 +13,7 @@ document.documentElement.classList.toggle('dark', initialTheme === 'dark');
  * Útil para la ruta raíz "/" cuando el usuario inicia sesión
  */
 export function DefaultRoute() {
-  const { hasPermission, loading } = useAuth();
+  const { hasPermission, isInGroup, loading } = useAuth();
 
   // Asegurar que el tema esté aplicado (por si cambia mientras el componente está montado)
   useLayoutEffect(() => {
@@ -36,8 +36,7 @@ export function DefaultRoute() {
   }
 
   // Orden de prioridad de las vistas para redirección
-  // Redirige a la primera vista que el usuario tenga permisos
-  const viewPriority = [
+  const allViewPriority = [
     { path: '/overview', viewName: 'Overview' },
     { path: '/healthscore', viewName: 'HealthScore' },
     { path: '/jobs', viewName: 'Jobs' },
@@ -47,10 +46,22 @@ export function DefaultRoute() {
     { path: '/indexes', viewName: 'Indexes' },
     { path: '/patching', viewName: 'Patching' },
     { path: '/oncall/dashboard', viewName: 'OnCallDashboard' },
+    { path: '/oncall/planner', viewName: 'OnCallPlanner' },
+    { path: '/oncall/swaps', viewName: 'OnCallSwaps' },
+    { path: '/oncall/operators', viewName: 'OnCallOperators' },
+    { path: '/oncall/escalation', viewName: 'OnCallEscalation' },
+    { path: '/oncall/activations', viewName: 'OnCallActivations' },
+    { path: '/oncall/reports', viewName: 'OnCallReports' },
     { path: '/vault/dashboard', viewName: 'VaultDashboard' },
     { path: '/admin/users', viewName: 'AdminUsers' },
     { path: '/admin/groups', viewName: 'AdminGroups' },
   ];
+
+  // Usuarios fuera del grupo IDD (General) no deben caer en Overview por defecto
+  const isIddMember = isInGroup('IDD (General)');
+  const viewPriority = isIddMember
+    ? allViewPriority
+    : allViewPriority.filter(v => v.viewName !== 'Overview');
 
   // Buscar la primera vista a la que el usuario tiene acceso
   for (const view of viewPriority) {

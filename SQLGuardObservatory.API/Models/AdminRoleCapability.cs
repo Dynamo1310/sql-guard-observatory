@@ -61,6 +61,11 @@ public static class CapabilityDefinitions
     // ==================== PARCHEOS ====================
     public const string PatchingConfigureCompliance = "Patching.ConfigureCompliance";
 
+    // ==================== GUARDIAS DBA ====================
+    public const string OnCallManageOperators = "OnCall.ManageOperators";
+    public const string OnCallGenerateCalendar = "OnCall.GenerateCalendar";
+    public const string OnCallCreateActivations = "OnCall.CreateActivations";
+
     // ==================== SISTEMA ====================
     public const string SystemConfigureSMTP = "System.ConfigureSMTP";
     public const string SystemConfigureCollectors = "System.ConfigureCollectors";
@@ -107,6 +112,12 @@ public static class CapabilityDefinitions
             ["Parcheos"] = new List<CapabilityInfo>
             {
                 new(PatchingConfigureCompliance, "Configurar Compliance", "Crear, editar y eliminar configuraciones de compliance de parcheos")
+            },
+            ["Guardias DBA"] = new List<CapabilityInfo>
+            {
+                new(OnCallManageOperators, "Gestionar Operadores", "Ver y gestionar operadores de guardia en el planificador"),
+                new(OnCallGenerateCalendar, "Generar Calendario", "Generar el calendario de guardias automáticamente"),
+                new(OnCallCreateActivations, "Crear Activaciones", "Crear activaciones clickeando en el calendario de guardias")
             },
             ["Sistema"] = new List<CapabilityInfo>
             {

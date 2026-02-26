@@ -15,6 +15,11 @@ public interface IPermissionService
     Task<List<string>> GetUserPermissionsAsync(string userId);
     
     /// <summary>
+    /// Obtiene los nombres de los grupos activos a los que pertenece un usuario
+    /// </summary>
+    Task<List<string>> GetUserGroupNamesAsync(string userId);
+
+    /// <summary>
     /// Verifica si un usuario tiene permiso para una vista específica
     /// </summary>
     Task<bool> HasPermissionAsync(string userId, string viewName);
