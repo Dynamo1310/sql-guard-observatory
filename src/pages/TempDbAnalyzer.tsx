@@ -139,7 +139,7 @@ function RecommendationDetail({ rec }: { rec: TempDbRecommendationDto }) {
               <div className="absolute top-1.5 right-1.5 z-10">
                 <CopyButton text={rec.sqlScript} />
               </div>
-              <pre className="bg-slate-950 text-slate-50 rounded-md p-3 pr-20 text-xs overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
+              <pre className="bg-muted border rounded-md p-3 pr-20 text-xs text-foreground overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
                 {rec.sqlScript}
               </pre>
             </div>
@@ -374,7 +374,7 @@ export default function TempDbAnalyzer() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-4 p-4 md:p-6">
+      <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -473,34 +473,34 @@ export default function TempDbAnalyzer() {
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px] h-9 text-sm">
+              <SelectTrigger className="w-[170px] h-9 text-sm">
                 <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
                 <SelectValue placeholder="Estado" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="all">Todos los estados</SelectItem>
                 <SelectItem value="CUMPLE">Cumplen</SelectItem>
                 <SelectItem value="REVISAR">Revisar</SelectItem>
                 <SelectItem value="NO CUMPLE">No Cumplen</SelectItem>
               </SelectContent>
             </Select>
             <Select value={ambienteFilter} onValueChange={setAmbienteFilter}>
-              <SelectTrigger className="w-[130px] h-9 text-sm">
+              <SelectTrigger className="w-[190px] h-9 text-sm">
                 <SelectValue placeholder="Ambiente" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="all">Todos los ambientes</SelectItem>
                 {ambientes.map(a => (
                   <SelectItem key={a} value={a}>{a}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={versionFilter} onValueChange={setVersionFilter}>
-              <SelectTrigger className="w-[130px] h-9 text-sm">
+              <SelectTrigger className="w-[190px] h-9 text-sm">
                 <SelectValue placeholder="Versión" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="all">Todas las versiones</SelectItem>
                 {versions.map(v => (
                   <SelectItem key={v} value={v}>SQL {v}</SelectItem>
                 ))}

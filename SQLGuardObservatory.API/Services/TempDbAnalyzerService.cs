@@ -54,6 +54,7 @@ public class TempDbAnalyzerService : ITempDbAnalyzerService
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var instances = await context.SqlServerInstancesCache
+            .Where(i => !i.NombreInstancia.Contains("DMZ"))
             .OrderBy(i => i.NombreInstancia)
             .ToListAsync(ct);
 
