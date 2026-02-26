@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   RefreshCw, Search, CheckCircle2, AlertTriangle, XCircle, ChevronDown,
-  ChevronRight, Copy, Check, Server, Database, Clock, Filter, Shield,
+  ChevronRight, Copy, Check, Server, Database, Clock, Shield,
   ExternalLink,
 } from 'lucide-react';
 import {
@@ -22,9 +22,6 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
@@ -167,35 +164,34 @@ function InstanceRow({
   ).length;
 
   return (
-    <Collapsible open={expanded} onOpenChange={setExpanded}>
+    <>
       <TableRow
         className={cn(
           'cursor-pointer transition-colors hover:bg-muted/50',
           expanded && 'bg-muted/30'
         )}
+        onClick={() => setExpanded(!expanded)}
       >
         <TableCell className="w-8">
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-              {expanded
-                ? <ChevronDown className="h-3.5 w-3.5" />
-                : <ChevronRight className="h-3.5 w-3.5" />}
-            </Button>
-          </CollapsibleTrigger>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+            {expanded
+              ? <ChevronDown className="h-3.5 w-3.5" />
+              : <ChevronRight className="h-3.5 w-3.5" />}
+          </Button>
         </TableCell>
-        <TableCell className="font-medium text-sm" onClick={() => setExpanded(!expanded)}>
+        <TableCell className="font-medium text-sm">
           <div className="flex items-center gap-1.5">
             <Server className="h-3.5 w-3.5 text-muted-foreground" />
             {result.instanceName}
           </div>
         </TableCell>
-        <TableCell className="text-sm" onClick={() => setExpanded(!expanded)}>
+        <TableCell className="text-sm">
           <Badge variant="outline" className="text-xs">{result.ambiente || '-'}</Badge>
         </TableCell>
-        <TableCell className="text-sm" onClick={() => setExpanded(!expanded)}>
+        <TableCell className="text-sm">
           {result.majorVersion || '-'}
         </TableCell>
-        <TableCell onClick={() => setExpanded(!expanded)}>
+        <TableCell>
           {result.connectionSuccess ? (
             <div className="flex items-center gap-2 min-w-[120px]">
               <Progress
@@ -210,7 +206,7 @@ function InstanceRow({
             <span className="text-xs text-red-500">Error</span>
           )}
         </TableCell>
-        <TableCell onClick={() => setExpanded(!expanded)}>
+        <TableCell>
           {result.connectionSuccess ? (
             <div className="flex items-center gap-1.5">
               {overallStatus === 'CUMPLE' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
@@ -222,43 +218,39 @@ function InstanceRow({
               )}
             </div>
           ) : (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Badge variant="destructive" className="text-xs">Sin conexión</Badge>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  {result.errorMessage || 'Error de conexión'}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Badge variant="destructive" className="text-xs">Sin conexión</Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-xs">
+                {result.errorMessage || 'Error de conexión'}
+              </TooltipContent>
+            </Tooltip>
           )}
         </TableCell>
-        <TableCell className="text-xs text-muted-foreground" onClick={() => setExpanded(!expanded)}>
+        <TableCell className="text-xs text-muted-foreground">
           {formatDate(result.analyzedAt)}
         </TableCell>
         <TableCell>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={(e) => { e.stopPropagation(); onRefresh(result.instanceName); }}
-                  disabled={isRefreshing}
-                >
-                  <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Re-analizar esta instancia</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={(e) => { e.stopPropagation(); onRefresh(result.instanceName); }}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Re-analizar esta instancia</TooltipContent>
+          </Tooltip>
         </TableCell>
       </TableRow>
-      <CollapsibleContent asChild>
-        <tr>
-          <td colSpan={8} className="p-0">
+      {expanded && (
+        <TableRow>
+          <TableCell colSpan={8} className="p-0">
             <div className="px-4 py-3 bg-muted/20 border-t space-y-2">
               {!result.connectionSuccess ? (
                 <div className="text-sm text-red-500 p-2">
@@ -276,10 +268,10 @@ function InstanceRow({
                 </div>
               )}
             </div>
-          </td>
-        </tr>
-      </CollapsibleContent>
-    </Collapsible>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   );
 }
 
@@ -474,7 +466,6 @@ export default function TempDbAnalyzer() {
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[170px] h-9 text-sm">
-                <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
                 <SelectValue placeholder="Estado" />
               </SelectTrigger>
               <SelectContent>
