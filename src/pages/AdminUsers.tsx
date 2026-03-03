@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Pencil, Trash2, UserPlus, Search, Loader2, Shield, ShieldCheck, Eye, Lock, Upload, RefreshCw, Mail, CheckCircle2, XCircle, AlertTriangle, ListChecks, RefreshCcw, Trash, Clock } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, UserPlus, Search, Loader2, Shield, ShieldCheck, Eye, Lock, Upload, RefreshCw, Mail, CheckCircle2, XCircle, AlertTriangle, ListChecks, RefreshCcw, Trash, Clock, UserCog } from 'lucide-react';
 import { Capabilities } from '@/lib/capabilities';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { authApi, groupsApi, adminRolesApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto, AdminRoleSimpleDto, EmailSearchResult, DistributionListSearchResponse, DistributionListMember, UserImportSyncDto } from '@/services/api';
+import { authApi, groupsApi, adminRolesApi, UserDto, CreateUserRequest, UpdateUserRequest, ActiveDirectoryUserDto, AdminRoleSimpleDto, EmailSearchResult, DistributionListSearchResponse, DistributionListMember, UserImportSyncDto, UsernameSearchResult } from '@/services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
@@ -99,6 +99,15 @@ export default function AdminUsers() {
   const [enableDlSync, setEnableDlSync] = useState(false);
   const [dlSyncIntervalHours, setDlSyncIntervalHours] = useState(24);
 
+  // AD Username Import states
+  const [usernameInput, setUsernameInput] = useState('');
+  const [usernameSearchResults, setUsernameSearchResults] = useState<UsernameSearchResult[]>([]);
+  const [selectedUsernameUsers, setSelectedUsernameUsers] = useState<Set<string>>(new Set());
+  const [searchingByUsername, setSearchingByUsername] = useState(false);
+  const [importingByUsername, setImportingByUsername] = useState(false);
+  const [usernameImportRoleId, setUsernameImportRoleId] = useState<number | undefined>(undefined);
+  const [resolvedSuggestions, setResolvedSuggestions] = useState<Map<string, ActiveDirectoryUserDto>>(new Map());
+
   // Sync management states
   const [importSyncs, setImportSyncs] = useState<UserImportSyncDto[]>([]);
   const [executingSync, setExecutingSync] = useState<number | null>(null);
@@ -128,11 +137,13 @@ export default function AdminUsers() {
         setImportRoleId(readerRole.id);
         setEmailImportRoleId(readerRole.id);
         setDlImportRoleId(readerRole.id);
+        setUsernameImportRoleId(readerRole.id);
       } else if (roles.length > 0 && !formData.roleId) {
         setFormData(prev => ({ ...prev, roleId: roles[roles.length - 1].id }));
         setImportRoleId(roles[roles.length - 1].id);
         setEmailImportRoleId(roles[roles.length - 1].id);
         setDlImportRoleId(roles[roles.length - 1].id);
+        setUsernameImportRoleId(roles[roles.length - 1].id);
       }
     } catch (err) {
       console.error('Error fetching roles:', err);
@@ -644,6 +655,128 @@ export default function AdminUsers() {
     }
   };
 
+  // Funciones para importación por username de AD
+  const handleSearchByUsername = async () => {
+    const usernames = usernameInput
+      .split(/[\n,;]+/)
+      .map(u => u.trim())
+      .filter(u => u.length > 0);
+
+    if (usernames.length === 0) {
+      toast.error('Ingresa al menos un username de AD');
+      return;
+    }
+
+    setSearchingByUsername(true);
+    setResolvedSuggestions(new Map());
+    try {
+      const response = await authApi.searchByUsername(usernames);
+      setUsernameSearchResults(response.results);
+
+      const importable = response.results.filter(r => r.found && !r.alreadyExists);
+      setSelectedUsernameUsers(new Set(importable.map(r => r.username)));
+
+      const withSuggestions = response.results.filter(r => !r.found && r.suggestions && r.suggestions.length > 0).length;
+      if (response.foundCount === 0 && withSuggestions === 0) {
+        toast.error('Ningún usuario fue encontrado en Active Directory');
+      } else if (response.foundCount === 0 && withSuggestions > 0) {
+        toast.success(`Se encontraron sugerencias para ${withSuggestions} búsqueda${withSuggestions !== 1 ? 's' : ''}`);
+      } else {
+        const msg = `${response.foundCount} de ${response.results.length} encontrados en AD`;
+        toast.success(withSuggestions > 0 ? `${msg}. ${withSuggestions} con sugerencias.` : msg);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Error al buscar usuarios en Active Directory');
+      setUsernameSearchResults([]);
+      setSelectedUsernameUsers(new Set());
+    } finally {
+      setSearchingByUsername(false);
+    }
+  };
+
+  const handleSelectSuggestion = (originalQuery: string, adUser: ActiveDirectoryUserDto) => {
+    const newResolved = new Map(resolvedSuggestions);
+    newResolved.set(originalQuery, adUser);
+    setResolvedSuggestions(newResolved);
+
+    // Auto-seleccionar para importar
+    const newSelected = new Set(selectedUsernameUsers);
+    newSelected.add(originalQuery);
+    setSelectedUsernameUsers(newSelected);
+  };
+
+  const handleDeselectSuggestion = (originalQuery: string) => {
+    const newResolved = new Map(resolvedSuggestions);
+    newResolved.delete(originalQuery);
+    setResolvedSuggestions(newResolved);
+
+    const newSelected = new Set(selectedUsernameUsers);
+    newSelected.delete(originalQuery);
+    setSelectedUsernameUsers(newSelected);
+  };
+
+  const handleToggleUsernameUser = (username: string) => {
+    const newSelected = new Set(selectedUsernameUsers);
+    if (newSelected.has(username)) {
+      newSelected.delete(username);
+    } else {
+      newSelected.add(username);
+    }
+    setSelectedUsernameUsers(newSelected);
+  };
+
+  const handleImportByUsername = async () => {
+    if (selectedUsernameUsers.size === 0) {
+      toast.error('Selecciona al menos un usuario para importar');
+      return;
+    }
+
+    if (!usernameImportRoleId) {
+      toast.error('Selecciona un rol para los usuarios importados');
+      return;
+    }
+
+    const selectedRole = availableRoles.find(r => r.id === usernameImportRoleId);
+    const roleName = selectedRole?.name || 'Reader';
+
+    setImportingByUsername(true);
+    try {
+      const selectedUsernames: string[] = [];
+      for (const r of usernameSearchResults) {
+        if (!selectedUsernameUsers.has(r.username)) continue;
+        if (r.found && !r.alreadyExists) {
+          selectedUsernames.push(r.username);
+        } else if (!r.found && resolvedSuggestions.has(r.username)) {
+          selectedUsernames.push(resolvedSuggestions.get(r.username)!.samAccountName);
+        }
+      }
+
+      const response = await authApi.importByUsername({
+        usernames: selectedUsernames,
+        roleId: usernameImportRoleId,
+        defaultRole: roleName,
+      });
+
+      toast.success(response.message + ' Recuerda agregarlos a un grupo para darles permisos de vistas.');
+
+      if (response.errors.length > 0) {
+        console.error('Errores durante la importación por username:', response.errors);
+      }
+
+      await fetchUsers();
+
+      // Resetear pestaña username
+      setUsernameInput('');
+      setUsernameSearchResults([]);
+      setSelectedUsernameUsers(new Set());
+      setResolvedSuggestions(new Map());
+    } catch (error: any) {
+      toast.error(error.message || 'Error al importar usuarios');
+    } finally {
+      setImportingByUsername(false);
+    }
+  };
+
   const resetImportDialog = () => {
     setAdGroupMembers([]);
     setSelectedAdUsers(new Set());
@@ -656,6 +789,10 @@ export default function AdminUsers() {
     setSelectedDlUsers(new Set());
     setEnableDlSync(false);
     setDlSyncIntervalHours(24);
+    setUsernameInput('');
+    setUsernameSearchResults([]);
+    setSelectedUsernameUsers(new Set());
+    setResolvedSuggestions(new Map());
   };
 
   const resetForm = () => {
@@ -1373,10 +1510,14 @@ export default function AdminUsers() {
           </DialogHeader>
 
           <Tabs value={activeImportTab} onValueChange={setActiveImportTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="ad-group">
                 <UserPlus className="mr-2 h-4 w-4" />
                 Grupo AD
+              </TabsTrigger>
+              <TabsTrigger value="ad-username">
+                <UserCog className="mr-2 h-4 w-4" />
+                Usuario AD
               </TabsTrigger>
               <TabsTrigger value="emails">
                 <Mail className="mr-2 h-4 w-4" />
@@ -1466,6 +1607,172 @@ export default function AdminUsers() {
                       {importingUsers ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Importando...</> : <><UserPlus className="mr-2 h-4 w-4" />Importar {selectedAdUsers.size} Usuario{selectedAdUsers.size !== 1 ? 's' : ''}</>}
                     </Button>
                   </div>
+                </>
+              )}
+            </TabsContent>
+
+            {/* ============ TAB: USUARIO AD ============ */}
+            <TabsContent value="ad-username" className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="usernameInput">Usernames de Active Directory</Label>
+                <Textarea
+                  id="usernameInput"
+                  className="min-h-[120px]"
+                  placeholder={"TB03260\nBallesteros\nTB"}
+                  value={usernameInput}
+                  onChange={(e) => setUsernameInput(e.target.value)}
+                  disabled={searchingByUsername}
+                />
+                <p className="text-xs text-muted-foreground">Un username por línea, o separados por coma. Acepta búsquedas parciales (ej: TB, 03260, Ballesteros).</p>
+              </div>
+
+              <Button onClick={handleSearchByUsername} disabled={searchingByUsername || !usernameInput.trim()} className="w-full">
+                {searchingByUsername ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Buscando en Active Directory...</> : <><Search className="mr-2 h-4 w-4" />Buscar en Active Directory</>}
+              </Button>
+
+              {usernameSearchResults.length > 0 && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Resultados ({(() => {
+                      const directImportable = usernameSearchResults.filter(r => r.found && !r.alreadyExists).length;
+                      const resolvedImportable = Array.from(resolvedSuggestions.keys()).length;
+                      return directImportable + resolvedImportable;
+                    })()} importables de {usernameSearchResults.length})</Label>
+                    <div className="border rounded-md max-h-[400px] overflow-y-auto">
+                      <div className="p-2 space-y-1">
+                        {usernameSearchResults.map((result) => {
+                          const resolved = resolvedSuggestions.get(result.username);
+                          const hasSuggestions = !result.found && result.suggestions && result.suggestions.length > 0;
+                          const isResolved = !result.found && resolved != null;
+
+                          return (
+                            <div key={result.username}>
+                              {/* Fila principal del resultado */}
+                              <div className={`flex items-center space-x-3 p-2 rounded ${
+                                (result.found && !result.alreadyExists) || isResolved
+                                  ? 'hover:bg-accent cursor-pointer'
+                                  : hasSuggestions ? '' : 'opacity-60'
+                              }`}
+                                onClick={() => {
+                                  if (result.found && !result.alreadyExists) handleToggleUsernameUser(result.username);
+                                  else if (isResolved) handleToggleUsernameUser(result.username);
+                                }}>
+                                {/* Checkbox para encontrados directos */}
+                                {result.found && !result.alreadyExists && (
+                                  <Checkbox checked={selectedUsernameUsers.has(result.username)} onCheckedChange={() => handleToggleUsernameUser(result.username)} />
+                                )}
+                                {/* Checkbox para sugerencias resueltas */}
+                                {isResolved && (
+                                  <Checkbox checked={selectedUsernameUsers.has(result.username)} onCheckedChange={() => handleToggleUsernameUser(result.username)} />
+                                )}
+
+                                {/* Iconos de estado */}
+                                {result.found && !result.alreadyExists && <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />}
+                                {result.found && result.alreadyExists && <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />}
+                                {!result.found && !isResolved && hasSuggestions && <Search className="h-4 w-4 text-orange-500 flex-shrink-0" />}
+                                {!result.found && !isResolved && !hasSuggestions && <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />}
+                                {isResolved && <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />}
+
+                                <div className="flex-1 min-w-0">
+                                  {/* Encontrado directamente */}
+                                  {result.found && result.adUser && (
+                                    <>
+                                      <div className="text-sm font-medium truncate">{result.adUser.displayName}</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        <span className="font-mono">{result.adUser.samAccountName}</span>
+                                        {result.adUser.email && <><span className="mx-1">·</span><span>{result.adUser.email}</span></>}
+                                      </div>
+                                    </>
+                                  )}
+                                  {/* Sugerencia resuelta */}
+                                  {isResolved && resolved && (
+                                    <>
+                                      <div className="text-sm font-medium truncate">{resolved.displayName}</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        <span className="font-mono">{resolved.samAccountName}</span>
+                                        {resolved.email && <><span className="mx-1">·</span><span>{resolved.email}</span></>}
+                                        <span className="mx-1">·</span>
+                                        <span className="text-green-600 dark:text-green-400">seleccionado de "{result.username}"</span>
+                                      </div>
+                                      <button className="text-xs text-muted-foreground underline hover:text-foreground mt-0.5" onClick={(e) => { e.stopPropagation(); handleDeselectSuggestion(result.username); }}>
+                                        Cambiar selección
+                                      </button>
+                                    </>
+                                  )}
+                                  {/* No encontrado sin sugerencias */}
+                                  {!result.found && !isResolved && !hasSuggestions && (
+                                    <>
+                                      <div className="text-sm font-mono truncate">{result.username}</div>
+                                      <div className="text-xs text-red-600 dark:text-red-400">No encontrado en Active Directory</div>
+                                    </>
+                                  )}
+                                  {/* No encontrado con sugerencias */}
+                                  {!result.found && !isResolved && hasSuggestions && (
+                                    <>
+                                      <div className="text-sm font-mono">{result.username}</div>
+                                      <div className="text-xs text-orange-600 dark:text-orange-400">{result.suggestions.length} sugerencia{result.suggestions.length !== 1 ? 's' : ''} encontrada{result.suggestions.length !== 1 ? 's' : ''}</div>
+                                    </>
+                                  )}
+                                  {result.alreadyExists && <div className="text-xs text-yellow-600 dark:text-yellow-400">Ya existe en la aplicación</div>}
+                                </div>
+                              </div>
+
+                              {/* Sugerencias expandidas */}
+                              {hasSuggestions && !isResolved && (
+                                <div className="ml-10 mt-1 mb-2 space-y-1">
+                                  {result.suggestions.map((suggestion) => (
+                                    <div key={suggestion.samAccountName} className="flex items-center justify-between p-2 rounded border border-dashed border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100 dark:hover:bg-orange-950/40">
+                                      <div className="flex-1 min-w-0 mr-2">
+                                        <div className="text-sm font-medium truncate">{suggestion.displayName}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                          <span className="font-mono">{suggestion.samAccountName}</span>
+                                          {suggestion.email && <><span className="mx-1">·</span><span>{suggestion.email}</span></>}
+                                        </div>
+                                      </div>
+                                      <Button variant="outline" size="sm" className="flex-shrink-0 text-xs h-7" onClick={() => handleSelectSuggestion(result.username, suggestion)}>
+                                        Seleccionar
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {(usernameSearchResults.some(r => r.found && !r.alreadyExists) || resolvedSuggestions.size > 0) && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Rol a asignar</Label>
+                        <Select value={usernameImportRoleId?.toString() || ''} onValueChange={(value) => setUsernameImportRoleId(parseInt(value))}>
+                          <SelectTrigger><SelectValue placeholder="Seleccionar rol" /></SelectTrigger>
+                          <SelectContent>
+                            {availableRoles.map((role) => {
+                              const IconComponent = getRoleIcon(role.name);
+                              return (
+                                <SelectItem key={role.id} value={role.id.toString()}>
+                                  <div className="flex items-center gap-2"><IconComponent className="h-4 w-4" style={{ color: role.color }} />{role.name}</div>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="bg-accent/50 p-3 rounded-md">
+                        <p className="text-sm"><strong>{selectedUsernameUsers.size}</strong> usuario{selectedUsernameUsers.size !== 1 ? 's' : ''} seleccionado{selectedUsernameUsers.size !== 1 ? 's' : ''} para importar con rol <strong>{availableRoles.find(r => r.id === usernameImportRoleId)?.name || 'Reader'}</strong></p>
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button onClick={handleImportByUsername} disabled={importingByUsername || selectedUsernameUsers.size === 0}>
+                          {importingByUsername ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Importando...</> : <><UserCog className="mr-2 h-4 w-4" />Importar {selectedUsernameUsers.size} Usuario{selectedUsernameUsers.size !== 1 ? 's' : ''}</>}
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </TabsContent>

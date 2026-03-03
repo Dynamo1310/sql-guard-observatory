@@ -167,6 +167,37 @@ export interface ImportByEmailResponse {
 }
 
 // =============================================
+// Tipos para Importación por Username de AD
+// =============================================
+
+export interface UsernameSearchResult {
+  username: string;
+  found: boolean;
+  adUser: ActiveDirectoryUserDto | null;
+  alreadyExists: boolean;
+  suggestions: ActiveDirectoryUserDto[];
+}
+
+export interface SearchByUsernameResponse {
+  results: UsernameSearchResult[];
+  foundCount: number;
+  notFoundCount: number;
+}
+
+export interface ImportByUsernameRequest {
+  usernames: string[];
+  roleId?: number;
+  defaultRole: string;
+}
+
+export interface ImportByUsernameResponse {
+  message: string;
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
+// =============================================
 // Tipos de Listas de Distribución y Sync
 // =============================================
 
@@ -473,6 +504,34 @@ export const authApi = {
       body: JSON.stringify(request),
     });
     return handleResponse<ImportByEmailResponse>(response);
+  },
+
+  // =============================================
+  // Importación por Username de AD
+  // =============================================
+
+  async searchByUsername(usernames: string[]): Promise<SearchByUsernameResponse> {
+    const response = await fetch(`${API_URL}/api/auth/search-by-username`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ usernames }),
+    });
+    return handleResponse<SearchByUsernameResponse>(response);
+  },
+
+  async importByUsername(request: ImportByUsernameRequest): Promise<ImportByUsernameResponse> {
+    const response = await fetch(`${API_URL}/api/auth/import-by-username`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<ImportByUsernameResponse>(response);
   },
 
   // =============================================

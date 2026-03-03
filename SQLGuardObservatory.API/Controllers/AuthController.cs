@@ -702,6 +702,182 @@ public class AuthController : ControllerBase
     }
 
     // =============================================
+    // Endpoints de Importación por Username de AD
+    // =============================================
+
+    /// <summary>
+    /// Busca usuarios en Active Directory por su sAMAccountName (ej: TB03260).
+    /// </summary>
+    [HttpPost("search-by-username")]
+    [RequireCapability("Users.ImportFromAD")]
+    [SupportedOSPlatform("windows")]
+    public async Task<IActionResult> SearchByUsername([FromBody] SearchByUsernameRequest request)
+    {
+        try
+        {
+            if (request.Usernames == null || !request.Usernames.Any())
+            {
+                return BadRequest(new { message = "Debe proporcionar al menos un username" });
+            }
+
+            var usernames = request.Usernames
+                .SelectMany(u => u.Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                .Select(u => u.Trim())
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var adResults = await _activeDirectoryService.FindUsersBySamAccountNameAsync(usernames);
+
+            var results = new List<UsernameSearchResult>();
+            foreach (var username in usernames)
+            {
+                var adUser = adResults.ContainsKey(username) ? adResults[username] : null;
+                var alreadyExists = false;
+                var suggestions = new List<ActiveDirectoryUserDto>();
+
+                if (adUser != null)
+                {
+                    var existingUser = await _authService.GetUserByDomainUserAsync(adUser.SamAccountName);
+                    alreadyExists = existingUser != null;
+                }
+                else
+                {
+                    // No se encontró exactamente: buscar coincidencias parciales
+                    try
+                    {
+                        suggestions = await _activeDirectoryService.SearchUsersByPartialMatchAsync(username, 10);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error en búsqueda parcial para '{Username}'", username);
+                    }
+                }
+
+                results.Add(new UsernameSearchResult
+                {
+                    Username = username,
+                    Found = adUser != null,
+                    AdUser = adUser,
+                    AlreadyExists = alreadyExists,
+                    Suggestions = suggestions
+                });
+            }
+
+            return Ok(new SearchByUsernameResponse
+            {
+                Results = results,
+                FoundCount = results.Count(r => r.Found),
+                NotFoundCount = results.Count(r => !r.Found)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al buscar usuarios por username en AD");
+            return StatusCode(500, new { message = $"Error al buscar en Active Directory: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Importa usuarios encontrados por username desde Active Directory.
+    /// </summary>
+    [HttpPost("import-by-username")]
+    [RequireCapability("Users.ImportFromAD")]
+    [SupportedOSPlatform("windows")]
+    public async Task<IActionResult> ImportByUsername([FromBody] ImportByUsernameRequest request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            if (!await _adminAuthService.CanCreateUsersAsync(currentUserId))
+            {
+                return Forbid();
+            }
+
+            if (request.Usernames == null || !request.Usernames.Any())
+            {
+                return BadRequest(new { message = "Debe proporcionar al menos un username para importar" });
+            }
+
+            bool canAssignRole = false;
+            if (request.RoleId.HasValue)
+                canAssignRole = await _adminAuthService.CanAssignRoleByIdAsync(currentUserId, request.RoleId.Value);
+            else
+                canAssignRole = await _adminAuthService.CanAssignRoleAsync(currentUserId, request.DefaultRole);
+
+            if (!canAssignRole)
+            {
+                return StatusCode(403, new { message = "No tiene permisos para asignar el rol especificado" });
+            }
+
+            var adResults = await _activeDirectoryService.FindUsersBySamAccountNameAsync(request.Usernames);
+
+            var importedCount = 0;
+            var skippedCount = 0;
+            var errors = new List<string>();
+
+            foreach (var username in request.Usernames)
+            {
+                try
+                {
+                    var adUser = adResults.ContainsKey(username) ? adResults[username] : null;
+                    if (adUser == null)
+                    {
+                        errors.Add($"{username}: No encontrado en Active Directory");
+                        skippedCount++;
+                        continue;
+                    }
+
+                    var existingUser = await _authService.GetUserByDomainUserAsync(adUser.SamAccountName);
+                    if (existingUser != null)
+                    {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    var createRequest = new CreateUserRequest
+                    {
+                        DomainUser = adUser.SamAccountName,
+                        DisplayName = adUser.DisplayName,
+                        Email = adUser.Email,
+                        RoleId = request.RoleId,
+                        Role = request.DefaultRole
+                    };
+
+                    var created = await _authService.CreateUserAsync(createRequest);
+                    if (created != null)
+                    {
+                        importedCount++;
+                    }
+                    else
+                    {
+                        errors.Add($"{username}: Error al crear usuario en la base de datos");
+                        skippedCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"{username}: {ex.Message}");
+                    skippedCount++;
+                }
+            }
+
+            return Ok(new
+            {
+                message = $"Importación completada: {importedCount} usuarios importados, {skippedCount} omitidos",
+                imported = importedCount,
+                skipped = skippedCount,
+                errors
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al importar usuarios por username");
+            return StatusCode(500, new { message = $"Error al importar usuarios: {ex.Message}" });
+        }
+    }
+
+    // =============================================
     // Endpoints de Listas de Distribución y Sync
     // =============================================
 

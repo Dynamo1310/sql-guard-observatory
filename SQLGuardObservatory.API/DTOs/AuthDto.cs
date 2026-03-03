@@ -159,6 +159,38 @@ public class ImportByEmailRequest
 }
 
 // =============================================
+// DTOs para Importación por Username de AD
+// =============================================
+
+public class SearchByUsernameRequest
+{
+    public List<string> Usernames { get; set; } = new();
+}
+
+public class SearchByUsernameResponse
+{
+    public List<UsernameSearchResult> Results { get; set; } = new();
+    public int FoundCount { get; set; }
+    public int NotFoundCount { get; set; }
+}
+
+public class UsernameSearchResult
+{
+    public string Username { get; set; } = string.Empty;
+    public bool Found { get; set; }
+    public ActiveDirectoryUserDto? AdUser { get; set; }
+    public bool AlreadyExists { get; set; }
+    public List<ActiveDirectoryUserDto> Suggestions { get; set; } = new();
+}
+
+public class ImportByUsernameRequest
+{
+    public List<string> Usernames { get; set; } = new();
+    public int? RoleId { get; set; }
+    public string DefaultRole { get; set; } = "Reader";
+}
+
+// =============================================
 // DTOs para Listas de Distribución e Import Sync
 // =============================================
 

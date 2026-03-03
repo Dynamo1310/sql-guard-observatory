@@ -26,5 +26,21 @@ public interface IActiveDirectoryService
     /// <param name="email">Correo electrónico de la lista de distribución</param>
     /// <returns>Información del grupo y sus miembros, o null si no se encontró</returns>
     Task<DistributionListSearchResult?> FindDistributionListByEmailAsync(string email);
+
+    /// <summary>
+    /// Busca usuarios en Active Directory por su sAMAccountName (ej: TB03260).
+    /// </summary>
+    /// <param name="samAccountNames">Lista de usernames a buscar</param>
+    /// <returns>Diccionario username -> ActiveDirectoryUserDto (null si no se encontró)</returns>
+    Task<Dictionary<string, ActiveDirectoryUserDto?>> FindUsersBySamAccountNameAsync(List<string> samAccountNames);
+
+    /// <summary>
+    /// Busca usuarios en AD con coincidencia parcial en sAMAccountName o DisplayName.
+    /// Útil cuando el usuario escribe un fragmento como "TB" o "03260".
+    /// </summary>
+    /// <param name="query">Texto parcial a buscar</param>
+    /// <param name="maxResults">Máximo de resultados a retornar (default 10)</param>
+    /// <returns>Lista de usuarios que coinciden parcialmente</returns>
+    Task<List<ActiveDirectoryUserDto>> SearchUsersByPartialMatchAsync(string query, int maxResults = 10);
 }
 

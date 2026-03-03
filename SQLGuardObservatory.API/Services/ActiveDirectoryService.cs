@@ -254,6 +254,129 @@ public class ActiveDirectoryService : IActiveDirectoryService
         }
     }
 
+    public async Task<Dictionary<string, ActiveDirectoryUserDto?>> FindUsersBySamAccountNameAsync(List<string> samAccountNames)
+    {
+        return await Task.Run(() => FindUsersBySamAccountName(samAccountNames));
+    }
+
+    private Dictionary<string, ActiveDirectoryUserDto?> FindUsersBySamAccountName(List<string> samAccountNames)
+    {
+        var results = new Dictionary<string, ActiveDirectoryUserDto?>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            _logger.LogInformation("Buscando {Count} usuarios en AD por sAMAccountName", samAccountNames.Count);
+
+            using var context = new PrincipalContext(ContextType.Domain, _domainName);
+
+            foreach (var sam in samAccountNames)
+            {
+                var trimmed = sam.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed) || results.ContainsKey(trimmed))
+                    continue;
+
+                try
+                {
+                    using var user = UserPrincipal.FindByIdentity(context, IdentityType.SamAccountName, trimmed);
+                    if (user != null)
+                    {
+                        results[trimmed] = MapUserPrincipalToDto(user);
+                        _logger.LogInformation("Username {Sam} encontrado en AD: {Name}", trimmed, user.DisplayName);
+                    }
+                    else
+                    {
+                        results[trimmed] = null;
+                        _logger.LogWarning("Username {Sam} no encontrado en AD", trimmed);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error buscando username {Sam} en AD", trimmed);
+                    results[trimmed] = null;
+                }
+            }
+        }
+        catch (PrincipalServerDownException ex)
+        {
+            _logger.LogError(ex, "No se pudo conectar al servidor de dominio");
+            throw new Exception("No se pudo conectar al servidor de Active Directory. Verifica la conectividad de red.", ex);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al buscar usuarios por sAMAccountName en AD");
+            throw new Exception($"Error al consultar Active Directory: {ex.Message}", ex);
+        }
+
+        return results;
+    }
+
+    public async Task<List<ActiveDirectoryUserDto>> SearchUsersByPartialMatchAsync(string query, int maxResults = 10)
+    {
+        return await Task.Run(() => SearchUsersByPartialMatch(query, maxResults));
+    }
+
+    private List<ActiveDirectoryUserDto> SearchUsersByPartialMatch(string query, int maxResults)
+    {
+        var results = new List<ActiveDirectoryUserDto>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2)
+                return results;
+
+            var trimmed = query.Trim();
+            _logger.LogInformation("Búsqueda parcial en AD: '{Query}' (max {Max})", trimmed, maxResults);
+
+            using var context = new PrincipalContext(ContextType.Domain, _domainName);
+
+            // Búsqueda 1: por sAMAccountName con wildcard
+            using (var samPrincipal = new UserPrincipal(context) { SamAccountName = $"*{trimmed}*" })
+            using (var samSearcher = new PrincipalSearcher(samPrincipal))
+            {
+                foreach (var principal in samSearcher.FindAll())
+                {
+                    if (results.Count >= maxResults) break;
+                    if (principal is UserPrincipal user && !seen.Contains(user.SamAccountName ?? ""))
+                    {
+                        seen.Add(user.SamAccountName ?? "");
+                        results.Add(MapUserPrincipalToDto(user));
+                    }
+                    principal.Dispose();
+                }
+            }
+
+            // Búsqueda 2: complementar con DisplayName si hay espacio
+            if (results.Count < maxResults)
+            {
+                using var dnPrincipal = new UserPrincipal(context) { DisplayName = $"*{trimmed}*" };
+                using var dnSearcher = new PrincipalSearcher(dnPrincipal);
+                foreach (var principal in dnSearcher.FindAll())
+                {
+                    if (results.Count >= maxResults) break;
+                    if (principal is UserPrincipal user && !seen.Contains(user.SamAccountName ?? ""))
+                    {
+                        seen.Add(user.SamAccountName ?? "");
+                        results.Add(MapUserPrincipalToDto(user));
+                    }
+                    principal.Dispose();
+                }
+            }
+
+            _logger.LogInformation("Búsqueda parcial '{Query}': {Count} resultados", trimmed, results.Count);
+        }
+        catch (PrincipalServerDownException ex)
+        {
+            _logger.LogError(ex, "No se pudo conectar al servidor de dominio en búsqueda parcial");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en búsqueda parcial por '{Query}'", query);
+        }
+
+        return results.OrderBy(u => u.DisplayName).ToList();
+    }
+
     private static ActiveDirectoryUserDto MapUserPrincipalToDto(UserPrincipal user)
     {
         return new ActiveDirectoryUserDto
