@@ -2,6 +2,7 @@ C:\Temp\Backend\SQLGuardObservatory.API.exe
 C:\Temp\Backend\web.config
 C:\Temp\Backend\appsettings.Development.json
 C:\Temp\Backend\appsettings.json
+C:\Temp\Backend\appsettings.Testing.json
 C:\Temp\Backend\Data\dbatools-buildref-index.json
 C:\Temp\Backend\SQLGuardObservatory.API.dll
 C:\Temp\Backend\SQLGuardObservatory.API.runtimeconfig.json

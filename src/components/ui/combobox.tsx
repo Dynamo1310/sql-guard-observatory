@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +29,8 @@ interface ComboboxProps {
   searchPlaceholder?: string;
   emptyText?: string;
   className?: string;
+  allowCreate?: boolean;
+  createLabel?: string;
 }
 
 export function Combobox({
@@ -39,10 +41,21 @@ export function Combobox({
   searchPlaceholder = "Buscar...",
   emptyText = "No se encontraron resultados",
   className,
+  allowCreate = false,
+  createLabel = "Crear",
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
 
   const selectedOption = options.find((option) => option.value === value);
+
+  const trimmedSearch = search.trim();
+  const showCreateOption =
+    allowCreate &&
+    trimmedSearch.length > 0 &&
+    !options.some(
+      (o) => o.label.toLowerCase() === trimmedSearch.toLowerCase()
+    );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -54,23 +67,50 @@ export function Combobox({
           className={cn("w-full justify-between", className)}
         >
           <span className="truncate">
-            {selectedOption ? selectedOption.label : placeholder}
+            {selectedOption
+              ? selectedOption.label
+              : value
+                ? value
+                : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={true}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            value={search}
+            onValueChange={setSearch}
+          />
           <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandEmpty>
+              {allowCreate && trimmedSearch.length > 0 ? (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onValueChange(trimmedSearch);
+                    setSearch("");
+                    setOpen(false);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  {createLabel}: <span className="font-medium">{trimmedSearch}</span>
+                </button>
+              ) : (
+                emptyText
+              )}
+            </CommandEmpty>
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.value}
-                  onSelect={(currentValue) => {
-                    onValueChange(currentValue === value ? "" : currentValue);
+                  value={option.label}
+                  onSelect={() => {
+                    onValueChange(option.value === value ? "" : option.value);
+                    setSearch("");
                     setOpen(false);
                   }}
                 >
@@ -83,6 +123,19 @@ export function Combobox({
                   {option.label}
                 </CommandItem>
               ))}
+              {showCreateOption && (
+                <CommandItem
+                  value={`__create__${trimmedSearch}`}
+                  onSelect={() => {
+                    onValueChange(trimmedSearch);
+                    setSearch("");
+                    setOpen(false);
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {createLabel}: <span className="ml-1 font-medium">{trimmedSearch}</span>
+                </CommandItem>
+              )}
             </CommandGroup>
           </CommandList>
         </Command>

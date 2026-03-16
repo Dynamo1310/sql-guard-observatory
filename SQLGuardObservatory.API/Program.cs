@@ -371,7 +371,10 @@ builder.Services.AddCors(options =>
             "http://asprbm-nov-01:80",        // Puerto 80 explícito
             "http://asprbm-nov-01:8080",      // Puerto 8080 (frontend)
             "https://asprbm-nov-01",          // HTTPS si aplica
-            "https://asprbm-nov-01:443"       // HTTPS puerto explícito
+            "https://asprbm-nov-01:443",      // HTTPS puerto explícito
+            // Testing - Frontend en ASTSBM-NOV-01
+            "http://astsbm-nov-01:8080",      // Puerto 8080 (frontend testing)
+            "http://astsbm-nov-01:5000"       // Puerto 5000 (API testing)
         )
         .AllowAnyMethod()
         .AllowAnyHeader()

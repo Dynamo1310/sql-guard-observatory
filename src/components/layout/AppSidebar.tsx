@@ -4,7 +4,7 @@ import {
   Phone, Calendar, CalendarDays, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
   ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Settings, Cog, ShieldCheck, Clock,
   Key, Lock, History, KeyRound, Share2, FolderLock, Sparkles, Server, Zap, Tag, AlertTriangle, TrendingUp,
-  Snowflake, Play, BookOpen, LayoutDashboard, Swords, Calculator
+  BookOpen, LayoutDashboard, Swords, Calculator
 } from 'lucide-react';
 import { menuBadgesApi, MenuBadgeDto, overviewApi } from '@/services/api';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -97,12 +97,7 @@ const rendimientoSubItems = [
 const patchingSubItems = [
   { title: 'Dashboard', url: '/patching', icon: LayoutDashboard, permission: 'Patching' },
   { title: 'Planificador', url: '/patching/planner', icon: CalendarDays, permission: 'PatchPlanner' },
-  { title: 'Calendario', url: '/patching/calendar', icon: Calendar, permission: 'PatchCalendar' },
-  { title: 'Vista Célula', url: '/patching/cell', icon: Users, permission: 'PatchCellView' },
-  { title: 'Ejecución', url: '/patching/execute', icon: Play, permission: 'PatchExecution' },
   { title: 'Inst. Obsoletas', url: '/patching/obsolete', icon: Clock, permission: 'ObsoleteInstances' },
-  { title: 'Config. Freezing', url: '/patching/freezing-config', icon: Snowflake, permission: 'PatchFreezingConfig' },
-  { title: 'Config. Notificaciones', url: '/patching/notifications-config', icon: Bell, permission: 'PatchNotificationsConfig' },
   { title: 'Config. Compliance', url: '/patching/config', icon: Settings, permission: 'PatchingConfig' },
 ];
 

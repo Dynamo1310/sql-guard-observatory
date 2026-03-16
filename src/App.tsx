@@ -39,11 +39,6 @@ import AdminRoles from "./pages/AdminRoles";
 import PatchStatus from "./pages/PatchStatus";
 import PatchComplianceConfig from "./pages/PatchComplianceConfig";
 import PatchPlanner from "./pages/PatchPlanner";
-import PatchCalendar from "./pages/PatchCalendar";
-import PatchCellView from "./pages/PatchCellView";
-import PatchExecution from "./pages/PatchExecution";
-import PatchFreezingConfig from "./pages/PatchFreezingConfig";
-import PatchNotificationsConfig from "./pages/PatchNotificationsConfig";
 import ObsoleteInstances from "./pages/ObsoleteInstances";
 import DatabaseOwners from "./pages/DatabaseOwners";
 import BasesSinUso from "./pages/BasesSinUso";
@@ -190,31 +185,6 @@ const App = () => (
                       <Route path="/patching/planner" element={
                         <ProtectedRoute viewName="PatchPlanner">
                           <PatchPlanner />
-                        </ProtectedRoute>
-                      } />
-                      <Route path="/patching/calendar" element={
-                        <ProtectedRoute viewName="PatchCalendar">
-                          <PatchCalendar />
-                        </ProtectedRoute>
-                      } />
-                      <Route path="/patching/cell" element={
-                        <ProtectedRoute viewName="PatchCellView">
-                          <PatchCellView />
-                        </ProtectedRoute>
-                      } />
-                      <Route path="/patching/execute" element={
-                        <ProtectedRoute viewName="PatchExecution">
-                          <PatchExecution />
-                        </ProtectedRoute>
-                      } />
-                      <Route path="/patching/freezing-config" element={
-                        <ProtectedRoute viewName="PatchFreezingConfig">
-                          <PatchFreezingConfig />
-                        </ProtectedRoute>
-                      } />
-                      <Route path="/patching/notifications-config" element={
-                        <ProtectedRoute viewName="PatchNotificationsConfig">
-                          <PatchNotificationsConfig />
                         </ProtectedRoute>
                       } />
                       <Route path="/patching/obsolete" element={

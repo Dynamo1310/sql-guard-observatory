@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Combobox } from '@/components/ui/combobox';
 import {
   Select,
   SelectContent,
@@ -1115,20 +1116,16 @@ export default function PatchPlanner() {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="cellTeam">Célula</Label>
-                <Select 
-                  value={formData.cellTeam || '__none__'} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, cellTeam: value === '__none__' ? '' : value }))}
-                >
-                  <SelectTrigger id="cellTeam">
-                    <SelectValue placeholder="Seleccionar célula..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Sin célula</SelectItem>
-                    {cellTeams?.map(cell => (
-                      <SelectItem key={cell} value={cell}>{cell}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={cellTeams?.map(cell => ({ value: cell, label: cell })) ?? []}
+                  value={formData.cellTeam || ''}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, cellTeam: value }))}
+                  placeholder="Seleccionar célula..."
+                  searchPlaceholder="Buscar o crear célula..."
+                  emptyText="No se encontraron células"
+                  allowCreate
+                  createLabel="Crear célula"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ambiente">Ambiente</Label>

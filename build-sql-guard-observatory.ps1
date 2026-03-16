@@ -1,6 +1,9 @@
 param(
     # Carpeta raíz donde se dejarán los artefactos compilados
-    [string]$OutputRoot = "C:\Temp"
+    [string]$OutputRoot = "C:\Temp",
+    # Entorno de build del frontend: production (default), testing, development
+    [ValidateSet("production", "testing", "development")]
+    [string]$Environment = "production"
 )
 
 # =========================
@@ -24,6 +27,7 @@ Write-Host "====================================="
 Write-Host ""
 Write-Host "Solution root : $solutionRoot"
 Write-Host "Output root   : $OutputRoot"
+Write-Host "Environment   : $Environment"
 Write-Host ""
 
 $initialLocation = Get-Location
@@ -50,6 +54,20 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ">>> [Backend] Publicación completada en: $backendOut"
+
+# Ajustar ASPNETCORE_ENVIRONMENT en el web.config del output
+$webConfigPath = Join-Path $backendOut "web.config"
+if (Test-Path $webConfigPath) {
+    $envValue = switch ($Environment) {
+        "testing"     { "Testing" }
+        "development" { "Development" }
+        default       { "Production" }
+    }
+    (Get-Content $webConfigPath) -replace 'value="Production"', "value=`"$envValue`"" |
+        Set-Content $webConfigPath
+    Write-Host ">>> [Backend] web.config actualizado: ASPNETCORE_ENVIRONMENT=$envValue" -ForegroundColor Green
+}
+
 Write-Host ""
 
 # =========================
@@ -72,8 +90,8 @@ if (-not (Test-Path (Join-Path $frontendRoot "node_modules"))) {
     Write-Host ">>> [Frontend] node_modules ya existe. Omitiendo 'npm install'."
 }
 
-Write-Host ">>> [Frontend] Ejecutando 'npm run build'..."
-npm run build
+Write-Host ">>> [Frontend] Ejecutando build en modo '$Environment'..."
+npx vite build --mode $Environment
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Falló 'npm run build'." -ForegroundColor Red
     Set-Location $initialLocation

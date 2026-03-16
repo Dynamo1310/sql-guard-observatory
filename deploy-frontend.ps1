@@ -1,11 +1,18 @@
 # Script de Despliegue Automatizado - Frontend SQL Guard Observatory
 # Requiere ejecutarse como Administrador
+#
+# Ejemplos de uso:
+#   Produccion:  .\deploy-frontend.ps1 -ApiUrl "http://asprbm-nov-01:5000" -Port "8080"
+#   Testing:     .\deploy-frontend.ps1 -ApiUrl "http://astsbm-nov-01:5000" -Port "8080" -Environment "testing"
+#   Desarrollo:  .\deploy-frontend.ps1 -ApiUrl "http://localhost:5000" -Port "3000"
 
 param(
     [string]$InstallPath = "C:\Apps\SQLGuardObservatory",
     [string]$ServiceName = "SQLGuardObservatoryFrontend",
     [string]$Port = "3000",
     [string]$ApiUrl = "http://localhost:5000",
+    [ValidateSet("production", "testing", "development")]
+    [string]$Environment = "production",
     [switch]$Uninstall
 )
 
@@ -38,19 +45,19 @@ if ($Uninstall) {
     exit 0
 }
 
-# Verificar que NSSM está instalado
+# Verificar que NSSM est? instalado
 if (-not (Get-Command nssm -ErrorAction SilentlyContinue)) {
-    Write-Error "NSSM no está instalado. Descargar desde https://nssm.cc/download"
+    Write-Error "NSSM no est? instalado. Descargar desde https://nssm.cc/download"
     exit 1
 }
 
-# Verificar que Node.js está instalado
+# Verificar que Node.js est? instalado
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Error "Node.js no está instalado. Descargar desde https://nodejs.org/"
+    Write-Error "Node.js no est? instalado. Descargar desde https://nodejs.org/"
     exit 1
 }
 
-# Verificar que http-server está instalado
+# Verificar que http-server est? instalado
 if (-not (Get-Command http-server -ErrorAction SilentlyContinue)) {
     Write-Host "Instalando http-server globalmente..." -ForegroundColor Yellow
     npm install -g http-server
@@ -58,14 +65,14 @@ if (-not (Get-Command http-server -ErrorAction SilentlyContinue)) {
 
 # Crear directorios
 $FrontendPath = Join-Path $InstallPath "Frontend"
-Write-Host "Creando directorio de instalación: $FrontendPath" -ForegroundColor Green
+Write-Host "Creando directorio de instalaci?n: $FrontendPath" -ForegroundColor Green
 New-Item -ItemType Directory -Force -Path $FrontendPath | Out-Null
 
-# Crear archivo .env.production
+# Crear archivo .env para el entorno seleccionado
 $envContent = "VITE_API_URL=$ApiUrl"
-$envPath = Join-Path $PSScriptRoot ".env.production"
+$envPath = Join-Path $PSScriptRoot ".env.$Environment"
 Set-Content -Path $envPath -Value $envContent
-Write-Host "Archivo .env.production creado con API_URL=$ApiUrl" -ForegroundColor Green
+Write-Host "Archivo .env.$Environment creado con API_URL=$ApiUrl" -ForegroundColor Green
 
 # Compilar el frontend
 Write-Host "Instalando dependencias del frontend..." -ForegroundColor Green
@@ -76,8 +83,8 @@ try {
         throw "Error al instalar dependencias"
     }
     
-    Write-Host "Compilando el frontend..." -ForegroundColor Green
-    npm run build
+    Write-Host "Compilando el frontend (modo: $Environment)..." -ForegroundColor Green
+    npx vite build --mode $Environment
     if ($LASTEXITCODE -ne 0) {
         throw "Error al compilar el frontend"
     }
@@ -88,12 +95,12 @@ try {
 Write-Host "Frontend compilado exitosamente" -ForegroundColor Green
 
 # Copiar archivos compilados
-Write-Host "Copiando archivos al directorio de instalación..." -ForegroundColor Green
+Write-Host "Copiando archivos al directorio de instalaci?n..." -ForegroundColor Green
 $DistPath = Join-Path $PSScriptRoot "dist"
 if (Test-Path $DistPath) {
     Copy-Item -Path "$DistPath\*" -Destination $FrontendPath -Recurse -Force
 } else {
-    Write-Error "No se encontró el directorio dist. La compilación puede haber fallado."
+    Write-Error "No se encontr? el directorio dist. La compilaci?n puede haber fallado."
     exit 1
 }
 
@@ -155,13 +162,13 @@ if ($serviceStatus.Status -eq "Running") {
     Write-Host "Estado: Running" -ForegroundColor Green
     Write-Host "Puerto: $Port" -ForegroundColor Cyan
     Write-Host "Ruta: $FrontendPath" -ForegroundColor Cyan
-    Write-Host "`nAcceder a la aplicación en:" -ForegroundColor Yellow
+    Write-Host "`nAcceder a la aplicaci?n en:" -ForegroundColor Yellow
     Write-Host "  http://localhost:$Port" -ForegroundColor White
     Write-Host "`nCredenciales por defecto:" -ForegroundColor Yellow
     Write-Host "  Usuario: TB03260" -ForegroundColor White
-    Write-Host "  Contraseña: Admin123! (¡CAMBIAR INMEDIATAMENTE!)" -ForegroundColor Red
+    Write-Host "  Contrase?a: Admin123! (?CAMBIAR INMEDIATAMENTE!)" -ForegroundColor Red
 } else {
-    Write-Warning "El servicio no está corriendo. Revisar logs en: $LogPath"
+    Write-Warning "El servicio no est? corriendo. Revisar logs en: $LogPath"
     Write-Host "Para ver logs: Get-Content '$LogPath\error.log' -Tail 50" -ForegroundColor Cyan
 }
 
