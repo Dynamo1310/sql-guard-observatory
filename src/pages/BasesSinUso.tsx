@@ -534,6 +534,36 @@ export default function BasesSinUso() {
         <span className="text-muted-foreground">—</span>
       );
     }
+    if (colKey === 'status') {
+      const statusVal = (value as string | null)?.toUpperCase();
+      if (!statusVal) return <span className="text-muted-foreground">—</span>;
+      if (statusVal === 'ONLINE') {
+        return (
+          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+            ONLINE
+          </Badge>
+        );
+      }
+      if (statusVal === 'OFFLINE') {
+        return (
+          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+            OFFLINE
+          </Badge>
+        );
+      }
+      if (statusVal === 'ELIMINADA') {
+        return (
+          <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400">
+            Eliminada
+          </Badge>
+        );
+      }
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+          {value as string}
+        </Badge>
+      );
+    }
     if (['fulltext', 'autoClose', 'readOnly', 'autoShrink', 'autoCreateStatistics', 'autoUpdateStatistics'].includes(colKey)) {
       if (value == null) return <span className="text-muted-foreground">—</span>;
       return value ? 'Si' : 'No';
@@ -542,20 +572,35 @@ export default function BasesSinUso() {
     // Última Actividad con etiquetas semánticas y colores
     if (colKey === 'fechaUltimaActividad') {
       const dateVal = value as string | null;
-      if (!dateVal) {
+
+      if (!item.enInventarioActual) {
         return (
-          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-            Activa
+          <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+            Eliminada
           </Badge>
         );
       }
-      if (isDefaultDate(dateVal)) {
+
+      if (!dateVal || isDefaultDate(dateVal)) {
         return (
           <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
             Base sin actividad registrada
           </Badge>
         );
       }
+
+      const activityDate = new Date(dateVal);
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      if (activityDate >= thirtyDaysAgo) {
+        return (
+          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+            Activa
+          </Badge>
+        );
+      }
+
       return (
         <span className="text-muted-foreground">
           {formatDate(dateVal)}
