@@ -22,6 +22,8 @@ function getGreeting(): string {
   const month = now.getMonth(); // 0 = Enero
 
   // Mensajes especiales
+  // Vamos Argentina
+  if (month === 2 && (dayOfMonth === 27 || dayOfMonth === 31)) return '¡VAMOS ARGENTINA!';
   // Navidad
   if (month === 11 && dayOfMonth === 25) return '🎄 ¡Feliz Navidad!';
   // Nochebuena
@@ -56,6 +58,21 @@ const whatsNew = [
   //{ text: "Nuevo sistema de guardias DBA con intercambios", isNew: true },
   { text: "Gestión de proyectos: Racionalización SQL", isNew: true },
 ];
+
+function isArgentinaDay(): boolean {
+  const now = new Date();
+  return now.getMonth() === 2 && (now.getDate() === 27 || now.getDate() === 31);
+}
+
+function ArgentinaFlag() {
+  return (
+    <img
+      src="/ArgentinaFlag.svg"
+      alt="Bandera Argentina"
+      className="inline-block w-7 h-7"
+    />
+  );
+}
 
 // Componente de partículas flotantes - MÁS Y MÁS VISIBLES
 function FloatingParticles() {
@@ -171,8 +188,10 @@ export default function Login() {
       {/* Contenedor central con saludo y card */}
       <div className="flex flex-col items-center z-10 animate-fade-in-up">
         {/* Saludo dinámico - fuera de la caja */}
-        <p className="text-2xl font-medium text-foreground mb-6 animate-fade-in">
+        <p className="text-2xl font-medium text-foreground mb-6 animate-fade-in flex items-center gap-2">
+          {isArgentinaDay() && <ArgentinaFlag />}
           {getGreeting()}
+          {isArgentinaDay() && <ArgentinaFlag />}
         </p>
 
         <Card className="w-full max-w-md relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/50 dark:border-slate-700/50 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50">

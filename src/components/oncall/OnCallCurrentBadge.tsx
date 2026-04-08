@@ -1,4 +1,4 @@
-import { Phone, ShieldAlert, Mail, Circle } from 'lucide-react';
+import { Phone, ShieldAlert, Mail, Circle, Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -25,6 +25,10 @@ export function OnCallCurrentBadge({ currentOnCall, loading }: OnCallCurrentBadg
         </CardContent>
       </Card>
     );
+  }
+
+  if (!currentOnCall?.isCurrentlyOnCall && currentOnCall?.isInTransitionGap) {
+    return <TransitionGapBadge currentOnCall={currentOnCall} />;
   }
 
   if (!currentOnCall?.isCurrentlyOnCall) {
@@ -171,6 +175,146 @@ export function OnCallCurrentBadge({ currentOnCall, loading }: OnCallCurrentBadg
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <a 
+                              href={`mailto:${user.email}`}
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              <Mail className="h-4 w-4" />
+                            </a>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">{user.email}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function TransitionGapBadge({ currentOnCall }: { currentOnCall: OnCallCurrentDto }) {
+  const amberColor = '#f59e0b';
+  const amberColorRgb = '245, 158, 11';
+
+  const formatStartTime = () => {
+    if (!currentOnCall.nextGuardStartTime) return '19:00';
+    const d = new Date(currentOnCall.nextGuardStartTime);
+    return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+
+  return (
+    <div className="space-y-3">
+      <Card
+        className="transition-all duration-200 shadow-md ring-1 border-amber-500/30 bg-amber-500/10"
+        style={{
+          '--tw-ring-color': `rgba(${amberColorRgb}, 0.2)`,
+        } as React.CSSProperties}
+      >
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-shrink-0">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center ring-2 bg-amber-500/20 ring-amber-500/40">
+                <Clock className="h-7 w-7 text-amber-500" />
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full animate-pulse border-2 border-background bg-amber-500" />
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-bold text-lg" style={{ color: amberColor }}>
+                  {currentOnCall.nextGuardDisplayName}
+                </p>
+                <Badge
+                  className="font-bold text-white shadow-sm hover:opacity-90"
+                  style={{ backgroundColor: amberColor }}
+                >
+                  <Clock className="h-2.5 w-2.5 mr-1" />
+                  PRÓXIMA GUARDIA
+                </Badge>
+              </div>
+              <p className="text-sm font-medium" style={{ color: `rgba(${amberColorRgb}, 0.85)` }}>
+                Entra de guardia hoy a las {formatStartTime()}
+                {currentOnCall.nextGuardWeekNumber != null && ` · Semana ${currentOnCall.nextGuardWeekNumber}`}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+                {currentOnCall.nextGuardPhoneNumber && (
+                  <a
+                    href={`tel:${currentOnCall.nextGuardPhoneNumber}`}
+                    className="flex items-center gap-1.5 text-sm px-2.5 py-1 rounded-full font-mono font-semibold transition-colors"
+                    style={{
+                      backgroundColor: `rgba(${amberColorRgb}, 0.25)`,
+                      color: amberColor,
+                    }}
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                    {currentOnCall.nextGuardPhoneNumber}
+                  </a>
+                )}
+                {currentOnCall.nextGuardEmail && (
+                  <a
+                    href={`mailto:${currentOnCall.nextGuardEmail}`}
+                    className="flex items-center gap-1 text-sm hover:underline truncate max-w-[200px]"
+                    style={{ color: `rgba(${amberColorRgb}, 0.7)` }}
+                    title={currentOnCall.nextGuardEmail}
+                  >
+                    <Mail className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{currentOnCall.nextGuardEmail}</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {currentOnCall.escalationUsers.length > 0 && (
+        <Card className="transition-all duration-200">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-amber-600 dark:text-amber-400 mb-2 italic">
+                  Team Escalamiento
+                </p>
+                <div className="space-y-2">
+                  {currentOnCall.escalationUsers.map((user) => (
+                    <div
+                      key={user.userId}
+                      className="flex items-center gap-2 p-2 rounded-md border transition-colors hover:bg-muted/50"
+                      style={{
+                        borderColor: user.colorCode || '#f59e0b',
+                        borderLeftWidth: '3px',
+                      }}
+                    >
+                      <span
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: user.colorCode || '#f59e0b' }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{user.displayName}</p>
+                        {user.phoneNumber && (
+                          <a
+                            href={`tel:${user.phoneNumber}`}
+                            className="text-xs font-mono text-muted-foreground hover:text-foreground flex items-center gap-1"
+                          >
+                            <Phone className="h-3 w-3" />
+                            {user.phoneNumber}
+                          </a>
+                        )}
+                      </div>
+                      {user.email && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <a
                               href={`mailto:${user.email}`}
                               className="text-muted-foreground hover:text-foreground"
                             >

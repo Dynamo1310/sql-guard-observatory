@@ -46,6 +46,23 @@ public class InstanceHealthAlwaysOn
     [MaxLength(255)]
     public string? AGName { get; set; }
     
+    /// <summary>
+    /// Indica si esta instancia es la réplica primaria del AG
+    /// </summary>
+    public bool IsPrimary { get; set; }
+
+    /// <summary>
+    /// Nombre del servidor que es réplica primaria del AG (capturado desde cualquier nodo)
+    /// </summary>
+    [MaxLength(255)]
+    public string? PrimaryReplicaName { get; set; }
+
+    /// <summary>
+    /// Datacenter donde está el nodo primario: "Mitre" o "Martínez"
+    /// </summary>
+    [MaxLength(50)]
+    public string? Datacenter { get; set; }
+    
     // v3.1: Métricas de velocidad de replicación
     public long MaxLogSendRateKBps { get; set; }      // KB/sec de envío de log
     public long AvgLogSendRateKBps { get; set; }      // Promedio KB/sec

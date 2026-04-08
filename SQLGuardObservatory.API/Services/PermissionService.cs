@@ -77,6 +77,10 @@ public class PermissionService : IPermissionService
         { "OnCallAlerts", new ViewInfo { ViewName = "OnCallAlerts", DisplayName = "Guardias - Alertas", Description = "Alertas de guardias DBA", Category = "Guardias DBA" } },
         { "OnCallReports", new ViewInfo { ViewName = "OnCallReports", DisplayName = "Guardias - Reportes", Description = "Reportes de guardias DBA", Category = "Guardias DBA" } },
         
+        // === REGISTRO DE AUSENCIAS ===
+        { "AusenciasMenu", new ViewInfo { ViewName = "AusenciasMenu", DisplayName = "📁 Registro de Ausencias (Menú)", Description = "Mostrar/ocultar el menú de Registro de Ausencias", Category = "Registro de Ausencias" } },
+        { "DbaAbsences", new ViewInfo { ViewName = "DbaAbsences", DisplayName = "Ausencias DBA", Description = "Registro y consulta de ausencias del equipo DBA", Category = "Registro de Ausencias" } },
+        
         // === OPERACIONES ===
         { "OperationsMenu", new ViewInfo { ViewName = "OperationsMenu", DisplayName = "📁 Operaciones (Menú)", Description = "Mostrar/ocultar el menú completo de Operaciones", Category = "Operaciones" } },
         { "ServerRestart", new ViewInfo { ViewName = "ServerRestart", DisplayName = "Operaciones - Reinicio Servidores", Description = "Reiniciar servidores SQL Server (operación crítica)", Category = "Operaciones" } },

@@ -229,11 +229,16 @@ export default function OnCallDashboard() {
         {/* Operador activo */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Guardia Actual</CardTitle>
-            <Phone className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm font-medium">
+              {currentOnCall?.isInTransitionGap ? 'Próxima Guardia' : 'Guardia Actual'}
+            </CardTitle>
+            {currentOnCall?.isInTransitionGap 
+              ? <Clock className="h-4 w-4 text-amber-500" />
+              : <Phone className="h-4 w-4 text-primary" />
+            }
           </CardHeader>
           <CardContent>
-            {currentOnCall ? (
+            {currentOnCall?.isCurrentlyOnCall ? (
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
@@ -244,6 +249,23 @@ export default function OnCallDashboard() {
                 <div>
                   <p className="text-lg font-bold text-primary">{currentOnCall.displayName}</p>
                   <p className="text-xs text-muted-foreground">{currentOnCall.domainUser}</p>
+                </div>
+              </div>
+            ) : currentOnCall?.isInTransitionGap ? (
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                    <Clock className="h-5 w-5 text-amber-500" />
+                  </div>
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-amber-500 rounded-full animate-pulse" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-amber-500">{currentOnCall.nextGuardDisplayName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Entra a las {currentOnCall.nextGuardStartTime 
+                      ? new Date(currentOnCall.nextGuardStartTime).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) 
+                      : '19:00'}
+                  </p>
                 </div>
               </div>
             ) : (

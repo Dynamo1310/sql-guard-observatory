@@ -209,6 +209,7 @@ export default function Overview() {
     }
   };
 
+
   // Valores por defecto si no hay datos
   const stats = {
     total: data?.totalInstances ?? 0,
@@ -374,6 +375,9 @@ export default function Overview() {
                     >
                       Availability Group {getSortIndicatorAG('displayName')}
                     </TableHead>
+                    <TableHead className="text-center">
+                      Datacenter
+                    </TableHead>
                     <TableHead
                       className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
                       onClick={() => requestSortAG('worstState')}
@@ -393,6 +397,19 @@ export default function Overview() {
                     sortedAGHealth.map((ag, idx) => (
                       <TableRow key={idx}>
                         <TableCell className="font-medium">{ag.displayName || ag.instanceName}</TableCell>
+                        <TableCell className="text-center">
+                          {ag.datacenter ? (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              ag.datacenter === 'Mitre'
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                            }`}>
+                              {ag.datacenter}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-center">
                           <StatusBadge status={getAGStatusBadge(ag.worstState)}>
                             {getAGStateLabel(ag.worstState)}
@@ -475,7 +492,7 @@ export default function Overview() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-12">
+                      <TableCell colSpan={5} className="text-center py-12">
                         <ShieldCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                         <h3 className="text-lg font-semibold mb-2">Sin datos de AlwaysOn</h3>
                         <p className="text-muted-foreground">

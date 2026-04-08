@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
+using SQLGuardObservatory.API.Services;
 using System.Data;
 
 namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
@@ -38,6 +39,32 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
     {
     }
 
+    protected override Task<string> GetQueryForVersionAsync(int sqlMajorVersion, CancellationToken ct)
+    {
+        return Task.FromResult(GetDefaultQuery(sqlMajorVersion));
+    }
+
+    protected override async Task PostProcessAsync(List<CollectorInstanceResult> results, CancellationToken ct)
+    {
+        var successCount = results.Count(r => r.Success);
+        if (successCount == 0) return;
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var cacheService = scope.ServiceProvider.GetService<IOverviewSummaryCacheService>();
+            if (cacheService != null)
+            {
+                await cacheService.RefreshCacheAsync("AlwaysOnCollector", ct);
+                _logger.LogDebug("Overview cache refreshed after AlwaysOnCollector");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error refreshing Overview cache after AlwaysOnCollector");
+        }
+    }
+
     protected override async Task<AlwaysOnMetrics> CollectFromInstanceAsync(
         SqlInstanceInfo instance,
         int timeoutSeconds,
@@ -53,6 +80,33 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
 
             if (dataTable.Rows.Count == 0)
             {
+                // La query principal no devolvió filas (posiblemente todas las DBs están offline).
+                // Intentar una query más simple para capturar AGName y Role sin depender de drs.
+                try
+                {
+                    var fallbackTable = await ExecuteQueryAsync(
+                        instance.InstanceName, GetFallbackRoleQuery(), timeoutSeconds, ct);
+
+                    if (fallbackTable.Rows.Count > 0)
+                    {
+                        result.AlwaysOnEnabled = true;
+                        result.AGName = GetString(fallbackTable.Rows[0], "AGName");
+                        var role = GetString(fallbackTable.Rows[0], "Role") ?? "";
+                        result.IsPrimary = role.Equals("PRIMARY", StringComparison.OrdinalIgnoreCase);
+                        result.PrimaryReplicaName = GetString(fallbackTable.Rows[0], "PrimaryReplicaName");
+                        result.Datacenter = DetermineDatacenter(result.AGName, result.PrimaryReplicaName);
+                        result.WorstState = "N/A";
+                        result.DatabaseCount = 0;
+                        return result;
+                    }
+                }
+                catch (Exception fallbackEx)
+                {
+                    _logger.LogDebug(fallbackEx,
+                        "Fallback role query also returned no results for {Instance}",
+                        instance.InstanceName);
+                }
+
                 result.AlwaysOnEnabled = false;
                 result.WorstState = "N/A";
                 return result;
@@ -86,10 +140,14 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
 
         foreach (DataRow row in table.Rows)
         {
-            // Capturar AGName del primer row (la query devuelve ag.name AS AGName)
+            // Capturar AGName, Role, PrimaryReplicaName y Datacenter del primer row
             if (result.AGName == null)
             {
                 result.AGName = GetString(row, "AGName");
+                var role = GetString(row, "Role") ?? "";
+                result.IsPrimary = role.Equals("PRIMARY", StringComparison.OrdinalIgnoreCase);
+                result.PrimaryReplicaName = GetString(row, "PrimaryReplicaName");
+                result.Datacenter = DetermineDatacenter(result.AGName, result.PrimaryReplicaName);
             }
 
             var dbName = GetString(row, "DatabaseName") ?? "";
@@ -238,6 +296,9 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
             MaxRedoQueueKB = (int)Math.Min(data.MaxRedoQueueKB, int.MaxValue),
             AlwaysOnWorstState = data.WorstState,
             AGName = data.AGName,
+            IsPrimary = data.IsPrimary,
+            PrimaryReplicaName = data.PrimaryReplicaName,
+            Datacenter = data.Datacenter,
             // v3.1: Métricas de velocidad
             MaxLogSendRateKBps = data.MaxLogSendRateKBps,
             AvgLogSendRateKBps = data.AvgLogSendRateKBps,
@@ -289,7 +350,12 @@ BEGIN
         drs.last_hardened_time AS LastHardenedTime,
         drs.last_redone_time AS LastRedoneTime,
         -- Tiempo desde último log hardened (indica lag de sincronización)
-        ISNULL(DATEDIFF(SECOND, drs.last_hardened_time, GETDATE()), 0) AS SecondsSinceLastHardened
+        ISNULL(DATEDIFF(SECOND, drs.last_hardened_time, GETDATE()), 0) AS SecondsSinceLastHardened,
+        -- Nombre de la réplica primaria (obtenido desde cualquier nodo)
+        (SELECT TOP 1 ar2.replica_server_name
+         FROM sys.dm_hadr_availability_replica_states ars2
+         INNER JOIN sys.availability_replicas ar2 ON ars2.replica_id = ar2.replica_id
+         WHERE ars2.role_desc = 'PRIMARY' AND ar2.group_id = ag.group_id) AS PrimaryReplicaName
     FROM sys.availability_replicas ar
     INNER JOIN sys.dm_hadr_availability_replica_states ars 
         ON ar.replica_id = ars.replica_id
@@ -322,6 +388,50 @@ END";
         };
     }
 
+    /// <summary>
+    /// Query simplificada que obtiene solo AGName y Role sin depender de sys.dm_hadr_database_replica_states.
+    /// Se usa como fallback cuando la query principal no devuelve filas (ej: todas las DBs offline).
+    /// </summary>
+    private static string GetFallbackRoleQuery()
+    {
+        return @"
+DECLARE @hadrEnabled INT = CAST(SERVERPROPERTY('IsHadrEnabled') AS INT);
+IF @hadrEnabled = 1
+BEGIN
+    SELECT ag.name AS AGName, ars.role_desc AS Role,
+        (SELECT TOP 1 ar2.replica_server_name
+         FROM sys.dm_hadr_availability_replica_states ars2
+         INNER JOIN sys.availability_replicas ar2 ON ars2.replica_id = ar2.replica_id
+         WHERE ars2.role_desc = 'PRIMARY' AND ar2.group_id = ag.group_id) AS PrimaryReplicaName
+    FROM sys.availability_replicas ar
+    INNER JOIN sys.dm_hadr_availability_replica_states ars ON ar.replica_id = ars.replica_id
+    INNER JOIN sys.availability_groups ag ON ar.group_id = ag.group_id
+    WHERE ars.is_local = 1;
+END
+ELSE
+BEGIN
+    SELECT NULL WHERE 1=0;
+END";
+    }
+
+    private static string? DetermineDatacenter(string? agName, string? primaryReplica)
+    {
+        if (string.IsNullOrEmpty(agName) || string.IsNullOrEmpty(primaryReplica)) return null;
+        var replica = primaryReplica.ToUpperInvariant();
+        var ag = agName.ToUpperInvariant();
+
+        if (ag == "SSPR14ODMAG" || ag == "SSPR16SOAAG" || ag == "SSPR14AONAG" || ag == "SSPR16BPMAG")
+        {
+            if (replica.EndsWith("-01") || replica.EndsWith("\\01")) return "Mitre";
+            if (replica.EndsWith("-02") || replica.EndsWith("\\02")) return "Martínez";
+            return null;
+        }
+
+        if (replica.EndsWith("01") || replica.EndsWith("02")) return "Mitre";
+        if (replica.EndsWith("51") || replica.EndsWith("52")) return "Martínez";
+        return null;
+    }
+
     public class AlwaysOnMetrics
     {
         public bool AlwaysOnEnabled { get; set; }
@@ -340,6 +450,10 @@ END";
         /// Nombre del Availability Group (capturado de sys.availability_groups)
         /// </summary>
         public string? AGName { get; set; }
+        
+        public bool IsPrimary { get; set; }
+        public string? PrimaryReplicaName { get; set; }
+        public string? Datacenter { get; set; }
         
         // Métricas v3.1 - Log Send y Redo Rate
         public long MaxLogSendRateKBps { get; set; }     // KB/s de envío de log

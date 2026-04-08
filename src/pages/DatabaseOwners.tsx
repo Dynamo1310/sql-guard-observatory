@@ -65,6 +65,10 @@ export default function DatabaseOwners() {
   const [page, setPage] = useState(1);
   const pageSize = 20;
   
+  const [serverAmbienteFilter, setServerAmbienteFilter] = useState<string>('all');
+  const [serverSearch, setServerSearch] = useState('');
+  const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
+
   // Dialog states
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingOwner, setEditingOwner] = useState<DatabaseOwnerDto | null>(null);
@@ -164,7 +168,27 @@ export default function DatabaseOwners() {
       businessCriticality: '',
       notes: '',
     });
+    setServerAmbienteFilter('all');
+    setServerSearch('');
+    setServerDropdownOpen(false);
   };
+
+  const availableAmbientes = useMemo(() => {
+    if (!servers) return [];
+    return [...new Set(servers.map(s => s.ambiente).filter(Boolean))].sort();
+  }, [servers]);
+
+  const filteredServers = useMemo(() => {
+    if (!servers) return [];
+    if (serverAmbienteFilter === 'all') return servers;
+    return servers.filter(s => s.ambiente === serverAmbienteFilter);
+  }, [servers, serverAmbienteFilter]);
+
+  const matchingServers = useMemo(() => {
+    if (!serverSearch.trim()) return filteredServers;
+    const q = serverSearch.toLowerCase();
+    return filteredServers.filter(s => s.serverName.toLowerCase().includes(q));
+  }, [filteredServers, serverSearch]);
 
   const handleCreate = () => {
     createMutation.mutate(formData);
@@ -433,24 +457,81 @@ export default function DatabaseOwners() {
           <div className="space-y-4">
             {!editingOwner && (
               <>
+                <div className="space-y-2">
+                  <Label>Ambiente</Label>
+                  <Select
+                    value={serverAmbienteFilter}
+                    onValueChange={(v) => {
+                      setServerAmbienteFilter(v);
+                      setFormData({ ...formData, serverName: '' });
+                      setServerSearch('');
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos los ambientes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los ambientes</SelectItem>
+                      {availableAmbientes.map(a => (
+                        <SelectItem key={a!} value={a!}>{a}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Servidor *</Label>
-                    <Select 
-                      value={formData.serverName} 
-                      onValueChange={(v) => setFormData({ ...formData, serverName: v })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {servers?.map(s => (
-                          <SelectItem key={s.serverName} value={s.serverName}>
-                            {s.serverName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="relative">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          value={serverSearch}
+                          onChange={(e) => {
+                            setServerSearch(e.target.value);
+                            setServerDropdownOpen(true);
+                            if (!e.target.value) {
+                              setFormData({ ...formData, serverName: '' });
+                            }
+                          }}
+                          onFocus={() => setServerDropdownOpen(true)}
+                          onBlur={() => setTimeout(() => setServerDropdownOpen(false), 150)}
+                          placeholder="Buscar servidor..."
+                          className="pl-8"
+                        />
+                      </div>
+                      {formData.serverName && !serverDropdownOpen && (
+                        <Badge variant="secondary" className="mt-1 text-xs">
+                          {formData.serverName}
+                        </Badge>
+                      )}
+                      {serverDropdownOpen && (
+                        <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
+                          {matchingServers.length > 0 ? (
+                            matchingServers.map(s => (
+                              <div
+                                key={s.serverName}
+                                className={cn(
+                                  "px-3 py-2 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors",
+                                  formData.serverName === s.serverName && "bg-accent font-medium"
+                                )}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setFormData({ ...formData, serverName: s.serverName });
+                                  setServerSearch(s.serverName);
+                                  setServerDropdownOpen(false);
+                                }}
+                              >
+                                {s.serverName}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              No se encontraron servidores
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Base de Datos *</Label>
@@ -500,30 +581,21 @@ export default function DatabaseOwners() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Departamento</Label>
-                <Input
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Criticidad</Label>
-                <Select 
-                  value={formData.businessCriticality} 
-                  onValueChange={(v) => setFormData({ ...formData, businessCriticality: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CRITICALITY_OPTIONS.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label>Criticidad</Label>
+              <Select 
+                value={formData.businessCriticality} 
+                onValueChange={(v) => setFormData({ ...formData, businessCriticality: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {CRITICALITY_OPTIONS.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

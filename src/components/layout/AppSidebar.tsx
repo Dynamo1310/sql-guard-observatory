@@ -4,7 +4,7 @@ import {
   Phone, Calendar, CalendarDays, Users as UsersIcon, ShieldAlert, Activity as ActivityIcon, Bell, FileText, Mail,
   ChevronDown, ChevronRight, ArrowRightLeft, RotateCcw, Settings, Cog, ShieldCheck, Clock,
   Key, Lock, History, KeyRound, Share2, FolderLock, Sparkles, Server, Zap, Tag, AlertTriangle, TrendingUp,
-  BookOpen, LayoutDashboard, Swords, Calculator
+  BookOpen, LayoutDashboard, Swords, Calculator, CalendarOff
 } from 'lucide-react';
 import { menuBadgesApi, MenuBadgeDto, overviewApi } from '@/services/api';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -122,6 +122,12 @@ const onCallSubItems = [
   { title: 'Configuración', url: '/oncall/settings', icon: Settings, permission: 'OnCallConfig' },
 ];
 
+// ==================== REGISTRO DE AUSENCIAS ====================
+
+const ausenciasSubItems = [
+  { title: 'Registro', url: '/ausencias-dba', icon: CalendarOff, permission: 'DbaAbsences' },
+];
+
 // ==================== OPERACIONES ====================
 
 const operationsSubItems = [
@@ -226,6 +232,10 @@ export function AppSidebar() {
   // Guardias DBA
   const isOnCallActive = location.pathname.startsWith('/oncall');
   const [onCallOpen, setOnCallOpen] = useState(isOnCallActive);
+
+  // Registro de Ausencias
+  const isAusenciasActive = location.pathname.startsWith('/ausencias-dba');
+  const [ausenciasOpen, setAusenciasOpen] = useState(isAusenciasActive);
 
   // Operaciones
   const isOperationsActive = location.pathname.startsWith('/operations');
@@ -415,6 +425,11 @@ export function AppSidebar() {
   const hasOnCallMenuPermission = hasPermission('OnCall');
   const visibleOnCallSubItems = onCallSubItems.filter(item => hasPermission(item.permission));
   const showOnCallMenu = hasOnCallMenuPermission && visibleOnCallSubItems.length > 0;
+
+  // Registro de Ausencias
+  const hasAusenciasMenuPermission = hasPermission('AusenciasMenu');
+  const visibleAusenciasSubItems = ausenciasSubItems.filter(item => hasPermission(item.permission));
+  const showAusenciasMenu = hasAusenciasMenuPermission && visibleAusenciasSubItems.length > 0;
 
   // Operaciones
   const hasOperationsMenuPermission = hasPermission('OperationsMenu');
@@ -810,6 +825,31 @@ export function AppSidebar() {
                         title="Guardias DBA"
                         menuKey="OnCall"
                         subItems={visibleOnCallSubItems}
+                      />
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            )}
+
+            {/* ==================== REGISTRO DE AUSENCIAS ==================== */}
+            {showAusenciasMenu && (
+              <>
+                {!isCollapsed && <Separator className="my-2 mx-2 w-auto opacity-50" />}
+                <SidebarGroup className="pb-2">
+                  <SidebarGroupLabel className={`${isCollapsed ? 'sr-only' : 'px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70'}`}>
+                    Registro de Ausencias
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      <CollapsibleMenu
+                        isOpen={ausenciasOpen}
+                        setIsOpen={setAusenciasOpen}
+                        isActive={isAusenciasActive}
+                        icon={CalendarOff}
+                        title="Ausencias DBA"
+                        menuKey="AusenciasMenu"
+                        subItems={visibleAusenciasSubItems}
                       />
                     </SidebarMenu>
                   </SidebarGroupContent>

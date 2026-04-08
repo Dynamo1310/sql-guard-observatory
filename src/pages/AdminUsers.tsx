@@ -51,6 +51,14 @@ interface UserDtoWithGroups extends UserDto {
   groups?: UserGroupMembership[];
 }
 
+function formatAdCreatedDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch { return null; }
+}
+
 export default function AdminUsers() {
   const { user: currentUser, isSuperAdmin, isReader, canCreateUsers, canDeleteUsers, assignableRoles, canAssignRole, hasCapability } = useAuth();
   
@@ -1569,8 +1577,11 @@ export default function AdminUsers() {
                             <Checkbox id={`ad-${member.samAccountName}`} checked={selectedAdUsers.has(member.samAccountName)} onCheckedChange={() => handleToggleAdUser(member.samAccountName)} />
                             <label htmlFor={`ad-${member.samAccountName}`} className="flex-1 cursor-pointer">
                               <div className="text-sm font-medium">{member.displayName}</div>
-                              <div className="text-xs text-muted-foreground font-mono">{member.samAccountName}</div>
-                              {member.email && <div className="text-xs text-muted-foreground">{member.email}</div>}
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-mono">{member.samAccountName}</span>
+                                {member.email && <><span className="mx-1">·</span><span>{member.email}</span></>}
+                                {member.createdInAD && <><span className="mx-1">·</span><span>Creado en AD: {formatAdCreatedDate(member.createdInAD)}</span></>}
+                              </div>
                             </label>
                           </div>
                         ))}
@@ -1681,6 +1692,7 @@ export default function AdminUsers() {
                                       <div className="text-xs text-muted-foreground">
                                         <span className="font-mono">{result.adUser.samAccountName}</span>
                                         {result.adUser.email && <><span className="mx-1">·</span><span>{result.adUser.email}</span></>}
+                                        {result.adUser.createdInAD && <><span className="mx-1">·</span><span>Creado en AD: {formatAdCreatedDate(result.adUser.createdInAD)}</span></>}
                                       </div>
                                     </>
                                   )}
@@ -1691,6 +1703,7 @@ export default function AdminUsers() {
                                       <div className="text-xs text-muted-foreground">
                                         <span className="font-mono">{resolved.samAccountName}</span>
                                         {resolved.email && <><span className="mx-1">·</span><span>{resolved.email}</span></>}
+                                        {resolved.createdInAD && <><span className="mx-1">·</span><span>Creado en AD: {formatAdCreatedDate(resolved.createdInAD)}</span></>}
                                         <span className="mx-1">·</span>
                                         <span className="text-green-600 dark:text-green-400">seleccionado de "{result.username}"</span>
                                       </div>
@@ -1727,6 +1740,7 @@ export default function AdminUsers() {
                                         <div className="text-xs text-muted-foreground">
                                           <span className="font-mono">{suggestion.samAccountName}</span>
                                           {suggestion.email && <><span className="mx-1">·</span><span>{suggestion.email}</span></>}
+                                          {suggestion.createdInAD && <><span className="mx-1">·</span><span>Creado en AD: {formatAdCreatedDate(suggestion.createdInAD)}</span></>}
                                         </div>
                                       </div>
                                       <Button variant="outline" size="sm" className="flex-shrink-0 text-xs h-7" onClick={() => handleSelectSuggestion(result.username, suggestion)}>
@@ -1813,7 +1827,11 @@ export default function AdminUsers() {
                               {result.found && result.adUser ? (
                                 <>
                                   <div className="text-sm font-medium truncate">{result.adUser.displayName}</div>
-                                  <div className="text-xs text-muted-foreground"><span className="font-mono">{result.adUser.samAccountName}</span><span className="mx-1">·</span><span>{result.email}</span></div>
+                                  <div className="text-xs text-muted-foreground">
+                                    <span className="font-mono">{result.adUser.samAccountName}</span>
+                                    <span className="mx-1">·</span><span>{result.email}</span>
+                                    {result.adUser.createdInAD && <><span className="mx-1">·</span><span>Creado en AD: {formatAdCreatedDate(result.adUser.createdInAD)}</span></>}
+                                  </div>
                                 </>
                               ) : (
                                 <div className="text-sm truncate">{result.email}</div>
@@ -1920,6 +1938,7 @@ export default function AdminUsers() {
                                 <div className="text-xs text-muted-foreground">
                                   <span className="font-mono">{member.samAccountName}</span>
                                   {member.email && <><span className="mx-1">·</span><span>{member.email}</span></>}
+                                  {member.createdInAD && <><span className="mx-1">·</span><span>Creado en AD: {formatAdCreatedDate(member.createdInAD)}</span></>}
                                 </div>
                                 {member.alreadyExists && <div className="text-xs text-yellow-600 dark:text-yellow-400">Ya existe en la aplicación</div>}
                               </div>

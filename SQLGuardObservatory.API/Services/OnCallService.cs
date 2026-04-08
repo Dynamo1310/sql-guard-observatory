@@ -639,6 +639,39 @@ public class OnCallService : IOnCallService
 
         if (currentSchedule == null)
         {
+            var isWednesday = now.DayOfWeek == DayOfWeek.Wednesday;
+            var isInGap = isWednesday && now.Hour >= 7 && now.Hour < 19;
+
+            if (isInGap)
+            {
+                var todayAt19 = now.Date.AddHours(19);
+                var nextSchedule = await _context.OnCallSchedules
+                    .Include(s => s.User)
+                    .Where(s => s.WeekStartDate == todayAt19)
+                    .FirstOrDefaultAsync();
+
+                if (nextSchedule != null)
+                {
+                    var nextOperator = await _context.OnCallOperators
+                        .FirstOrDefaultAsync(o => o.UserId == nextSchedule.UserId);
+
+                    return new OnCallCurrentDto
+                    {
+                        IsCurrentlyOnCall = false,
+                        IsInTransitionGap = true,
+                        NextGuardStartTime = todayAt19,
+                        NextGuardUserId = nextSchedule.UserId,
+                        NextGuardDomainUser = nextSchedule.User?.DomainUser ?? "",
+                        NextGuardDisplayName = nextSchedule.User?.DisplayName ?? "",
+                        NextGuardEmail = nextSchedule.User?.Email,
+                        NextGuardPhoneNumber = nextOperator?.PhoneNumber,
+                        NextGuardColorCode = nextOperator?.ColorCode,
+                        NextGuardWeekNumber = nextSchedule.WeekNumber,
+                        EscalationUsers = escalationUsers
+                    };
+                }
+            }
+
             return new OnCallCurrentDto
             {
                 IsCurrentlyOnCall = false,

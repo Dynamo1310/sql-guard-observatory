@@ -548,12 +548,14 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                     ISNULL(MaxSecondsBehind, 0) AS MaxSecondsBehind,
                     AlwaysOnDetails,
                     AGName,
+                    PrimaryReplicaName,
+                    Datacenter,
                     ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
                 FROM dbo.InstanceHealth_AlwaysOn
                 WHERE Ambiente = 'Produccion'
                   AND AlwaysOnEnabled = 1
                   AND AGName IS NOT NULL
-                  AND DatabaseCount > 0
+                  AND (DatabaseCount > 0 OR ISNULL(IsPrimary, 0) = 1)
             )
             SELECT 
                 InstanceName,
@@ -566,7 +568,15 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                 MaxRedoQueueKB,
                 MaxSecondsBehind,
                 AlwaysOnDetails,
-                AGName
+                AGName,
+                PrimaryReplicaName,
+                COALESCE(Datacenter,
+                    (SELECT TOP 1 Datacenter
+                     FROM dbo.InstanceHealth_AlwaysOn prev
+                     WHERE prev.InstanceName = LatestAlwaysOn.InstanceName
+                       AND prev.Datacenter IS NOT NULL
+                     ORDER BY prev.CollectedAtUtc DESC)
+                ) AS Datacenter
             FROM LatestAlwaysOn
             WHERE rn = 1";
 
@@ -591,7 +601,9 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                 MaxRedoQueueKB = reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
                 MaxSecondsBehind = reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
                 Details = reader.IsDBNull(9) ? null : reader.GetString(9),
-                AGName = reader.IsDBNull(10) ? null : reader.GetString(10)
+                AGName = reader.IsDBNull(10) ? null : reader.GetString(10),
+                PrimaryReplicaName = reader.IsDBNull(11) ? null : reader.GetString(11),
+                Datacenter = reader.IsDBNull(12) ? null : reader.GetString(12)
             });
         }
 
@@ -624,6 +636,9 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             var agName = group.Key;
             var nodes = group.ToList();
 
+            if (nodes.Count < 2)
+                continue;
+
             // Peor estado entre todos los nodos
             var worstState = nodes
                 .OrderBy(n => stateOrder.GetValueOrDefault(n.WorstState, 6))
@@ -645,6 +660,14 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                 nodes.Where(n => !string.IsNullOrEmpty(n.Details))
                      .Select(n => n.Details!));
 
+            var primaryReplica = nodes
+                .Select(n => n.PrimaryReplicaName)
+                .FirstOrDefault(n => !string.IsNullOrEmpty(n));
+
+            var datacenter = nodes
+                .Select(n => n.Datacenter)
+                .FirstOrDefault(n => !string.IsNullOrEmpty(n));
+
             results.Add(new OverviewAGHealthDto
             {
                 InstanceName = nodes.First().InstanceName,
@@ -657,7 +680,9 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                 MaxSendQueueKB = maxSendQueue,
                 MaxRedoQueueKB = maxRedoQueue,
                 MaxSecondsBehind = maxSecsBehind,
-                Details = string.IsNullOrEmpty(allDetails) ? null : allDetails
+                Details = string.IsNullOrEmpty(allDetails) ? null : allDetails,
+                PrimaryReplica = primaryReplica,
+                Datacenter = datacenter
             });
         }
 
@@ -665,6 +690,29 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             .OrderBy(r => stateOrder.GetValueOrDefault(r.WorstState, 6))
             .ThenBy(r => r.DisplayName)
             .ToList();
+    }
+
+    /// <summary>
+    /// Determina el datacenter a partir del nombre del AG y la réplica primaria.
+    /// Mitre = nodos terminados en 01/02 (principal), Martínez = nodos terminados en 51/52 (contingencia).
+    /// Excepciones: SSPR14ODMAG, SSPR16SOAAG, SSPR14AONAG y SSPR16BPMAG tienen -01=Mitre, -02=Martínez.
+    /// </summary>
+    private static string? DetermineDatacenter(string agName, string? primaryReplica)
+    {
+        if (string.IsNullOrEmpty(primaryReplica)) return null;
+        var replica = primaryReplica.ToUpperInvariant();
+        var ag = agName.ToUpperInvariant();
+
+        if (ag == "SSPR14ODMAG" || ag == "SSPR16SOAAG" || ag == "SSPR14AONAG" || ag == "SSPR16BPMAG")
+        {
+            if (replica.EndsWith("-01") || replica.EndsWith("\\01")) return "Mitre";
+            if (replica.EndsWith("-02") || replica.EndsWith("\\02")) return "Martínez";
+            return null;
+        }
+
+        if (replica.EndsWith("01") || replica.EndsWith("02")) return "Mitre";
+        if (replica.EndsWith("51") || replica.EndsWith("52")) return "Martínez";
+        return null;
     }
 
     /// <summary>
@@ -1031,5 +1079,7 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
         public int MaxSecondsBehind { get; set; }
         public string? Details { get; set; }
         public string? AGName { get; set; }
+        public string? PrimaryReplicaName { get; set; }
+        public string? Datacenter { get; set; }
     }
 }

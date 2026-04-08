@@ -114,6 +114,7 @@ export interface ActiveDirectoryUserDto {
   displayName: string;
   email: string;
   distinguishedName: string;
+  createdInAD: string | null;
 }
 
 export interface GetGroupMembersResponse {
@@ -2014,6 +2015,8 @@ export interface OverviewAGHealthDto {
   maxSendQueueKB: number;
   maxRedoQueueKB: number;
   details?: string;
+  primaryReplica?: string;
+  datacenter?: string;
 }
 
 export interface OverviewBackupIssueDto {
@@ -2137,6 +2140,15 @@ export interface OnCallCurrentDto {
   weekEndDate: string;
   weekNumber: number;
   isCurrentlyOnCall: boolean;
+  isInTransitionGap: boolean;
+  nextGuardStartTime?: string;
+  nextGuardUserId?: string;
+  nextGuardDomainUser?: string;
+  nextGuardDisplayName?: string;
+  nextGuardEmail?: string;
+  nextGuardPhoneNumber?: string;
+  nextGuardColorCode?: string;
+  nextGuardWeekNumber?: number;
   escalationUsers: EscalationUserDto[];
 }
 
@@ -6688,6 +6700,105 @@ export const tempDbAnalyzerApi = {
       headers: { ...getAuthHeader() },
     });
     return handleResponse<TempDbCheckResultDto>(response);
+  },
+};
+
+// ==================== SYSTEM INFO ====================
+
+export interface ServerUptimeDto {
+  uptimeDays: number;
+  uptimeHours: number;
+  serverName: string;
+}
+
+export const systemApi = {
+  async getUptime(): Promise<ServerUptimeDto> {
+    const response = await fetch(`${API_URL}/api/system/uptime`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<ServerUptimeDto>(response);
+  },
+};
+
+// ==================== DBA ABSENCES ====================
+
+export interface DbaAbsenceDto {
+  id: number;
+  userId: string;
+  userDisplayName: string;
+  date: string;
+  reason: string;
+  notes: string | null;
+  createdByDisplayName: string;
+  createdAt: string;
+}
+
+export interface CreateDbaAbsenceRequest {
+  userId: string;
+  date: string;
+  reason: string;
+  notes?: string;
+}
+
+export interface DbaAbsenceDbaDto {
+  userId: string;
+  displayName: string;
+}
+
+export interface DbaAbsenceStatsDto {
+  monthlyStats: { month: string; count: number }[];
+  byDbaStats: { displayName: string; count: number }[];
+}
+
+export const dbaAbsencesApi = {
+  async getAll(dateFrom?: string, dateTo?: string, userId?: string): Promise<DbaAbsenceDto[]> {
+    const params = new URLSearchParams();
+    if (dateFrom) params.append('dateFrom', dateFrom);
+    if (dateTo) params.append('dateTo', dateTo);
+    if (userId) params.append('userId', userId);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${API_URL}/api/dba-absences${query}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DbaAbsenceDto[]>(response);
+  },
+
+  async create(request: CreateDbaAbsenceRequest): Promise<DbaAbsenceDto> {
+    const response = await fetch(`${API_URL}/api/dba-absences`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<DbaAbsenceDto>(response);
+  },
+
+  async delete(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/dba-absences/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() },
+    });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(error || 'Error al eliminar ausencia');
+    }
+  },
+
+  async getAvailableDbas(): Promise<DbaAbsenceDbaDto[]> {
+    const response = await fetch(`${API_URL}/api/dba-absences/dbas`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DbaAbsenceDbaDto[]>(response);
+  },
+
+  async getStats(dateFrom?: string, dateTo?: string): Promise<DbaAbsenceStatsDto> {
+    const params = new URLSearchParams();
+    if (dateFrom) params.append('dateFrom', dateFrom);
+    if (dateTo) params.append('dateTo', dateTo);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${API_URL}/api/dba-absences/stats${query}`, {
+      headers: { ...getAuthHeader() },
+    });
+    return handleResponse<DbaAbsenceStatsDto>(response);
   },
 };
 

@@ -46,6 +46,7 @@ import ServerComparison from "./pages/ServerComparison";
 import MigrationSimulator from "./pages/MigrationSimulator";
 import TempDbAnalyzer from "./pages/TempDbAnalyzer";
 import IntervencionesWar from "./pages/IntervencionesWar";
+import DbaAbsences from "./pages/DbaAbsences";
 import VaultDashboard from "./pages/VaultDashboard";
 import VaultCredentials from "./pages/VaultCredentials";
 import VaultSharedWithMe from "./pages/VaultSharedWithMe";
@@ -246,6 +247,11 @@ const App = () => (
                       <Route path="/oncall/swaps" element={
                         <ProtectedRoute viewName="OnCallSwaps">
                           <OnCallSwaps />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/ausencias-dba" element={
+                        <ProtectedRoute viewName="DbaAbsences">
+                          <DbaAbsences />
                         </ProtectedRoute>
                       } />
                       <Route path="/admin/smtp" element={

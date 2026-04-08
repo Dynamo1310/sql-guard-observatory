@@ -101,6 +101,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Menu Badges - Indicadores de menús nuevos
     public DbSet<MenuBadge> MenuBadges { get; set; } = null!;
 
+    // DBA Absences - Registro de ausencias del equipo DBA
+    public DbSet<DbaAbsence> DbaAbsences { get; set; } = null!;
+
     // Inventory Cache - Caché de inventario SQL Server
     public DbSet<SqlServerInstanceCache> SqlServerInstancesCache { get; set; } = null!;
     public DbSet<SqlServerDatabaseCache> SqlServerDatabasesCache { get; set; } = null!;
@@ -1197,6 +1200,29 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => e.TipoIntervencion);
             entity.HasIndex(e => e.Celula);
             entity.HasIndex(e => e.NumeroIncidente);
+        });
+
+        // =============================================
+        // DBA Absences - Registro de ausencias
+        // =============================================
+        
+        builder.Entity<DbaAbsence>(entity =>
+        {
+            entity.ToTable("DbaAbsences", "dbo");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.Date);
+            entity.HasIndex(e => new { e.UserId, e.Date });
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.CreatedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
     }

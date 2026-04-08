@@ -60,6 +60,16 @@ public class OverviewAGHealthDto
     /// Detalle de DBs con problemas (formato: "DBName:SUSPENDED|DBName2:NOT_SYNCHRONIZED")
     /// </summary>
     public string? Details { get; set; }
+    
+    /// <summary>
+    /// Nombre de la réplica primaria actual del AG
+    /// </summary>
+    public string? PrimaryReplica { get; set; }
+
+    /// <summary>
+    /// Datacenter donde está el nodo primario: "Mitre" o "Martínez"
+    /// </summary>
+    public string? Datacenter { get; set; }
 }
 
 /// <summary>

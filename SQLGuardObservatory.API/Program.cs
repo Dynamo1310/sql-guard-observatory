@@ -269,6 +269,7 @@ builder.Services.AddScoped<IMigrationSimulatorService, MigrationSimulatorService
 // Rendimiento - Analizador TempDB Best Practices
 builder.Services.AddScoped<ITempDbAnalyzerService, TempDbAnalyzerService>();
 builder.Services.AddScoped<IIntervencionWarService, IntervencionWarService>();
+builder.Services.AddScoped<IDbaAbsenceService, DbaAbsenceService>();
 builder.Services.AddScoped<IPatchConfigService, PatchConfigService>();
 builder.Services.AddHostedService<PatchNotificationBackgroundService>();
 

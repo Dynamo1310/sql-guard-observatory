@@ -112,6 +112,7 @@ public class ActiveDirectoryUserDto
     public string DisplayName { get; set; } = string.Empty;     // Ej: Tobias Garcia
     public string Email { get; set; } = string.Empty;
     public string DistinguishedName { get; set; } = string.Empty;
+    public string? CreatedInAD { get; set; }
 }
 
 public class GetGroupMembersRequest

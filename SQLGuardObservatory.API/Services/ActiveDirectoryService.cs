@@ -379,12 +379,25 @@ public class ActiveDirectoryService : IActiveDirectoryService
 
     private static ActiveDirectoryUserDto MapUserPrincipalToDto(UserPrincipal user)
     {
+        string? createdInAD = null;
+        try
+        {
+            if (user.GetUnderlyingObject() is DirectoryEntry de
+                && de.Properties.Contains("whenCreated")
+                && de.Properties["whenCreated"].Value is DateTime dt)
+            {
+                createdInAD = dt.ToString("yyyy-MM-ddTHH:mm:ssZ");
+            }
+        }
+        catch { /* whenCreated puede no estar disponible en ciertos contextos */ }
+
         return new ActiveDirectoryUserDto
         {
             SamAccountName = user.SamAccountName ?? string.Empty,
             DisplayName = user.DisplayName ?? user.Name ?? string.Empty,
             Email = user.EmailAddress ?? string.Empty,
-            DistinguishedName = user.DistinguishedName ?? string.Empty
+            DistinguishedName = user.DistinguishedName ?? string.Empty,
+            CreatedInAD = createdInAD
         };
     }
 }

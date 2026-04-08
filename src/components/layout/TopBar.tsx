@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
-import { Sun, Moon, Upload, Trash2, LogOut, ChevronsUpDown } from 'lucide-react';
+import { Sun, Moon, Upload, Trash2, LogOut, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { authApi } from '@/services/api';
+import { authApi, systemApi } from '@/services/api';
 import { UserAvatar } from '@/components/UserAvatar';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +32,8 @@ export function TopBar() {
   const [animationTimestamp, setAnimationTimestamp] = useState(() => Date.now());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Función para reiniciar la animación (cambia el query param para forzar recarga)
+  const [uptimeDays, setUptimeDays] = useState<number | null>(null);
+
   const restartAnimation = () => {
     setAnimationTimestamp(Date.now());
   };
@@ -41,6 +43,12 @@ export function TopBar() {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
     setTheme(initialTheme);
+  }, []);
+
+  useEffect(() => {
+    systemApi.getUptime()
+      .then(data => setUptimeDays(data.uptimeDays))
+      .catch(() => {});
   }, []);
 
   const toggleTheme = () => {
@@ -119,6 +127,13 @@ export function TopBar() {
       </div>
 
       <div className="flex-1" />
+
+      {uptimeDays !== null && uptimeDays > 40 && (
+        <Badge variant="outline" className="gap-1.5 border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-3 py-1 text-xs font-medium animate-pulse">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Llevo {uptimeDays} días de uptime, reiniciame
+        </Badge>
+      )}
 
       <div className="flex items-center gap-3">
         {/* Botón de tema claro/oscuro */}

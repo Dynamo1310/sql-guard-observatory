@@ -124,6 +124,20 @@ public class OnCallCurrentDto
     public DateTime WeekEndDate { get; set; }
     public int WeekNumber { get; set; }
     public bool IsCurrentlyOnCall { get; set; }
+
+    /// <summary>
+    /// Indica si estamos en la franja de transición del miércoles (07:00 - 19:00)
+    /// donde no hay guardia activa pero se conoce el próximo operador.
+    /// </summary>
+    public bool IsInTransitionGap { get; set; }
+    public DateTime? NextGuardStartTime { get; set; }
+    public string? NextGuardUserId { get; set; }
+    public string? NextGuardDomainUser { get; set; }
+    public string? NextGuardDisplayName { get; set; }
+    public string? NextGuardEmail { get; set; }
+    public string? NextGuardPhoneNumber { get; set; }
+    public string? NextGuardColorCode { get; set; }
+    public int? NextGuardWeekNumber { get; set; }
     
     /// <summary>
     /// Usuarios de escalamiento disponibles
