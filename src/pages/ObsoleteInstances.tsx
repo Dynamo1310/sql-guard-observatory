@@ -228,34 +228,104 @@ export default function ObsoleteInstances() {
     return [...OBSOLETE_VERSION_NAMES, ...NEAR_OBSOLETE_VERSION_NAMES];
   }, [servers]);
 
-  // Exportar CSV
-  const exportToCSV = () => {
+  // Exportar Excel
+  const exportToExcel = async () => {
     if (!filteredServers.length) return;
 
-    const headers = ['Servidor', 'Instancia', 'Ambiente', 'Versión', 'Build', 'Fin Soporte', 'Estado', 'Riesgo'];
-    const rows = filteredServers.map(s => {
+    const ExcelJS = await import('exceljs');
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'SQL Guard Observatory';
+    workbook.created = new Date();
+
+    const worksheet = workbook.addWorksheet('Instancias Obsoletas');
+
+    worksheet.columns = [
+      { header: 'Servidor', key: 'serverName', width: 35 },
+      { header: 'Instancia', key: 'instanceName', width: 35 },
+      { header: 'Ambiente', key: 'ambiente', width: 15 },
+      { header: 'Versión', key: 'majorVersion', width: 25 },
+      { header: 'Build', key: 'currentBuild', width: 18 },
+      { header: 'Fin Soporte', key: 'endOfSupport', width: 18 },
+      { header: 'Estado', key: 'estado', width: 20 },
+      { header: 'Riesgo', key: 'riesgo', width: 15 },
+    ];
+
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0066CC' },
+    };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    filteredServers.forEach(s => {
       const versionInfo = OBSOLETE_VERSIONS.find(v => v.version === s.majorVersion) ||
                          NEAR_OBSOLETE_VERSIONS.find(v => v.version === s.majorVersion);
       const isObsolete = OBSOLETE_VERSION_NAMES.includes(s.majorVersion);
-      
-      return [
-        s.serverName,
-        s.instanceName,
-        s.ambiente,
-        s.majorVersion,
-        s.currentBuild,
-        versionInfo ? ('endOfSupport' in versionInfo ? versionInfo.endOfSupport : versionInfo.endOfSupport) : 'N/A',
-        isObsolete ? 'Obsoleto' : 'Próximo a Obsoleto',
-        isObsolete ? 'CRÍTICO' : 'ADVERTENCIA',
-      ];
+
+      worksheet.addRow({
+        serverName: s.serverName,
+        instanceName: s.instanceName,
+        ambiente: s.ambiente,
+        majorVersion: s.majorVersion,
+        currentBuild: s.currentBuild,
+        endOfSupport: versionInfo ? versionInfo.endOfSupport : 'N/A',
+        estado: isObsolete ? 'Obsoleto' : 'Próximo a Obsoleto',
+        riesgo: isObsolete ? 'CRÍTICO' : 'ADVERTENCIA',
+      });
     });
 
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.eachCell(cell => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          };
+        });
+        if (rowNumber % 2 === 0) {
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF5F5F5' },
+          };
+        }
+
+        const estadoCell = row.getCell(7);
+        const riesgoCell = row.getCell(8);
+        if (estadoCell.value === 'Obsoleto') {
+          estadoCell.font = { color: { argb: 'FFCC0000' }, bold: true };
+          riesgoCell.font = { color: { argb: 'FFCC0000' }, bold: true };
+        } else {
+          estadoCell.font = { color: { argb: 'FFCC7700' }, bold: true };
+          riesgoCell.font = { color: { argb: 'FFCC7700' }, bold: true };
+        }
+      }
+    });
+
+    worksheet.addRow([]);
+    const totalRow = worksheet.addRow([`Total: ${filteredServers.length} instancias obsoletas`]);
+    totalRow.font = { bold: true };
+    totalRow.getCell(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFE599' },
+    };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `instancias_obsoletas_${new Date().toISOString().split('T')[0]}.csv`;
+    link.href = url;
+    link.download = `instancias_obsoletas_${new Date().toISOString().split('T')[0]}.xlsx`;
     link.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const getVersionBadge = (version: string) => {
@@ -359,8 +429,8 @@ export default function ObsoleteInstances() {
             <RefreshCw className={cn('w-4 h-4 mr-2', isFetching && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button onClick={exportToCSV} variant="outline" disabled={!filteredServers.length}>
-            <Download className="w-4 h-4 mr-2" /> CSV
+          <Button onClick={exportToExcel} variant="outline" disabled={!filteredServers.length}>
+            <Download className="w-4 h-4 mr-2" /> Excel
           </Button>
         </div>
       </div>

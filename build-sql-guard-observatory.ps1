@@ -1,6 +1,6 @@
 param(
     # Carpeta raíz donde se dejarán los artefactos compilados
-    [string]$OutputRoot = "C:\Temp",
+    [string]$OutputRoot = "C:\Temp\SQLNovaApp",
     # Entorno de build del frontend: production (default), testing, development
     [ValidateSet("production", "testing", "development")]
     [string]$Environment = "production"
@@ -11,7 +11,7 @@ param(
 # =========================
 
 # Ruta raíz del repo
-$solutionRoot  = "C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory"
+$solutionRoot  = "C:\Temp\SQLNovaApp\sql-guard-observatory"
 
 # Backend (.NET)
 $backendProj   = Join-Path $solutionRoot "SQLGuardObservatory.API\SQLGuardObservatory.API.csproj"
