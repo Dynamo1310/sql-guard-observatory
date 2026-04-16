@@ -148,11 +148,11 @@ function findVersionInfo(engine: EngineKind, versionKey: string): VersionLifecyc
   const entries = ENGINE_LIFECYCLE[engine];
   const exact = entries.find(v => v.version === versionKey);
   if (exact) return exact;
-  // Fallback Redis/DocumentDB: si el key extraído es "5" o "5.0" pero la lifecycle
-  // tiene "5.0" o "5" respectivamente, matchear por major
-  if (engine === 'Redis' || engine === 'DocumentDB') {
-    const major = versionKey.split('.')[0];
-    const byMajor = entries.find(v => v.version.split('.')[0] === major);
+  // Fallback Redis/DocumentDB: SOLO cuando el inventario trae el major sin minor
+  // (ej. "5" → matchea contra "5.0" en la lifecycle). NO usar fallback cuando viene
+  // con minor (ej. "6.2" no debe matchear "6.0", son versiones distintas).
+  if ((engine === 'Redis' || engine === 'DocumentDB') && !versionKey.includes('.')) {
+    const byMajor = entries.find(v => v.version.split('.')[0] === versionKey);
     if (byMajor) return byMajor;
   }
   return null;
