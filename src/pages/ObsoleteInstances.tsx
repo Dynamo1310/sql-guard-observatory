@@ -148,11 +148,11 @@ function findVersionInfo(engine: EngineKind, versionKey: string): VersionLifecyc
   const entries = ENGINE_LIFECYCLE[engine];
   const exact = entries.find(v => v.version === versionKey);
   if (exact) return exact;
-  // Fallback Redis/DocumentDB: SOLO cuando el inventario trae el major sin minor
-  // (ej. "5" → matchea contra "5.0" en la lifecycle). NO usar fallback cuando viene
-  // con minor (ej. "6.2" no debe matchear "6.0", son versiones distintas).
-  if ((engine === 'Redis' || engine === 'DocumentDB') && !versionKey.includes('.')) {
-    const byMajor = entries.find(v => v.version.split('.')[0] === versionKey);
+  // Fallback Redis/DocumentDB: agrupar por major. Ej. "6.2" o "6.2.6" → entrada "6.0".
+  // El usuario considera todas las 6.x como pertenecientes al ciclo de vida de 6.0.
+  if (engine === 'Redis' || engine === 'DocumentDB') {
+    const major = versionKey.split('.')[0];
+    const byMajor = entries.find(v => v.version.split('.')[0] === major);
     if (byMajor) return byMajor;
   }
   return null;
@@ -471,17 +471,18 @@ export default function ObsoleteInstances() {
   const pieData = useMemo(() => {
     const buckets: Record<string, { key: string; label: string; value: number; fill: string; engine: EngineKind; version: string }> = {};
     scopedRows.filter(r => r.status === 'obsolete').forEach(r => {
-      const key = `${r.engine}|${r.versionKey}`;
+      const groupVersion = r.versionInfo?.version ?? r.versionKey;
+      const key = `${r.engine}|${groupVersion}`;
       if (!buckets[key]) {
         buckets[key] = {
           key,
           label: selectedEngine === 'all'
-            ? `${ENGINE_SHORT[r.engine]} ${r.versionKey}`
-            : r.versionKey,
+            ? `${ENGINE_SHORT[r.engine]} ${groupVersion}`
+            : groupVersion,
           value: 0,
-          fill: pieColorFor(r.engine, r.versionKey),
+          fill: pieColorFor(r.engine, groupVersion),
           engine: r.engine,
-          version: r.versionKey,
+          version: groupVersion,
         };
       }
       buckets[key].value++;
@@ -532,7 +533,7 @@ export default function ObsoleteInstances() {
         }
       }
       if (ambienteFilter !== 'all' && row.ambiente !== ambienteFilter) return false;
-      if (versionFilter !== 'all' && `${row.engine}|${row.versionKey}` !== versionFilter) return false;
+      if (versionFilter !== 'all' && `${row.engine}|${row.versionInfo?.version ?? row.versionKey}` !== versionFilter) return false;
       return true;
     });
   }, [scopedRows, searchTerm, statusFilter, ambienteFilter, versionFilter]);
@@ -548,12 +549,13 @@ export default function ObsoleteInstances() {
     const seen = new Set<string>();
     const result: { key: string; label: string; engine: EngineKind }[] = [];
     scopedRows.filter(r => r.status !== 'supported').forEach(r => {
-      const key = `${r.engine}|${r.versionKey}`;
+      const groupVersion = r.versionInfo?.version ?? r.versionKey;
+      const key = `${r.engine}|${groupVersion}`;
       if (!seen.has(key)) {
         seen.add(key);
         const label = selectedEngine === 'all'
-          ? `${ENGINE_SHORT[r.engine]} ${r.versionKey}`
-          : r.versionKey;
+          ? `${ENGINE_SHORT[r.engine]} ${groupVersion}`
+          : groupVersion;
         result.push({ key, label, engine: r.engine });
       }
     });
@@ -916,7 +918,7 @@ export default function ObsoleteInstances() {
                   </h4>
                   <div className="space-y-1.5">
                     {versions.map(v => {
-                      const count = allRows.filter(r => r.engine === engine && r.versionKey === v.version).length;
+                      const count = allRows.filter(r => r.engine === engine && r.versionInfo?.version === v.version).length;
                       const cls = classifyStatus(engine, v.version);
                       const isObsolete = cls.status === 'obsolete';
                       const isNear = cls.status === 'near-obsolete';
