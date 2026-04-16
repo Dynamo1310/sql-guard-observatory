@@ -8,9 +8,10 @@ import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle, Clock, Server, RefreshCw, Download, Search,
   CalendarX2, ShieldAlert, Database, TrendingDown,
-  ExternalLink, Info, MemoryStick, FileJson,
+  ExternalLink, Info, MemoryStick, FileJson, Layers,
 } from 'lucide-react';
 import { SqlServerIcon } from '@/components/icons/SqlServerIcon';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { patchingApi } from '@/services/api';
 import { postgresqlInventoryApi } from '@/services/postgresqlInventoryApi';
 import { redisInventoryApi } from '@/services/redisInventoryApi';
@@ -125,11 +126,33 @@ const NEAR_OBSOLETE_MONTHS = 12;
 function extractVersionKey(engine: EngineKind, raw: string | null | undefined): string {
   if (!raw) return '';
   const cleaned = String(raw).trim();
-  if (engine === 'SQL Server' || engine === 'PostgreSQL') return cleaned;
-  // Redis & DocumentDB vienen con "X.Y" o "X.Y.Z" — nos quedamos con major.minor
-  const parts = cleaned.split('.');
-  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`;
-  return cleaned;
+  if (engine === 'SQL Server') return cleaned; // ya viene "2014", "2008 R2", etc.
+
+  if (engine === 'PostgreSQL') {
+    // "PostgreSQL 16" / "16" / "16.4" → "16"
+    const m = cleaned.match(/(\d+)/);
+    return m ? m[1] : cleaned;
+  }
+
+  // Redis & DocumentDB: "5", "5.0", "5.0.6", "Redis 5.0", "redis7.0.4" → "5.0" o "5"
+  const m = cleaned.match(/(\d+)(?:\.(\d+))?/);
+  if (!m) return cleaned;
+  return m[2] !== undefined ? `${m[1]}.${m[2]}` : m[1];
+}
+
+function findVersionInfo(engine: EngineKind, versionKey: string): VersionLifecycle | null {
+  if (!versionKey) return null;
+  const entries = ENGINE_LIFECYCLE[engine];
+  const exact = entries.find(v => v.version === versionKey);
+  if (exact) return exact;
+  // Fallback Redis/DocumentDB: si el key extraído es "5" o "5.0" pero la lifecycle
+  // tiene "5.0" o "5" respectivamente, matchear por major
+  if (engine === 'Redis' || engine === 'DocumentDB') {
+    const major = versionKey.split('.')[0];
+    const byMajor = entries.find(v => v.version.split('.')[0] === major);
+    if (byMajor) return byMajor;
+  }
+  return null;
 }
 
 function classifyStatus(engine: EngineKind, versionKey: string): {
@@ -137,7 +160,7 @@ function classifyStatus(engine: EngineKind, versionKey: string): {
   endOfSupport: string | null;
   versionInfo: VersionLifecycle | null;
 } {
-  const versionInfo = ENGINE_LIFECYCLE[engine].find(v => v.version === versionKey) || null;
+  const versionInfo = findVersionInfo(engine, versionKey);
   if (!versionInfo) {
     return { status: 'supported', endOfSupport: null, versionInfo: null };
   }
@@ -215,9 +238,11 @@ const ambienteChartConfig = {
 
 // ==================== COMPONENTE ====================
 
+type EngineTab = 'all' | EngineKind;
+
 export default function ObsoleteInstances() {
+  const [selectedEngine, setSelectedEngine] = useState<EngineTab>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [engineFilter, setEngineFilter] = useState<string>('all');
   const [ambienteFilter, setAmbienteFilter] = useState<string>('all');
   const [versionFilter, setVersionFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all'); // all, obsolete, near-obsolete
@@ -347,27 +372,54 @@ export default function ObsoleteInstances() {
     return rows;
   }, [sqlQuery.data, pgQuery.data, redisQuery.data, docdbQuery.data]);
 
-  // KPIs
+  // Filas en alcance del tab activo
+  const scopedRows: ObsoleteRow[] = useMemo(() => {
+    if (selectedEngine === 'all') return allRows;
+    return allRows.filter(r => r.engine === selectedEngine);
+  }, [allRows, selectedEngine]);
+
+  // Contador de obsoletas + próximas por motor (para badges en los tabs)
+  const engineRiskCounts = useMemo(() => {
+    const counts: Record<EngineTab, number> = {
+      all: 0,
+      'SQL Server': 0,
+      'PostgreSQL': 0,
+      'Redis': 0,
+      'DocumentDB': 0,
+    };
+    allRows.forEach(r => {
+      if (r.status === 'obsolete' || r.status === 'near-obsolete') {
+        counts[r.engine]++;
+        counts.all++;
+      }
+    });
+    return counts;
+  }, [allRows]);
+
+  // KPIs (filtrados por tab activo)
   const metrics = useMemo(() => {
-    const total = allRows.length;
-    const obsolete = allRows.filter(r => r.status === 'obsolete').length;
-    const nearObsolete = allRows.filter(r => r.status === 'near-obsolete').length;
+    const total = scopedRows.length;
+    const obsolete = scopedRows.filter(r => r.status === 'obsolete').length;
+    const nearObsolete = scopedRows.filter(r => r.status === 'near-obsolete').length;
     const supported = total - obsolete - nearObsolete;
     const obsoleteRate = total > 0 ? Math.round((obsolete / total) * 100) : 0;
     const nearObsoleteRate = total > 0 ? Math.round((nearObsolete / total) * 100) : 0;
     const riskRate = total > 0 ? Math.round(((obsolete + nearObsolete) / total) * 100) : 0;
     return { total, obsolete, nearObsolete, supported, obsoleteRate, nearObsoleteRate, riskRate };
-  }, [allRows]);
+  }, [scopedRows]);
 
   // Pie chart: distribución por (motor, versión) entre las obsoletas
+  // En tab específico, etiqueta sólo con la versión (no hace falta repetir motor)
   const pieData = useMemo(() => {
     const buckets: Record<string, { key: string; label: string; value: number; fill: string; engine: EngineKind; version: string }> = {};
-    allRows.filter(r => r.status === 'obsolete').forEach(r => {
+    scopedRows.filter(r => r.status === 'obsolete').forEach(r => {
       const key = `${r.engine}|${r.versionKey}`;
       if (!buckets[key]) {
         buckets[key] = {
           key,
-          label: `${ENGINE_SHORT[r.engine]} ${r.versionKey}`,
+          label: selectedEngine === 'all'
+            ? `${ENGINE_SHORT[r.engine]} ${r.versionKey}`
+            : r.versionKey,
           value: 0,
           fill: pieColorFor(r.engine, r.versionKey),
           engine: r.engine,
@@ -381,7 +433,7 @@ export default function ObsoleteInstances() {
       const versions = ENGINE_LIFECYCLE[a.engine].map(v => v.version);
       return versions.indexOf(a.version) - versions.indexOf(b.version);
     });
-  }, [allRows]);
+  }, [scopedRows, selectedEngine]);
 
   // Config dinámica del pie chart
   const pieChartConfig = useMemo<ChartConfig>(() => {
@@ -395,7 +447,7 @@ export default function ObsoleteInstances() {
   // Bar chart por ambiente
   const ambienteData = useMemo(() => {
     const byAmbiente: Record<string, { ambiente: string; obsolete: number; nearObsolete: number; supported: number; total: number }> = {};
-    allRows.forEach(r => {
+    scopedRows.forEach(r => {
       const a = r.ambiente;
       if (!byAmbiente[a]) byAmbiente[a] = { ambiente: a, obsolete: 0, nearObsolete: 0, supported: 0, total: 0 };
       byAmbiente[a].total++;
@@ -406,16 +458,14 @@ export default function ObsoleteInstances() {
     return Object.values(byAmbiente)
       .filter(a => a.obsolete > 0 || a.nearObsolete > 0)
       .sort((a, b) => (b.obsolete + b.nearObsolete) - (a.obsolete + a.nearObsolete));
-  }, [allRows]);
+  }, [scopedRows]);
 
   // Filas filtradas (solo obsoletas y próximas)
   const filteredRows = useMemo(() => {
-    return allRows.filter(row => {
+    return scopedRows.filter(row => {
       if (statusFilter === 'obsolete' && row.status !== 'obsolete') return false;
       if (statusFilter === 'near-obsolete' && row.status !== 'near-obsolete') return false;
       if (statusFilter === 'all' && row.status === 'supported') return false;
-
-      if (engineFilter !== 'all' && row.engine !== engineFilter) return false;
 
       if (searchTerm) {
         const t = searchTerm.toLowerCase();
@@ -427,27 +477,30 @@ export default function ObsoleteInstances() {
       if (versionFilter !== 'all' && `${row.engine}|${row.versionKey}` !== versionFilter) return false;
       return true;
     });
-  }, [allRows, searchTerm, statusFilter, engineFilter, ambienteFilter, versionFilter]);
+  }, [scopedRows, searchTerm, statusFilter, ambienteFilter, versionFilter]);
 
-  // Filtros dinámicos (calculados sobre el set obsoleto/próximo)
+  // Filtros dinámicos (calculados sobre el set obsoleto/próximo del tab activo)
   const uniqueAmbientes = useMemo(() => {
     return [...new Set(
-      allRows.filter(r => r.status !== 'supported').map(r => r.ambiente).filter(Boolean)
+      scopedRows.filter(r => r.status !== 'supported').map(r => r.ambiente).filter(Boolean)
     )].sort();
-  }, [allRows]);
+  }, [scopedRows]);
 
   const uniqueVersionEntries = useMemo(() => {
     const seen = new Set<string>();
     const result: { key: string; label: string; engine: EngineKind }[] = [];
-    allRows.filter(r => r.status !== 'supported').forEach(r => {
+    scopedRows.filter(r => r.status !== 'supported').forEach(r => {
       const key = `${r.engine}|${r.versionKey}`;
       if (!seen.has(key)) {
         seen.add(key);
-        result.push({ key, label: `${ENGINE_SHORT[r.engine]} ${r.versionKey}`, engine: r.engine });
+        const label = selectedEngine === 'all'
+          ? `${ENGINE_SHORT[r.engine]} ${r.versionKey}`
+          : r.versionKey;
+        result.push({ key, label, engine: r.engine });
       }
     });
     return result.sort((a, b) => a.label.localeCompare(b.label));
-  }, [allRows]);
+  }, [scopedRows, selectedEngine]);
 
   // Export Excel
   const exportToExcel = async () => {
@@ -641,6 +694,35 @@ export default function ObsoleteInstances() {
         </div>
       </div>
 
+      {/* Tabs por motor */}
+      <Tabs
+        value={selectedEngine}
+        onValueChange={(v) => {
+          setSelectedEngine(v as EngineTab);
+          setAmbienteFilter('all');
+          setVersionFilter('all');
+        }}
+      >
+        <TabsList className="grid w-full grid-cols-5 h-auto">
+          <TabsTrigger value="all" className="flex items-center gap-2 py-2">
+            <Layers className="h-4 w-4" />
+            <span>Todos</span>
+            {engineRiskCounts.all > 0 && (
+              <Badge variant="destructive" className="ml-1 h-5 px-1.5">{engineRiskCounts.all}</Badge>
+            )}
+          </TabsTrigger>
+          {ENGINES.map(e => (
+            <TabsTrigger key={e} value={e} className="flex items-center gap-2 py-2">
+              <EngineIcon engine={e} className="h-4 w-4" />
+              <span>{e}</span>
+              {engineRiskCounts[e] > 0 && (
+                <Badge variant="destructive" className="ml-1 h-5 px-1.5">{engineRiskCounts[e]}</Badge>
+              )}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -712,8 +794,13 @@ export default function ObsoleteInstances() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {ENGINES.map(engine => {
+          <div className={cn(
+            'grid gap-4',
+            selectedEngine === 'all'
+              ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'
+              : 'grid-cols-1'
+          )}>
+            {(selectedEngine === 'all' ? ENGINES : [selectedEngine as EngineKind]).map(engine => {
               const versions = ENGINE_LIFECYCLE[engine];
               return (
                 <div key={engine} className="space-y-2">
@@ -907,17 +994,6 @@ export default function ObsoleteInstances() {
                 <SelectItem value="near-obsolete">Próx. Obsoletos</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={engineFilter} onValueChange={setEngineFilter}>
-              <SelectTrigger className="h-8 w-[140px]">
-                <SelectValue placeholder="Motor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los motores</SelectItem>
-                {ENGINES.map(e => (
-                  <SelectItem key={e} value={e}>{e}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Select value={ambienteFilter} onValueChange={setAmbienteFilter}>
               <SelectTrigger className="h-8 w-[120px]">
                 <SelectValue placeholder="Ambiente" />
@@ -956,11 +1032,11 @@ export default function ObsoleteInstances() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Motor</TableHead>
+                    {selectedEngine === 'all' && <TableHead>Motor</TableHead>}
                     <TableHead>Servidor</TableHead>
                     <TableHead>Ambiente</TableHead>
                     <TableHead>Versión</TableHead>
-                    <TableHead>Build</TableHead>
+                    {selectedEngine === 'all' || selectedEngine === 'SQL Server' ? <TableHead>Build</TableHead> : null}
                     <TableHead>Fin Soporte</TableHead>
                     <TableHead>Estado</TableHead>
                   </TableRow>
@@ -976,12 +1052,14 @@ export default function ObsoleteInstances() {
                           'bg-warning/5': !isObsolete,
                         })}
                       >
-                        <TableCell>
-                          <Badge variant="outline" className={cn('gap-1.5', ENGINE_BADGE_CLASS[row.engine])}>
-                            <EngineIcon engine={row.engine} className="h-3 w-3" />
-                            {row.engine}
-                          </Badge>
-                        </TableCell>
+                        {selectedEngine === 'all' && (
+                          <TableCell>
+                            <Badge variant="outline" className={cn('gap-1.5', ENGINE_BADGE_CLASS[row.engine])}>
+                              <EngineIcon engine={row.engine} className="h-3 w-3" />
+                              {row.engine}
+                            </Badge>
+                          </TableCell>
+                        )}
                         <TableCell>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1008,9 +1086,11 @@ export default function ObsoleteInstances() {
                         <TableCell>
                           <span className="font-medium">{row.versionDisplay}</span>
                         </TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
-                          {row.build || '-'}
-                        </TableCell>
+                        {(selectedEngine === 'all' || selectedEngine === 'SQL Server') && (
+                          <TableCell className="font-mono text-sm text-muted-foreground">
+                            {row.build || '-'}
+                          </TableCell>
+                        )}
                         <TableCell>
                           {row.versionInfo && (
                             <Tooltip>

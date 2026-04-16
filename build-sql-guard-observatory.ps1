@@ -10,8 +10,8 @@ param(
 # CONFIGURACIÓN DE RUTAS
 # =========================
 
-# Ruta raíz del repo
-$solutionRoot  = "C:\Temp\SQLNovaApp\sql-guard-observatory"
+# Ruta raíz del repo (carpeta donde está este script)
+$solutionRoot  = $PSScriptRoot
 
 # Backend (.NET)
 $backendProj   = Join-Path $solutionRoot "SQLGuardObservatory.API\SQLGuardObservatory.API.csproj"

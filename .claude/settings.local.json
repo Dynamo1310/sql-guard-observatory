@@ -8,7 +8,8 @@
       "Bash(powershell.exe *)",
       "Bash(grep -l \"Postgres\\\\|Redis\\\\|DocDb\\\\|DocumentDb\" \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\sql-guard-observatory\\\\SQLGuardObservatory.API\\\\Models\"*.cs)",
       "Bash(grep -l \"Postgres\\\\|Redis\\\\|DocumentDB\\\\|DocDb\" \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\sql-guard-observatory\\\\src\\\\types\"*)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(npx tsc *)"
     ]
   }
 }
