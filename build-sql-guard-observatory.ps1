@@ -1,6 +1,6 @@
 param(
     # Carpeta raíz donde se dejarán los artefactos compilados
-    [string]$OutputRoot = "C:\Temp\SQLNovaApp",
+    [string]$OutputRoot = "C:\Temp\SQLNova Compilado",
     # Entorno de build del frontend: production (default), testing, development
     [ValidateSet("production", "testing", "development")]
     [string]$Environment = "production"

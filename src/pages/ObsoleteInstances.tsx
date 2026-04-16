@@ -1,16 +1,20 @@
 /**
- * Página de Instancias Obsoletas - SQL Server
+ * Página de Instancias Obsoletas - Multi-motor
  * Muestra instancias con versiones fuera de soporte y próximas a quedar obsoletas
+ * Soporta SQL Server, PostgreSQL (AWS RDS), Redis (AWS ElastiCache) y DocumentDB
  */
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { 
+import {
   AlertTriangle, Clock, Server, RefreshCw, Download, Search,
   CalendarX2, ShieldAlert, Database, TrendingDown,
-  ExternalLink, Info
+  ExternalLink, Info, MemoryStick, FileJson,
 } from 'lucide-react';
 import { SqlServerIcon } from '@/components/icons/SqlServerIcon';
-import { patchingApi, ServerPatchStatusDto } from '@/services/api';
+import { patchingApi } from '@/services/api';
+import { postgresqlInventoryApi } from '@/services/postgresqlInventoryApi';
+import { redisInventoryApi } from '@/services/redisInventoryApi';
+import { documentdbInventoryApi } from '@/services/documentdbInventoryApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,184 +57,401 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 
-// Definición de versiones obsoletas y próximas a quedar obsoletas
-const OBSOLETE_VERSIONS = [
-  { version: '2005', name: 'SQL Server 2005', endOfSupport: '2016-04-12', yearsOutOfSupport: 8 },
-  { version: '2008', name: 'SQL Server 2008', endOfSupport: '2019-07-09', yearsOutOfSupport: 5 },
-  { version: '2008 R2', name: 'SQL Server 2008 R2', endOfSupport: '2019-07-09', yearsOutOfSupport: 5 },
-  { version: '2012', name: 'SQL Server 2012', endOfSupport: '2022-07-12', yearsOutOfSupport: 2 },
-  { version: '2014', name: 'SQL Server 2014', endOfSupport: '2024-07-09', yearsOutOfSupport: 0 },
-];
+// ==================== TIPOS ====================
 
-const NEAR_OBSOLETE_VERSIONS = [
-  { version: '2016', name: 'SQL Server 2016', endOfSupport: '2026-07-14' },
-];
+type EngineKind = 'SQL Server' | 'PostgreSQL' | 'Redis' | 'DocumentDB';
 
-// Función para calcular meses restantes hasta fin de soporte
-const getMonthsRemaining = (endOfSupportDate: string): number => {
-  const today = new Date();
-  const endDate = new Date(endOfSupportDate);
-  const diffTime = endDate.getTime() - today.getTime();
-  const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30.44)); // 30.44 días promedio por mes
-  return Math.max(0, diffMonths);
+const ENGINES: EngineKind[] = ['SQL Server', 'PostgreSQL', 'Redis', 'DocumentDB'];
+
+interface VersionLifecycle {
+  version: string;
+  name: string;
+  endOfSupport: string; // ISO date
+}
+
+interface ObsoleteRow {
+  engine: EngineKind;
+  serverName: string;
+  instanceName: string;
+  ambiente: string;
+  hostingSite: string;
+  versionKey: string;          // normalizada para matching
+  versionDisplay: string;      // raw para mostrar
+  build: string | null;        // solo SQL Server
+  endOfSupport: string | null;
+  versionInfo: VersionLifecycle | null;
+  status: 'obsolete' | 'near-obsolete' | 'supported';
+}
+
+// ==================== TABLAS DE FIN DE SOPORTE ====================
+// Fuentes públicas: AWS RDS / ElastiCache / DocumentDB lifecycle policies + Microsoft Lifecycle.
+// Si AWS extiende el soporte estándar de alguna versión, actualizar esta tabla.
+
+const ENGINE_LIFECYCLE: Record<EngineKind, VersionLifecycle[]> = {
+  'SQL Server': [
+    { version: '2005',    name: 'SQL Server 2005',    endOfSupport: '2016-04-12' },
+    { version: '2008',    name: 'SQL Server 2008',    endOfSupport: '2019-07-09' },
+    { version: '2008 R2', name: 'SQL Server 2008 R2', endOfSupport: '2019-07-09' },
+    { version: '2012',    name: 'SQL Server 2012',    endOfSupport: '2022-07-12' },
+    { version: '2014',    name: 'SQL Server 2014',    endOfSupport: '2024-07-09' },
+    { version: '2016',    name: 'SQL Server 2016',    endOfSupport: '2026-07-14' },
+  ],
+  'PostgreSQL': [
+    { version: '11', name: 'PostgreSQL 11', endOfSupport: '2024-02-29' },
+    { version: '12', name: 'PostgreSQL 12', endOfSupport: '2025-02-28' },
+    { version: '13', name: 'PostgreSQL 13', endOfSupport: '2026-02-28' },
+    { version: '14', name: 'PostgreSQL 14', endOfSupport: '2026-11-12' },
+    { version: '15', name: 'PostgreSQL 15', endOfSupport: '2027-11-11' },
+    { version: '16', name: 'PostgreSQL 16', endOfSupport: '2028-11-09' },
+    { version: '17', name: 'PostgreSQL 17', endOfSupport: '2029-11-08' },
+  ],
+  'Redis': [
+    { version: '2.6', name: 'Redis 2.6', endOfSupport: '2024-04-30' },
+    { version: '2.8', name: 'Redis 2.8', endOfSupport: '2024-04-30' },
+    { version: '3.2', name: 'Redis 3.2', endOfSupport: '2024-04-30' },
+    { version: '4.0', name: 'Redis 4.0', endOfSupport: '2024-08-31' },
+    { version: '5.0', name: 'Redis 5.0', endOfSupport: '2024-08-31' },
+    { version: '6.0', name: 'Redis 6.0', endOfSupport: '2024-08-31' },
+  ],
+  'DocumentDB': [
+    { version: '3.6', name: 'DocumentDB 3.6', endOfSupport: '2023-04-30' },
+  ],
 };
 
-// Todas las versiones obsoletas como array simple
-const OBSOLETE_VERSION_NAMES = OBSOLETE_VERSIONS.map(v => v.version);
-const NEAR_OBSOLETE_VERSION_NAMES = NEAR_OBSOLETE_VERSIONS.map(v => v.version);
+const NEAR_OBSOLETE_MONTHS = 12;
 
-// Configuración del gráfico de pie por versión obsoleta - Escala de rojos/naranjas (más viejo = más oscuro)
-const obsoleteChartConfig = {
-  '2005': { label: 'SQL 2005', color: '#7f1d1d' },   // red-900 (más antigua)
-  '2008': { label: 'SQL 2008', color: '#b91c1c' },   // red-700
-  '2008 R2': { label: 'SQL 2008 R2', color: '#dc2626' }, // red-600
-  '2012': { label: 'SQL 2012', color: '#f97316' },   // orange-500
-  '2014': { label: 'SQL 2014', color: '#fb923c' },   // orange-400 (más reciente)
-} satisfies ChartConfig;
+// ==================== HELPERS ====================
 
-// Configuración del gráfico de barras por ambiente
+function extractVersionKey(engine: EngineKind, raw: string | null | undefined): string {
+  if (!raw) return '';
+  const cleaned = String(raw).trim();
+  if (engine === 'SQL Server' || engine === 'PostgreSQL') return cleaned;
+  // Redis & DocumentDB vienen con "X.Y" o "X.Y.Z" — nos quedamos con major.minor
+  const parts = cleaned.split('.');
+  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`;
+  return cleaned;
+}
+
+function classifyStatus(engine: EngineKind, versionKey: string): {
+  status: ObsoleteRow['status'];
+  endOfSupport: string | null;
+  versionInfo: VersionLifecycle | null;
+} {
+  const versionInfo = ENGINE_LIFECYCLE[engine].find(v => v.version === versionKey) || null;
+  if (!versionInfo) {
+    return { status: 'supported', endOfSupport: null, versionInfo: null };
+  }
+  const today = new Date();
+  const eos = new Date(versionInfo.endOfSupport);
+  if (eos.getTime() <= today.getTime()) {
+    return { status: 'obsolete', endOfSupport: versionInfo.endOfSupport, versionInfo };
+  }
+  const monthsRemaining = (eos.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+  if (monthsRemaining <= NEAR_OBSOLETE_MONTHS) {
+    return { status: 'near-obsolete', endOfSupport: versionInfo.endOfSupport, versionInfo };
+  }
+  return { status: 'supported', endOfSupport: versionInfo.endOfSupport, versionInfo };
+}
+
+function getMonthsRemaining(endOfSupportDate: string): number {
+  const today = new Date();
+  const endDate = new Date(endOfSupportDate);
+  const diffMonths = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+  return Math.max(0, diffMonths);
+}
+
+function getYearsOutOfSupport(endOfSupportDate: string): number {
+  const today = new Date();
+  const endDate = new Date(endOfSupportDate);
+  const diffYears = (today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+  return Math.max(0, Math.floor(diffYears));
+}
+
+// ==================== ESTILOS POR MOTOR ====================
+
+const ENGINE_SHORT: Record<EngineKind, string> = {
+  'SQL Server': 'SQL',
+  'PostgreSQL': 'PG',
+  'Redis': 'Redis',
+  'DocumentDB': 'DocDB',
+};
+
+const ENGINE_BADGE_CLASS: Record<EngineKind, string> = {
+  'SQL Server': 'bg-red-500/10 text-red-600 border-red-500/30',
+  'PostgreSQL': 'bg-sky-500/10 text-sky-600 border-sky-500/30',
+  'Redis':      'bg-purple-500/10 text-purple-600 border-purple-500/30',
+  'DocumentDB': 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
+};
+
+// Paleta para el pie chart — colores graduados por engine
+const ENGINE_PIE_PALETTE: Record<EngineKind, string[]> = {
+  'SQL Server': ['#7f1d1d', '#b91c1c', '#dc2626', '#f97316', '#fb923c', '#fbbf24'],
+  'PostgreSQL': ['#0c4a6e', '#075985', '#0369a1', '#0284c7', '#0ea5e9', '#38bdf8', '#7dd3fc'],
+  'Redis':      ['#581c87', '#7e22ce', '#a855f7', '#c084fc', '#d8b4fe'],
+  'DocumentDB': ['#14532d', '#15803d', '#22c55e', '#4ade80'],
+};
+
+function pieColorFor(engine: EngineKind, versionKey: string): string {
+  const palette = ENGINE_PIE_PALETTE[engine];
+  const versions = ENGINE_LIFECYCLE[engine].map(v => v.version);
+  const idx = versions.indexOf(versionKey);
+  return palette[idx >= 0 ? idx % palette.length : 0];
+}
+
+function EngineIcon({ engine, className }: { engine: EngineKind; className?: string }) {
+  switch (engine) {
+    case 'SQL Server': return <SqlServerIcon className={className} />;
+    case 'PostgreSQL': return <Database className={className} />;
+    case 'Redis':      return <MemoryStick className={className} />;
+    case 'DocumentDB': return <FileJson className={className} />;
+  }
+}
+
 const ambienteChartConfig = {
-  obsolete: { label: 'Obsoletos', color: '#dc2626' },
+  obsolete:     { label: 'Obsoletos',      color: '#dc2626' },
   nearObsolete: { label: 'Próx. Obsoletos', color: '#f59e0b' },
-  supported: { label: 'Con Soporte', color: '#22c55e' },
+  supported:    { label: 'Con Soporte',     color: '#22c55e' },
 } satisfies ChartConfig;
+
+// ==================== COMPONENTE ====================
 
 export default function ObsoleteInstances() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [engineFilter, setEngineFilter] = useState<string>('all');
   const [ambienteFilter, setAmbienteFilter] = useState<string>('all');
   const [versionFilter, setVersionFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all'); // all, obsolete, near-obsolete
 
-  const { 
-    data: rawServers, 
-    isLoading, 
-    isError, 
-    error,
-    refetch, 
-    isFetching 
-  } = useQuery({
+  const sqlQuery = useQuery({
     queryKey: ['patchStatus'],
     queryFn: () => patchingApi.getStatus(false),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  // Filtrar servidores que responden
-  const servers = useMemo(() => {
-    if (!rawServers) return [];
-    return rawServers.filter(s => s.connectionSuccess === true);
-  }, [rawServers]);
+  const pgQuery = useQuery({
+    queryKey: ['pgInventoryAll'],
+    queryFn: () => postgresqlInventoryApi.getInstances({ pageSize: 10000 }),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
 
-  // Calcular métricas de obsolescencia
+  const redisQuery = useQuery({
+    queryKey: ['redisInventoryAll'],
+    queryFn: () => redisInventoryApi.getInstances({ pageSize: 10000 }),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const docdbQuery = useQuery({
+    queryKey: ['docdbInventoryAll'],
+    queryFn: () => documentdbInventoryApi.getInstances({ pageSize: 10000 }),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const isLoading  = sqlQuery.isLoading || pgQuery.isLoading || redisQuery.isLoading || docdbQuery.isLoading;
+  const isFetching = sqlQuery.isFetching || pgQuery.isFetching || redisQuery.isFetching || docdbQuery.isFetching;
+  const isError    = sqlQuery.isError || pgQuery.isError || redisQuery.isError || docdbQuery.isError;
+  const error      = sqlQuery.error || pgQuery.error || redisQuery.error || docdbQuery.error;
+
+  const refetchAll = () => {
+    sqlQuery.refetch();
+    pgQuery.refetch();
+    redisQuery.refetch();
+    docdbQuery.refetch();
+  };
+
+  // Combinar todas las fuentes en filas unificadas
+  const allRows: ObsoleteRow[] = useMemo(() => {
+    const rows: ObsoleteRow[] = [];
+
+    // SQL Server
+    sqlQuery.data
+      ?.filter(s => s.connectionSuccess === true)
+      .forEach(s => {
+        const versionKey = extractVersionKey('SQL Server', s.majorVersion);
+        const cls = classifyStatus('SQL Server', versionKey);
+        rows.push({
+          engine: 'SQL Server',
+          serverName: s.serverName,
+          instanceName: s.instanceName,
+          ambiente: s.ambiente || 'Sin definir',
+          hostingSite: s.hostingSite || '',
+          versionKey,
+          versionDisplay: s.majorVersion || '-',
+          build: s.currentBuild || null,
+          endOfSupport: cls.endOfSupport,
+          versionInfo: cls.versionInfo,
+          status: cls.status,
+        });
+      });
+
+    // PostgreSQL
+    pgQuery.data?.data?.forEach(p => {
+      const versionKey = extractVersionKey('PostgreSQL', p.MajorVersion);
+      const cls = classifyStatus('PostgreSQL', versionKey);
+      rows.push({
+        engine: 'PostgreSQL',
+        serverName: p.ServerName,
+        instanceName: p.NombreInstancia,
+        ambiente: p.ambiente || 'Sin definir',
+        hostingSite: p.hostingSite || '',
+        versionKey,
+        versionDisplay: p.ProductVersion || p.MajorVersion || '-',
+        build: null,
+        endOfSupport: cls.endOfSupport,
+        versionInfo: cls.versionInfo,
+        status: cls.status,
+      });
+    });
+
+    // Redis
+    redisQuery.data?.data?.forEach(r => {
+      const versionKey = extractVersionKey('Redis', r.ProductVersion);
+      const cls = classifyStatus('Redis', versionKey);
+      rows.push({
+        engine: 'Redis',
+        serverName: r.ServerName,
+        instanceName: r.NombreInstancia,
+        ambiente: r.ambiente || 'Sin definir',
+        hostingSite: r.hostingSite || '',
+        versionKey,
+        versionDisplay: r.ProductVersion || '-',
+        build: null,
+        endOfSupport: cls.endOfSupport,
+        versionInfo: cls.versionInfo,
+        status: cls.status,
+      });
+    });
+
+    // DocumentDB
+    docdbQuery.data?.data?.forEach(d => {
+      const versionKey = extractVersionKey('DocumentDB', d.ProductVersion);
+      const cls = classifyStatus('DocumentDB', versionKey);
+      rows.push({
+        engine: 'DocumentDB',
+        serverName: d.ServerName,
+        instanceName: d.NombreInstancia,
+        ambiente: d.ambiente || 'Sin definir',
+        hostingSite: d.hostingSite || '',
+        versionKey,
+        versionDisplay: d.ProductVersion || '-',
+        build: null,
+        endOfSupport: cls.endOfSupport,
+        versionInfo: cls.versionInfo,
+        status: cls.status,
+      });
+    });
+
+    return rows;
+  }, [sqlQuery.data, pgQuery.data, redisQuery.data, docdbQuery.data]);
+
+  // KPIs
   const metrics = useMemo(() => {
-    if (!servers.length) return null;
-
-    const total = servers.length;
-    const obsolete = servers.filter(s => OBSOLETE_VERSION_NAMES.includes(s.majorVersion)).length;
-    const nearObsolete = servers.filter(s => NEAR_OBSOLETE_VERSION_NAMES.includes(s.majorVersion)).length;
+    const total = allRows.length;
+    const obsolete = allRows.filter(r => r.status === 'obsolete').length;
+    const nearObsolete = allRows.filter(r => r.status === 'near-obsolete').length;
     const supported = total - obsolete - nearObsolete;
     const obsoleteRate = total > 0 ? Math.round((obsolete / total) * 100) : 0;
+    const nearObsoleteRate = total > 0 ? Math.round((nearObsolete / total) * 100) : 0;
     const riskRate = total > 0 ? Math.round(((obsolete + nearObsolete) / total) * 100) : 0;
+    return { total, obsolete, nearObsolete, supported, obsoleteRate, nearObsoleteRate, riskRate };
+  }, [allRows]);
 
-    return { total, obsolete, nearObsolete, supported, obsoleteRate, riskRate };
-  }, [servers]);
-
-  // Datos para el gráfico de pie por versión obsoleta
+  // Pie chart: distribución por (motor, versión) entre las obsoletas
   const pieData = useMemo(() => {
-    if (!servers.length) return [];
-
-    const byVersion = servers.reduce((acc, s) => {
-      if (OBSOLETE_VERSION_NAMES.includes(s.majorVersion)) {
-        if (!acc[s.majorVersion]) {
-          acc[s.majorVersion] = 0;
-        }
-        acc[s.majorVersion]++;
+    const buckets: Record<string, { key: string; label: string; value: number; fill: string; engine: EngineKind; version: string }> = {};
+    allRows.filter(r => r.status === 'obsolete').forEach(r => {
+      const key = `${r.engine}|${r.versionKey}`;
+      if (!buckets[key]) {
+        buckets[key] = {
+          key,
+          label: `${ENGINE_SHORT[r.engine]} ${r.versionKey}`,
+          value: 0,
+          fill: pieColorFor(r.engine, r.versionKey),
+          engine: r.engine,
+          version: r.versionKey,
+        };
       }
-      return acc;
-    }, {} as Record<string, number>);
-
-    return Object.entries(byVersion)
-      .map(([version, count]) => ({
-        version,
-        value: count,
-        fill: obsoleteChartConfig[version as keyof typeof obsoleteChartConfig]?.color || '#dc2626',
-      }))
-      .sort((a, b) => {
-        const orderA = OBSOLETE_VERSION_NAMES.indexOf(a.version);
-        const orderB = OBSOLETE_VERSION_NAMES.indexOf(b.version);
-        return orderA - orderB;
-      });
-  }, [servers]);
-
-  // Datos para el gráfico de barras por ambiente
-  const ambienteData = useMemo(() => {
-    if (!servers.length) return [];
-
-    const byAmbiente = servers.reduce((acc, s) => {
-      const ambiente = s.ambiente || 'Sin definir';
-      if (!acc[ambiente]) {
-        acc[ambiente] = { ambiente, obsolete: 0, nearObsolete: 0, supported: 0, total: 0 };
-      }
-      acc[ambiente].total++;
-      
-      if (OBSOLETE_VERSION_NAMES.includes(s.majorVersion)) {
-        acc[ambiente].obsolete++;
-      } else if (NEAR_OBSOLETE_VERSION_NAMES.includes(s.majorVersion)) {
-        acc[ambiente].nearObsolete++;
-      } else {
-        acc[ambiente].supported++;
-      }
-      
-      return acc;
-    }, {} as Record<string, any>);
-
-    return Object.values(byAmbiente)
-      .filter((a: any) => a.obsolete > 0 || a.nearObsolete > 0)
-      .sort((a: any, b: any) => (b.obsolete + b.nearObsolete) - (a.obsolete + a.nearObsolete));
-  }, [servers]);
-
-  // Servidores filtrados (obsoletos y próximos a obsoletos)
-  const filteredServers = useMemo(() => {
-    if (!servers.length) return [];
-
-    return servers.filter(server => {
-      // Solo mostrar obsoletos y próximos a obsoletos
-      const isObsolete = OBSOLETE_VERSION_NAMES.includes(server.majorVersion);
-      const isNearObsolete = NEAR_OBSOLETE_VERSION_NAMES.includes(server.majorVersion);
-      
-      if (statusFilter === 'obsolete' && !isObsolete) return false;
-      if (statusFilter === 'near-obsolete' && !isNearObsolete) return false;
-      if (statusFilter === 'all' && !isObsolete && !isNearObsolete) return false;
-
-      const matchesSearch = searchTerm === '' || 
-        server.serverName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        server.instanceName.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesAmbiente = ambienteFilter === 'all' || server.ambiente === ambienteFilter;
-      const matchesVersion = versionFilter === 'all' || server.majorVersion === versionFilter;
-
-      return matchesSearch && matchesAmbiente && matchesVersion;
+      buckets[key].value++;
     });
-  }, [servers, searchTerm, ambienteFilter, versionFilter, statusFilter]);
+    return Object.values(buckets).sort((a, b) => {
+      if (a.engine !== b.engine) return ENGINES.indexOf(a.engine) - ENGINES.indexOf(b.engine);
+      const versions = ENGINE_LIFECYCLE[a.engine].map(v => v.version);
+      return versions.indexOf(a.version) - versions.indexOf(b.version);
+    });
+  }, [allRows]);
 
-  // Filtros únicos
+  // Config dinámica del pie chart
+  const pieChartConfig = useMemo<ChartConfig>(() => {
+    const cfg: ChartConfig = {};
+    pieData.forEach(item => {
+      cfg[item.key] = { label: item.label, color: item.fill };
+    });
+    return cfg;
+  }, [pieData]);
+
+  // Bar chart por ambiente
+  const ambienteData = useMemo(() => {
+    const byAmbiente: Record<string, { ambiente: string; obsolete: number; nearObsolete: number; supported: number; total: number }> = {};
+    allRows.forEach(r => {
+      const a = r.ambiente;
+      if (!byAmbiente[a]) byAmbiente[a] = { ambiente: a, obsolete: 0, nearObsolete: 0, supported: 0, total: 0 };
+      byAmbiente[a].total++;
+      if (r.status === 'obsolete') byAmbiente[a].obsolete++;
+      else if (r.status === 'near-obsolete') byAmbiente[a].nearObsolete++;
+      else byAmbiente[a].supported++;
+    });
+    return Object.values(byAmbiente)
+      .filter(a => a.obsolete > 0 || a.nearObsolete > 0)
+      .sort((a, b) => (b.obsolete + b.nearObsolete) - (a.obsolete + a.nearObsolete));
+  }, [allRows]);
+
+  // Filas filtradas (solo obsoletas y próximas)
+  const filteredRows = useMemo(() => {
+    return allRows.filter(row => {
+      if (statusFilter === 'obsolete' && row.status !== 'obsolete') return false;
+      if (statusFilter === 'near-obsolete' && row.status !== 'near-obsolete') return false;
+      if (statusFilter === 'all' && row.status === 'supported') return false;
+
+      if (engineFilter !== 'all' && row.engine !== engineFilter) return false;
+
+      if (searchTerm) {
+        const t = searchTerm.toLowerCase();
+        if (!row.serverName.toLowerCase().includes(t) && !row.instanceName.toLowerCase().includes(t)) {
+          return false;
+        }
+      }
+      if (ambienteFilter !== 'all' && row.ambiente !== ambienteFilter) return false;
+      if (versionFilter !== 'all' && `${row.engine}|${row.versionKey}` !== versionFilter) return false;
+      return true;
+    });
+  }, [allRows, searchTerm, statusFilter, engineFilter, ambienteFilter, versionFilter]);
+
+  // Filtros dinámicos (calculados sobre el set obsoleto/próximo)
   const uniqueAmbientes = useMemo(() => {
-    if (!servers.length) return [];
-    const obsoleteServers = servers.filter(s => 
-      OBSOLETE_VERSION_NAMES.includes(s.majorVersion) || 
-      NEAR_OBSOLETE_VERSION_NAMES.includes(s.majorVersion)
-    );
-    return [...new Set(obsoleteServers.map(s => s.ambiente).filter(Boolean))].sort();
-  }, [servers]);
+    return [...new Set(
+      allRows.filter(r => r.status !== 'supported').map(r => r.ambiente).filter(Boolean)
+    )].sort();
+  }, [allRows]);
 
-  const uniqueVersions = useMemo(() => {
-    if (!servers.length) return [];
-    return [...OBSOLETE_VERSION_NAMES, ...NEAR_OBSOLETE_VERSION_NAMES];
-  }, [servers]);
+  const uniqueVersionEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const result: { key: string; label: string; engine: EngineKind }[] = [];
+    allRows.filter(r => r.status !== 'supported').forEach(r => {
+      const key = `${r.engine}|${r.versionKey}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push({ key, label: `${ENGINE_SHORT[r.engine]} ${r.versionKey}`, engine: r.engine });
+      }
+    });
+    return result.sort((a, b) => a.label.localeCompare(b.label));
+  }, [allRows]);
 
-  // Exportar Excel
+  // Export Excel
   const exportToExcel = async () => {
-    if (!filteredServers.length) return;
+    if (!filteredRows.length) return;
 
     const ExcelJS = await import('exceljs');
 
@@ -241,14 +462,15 @@ export default function ObsoleteInstances() {
     const worksheet = workbook.addWorksheet('Instancias Obsoletas');
 
     worksheet.columns = [
-      { header: 'Servidor', key: 'serverName', width: 35 },
-      { header: 'Instancia', key: 'instanceName', width: 35 },
-      { header: 'Ambiente', key: 'ambiente', width: 15 },
-      { header: 'Versión', key: 'majorVersion', width: 25 },
-      { header: 'Build', key: 'currentBuild', width: 18 },
-      { header: 'Fin Soporte', key: 'endOfSupport', width: 18 },
-      { header: 'Estado', key: 'estado', width: 20 },
-      { header: 'Riesgo', key: 'riesgo', width: 15 },
+      { header: 'Motor',       key: 'engine',         width: 15 },
+      { header: 'Servidor',    key: 'serverName',     width: 35 },
+      { header: 'Instancia',   key: 'instanceName',   width: 35 },
+      { header: 'Ambiente',    key: 'ambiente',       width: 15 },
+      { header: 'Versión',     key: 'versionDisplay', width: 25 },
+      { header: 'Build',       key: 'build',          width: 18 },
+      { header: 'Fin Soporte', key: 'endOfSupport',   width: 18 },
+      { header: 'Estado',      key: 'estado',         width: 20 },
+      { header: 'Riesgo',      key: 'riesgo',         width: 15 },
     ];
 
     const headerRow = worksheet.getRow(1);
@@ -260,20 +482,17 @@ export default function ObsoleteInstances() {
     };
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    filteredServers.forEach(s => {
-      const versionInfo = OBSOLETE_VERSIONS.find(v => v.version === s.majorVersion) ||
-                         NEAR_OBSOLETE_VERSIONS.find(v => v.version === s.majorVersion);
-      const isObsolete = OBSOLETE_VERSION_NAMES.includes(s.majorVersion);
-
+    filteredRows.forEach(r => {
       worksheet.addRow({
-        serverName: s.serverName,
-        instanceName: s.instanceName,
-        ambiente: s.ambiente,
-        majorVersion: s.majorVersion,
-        currentBuild: s.currentBuild,
-        endOfSupport: versionInfo ? versionInfo.endOfSupport : 'N/A',
-        estado: isObsolete ? 'Obsoleto' : 'Próximo a Obsoleto',
-        riesgo: isObsolete ? 'CRÍTICO' : 'ADVERTENCIA',
+        engine: r.engine,
+        serverName: r.serverName,
+        instanceName: r.instanceName,
+        ambiente: r.ambiente,
+        versionDisplay: r.versionDisplay,
+        build: r.build || '-',
+        endOfSupport: r.endOfSupport ? new Date(r.endOfSupport).toLocaleDateString('es-ES') : 'N/A',
+        estado: r.status === 'obsolete' ? 'Obsoleto' : 'Próximo a Obsoleto',
+        riesgo: r.status === 'obsolete' ? 'CRÍTICO' : 'ADVERTENCIA',
       });
     });
 
@@ -295,8 +514,8 @@ export default function ObsoleteInstances() {
           };
         }
 
-        const estadoCell = row.getCell(7);
-        const riesgoCell = row.getCell(8);
+        const estadoCell = row.getCell(8);
+        const riesgoCell = row.getCell(9);
         if (estadoCell.value === 'Obsoleto') {
           estadoCell.font = { color: { argb: 'FFCC0000' }, bold: true };
           riesgoCell.font = { color: { argb: 'FFCC0000' }, bold: true };
@@ -308,7 +527,7 @@ export default function ObsoleteInstances() {
     });
 
     worksheet.addRow([]);
-    const totalRow = worksheet.addRow([`Total: ${filteredServers.length} instancias obsoletas`]);
+    const totalRow = worksheet.addRow([`Total: ${filteredRows.length} instancias obsoletas / próximas a obsoletas`]);
     totalRow.font = { bold: true };
     totalRow.getCell(1).fill = {
       type: 'pattern',
@@ -328,22 +547,10 @@ export default function ObsoleteInstances() {
     window.URL.revokeObjectURL(url);
   };
 
-  const getVersionBadge = (version: string) => {
-    const isObsolete = OBSOLETE_VERSION_NAMES.includes(version);
-    const isNearObsolete = NEAR_OBSOLETE_VERSION_NAMES.includes(version);
-    
-    if (isObsolete) {
-      return <Badge variant="destructive">Obsoleto</Badge>;
-    }
-    if (isNearObsolete) {
-      return <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">Próx. Obsoleto</Badge>;
-    }
+  const getStatusBadge = (status: ObsoleteRow['status']) => {
+    if (status === 'obsolete') return <Badge variant="destructive">Obsoleto</Badge>;
+    if (status === 'near-obsolete') return <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">Próx. Obsoleto</Badge>;
     return <Badge variant="secondary">Con Soporte</Badge>;
-  };
-
-  const getVersionInfo = (version: string) => {
-    return OBSOLETE_VERSIONS.find(v => v.version === version) ||
-           NEAR_OBSOLETE_VERSIONS.find(v => v.version === version);
   };
 
   // Error state
@@ -356,7 +563,7 @@ export default function ObsoleteInstances() {
               <AlertTriangle className="h-12 w-12 text-red-500 mb-4" />
               <h3 className="text-lg font-semibold mb-2">Error al cargar instancias</h3>
               <p className="text-muted-foreground mb-4">{(error as Error)?.message}</p>
-              <Button onClick={() => refetch()} variant="outline">
+              <Button onClick={refetchAll} variant="outline">
                 <RefreshCw className="w-4 h-4 mr-2" /> Reintentar
               </Button>
             </div>
@@ -377,7 +584,7 @@ export default function ObsoleteInstances() {
           </div>
           <Skeleton className="h-9 w-28" />
         </div>
-        
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
@@ -391,7 +598,7 @@ export default function ObsoleteInstances() {
             </Card>
           ))}
         </div>
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {[...Array(2)].map((_, i) => (
             <Card key={i}>
@@ -415,21 +622,20 @@ export default function ObsoleteInstances() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <div className="relative">
-              <SqlServerIcon className="h-8 w-8" />
-              <ShieldAlert className="h-4 w-4 text-red-500 absolute -bottom-1 -right-1" />
+              <ShieldAlert className="h-8 w-8 text-red-500" />
             </div>
             Instancias Obsoletas
           </h1>
           <p className="text-muted-foreground">
-            Versiones de SQL Server fuera de soporte o próximas a quedar sin soporte
+            SQL Server, PostgreSQL, Redis y DocumentDB fuera de soporte estándar (AWS / on-prem)
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => refetch()} variant="outline" disabled={isFetching}>
+          <Button onClick={refetchAll} variant="outline" disabled={isFetching}>
             <RefreshCw className={cn('w-4 h-4 mr-2', isFetching && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button onClick={exportToExcel} variant="outline" disabled={!filteredServers.length}>
+          <Button onClick={exportToExcel} variant="outline" disabled={!filteredRows.length}>
             <Download className="w-4 h-4 mr-2" /> Excel
           </Button>
         </div>
@@ -443,8 +649,8 @@ export default function ObsoleteInstances() {
             <Database className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{metrics?.total || 0}</div>
-            <p className="text-xs text-muted-foreground">instancias activas</p>
+            <div className="text-2xl font-bold text-primary">{metrics.total}</div>
+            <p className="text-xs text-muted-foreground">instancias activas (4 motores)</p>
           </CardContent>
         </Card>
 
@@ -455,12 +661,12 @@ export default function ObsoleteInstances() {
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-red-500">{metrics?.obsolete || 0}</span>
+              <span className="text-2xl font-bold text-red-500">{metrics.obsolete}</span>
               <span className="text-lg font-semibold text-red-500/70">
-                ({metrics?.obsoleteRate || 0}%)
+                ({metrics.obsoleteRate}%)
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">sin soporte de Microsoft</p>
+            <p className="text-xs text-muted-foreground">sin soporte estándar</p>
           </CardContent>
         </Card>
 
@@ -471,118 +677,107 @@ export default function ObsoleteInstances() {
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-warning">{metrics?.nearObsolete || 0}</span>
+              <span className="text-2xl font-bold text-warning">{metrics.nearObsolete}</span>
               <span className="text-lg font-semibold text-warning/70">
-                ({metrics?.total ? Math.round((metrics.nearObsolete / metrics.total) * 100) : 0}%)
+                ({metrics.nearObsoleteRate}%)
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">soporte termina pronto</p>
+            <p className="text-xs text-muted-foreground">soporte termina en ≤ {NEAR_OBSOLETE_MONTHS} meses</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Riesgo Total</CardTitle>
-            <TrendingDown className={`h-4 w-4 ${(metrics?.riskRate ?? 0) > 20 ? 'text-red-500' : 'text-warning'}`} />
+            <TrendingDown className={`h-4 w-4 ${metrics.riskRate > 20 ? 'text-red-500' : 'text-warning'}`} />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${(metrics?.riskRate ?? 0) > 20 ? 'text-red-500' : 'text-warning'}`}>
-              {metrics?.riskRate || 0}%
+            <div className={`text-2xl font-bold ${metrics.riskRate > 20 ? 'text-red-500' : 'text-warning'}`}>
+              {metrics.riskRate}%
             </div>
             <p className="text-xs text-muted-foreground">del parque en riesgo</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Info de versiones */}
+      {/* Info de versiones por motor */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-sm">
             <Info className="h-4 w-4 text-primary" />
-            Ciclo de Vida de Versiones SQL Server
+            Ciclo de Vida de Versiones por Motor
           </CardTitle>
+          <CardDescription>
+            Versiones contempladas en la clasificación. Los conteos provienen del inventario actual.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Versiones obsoletas */}
-            <div>
-              <h4 className="font-semibold text-red-500 mb-2 flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4" />
-                Sin Soporte (Obsoletas)
-              </h4>
-              <div className="space-y-1.5">
-                {OBSOLETE_VERSIONS.map(v => {
-                  const count = servers.filter(s => s.majorVersion === v.version).length;
-                  return (
-                    <div key={v.version} className="flex justify-between items-center text-sm p-2 rounded bg-red-500/5 border border-red-500/10">
-                      <div className="flex items-center gap-2">
-                        <SqlServerIcon className="h-4 w-4" />
-                        <span className="font-medium">{v.name}</span>
-                        <span className="text-muted-foreground">
-                          (fin: {new Date(v.endOfSupport).toLocaleDateString('es-ES')})
-                        </span>
-                      </div>
-                      <Badge variant={count > 0 ? "destructive" : "secondary"}>
-                        {count} inst.
-                      </Badge>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            
-            {/* Próximas a obsoletas */}
-            <div>
-              <h4 className="font-semibold text-warning mb-2 flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Próximas a quedar Obsoletas
-              </h4>
-              <div className="space-y-1.5">
-                {NEAR_OBSOLETE_VERSIONS.map(v => {
-                  const count = servers.filter(s => s.majorVersion === v.version).length;
-                  return (
-                    <div key={v.version} className="flex justify-between items-center text-sm p-2 rounded bg-warning/5 border border-warning/10">
-                      <div className="flex items-center gap-2">
-                        <SqlServerIcon className="h-4 w-4" />
-                        <span className="font-medium">{v.name}</span>
-                        <span className="text-muted-foreground">
-                          (fin: {new Date(v.endOfSupport).toLocaleDateString('es-ES')})
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-warning">~{getMonthsRemaining(v.endOfSupport)} meses</span>
-                        <Badge variant={count > 0 ? "outline" : "secondary"} className={count > 0 ? "border-warning text-warning" : ""}>
-                          {count} inst.
-                        </Badge>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              
-              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                <p className="text-xs text-muted-foreground flex items-start gap-2">
-                  <ExternalLink className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                  <span>
-                    Consulta las fechas de fin de soporte en{' '}
-                    <a 
-                      href="https://learn.microsoft.com/en-us/lifecycle/products/?products=sql-server" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      Microsoft Lifecycle
-                    </a>
-                  </span>
-                </p>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {ENGINES.map(engine => {
+              const versions = ENGINE_LIFECYCLE[engine];
+              return (
+                <div key={engine} className="space-y-2">
+                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                    <EngineIcon engine={engine} className="h-4 w-4" />
+                    {engine}
+                  </h4>
+                  <div className="space-y-1.5">
+                    {versions.map(v => {
+                      const count = allRows.filter(r => r.engine === engine && r.versionKey === v.version).length;
+                      const cls = classifyStatus(engine, v.version);
+                      const isObsolete = cls.status === 'obsolete';
+                      const isNear = cls.status === 'near-obsolete';
+                      const containerCls = isObsolete
+                        ? 'bg-red-500/5 border-red-500/10'
+                        : isNear
+                        ? 'bg-warning/5 border-warning/10'
+                        : 'bg-muted/30 border-muted';
+                      return (
+                        <div key={v.version} className={cn('flex justify-between items-center text-xs p-2 rounded border', containerCls)}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{v.name}</span>
+                            <span className="text-muted-foreground text-[10px]">
+                              fin: {new Date(v.endOfSupport).toLocaleDateString('es-ES')}
+                              {isNear && ` (~${getMonthsRemaining(v.endOfSupport)}m)`}
+                            </span>
+                          </div>
+                          <Badge
+                            variant={count > 0 && (isObsolete || isNear) ? (isObsolete ? 'destructive' : 'outline') : 'secondary'}
+                            className={cn({
+                              'border-warning text-warning': count > 0 && isNear,
+                            })}
+                          >
+                            {count}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+            <p className="text-xs text-muted-foreground flex items-start gap-2">
+              <ExternalLink className="h-3 w-3 mt-0.5 flex-shrink-0" />
+              <span>
+                Fuentes: {' '}
+                <a href="https://learn.microsoft.com/en-us/lifecycle/products/?products=sql-server" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Microsoft Lifecycle</a>
+                {' • '}
+                <a href="https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AWS RDS PostgreSQL</a>
+                {' • '}
+                <a href="https://docs.aws.amazon.com/AmazonElastiCache/latest/rg-ug/supported-engine-versions.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AWS ElastiCache Redis</a>
+                {' • '}
+                <a href="https://docs.aws.amazon.com/documentdb/latest/developerguide/engine-versions.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AWS DocumentDB</a>
+              </span>
+            </p>
           </div>
         </CardContent>
       </Card>
 
       {/* Gráficos */}
-      {(metrics?.obsolete || 0) > 0 && (
+      {metrics.obsolete > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Distribución por versión obsoleta */}
           <Card>
@@ -593,16 +788,16 @@ export default function ObsoleteInstances() {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <ChartContainer config={obsoleteChartConfig} className="mx-auto h-[200px]">
+              <ChartContainer config={pieChartConfig} className="mx-auto h-[200px]">
                 <PieChart>
                   <ChartTooltip
                     cursor={false}
-                    content={<ChartTooltipContent hideLabel nameKey="version" />}
+                    content={<ChartTooltipContent hideLabel nameKey="key" />}
                   />
                   <Pie
                     data={pieData}
                     dataKey="value"
-                    nameKey="version"
+                    nameKey="key"
                     cx="50%"
                     cy="50%"
                     innerRadius={40}
@@ -613,15 +808,15 @@ export default function ObsoleteInstances() {
                 </PieChart>
               </ChartContainer>
               <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs mt-2">
-                {pieData.map((item) => (
-                  <div key={item.version} className="flex items-center gap-1.5">
-                    <SqlServerIcon className="h-3.5 w-3.5" />
-                    <div 
-                      className="w-2.5 h-2.5 rounded-sm" 
-                      style={{ backgroundColor: obsoleteChartConfig[item.version as keyof typeof obsoleteChartConfig]?.color }}
+                {pieData.map(item => (
+                  <div key={item.key} className="flex items-center gap-1.5">
+                    <EngineIcon engine={item.engine} className="h-3.5 w-3.5" />
+                    <div
+                      className="w-2.5 h-2.5 rounded-sm"
+                      style={{ backgroundColor: item.fill }}
                     />
                     <span className="text-muted-foreground">
-                      {item.version} ({item.value})
+                      {item.label} ({item.value})
                     </span>
                   </div>
                 ))}
@@ -643,25 +838,22 @@ export default function ObsoleteInstances() {
                   Sin datos de ambientes con obsoletos
                 </div>
               ) : (
-                <ChartContainer 
-                  config={ambienteChartConfig} 
+                <ChartContainer
+                  config={ambienteChartConfig}
                   className="w-full"
                   style={{ height: Math.max(200, ambienteData.length * 35 + 40) }}
                 >
                   <BarChart data={ambienteData} layout="vertical" barSize={18} margin={{ left: 0, right: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis 
-                      dataKey="ambiente" 
-                      type="category" 
-                      tick={{ fontSize: 10 }} 
+                    <YAxis
+                      dataKey="ambiente"
+                      type="category"
+                      tick={{ fontSize: 10 }}
                       width={80}
                       interval={0}
                     />
-                    <ChartTooltip
-                      cursor={false}
-                      content={<ChartTooltipContent />}
-                    />
+                    <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
                     <Bar dataKey="obsolete" stackId="a" fill="var(--color-obsolete)" radius={[0, 0, 0, 0]} name="Obsoletos" />
                     <Bar dataKey="nearObsolete" stackId="a" fill="var(--color-nearObsolete)" radius={[0, 4, 4, 0]} name="Próx. Obsoletos" />
                   </BarChart>
@@ -690,7 +882,7 @@ export default function ObsoleteInstances() {
             Detalle de Instancias
           </CardTitle>
           <CardDescription>
-            {filteredServers.length} instancias {statusFilter === 'all' ? 'obsoletas o próximas' : statusFilter === 'obsolete' ? 'obsoletas' : 'próximas a obsoletas'}
+            {filteredRows.length} instancias {statusFilter === 'all' ? 'obsoletas o próximas' : statusFilter === 'obsolete' ? 'obsoletas' : 'próximas a obsoletas'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -715,6 +907,17 @@ export default function ObsoleteInstances() {
                 <SelectItem value="near-obsolete">Próx. Obsoletos</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={engineFilter} onValueChange={setEngineFilter}>
+              <SelectTrigger className="h-8 w-[140px]">
+                <SelectValue placeholder="Motor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los motores</SelectItem>
+                {ENGINES.map(e => (
+                  <SelectItem key={e} value={e}>{e}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={ambienteFilter} onValueChange={setAmbienteFilter}>
               <SelectTrigger className="h-8 w-[120px]">
                 <SelectValue placeholder="Ambiente" />
@@ -727,32 +930,33 @@ export default function ObsoleteInstances() {
               </SelectContent>
             </Select>
             <Select value={versionFilter} onValueChange={setVersionFilter}>
-              <SelectTrigger className="h-8 w-[120px]">
+              <SelectTrigger className="h-8 w-[140px]">
                 <SelectValue placeholder="Versión" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
-                {uniqueVersions.map(ver => (
-                  <SelectItem key={ver} value={ver}>SQL {ver}</SelectItem>
+                {uniqueVersionEntries.map(ver => (
+                  <SelectItem key={ver.key} value={ver.key}>{ver.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
           {/* Tabla */}
-          <div className="max-h-[400px] overflow-auto">
-            {filteredServers.length === 0 ? (
+          <div className="max-h-[500px] overflow-auto">
+            {filteredRows.length === 0 ? (
               <div className="text-center py-12">
                 <CalendarX2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No hay instancias obsoletas</h3>
                 <p className="text-muted-foreground">
-                  ¡Excelente! No tienes instancias con versiones fuera de soporte.
+                  ¡Excelente! No tienes instancias con versiones fuera de soporte para los filtros aplicados.
                 </p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Motor</TableHead>
                     <TableHead>Servidor</TableHead>
                     <TableHead>Ambiente</TableHead>
                     <TableHead>Versión</TableHead>
@@ -762,67 +966,71 @@ export default function ObsoleteInstances() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredServers.map((server, idx) => {
-                    const versionInfo = getVersionInfo(server.majorVersion);
-                    const isObsolete = OBSOLETE_VERSION_NAMES.includes(server.majorVersion);
-                    
+                  {filteredRows.map((row, idx) => {
+                    const isObsolete = row.status === 'obsolete';
                     return (
-                      <TableRow 
-                        key={`${server.instanceName}-${idx}`} 
+                      <TableRow
+                        key={`${row.engine}-${row.instanceName}-${idx}`}
                         className={cn({
                           'bg-red-500/5': isObsolete,
                           'bg-warning/5': !isObsolete,
                         })}
                       >
                         <TableCell>
+                          <Badge variant="outline" className={cn('gap-1.5', ENGINE_BADGE_CLASS[row.engine])}>
+                            <EngineIcon engine={row.engine} className="h-3 w-3" />
+                            {row.engine}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className="flex items-center gap-2">
                                 <div className="relative">
-                                  <SqlServerIcon className="h-4 w-4" />
+                                  <EngineIcon engine={row.engine} className="h-4 w-4" />
                                   <div className={cn('w-2 h-2 rounded-full absolute -bottom-0.5 -right-0.5 border border-background', {
                                     'bg-red-500': isObsolete,
                                     'bg-warning': !isObsolete,
                                   })} />
                                 </div>
-                                <span className="font-medium truncate max-w-[130px]">{server.serverName}</span>
+                                <span className="font-medium truncate max-w-[160px]">{row.serverName}</span>
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>Instancia: {server.instanceName}</p>
+                              <p>Instancia: {row.instanceName}</p>
+                              {row.hostingSite && <p>Hosting: {row.hostingSite}</p>}
                             </TooltipContent>
                           </Tooltip>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{server.ambiente}</Badge>
+                          <Badge variant="outline">{row.ambiente}</Badge>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">SQL {server.majorVersion}</span>
+                          <span className="font-medium">{row.versionDisplay}</span>
                         </TableCell>
                         <TableCell className="font-mono text-sm text-muted-foreground">
-                          {server.currentBuild || '-'}
+                          {row.build || '-'}
                         </TableCell>
                         <TableCell>
-                          {versionInfo && (
+                          {row.versionInfo && (
                             <Tooltip>
                               <TooltipTrigger>
                                 <span className={cn('text-sm', {
                                   'text-red-500': isObsolete,
                                   'text-warning': !isObsolete,
                                 })}>
-                                  {new Date(versionInfo.endOfSupport).toLocaleDateString('es-ES')}
+                                  {new Date(row.versionInfo.endOfSupport).toLocaleDateString('es-ES')}
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>
-                                {'yearsOutOfSupport' in versionInfo 
-                                  ? `Fuera de soporte hace ${versionInfo.yearsOutOfSupport} años`
-                                  : `Soporte termina en ~${getMonthsRemaining(versionInfo.endOfSupport)} meses`
-                                }
+                                {isObsolete
+                                  ? `Fuera de soporte hace ${getYearsOutOfSupport(row.versionInfo.endOfSupport)} años`
+                                  : `Soporte termina en ~${getMonthsRemaining(row.versionInfo.endOfSupport)} meses`}
                               </TooltipContent>
                             </Tooltip>
                           )}
                         </TableCell>
-                        <TableCell>{getVersionBadge(server.majorVersion)}</TableCell>
+                        <TableCell>{getStatusBadge(row.status)}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -848,4 +1056,3 @@ export default function ObsoleteInstances() {
     </div>
   );
 }
-

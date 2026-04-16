@@ -5,7 +5,10 @@
       "Bash(where dotnet:*)",
       "Bash(powershell.exe -Command \"Get-Command dotnet -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
       "Bash(winget install:*)",
-      "Bash(powershell.exe *)"
+      "Bash(powershell.exe *)",
+      "Bash(grep -l \"Postgres\\\\|Redis\\\\|DocDb\\\\|DocumentDb\" \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\sql-guard-observatory\\\\SQLGuardObservatory.API\\\\Models\"*.cs)",
+      "Bash(grep -l \"Postgres\\\\|Redis\\\\|DocumentDB\\\\|DocDb\" \"C:\\\\Users\\\\tobia\\\\OneDrive\\\\Desktop\\\\sql-guard-observatory\\\\src\\\\types\"*)",
+      "Bash(xargs grep *)"
     ]
   }
 }
