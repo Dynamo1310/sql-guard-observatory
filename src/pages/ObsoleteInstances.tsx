@@ -3,14 +3,17 @@
  * Muestra instancias con versiones fuera de soporte y próximas a quedar obsoletas
  * Soporta SQL Server, PostgreSQL (AWS RDS), Redis (AWS ElastiCache) y DocumentDB
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle, Clock, Server, RefreshCw, Download, Search,
   CalendarX2, ShieldAlert, Database, TrendingDown,
-  ExternalLink, Info, MemoryStick, FileJson, Layers,
+  ExternalLink, Info, Layers,
 } from 'lucide-react';
 import { SqlServerIcon } from '@/components/icons/SqlServerIcon';
+import { PostgreSqlIcon } from '@/components/icons/PostgreSqlIcon';
+import { RedisIcon } from '@/components/icons/RedisIcon';
+import { DocumentDbIcon } from '@/components/icons/DocumentDbIcon';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { patchingApi } from '@/services/api';
 import { postgresqlInventoryApi } from '@/services/postgresqlInventoryApi';
@@ -190,6 +193,58 @@ function getYearsOutOfSupport(endOfSupportDate: string): number {
   return Math.max(0, Math.floor(diffYears));
 }
 
+// Convierte el primer <svg> de un container a PNG (data URL).
+// Resuelve var(--xxx) leyendo getComputedStyle del propio container,
+// porque <ChartContainer> de shadcn inyecta los colores por CSS vars.
+async function chartContainerToPngDataUrl(
+  container: HTMLElement,
+  scale = 2,
+): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  const svgEl = container.querySelector('svg') as SVGSVGElement | null;
+  if (!svgEl) return null;
+
+  const bbox = svgEl.getBoundingClientRect();
+  const w = Math.max(1, Math.ceil(bbox.width));
+  const h = Math.max(1, Math.ceil(bbox.height));
+
+  const clone = svgEl.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute('width', String(w));
+  clone.setAttribute('height', String(h));
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+  let xml = new XMLSerializer().serializeToString(clone);
+  const containerStyle = window.getComputedStyle(container);
+  xml = xml.replace(/var\(--([a-zA-Z0-9_-]+)\)/g, (m, varName) => {
+    const v = containerStyle.getPropertyValue(`--${varName}`).trim();
+    return v || m;
+  });
+
+  const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+  try {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = url;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w * scale;
+    canvas.height = h * scale;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return { dataUrl: canvas.toDataURL('image/png'), width: w, height: h };
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 // ==================== ESTILOS POR MOTOR ====================
 
 const ENGINE_SHORT: Record<EngineKind, string> = {
@@ -224,9 +279,9 @@ function pieColorFor(engine: EngineKind, versionKey: string): string {
 function EngineIcon({ engine, className }: { engine: EngineKind; className?: string }) {
   switch (engine) {
     case 'SQL Server': return <SqlServerIcon className={className} />;
-    case 'PostgreSQL': return <Database className={className} />;
-    case 'Redis':      return <MemoryStick className={className} />;
-    case 'DocumentDB': return <FileJson className={className} />;
+    case 'PostgreSQL': return <PostgreSqlIcon className={className} />;
+    case 'Redis':      return <RedisIcon className={className} />;
+    case 'DocumentDB': return <DocumentDbIcon className={className} />;
   }
 }
 
@@ -246,6 +301,9 @@ export default function ObsoleteInstances() {
   const [ambienteFilter, setAmbienteFilter] = useState<string>('all');
   const [versionFilter, setVersionFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all'); // all, obsolete, near-obsolete
+
+  const pieChartRef = useRef<HTMLDivElement>(null);
+  const barChartRef = useRef<HTMLDivElement>(null);
 
   const sqlQuery = useQuery({
     queryKey: ['patchStatus'],
@@ -588,6 +646,54 @@ export default function ObsoleteInstances() {
       fgColor: { argb: 'FFFFE599' },
     };
 
+    // ===== Hoja "Gráficos" con imágenes embebidas =====
+    const chartImages: { title: string; subtitle: string; data: { dataUrl: string; width: number; height: number } | null }[] = [
+      {
+        title: 'Distribución por Versión Obsoleta',
+        subtitle: selectedEngine === 'all' ? 'Todos los motores' : selectedEngine,
+        data: pieChartRef.current ? await chartContainerToPngDataUrl(pieChartRef.current) : null,
+      },
+      {
+        title: 'Obsoletas por Ambiente',
+        subtitle: selectedEngine === 'all' ? 'Todos los motores' : selectedEngine,
+        data: barChartRef.current ? await chartContainerToPngDataUrl(barChartRef.current) : null,
+      },
+    ];
+
+    const renderableCharts = chartImages.filter(c => c.data !== null);
+    if (renderableCharts.length > 0) {
+      const chartsSheet = workbook.addWorksheet('Gráficos');
+      chartsSheet.getColumn(1).width = 90;
+
+      let currentRow = 1;
+      for (const chart of renderableCharts) {
+        if (!chart.data) continue;
+
+        const titleRow = chartsSheet.getRow(currentRow);
+        titleRow.getCell(1).value = chart.title;
+        titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF0066CC' } };
+        currentRow++;
+
+        const subtitleRow = chartsSheet.getRow(currentRow);
+        subtitleRow.getCell(1).value = chart.subtitle;
+        subtitleRow.getCell(1).font = { italic: true, color: { argb: 'FF666666' } };
+        currentRow += 1;
+
+        const base64 = chart.data.dataUrl.split(',')[1];
+        const imgId = workbook.addImage({ base64, extension: 'png' });
+        const imgWidth = Math.min(700, chart.data.width);
+        const imgHeight = chart.data.height * (imgWidth / chart.data.width);
+        chartsSheet.addImage(imgId, {
+          tl: { col: 0, row: currentRow },
+          ext: { width: imgWidth, height: imgHeight },
+        });
+
+        // Reservar filas debajo de la imagen (~20px por fila default)
+        const rowsForImage = Math.ceil(imgHeight / 20) + 2;
+        currentRow += rowsForImage;
+      }
+    }
+
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -875,6 +981,7 @@ export default function ObsoleteInstances() {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
+              <div ref={pieChartRef}>
               <ChartContainer config={pieChartConfig} className="mx-auto h-[200px]">
                 <PieChart>
                   <ChartTooltip
@@ -894,6 +1001,7 @@ export default function ObsoleteInstances() {
                   />
                 </PieChart>
               </ChartContainer>
+              </div>
               <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs mt-2">
                 {pieData.map(item => (
                   <div key={item.key} className="flex items-center gap-1.5">
@@ -925,6 +1033,7 @@ export default function ObsoleteInstances() {
                   Sin datos de ambientes con obsoletos
                 </div>
               ) : (
+                <div ref={barChartRef}>
                 <ChartContainer
                   config={ambienteChartConfig}
                   className="w-full"
@@ -945,6 +1054,7 @@ export default function ObsoleteInstances() {
                     <Bar dataKey="nearObsolete" stackId="a" fill="var(--color-nearObsolete)" radius={[0, 4, 4, 0]} name="Próx. Obsoletos" />
                   </BarChart>
                 </ChartContainer>
+                </div>
               )}
               <div className="flex justify-center gap-4 text-xs mt-2">
                 <div className="flex items-center gap-1.5">
