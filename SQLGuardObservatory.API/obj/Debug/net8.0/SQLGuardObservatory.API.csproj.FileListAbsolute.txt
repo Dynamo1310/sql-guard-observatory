@@ -208,3 +208,5 @@ C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\ob
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\obj\Debug\net8.0\SQLGuardObservatory.API.pdb
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\obj\Debug\net8.0\SQLGuardObservatory.API.genruntimeconfig.cache
 C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\obj\Debug\net8.0\ref\SQLGuardObservatory.API.dll
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Debug\net8.0\appsettings.Testing.json
+C:\Users\tobia\OneDrive\Desktop\sql-guard-observatory\SQLGuardObservatory.API\bin\Debug\net8.0\Dapper.dll

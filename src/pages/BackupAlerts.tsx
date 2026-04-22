@@ -95,12 +95,18 @@ interface AlertTypeState {
   alertIntervalMinutes: number;
   recipients: string[];
   ccRecipients: string[];
+  dmzRecipients: string[];
+  dmzCcRecipients: string[];
   newEmail: string;
   newCcEmail: string;
+  newDmzEmail: string;
+  newDmzCcEmail: string;
   saving: boolean;
   testing: boolean;
   running: boolean;
 }
+
+type RecipientScope = 'to' | 'cc' | 'dmzTo' | 'dmzCc';
 
 const createInitialState = (alertType: BackupAlertType): AlertTypeState => ({
   config: null,
@@ -114,8 +120,12 @@ const createInitialState = (alertType: BackupAlertType): AlertTypeState => ({
   alertIntervalMinutes: 240,
   recipients: [],
   ccRecipients: [],
+  dmzRecipients: [],
+  dmzCcRecipients: [],
   newEmail: '',
   newCcEmail: '',
+  newDmzEmail: '',
+  newDmzCcEmail: '',
   saving: false,
   testing: false,
   running: false,
@@ -150,6 +160,8 @@ export default function BackupAlerts() {
         alertIntervalMinutes: configData?.alertIntervalMinutes || 240,
         recipients: configData?.recipients || [],
         ccRecipients: configData?.ccRecipients || [],
+        dmzRecipients: configData?.dmzRecipients || [],
+        dmzCcRecipients: configData?.dmzCcRecipients || [],
       }));
     } catch (err: any) {
       console.error(`Error loading ${type} config:`, err);
@@ -207,6 +219,8 @@ export default function BackupAlerts() {
         alertIntervalMinutes: state.alertIntervalMinutes,
         recipients: state.recipients,
         ccRecipients: state.ccRecipients,
+        dmzRecipients: state.dmzRecipients,
+        dmzCcRecipients: state.dmzCcRecipients,
       };
 
       const result = await backupAlertsApi.updateConfig(type, payload);
@@ -272,10 +286,30 @@ export default function BackupAlerts() {
     }
   };
 
-  const addRecipient = (type: BackupAlertType, isCC = false) => {
+  const scopeToListField = (scope: RecipientScope): keyof Pick<AlertTypeState, 'recipients' | 'ccRecipients' | 'dmzRecipients' | 'dmzCcRecipients'> => {
+    switch (scope) {
+      case 'to':    return 'recipients';
+      case 'cc':    return 'ccRecipients';
+      case 'dmzTo': return 'dmzRecipients';
+      case 'dmzCc': return 'dmzCcRecipients';
+    }
+  };
+
+  const scopeToInputField = (scope: RecipientScope): keyof Pick<AlertTypeState, 'newEmail' | 'newCcEmail' | 'newDmzEmail' | 'newDmzCcEmail'> => {
+    switch (scope) {
+      case 'to':    return 'newEmail';
+      case 'cc':    return 'newCcEmail';
+      case 'dmzTo': return 'newDmzEmail';
+      case 'dmzCc': return 'newDmzCcEmail';
+    }
+  };
+
+  const addRecipient = (type: BackupAlertType, scope: RecipientScope) => {
     const state = type === 'full' ? fullState : logState;
     const setState = type === 'full' ? setFullState : setLogState;
-    const email = (isCC ? state.newCcEmail : state.newEmail).trim().toLowerCase();
+    const inputField = scopeToInputField(scope);
+    const listField = scopeToListField(scope);
+    const email = (state[inputField] as string).trim().toLowerCase();
 
     if (!email) return;
 
@@ -284,26 +318,25 @@ export default function BackupAlerts() {
       return;
     }
 
-    const list = isCC ? state.ccRecipients : state.recipients;
-    if (list.includes(email)) {
+    if ((state[listField] as string[]).includes(email)) {
       toast.error('Este email ya está agregado');
       return;
     }
 
-    if (isCC) {
-      setState(prev => ({ ...prev, ccRecipients: [...prev.ccRecipients, email], newCcEmail: '' }));
-    } else {
-      setState(prev => ({ ...prev, recipients: [...prev.recipients, email], newEmail: '' }));
-    }
+    setState(prev => ({
+      ...prev,
+      [listField]: [...(prev[listField] as string[]), email],
+      [inputField]: '',
+    }));
   };
 
-  const removeRecipient = (type: BackupAlertType, email: string, isCC = false) => {
+  const removeRecipient = (type: BackupAlertType, email: string, scope: RecipientScope) => {
     const setState = type === 'full' ? setFullState : setLogState;
-    if (isCC) {
-      setState(prev => ({ ...prev, ccRecipients: prev.ccRecipients.filter(r => r !== email) }));
-    } else {
-      setState(prev => ({ ...prev, recipients: prev.recipients.filter(r => r !== email) }));
-    }
+    const listField = scopeToListField(scope);
+    setState(prev => ({
+      ...prev,
+      [listField]: (prev[listField] as string[]).filter(r => r !== email),
+    }));
   };
 
   const formatDate = (dateStr?: string) => {
@@ -315,6 +348,77 @@ export default function BackupAlerts() {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  // Bloque reutilizable para un par input + lista de destinatarios
+  const RecipientBlock = ({
+    type,
+    scope,
+    label,
+    icon,
+    placeholder,
+    emails,
+    newEmailValue,
+    badgeVariant,
+    emptyText,
+    setState,
+  }: {
+    type: BackupAlertType;
+    scope: RecipientScope;
+    label: string;
+    icon: React.ReactNode;
+    placeholder: string;
+    emails: string[];
+    newEmailValue: string;
+    badgeVariant: 'secondary' | 'outline';
+    emptyText: string;
+    setState: React.Dispatch<React.SetStateAction<AlertTypeState>>;
+  }) => {
+    const inputField = scopeToInputField(scope);
+    return (
+      <div className="space-y-3">
+        <Label className="flex items-center gap-2">
+          {icon}
+          {label}
+        </Label>
+
+        <div className="flex gap-2">
+          <Input
+            type="email"
+            placeholder={placeholder}
+            value={newEmailValue}
+            onChange={(e) => setState(prev => ({ ...prev, [inputField]: e.target.value }))}
+            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRecipient(type, scope))}
+            disabled={!canConfigureAlerts}
+          />
+          <Button type="button" variant="outline" onClick={() => addRecipient(type, scope)} disabled={!canConfigureAlerts}>
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {emails.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {emails.map(email => (
+              <Badge key={email} variant={badgeVariant} className="py-1.5 px-3">
+                {icon}
+                <span className="ml-1.5">{email}</span>
+                {canConfigureAlerts && (
+                  <button
+                    type="button"
+                    onClick={() => removeRecipient(type, email, scope)}
+                    className="ml-2 hover:text-destructive"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">{emptyText}</p>
+        )}
+      </div>
+    );
   };
 
   // Componente reutilizable para la configuración de un tipo de alerta
@@ -412,99 +516,93 @@ export default function BackupAlerts() {
 
         <Separator />
 
-        {/* Destinatarios TO */}
-        <div className="space-y-3">
-          <Label className="flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            Destinatarios (TO)
-          </Label>
-
-          <div className="flex gap-2">
-            <Input
-              type="email"
-              placeholder="email@ejemplo.com"
-              value={state.newEmail}
-              onChange={(e) => setState(prev => ({ ...prev, newEmail: e.target.value }))}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRecipient(type, false))}
-              disabled={!canConfigureAlerts}
-            />
-            <Button type="button" variant="outline" onClick={() => addRecipient(type, false)} disabled={!canConfigureAlerts}>
-              <Plus className="h-4 w-4" />
-            </Button>
+        {/* === Destinatarios para servidores en RED === */}
+        <div className="space-y-1">
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Destinatarios para servidores en red
           </div>
-
-          {state.recipients.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {state.recipients.map(email => (
-                <Badge key={email} variant="secondary" className="py-1.5 px-3">
-                  <Mail className="h-3 w-3 mr-1.5" />
-                  {email}
-                  {canConfigureAlerts && (
-                    <button
-                      type="button"
-                      onClick={() => removeRecipient(type, email, false)}
-                      className="ml-2 hover:text-destructive"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  )}
-                </Badge>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No hay destinatarios configurados
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            Infraestructura, gestión de incidentes y DBAs. Aplica a todas las instancias NO-DMZ.
+          </p>
         </div>
+
+        <RecipientBlock
+          type={type}
+          scope="to"
+          label="Destinatarios (TO)"
+          icon={<Mail className="h-4 w-4" />}
+          placeholder="email@ejemplo.com"
+          emails={state.recipients}
+          newEmailValue={state.newEmail}
+          badgeVariant="secondary"
+          emptyText="No hay destinatarios configurados"
+          setState={setState}
+        />
+
+        <RecipientBlock
+          type={type}
+          scope="cc"
+          label="Copia (CC)"
+          icon={<UserPlus className="h-4 w-4" />}
+          placeholder="copia@ejemplo.com"
+          emails={state.ccRecipients}
+          newEmailValue={state.newCcEmail}
+          badgeVariant="outline"
+          emptyText="No hay destinatarios en copia"
+          setState={setState}
+        />
 
         <Separator />
 
-        {/* Destinatarios CC */}
-        <div className="space-y-3">
-          <Label className="flex items-center gap-2">
-            <UserPlus className="h-4 w-4" />
-            Copia (CC)
-          </Label>
+        {/* === Destinatarios para servidores DMZ (colapsable) === */}
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="dmz" className="border rounded-md px-3">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Lock className="h-4 w-4" />
+                Destinatarios para servidores DMZ
+                {(state.dmzRecipients.length > 0 || state.dmzCcRecipients.length > 0) && (
+                  <Badge variant="secondary" className="ml-1 text-xs">
+                    {state.dmzRecipients.length + state.dmzCcRecipients.length}
+                  </Badge>
+                )}
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-4 pt-2">
+              <p className="text-xs text-muted-foreground">
+                Aplica solo a instancias cuyo nombre contiene "DMZ". Si se deja vacío,
+                los atrasos en servidores DMZ no generarán alerta por mail.
+              </p>
 
-          <div className="flex gap-2">
-            <Input
-              type="email"
-              placeholder="copia@ejemplo.com"
-              value={state.newCcEmail}
-              onChange={(e) => setState(prev => ({ ...prev, newCcEmail: e.target.value }))}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRecipient(type, true))}
-              disabled={!canConfigureAlerts}
-            />
-            <Button type="button" variant="outline" onClick={() => addRecipient(type, true)} disabled={!canConfigureAlerts}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
+              <RecipientBlock
+                type={type}
+                scope="dmzTo"
+                label="Destinatarios DMZ (TO)"
+                icon={<Mail className="h-4 w-4" />}
+                placeholder="dba-dmz@ejemplo.com"
+                emails={state.dmzRecipients}
+                newEmailValue={state.newDmzEmail}
+                badgeVariant="secondary"
+                emptyText="Sin destinatarios DMZ — no se enviará mail por DMZ"
+                setState={setState}
+              />
 
-          {state.ccRecipients.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {state.ccRecipients.map(email => (
-                <Badge key={email} variant="outline" className="py-1.5 px-3">
-                  <UserPlus className="h-3 w-3 mr-1.5" />
-                  {email}
-                  {canConfigureAlerts && (
-                    <button
-                      type="button"
-                      onClick={() => removeRecipient(type, email, true)}
-                      className="ml-2 hover:text-destructive"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  )}
-                </Badge>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No hay destinatarios en copia
-            </p>
-          )}
-        </div>
+              <RecipientBlock
+                type={type}
+                scope="dmzCc"
+                label="Copia DMZ (CC)"
+                icon={<UserPlus className="h-4 w-4" />}
+                placeholder="copia-dmz@ejemplo.com"
+                emails={state.dmzCcRecipients}
+                newEmailValue={state.newDmzCcEmail}
+                badgeVariant="outline"
+                emptyText="Sin copia DMZ"
+                setState={setState}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         <Separator />
 

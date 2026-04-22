@@ -5,6 +5,7 @@ using SQLGuardObservatory.API.DTOs;
 using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Models;
 using SQLGuardObservatory.API.Models.Collectors;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace SQLGuardObservatory.API.Services;
@@ -40,6 +41,21 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
     private readonly ILogger<OverviewSummaryCacheService> _logger;
     private readonly string _connectionString;
     private static readonly SemaphoreSlim _refreshLock = new(1, 1);
+
+    // Último datacenter conocido por AG — evita que la columna Datacenter del Overview
+    // se blanquee cuando un ciclo del collector escribe null para todos los nodos del grupo.
+    private static readonly ConcurrentDictionary<string, string> _lastKnownDatacenterByAg =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // Réplicas (InstanceName) vistas históricamente por AG — permite que el resolver
+    // pair-aware siga funcionando aunque un ciclo solo releve uno de los dos nodos.
+    private static readonly ConcurrentDictionary<string, string[]> _lastKnownReplicasByAg =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // Último PrimaryReplicaName conocido por AG — garantiza un valor estable si en un
+    // ciclo puntual la DB no reporta o reporta inconsistente entre nodos.
+    private static readonly ConcurrentDictionary<string, string> _lastKnownPrimaryByAg =
+        new(StringComparer.OrdinalIgnoreCase);
     
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -221,6 +237,24 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
         {
             result.AGHealthStatuses = JsonSerializer.Deserialize<List<OverviewAGHealthDto>>(
                 cache.AGHealthStatusesJson, _jsonOptions) ?? new();
+
+            // El JSON almacenado puede haber sido escrito por una versión vieja del código
+            // (Datacenter = null) o por un ciclo transitorio. Rellenamos desde el diccionario
+            // en memoria y lo alimentamos con los valores buenos que vengan del blob, así
+            // nunca serveamos "-" una vez que al menos una resolución válida quedó registrada.
+            foreach (var ag in result.AGHealthStatuses)
+            {
+                if (string.IsNullOrEmpty(ag.Datacenter))
+                {
+                    if (!string.IsNullOrEmpty(ag.DisplayName) &&
+                        _lastKnownDatacenterByAg.TryGetValue(ag.DisplayName, out var remembered))
+                        ag.Datacenter = remembered;
+                }
+                else if (!string.IsNullOrEmpty(ag.DisplayName))
+                {
+                    _lastKnownDatacenterByAg[ag.DisplayName] = ag.Datacenter;
+                }
+            }
         }
 
         if (!string.IsNullOrEmpty(cache.BackupIssuesJson))
@@ -636,8 +670,8 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             var agName = group.Key;
             var nodes = group.ToList();
 
-            if (nodes.Count < 2)
-                continue;
+            // Procesamos incluso cuando en este ciclo se releva un solo nodo del par:
+            // así el AG nunca desaparece de la tabla por un fallo transitorio de captura.
 
             // Peor estado entre todos los nodos
             var worstState = nodes
@@ -646,6 +680,12 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
 
             // Max DatabaseCount (todos los nodos del AG tienen las mismas DBs)
             var dbCount = nodes.Max(n => n.DatabaseCount);
+
+            // No listamos AGs sin bases asociadas: son AGs creados pero vacíos,
+            // que no aportan información operativa al dashboard.
+            if (dbCount == 0)
+                continue;
+
             // Min SynchronizedCount (peor caso entre nodos)
             var syncCount = nodes.Min(n => n.SynchronizedCount);
             // Max SuspendedCount
@@ -660,13 +700,60 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                 nodes.Where(n => !string.IsNullOrEmpty(n.Details))
                      .Select(n => n.Details!));
 
+            // PrimaryReplicaName por consenso: si los nodos discrepan, gana el más votado.
+            // Tie-break ordinal para evitar oscilaciones no determinísticas entre refreshes.
             var primaryReplica = nodes
-                .Select(n => n.PrimaryReplicaName)
-                .FirstOrDefault(n => !string.IsNullOrEmpty(n));
+                .Where(n => !string.IsNullOrEmpty(n.PrimaryReplicaName))
+                .GroupBy(n => n.PrimaryReplicaName!, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.Key)
+                .FirstOrDefault();
 
-            var datacenter = nodes
-                .Select(n => n.Datacenter)
-                .FirstOrDefault(n => !string.IsNullOrEmpty(n));
+            // Si nadie reportó primary en este ciclo, reusamos el último conocido.
+            if (string.IsNullOrEmpty(primaryReplica) &&
+                _lastKnownPrimaryByAg.TryGetValue(agName, out var rememberedPrimary))
+                primaryReplica = rememberedPrimary;
+            else if (!string.IsNullOrEmpty(primaryReplica))
+                _lastKnownPrimaryByAg[agName] = primaryReplica;
+
+            // Acumulamos las réplicas vistas históricamente. Si un ciclo sólo trae 1 nodo,
+            // la unión con el par conocido deja que el resolver pair-aware siga clasificando.
+            var currentReplicas = nodes
+                .Select(n => n.InstanceName)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .Cast<string>()
+                .ToArray();
+
+            var knownReplicas = _lastKnownReplicasByAg.TryGetValue(agName, out var prev)
+                ? prev
+                : Array.Empty<string>();
+
+            var mergedReplicas = currentReplicas
+                .Union(knownReplicas, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (mergedReplicas.Length > 0)
+                _lastKnownReplicasByAg[agName] = mergedReplicas;
+
+            // Resolver pair-aware. Con la lista mergeada siempre tenemos el par completo
+            // aunque el ciclo actual solo haya podido capturar un nodo.
+            var datacenter = DatacenterResolver.Resolve(agName, primaryReplica, mergedReplicas);
+
+            // Fallback 1: valor ya clasificado y guardado en DB por ciclos anteriores.
+            if (string.IsNullOrEmpty(datacenter))
+                datacenter = nodes
+                    .Select(n => n.Datacenter)
+                    .FirstOrDefault(n => !string.IsNullOrEmpty(n));
+
+            // Fallback 2: último datacenter conocido en memoria — garantiza que una lectura
+            // fallida no blanquee la celda del frontend.
+            if (string.IsNullOrEmpty(datacenter) &&
+                _lastKnownDatacenterByAg.TryGetValue(agName, out var remembered))
+                datacenter = remembered;
+
+            if (!string.IsNullOrEmpty(datacenter))
+                _lastKnownDatacenterByAg[agName] = datacenter!;
 
             results.Add(new OverviewAGHealthDto
             {
@@ -690,29 +777,6 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             .OrderBy(r => stateOrder.GetValueOrDefault(r.WorstState, 6))
             .ThenBy(r => r.DisplayName)
             .ToList();
-    }
-
-    /// <summary>
-    /// Determina el datacenter a partir del nombre del AG y la réplica primaria.
-    /// Mitre = nodos terminados en 01/02 (principal), Martínez = nodos terminados en 51/52 (contingencia).
-    /// Excepciones: SSPR14ODMAG, SSPR16SOAAG, SSPR14AONAG y SSPR16BPMAG tienen -01=Mitre, -02=Martínez.
-    /// </summary>
-    private static string? DetermineDatacenter(string agName, string? primaryReplica)
-    {
-        if (string.IsNullOrEmpty(primaryReplica)) return null;
-        var replica = primaryReplica.ToUpperInvariant();
-        var ag = agName.ToUpperInvariant();
-
-        if (ag == "SSPR14ODMAG" || ag == "SSPR16SOAAG" || ag == "SSPR14AONAG" || ag == "SSPR16BPMAG")
-        {
-            if (replica.EndsWith("-01") || replica.EndsWith("\\01")) return "Mitre";
-            if (replica.EndsWith("-02") || replica.EndsWith("\\02")) return "Martínez";
-            return null;
-        }
-
-        if (replica.EndsWith("01") || replica.EndsWith("02")) return "Mitre";
-        if (replica.EndsWith("51") || replica.EndsWith("52")) return "Martínez";
-        return null;
     }
 
     /// <summary>

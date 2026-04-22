@@ -375,8 +375,11 @@ export default function Overview() {
                     >
                       Availability Group {getSortIndicatorAG('displayName')}
                     </TableHead>
-                    <TableHead className="text-center">
-                      Datacenter
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
+                      onClick={() => requestSortAG('datacenter')}
+                    >
+                      Datacenter {getSortIndicatorAG('datacenter')}
                     </TableHead>
                     <TableHead
                       className="cursor-pointer hover:bg-muted/50 transition-colors text-center"

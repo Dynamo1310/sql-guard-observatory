@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
+using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
 using SQLGuardObservatory.API.Services;
@@ -48,14 +49,21 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
         "C:\\", "E:\\", "F:\\", "G:\\", "H:\\"
     };
 
+    private readonly IConfiguration _configuration;
+
+    // Las instancias DMZ se relevan ruteando la query vía linked server en el jump.
+    protected override bool IncludeDMZ => true;
+
     public DiscosCollector(
         ILogger<DiscosCollector> logger,
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        IServiceScopeFactory scopeFactory) 
+        IServiceScopeFactory scopeFactory,
+        IConfiguration configuration)
         : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
+        _configuration = configuration;
     }
 
     protected override async Task<DiscosMetrics> CollectFromInstanceAsync(
@@ -85,7 +93,8 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
                 // SQL 2008 R2+ con sys.dm_os_volume_stats
                 try
                 {
-                    spaceData = await ExecuteQueryAsync(instance.InstanceName, GetVolumeStatsQuery(), timeoutSeconds, ct);
+                    var (volTarget, volRouted) = DmzQueryRouter.Route(_configuration, instance, GetVolumeStatsQuery());
+                    spaceData = await ExecuteQueryAsync(volTarget, volRouted, timeoutSeconds, ct);
                 }
                 catch (Exception ex) when (ex.Message.Contains("dm_os_volume_stats"))
                 {
@@ -99,7 +108,8 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
             if (!hasVolumeStats)
             {
                 // SQL 2005/2008 RTM: Usar xp_fixeddrives
-                spaceData = await ExecuteQueryAsync(instance.InstanceName, GetXpFixedDrivesQuery(), timeoutSeconds, ct);
+                var (xpTarget, xpRouted) = DmzQueryRouter.Route(_configuration, instance, GetXpFixedDrivesQuery());
+                spaceData = await ExecuteQueryAsync(xpTarget, xpRouted, timeoutSeconds, ct);
             }
 
             // Análisis de archivos (espacio interno) - solo si tiene dm_os_volume_stats o es SQL 2008+
@@ -107,8 +117,8 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
             {
                 try
                 {
-                    fileAnalysisData = await ExecuteQueryAsync(instance.InstanceName, 
-                        GetFileAnalysisQuery(), timeoutSeconds + 10, ct);
+                    var (faTarget, faRouted) = DmzQueryRouter.Route(_configuration, instance, GetFileAnalysisQuery());
+                    fileAnalysisData = await ExecuteQueryAsync(faTarget, faRouted, timeoutSeconds + 10, ct);
                 }
                 catch (Exception ex)
                 {
@@ -122,7 +132,8 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
             {
                 try
                 {
-                    rolesData = await ExecuteQueryAsync(instance.InstanceName, GetRolesQuery(), 5, ct);
+                    var (rolesTarget, rolesRouted) = DmzQueryRouter.Route(_configuration, instance, GetRolesQuery());
+                    rolesData = await ExecuteQueryAsync(rolesTarget, rolesRouted, 5, ct);
                 }
                 catch { /* Ignorar errores de roles */ }
             }
@@ -131,7 +142,8 @@ public class DiscosCollector : CollectorBase<DiscosCollector.DiscosMetrics>
                 // SQL 2005: usar sysaltfiles para roles
                 try
                 {
-                    rolesData = await ExecuteQueryAsync(instance.InstanceName, GetSysaltfilesRolesQuery(), 5, ct);
+                    var (saTarget, saRouted) = DmzQueryRouter.Route(_configuration, instance, GetSysaltfilesRolesQuery());
+                    rolesData = await ExecuteQueryAsync(saTarget, saRouted, 5, ct);
                 }
                 catch { /* Ignorar errores */ }
             }

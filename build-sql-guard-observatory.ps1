@@ -109,8 +109,10 @@ if (-not (Test-Path $distFolder)) {
 Write-Host ">>> [Frontend] Creando carpeta destino: $frontendOut"
 New-Item -ItemType Directory -Force -Path $frontendOut | Out-Null
 
-Write-Host ">>> [Frontend] Copiando el contenido de 'dist' a la carpeta compilada..."
-robocopy $distFolder $frontendOut /E | Out-Null
+Write-Host ">>> [Frontend] Sincronizando 'dist' con la carpeta compilada (espejo)..."
+# /MIR deja $frontendOut idéntico a $distFolder: copia lo nuevo y PURGA lo viejo,
+# evitando que se acumulen chunks con hash obsoleto en assets/ tras cada build.
+robocopy $distFolder $frontendOut /MIR | Out-Null
 
 Set-Location $initialLocation
 

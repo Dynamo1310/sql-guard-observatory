@@ -5838,6 +5838,8 @@ export interface BackupAlertConfigDto {
   alertIntervalMinutes: number;
   recipients: string[];
   ccRecipients: string[];
+  dmzRecipients: string[];
+  dmzCcRecipients: string[];
   lastRunAt?: string;
   lastAlertSentAt?: string;
   createdAt: string;
@@ -5862,6 +5864,8 @@ export interface UpdateBackupAlertRequest {
   alertIntervalMinutes?: number;
   recipients?: string[];
   ccRecipients?: string[];
+  dmzRecipients?: string[];
+  dmzCcRecipients?: string[];
 }
 
 export interface BackupAlertHistoryDto {

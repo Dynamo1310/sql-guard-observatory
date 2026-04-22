@@ -28,6 +28,7 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
     public abstract string DisplayName { get; }
     public bool IsRunning => _isRunning;
     protected virtual bool IncludeAWS => false;
+    protected virtual bool IncludeDMZ => false;
 
     protected CollectorBase(
         ILogger logger,
@@ -89,7 +90,10 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
             var executionLog = await _configService.StartExecutionLogAsync(CollectorName, "Scheduled", null, ct);
             
             // Obtener instancias
-            var instances = await _instanceProvider.GetFilteredInstancesAsync(includeAWS: IncludeAWS, ct: ct);
+            var instances = await _instanceProvider.GetFilteredInstancesAsync(
+                includeDMZ: IncludeDMZ,
+                includeAWS: IncludeAWS,
+                ct: ct);
             _logger.LogInformation("Collector {CollectorName} starting for {Count} instances", CollectorName, instances.Count);
 
             // Pre-procesamiento (opcional, para identificar grupos de instancias como AlwaysOn)
@@ -205,17 +209,31 @@ public abstract class CollectorBase<TResult> : ICollector where TResult : class,
 
         try
         {
-            // Verificar conectividad (pasando hostingSite/ambiente para resolución de credenciales)
-            if (!await _connectionFactory.TestConnectionAsync(instance.InstanceName, config.TimeoutSeconds, ct, instance.HostingSite, instance.Ambiente))
+            // Las instancias DMZ no son alcanzables directamente desde el backend:
+            // el collector que las incluye (IncludeDMZ=true) es responsable de rutear
+            // la query vía el jump server. Saltamos el probe TCP y el chequeo de versión
+            // directo — no hay forma de hacerlos sin alcanzar al DMZ.
+            if (!instance.IsDMZ)
             {
-                _logger.LogDebug("Instance {InstanceName} not reachable, skipping", instance.InstanceName);
-                return result; // Success = false, Error = null (skipped)
-            }
+                // Verificar conectividad (pasando hostingSite/ambiente para resolución de credenciales)
+                if (!await _connectionFactory.TestConnectionAsync(instance.InstanceName, config.TimeoutSeconds, ct, instance.HostingSite, instance.Ambiente))
+                {
+                    _logger.LogDebug("Instance {InstanceName} not reachable, skipping", instance.InstanceName);
+                    return result; // Success = false, Error = null (skipped)
+                }
 
-            // Obtener versión de SQL Server si no la tenemos
-            if (instance.SqlMajorVersion == 0)
+                // Obtener versión de SQL Server si no la tenemos
+                if (instance.SqlMajorVersion == 0)
+                {
+                    instance.SqlMajorVersion = await _connectionFactory.GetSqlMajorVersionAsync(instance.InstanceName, 10, ct, instance.HostingSite, instance.Ambiente);
+                }
+            }
+            else if (instance.SqlMajorVersion == 0)
             {
-                instance.SqlMajorVersion = await _connectionFactory.GetSqlMajorVersionAsync(instance.InstanceName, 10, ct, instance.HostingSite, instance.Ambiente);
+                // Default seguro para DMZ cuando el inventario no informa versión.
+                // SQL 2019 (15) cubre la mayoría de features modernos — las queries
+                // siguen filtrando por SERVERPROPERTY al ejecutarse remotamente.
+                instance.SqlMajorVersion = 15;
             }
 
             // Obtener query específica para la versión

@@ -130,7 +130,9 @@ public class BackupAlertService : IBackupAlertService
         if (request.AlertIntervalMinutes.HasValue) config.AlertIntervalMinutes = request.AlertIntervalMinutes.Value;
         if (request.Recipients != null) config.Recipients = string.Join(",", request.Recipients);
         if (request.CcRecipients != null) config.CcRecipients = string.Join(",", request.CcRecipients);
-        
+        if (request.DmzRecipients != null) config.DmzRecipients = string.Join(",", request.DmzRecipients);
+        if (request.DmzCcRecipients != null) config.DmzCcRecipients = string.Join(",", request.DmzCcRecipients);
+
         config.UpdatedAt = LocalClockAR.Now;
         config.UpdatedByUserId = userId;
 
@@ -229,7 +231,8 @@ public class BackupAlertService : IBackupAlertService
     }
 
     /// <summary>
-    /// Envía un email de prueba para el tipo especificado
+    /// Envía un email de prueba para el tipo especificado. Manda dos mails si hay
+    /// destinatarios DMZ configurados: uno de prueba a Red y otro a DMZ.
     /// </summary>
     public async Task<(bool success, string message)> TestAlertAsync(BackupAlertType alertType)
     {
@@ -239,34 +242,57 @@ public class BackupAlertService : IBackupAlertService
             return (false, "No hay configuración de alertas");
         }
 
-        var recipients = config.Recipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>();
-        var ccRecipients = config.CcRecipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>();
+        var networkRecipients = SplitEmails(config.Recipients);
+        var networkCc = SplitEmails(config.CcRecipients);
+        var dmzRecipients = SplitEmails(config.DmzRecipients);
+        var dmzCc = SplitEmails(config.DmzCcRecipients);
 
-        if (recipients.Count == 0)
+        if (networkRecipients.Count == 0 && dmzRecipients.Count == 0)
         {
-            return (false, "No hay destinatarios configurados");
+            return (false, "No hay destinatarios configurados (ni red ni DMZ)");
         }
 
         var status = await GetStatusAsync();
-        var issues = FilterIssuesByType(status.UnassignedIssues, alertType);
-        var htmlBody = GenerateAlertEmailBody(issues, alertType, isTest: true);
+        var filtered = FilterIssuesByType(status.UnassignedIssues, alertType);
+        var (networkIssues, dmzIssues) = PartitionByDmz(filtered);
         var typeName = alertType == BackupAlertType.Full ? "FULL" : "LOG";
 
-        var success = await _smtpService.SendEmailWithCcAsync(
-            recipients,
-            ccRecipients,
-            $"[DBA] Alerta de Backups {typeName} - PRUEBA",
-            htmlBody,
-            $"BackupAlert{typeName}Test"
-        );
+        var summary = new List<string>();
+        var anyFailure = false;
 
-        return success 
-            ? (true, $"Email de prueba ({typeName}) enviado a {recipients.Count} destinatarios y {ccRecipients.Count} en CC")
-            : (false, "Error al enviar email de prueba");
+        if (networkRecipients.Count > 0)
+        {
+            var body = GenerateAlertEmailBody(networkIssues, alertType, isTest: true, scopeLabel: "Red");
+            var ok = await _smtpService.SendEmailWithCcAsync(
+                networkRecipients, networkCc,
+                $"[DBA] Alerta de Backups {typeName} (Red) - PRUEBA",
+                body,
+                $"BackupAlert{typeName}NetworkTest");
+            if (ok) summary.Add($"Red: {networkRecipients.Count} TO / {networkCc.Count} CC");
+            else { anyFailure = true; summary.Add("Red: error al enviar"); }
+        }
+
+        if (dmzRecipients.Count > 0)
+        {
+            var body = GenerateAlertEmailBody(dmzIssues, alertType, isTest: true, scopeLabel: "DMZ");
+            var ok = await _smtpService.SendEmailWithCcAsync(
+                dmzRecipients, dmzCc,
+                $"[DBA] Alerta de Backups {typeName} (DMZ) - PRUEBA",
+                body,
+                $"BackupAlert{typeName}DmzTest");
+            if (ok) summary.Add($"DMZ: {dmzRecipients.Count} TO / {dmzCc.Count} CC");
+            else { anyFailure = true; summary.Add("DMZ: error al enviar"); }
+        }
+
+        return anyFailure
+            ? (false, $"Prueba {typeName}: " + string.Join(" | ", summary))
+            : (true,  $"Prueba {typeName} enviada — " + string.Join(" | ", summary));
     }
 
     /// <summary>
-    /// Ejecuta la verificación y envía alerta para el tipo especificado
+    /// Ejecuta la verificación y envía alertas. Separa los issues por red vs DMZ y
+    /// emite hasta dos mails independientes, cada uno con sus propios destinatarios.
+    /// Si DmzRecipients está vacío, los backups DMZ atrasados NO generan mail.
     /// </summary>
     public async Task<(bool success, string message)> RunCheckAsync(BackupAlertType alertType)
     {
@@ -282,12 +308,10 @@ public class BackupAlertService : IBackupAlertService
         config.LastRunAt = LocalClockAR.Now;
         await _context.SaveChangesAsync();
 
-        // Obtener estado actual
+        // Obtener estado actual y particionar
         var status = await GetStatusAsync();
-        
-        // Filtrar issues por tipo
         var effectiveIssues = FilterIssuesByType(status.UnassignedIssues, alertType);
-        
+
         if (effectiveIssues.Count == 0)
         {
             _logger.LogInformation("No hay backups {Type} atrasados sin asignar", typeName);
@@ -307,51 +331,113 @@ public class BackupAlertService : IBackupAlertService
             }
         }
 
-        // Enviar alerta
-        var recipients = config.Recipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>();
-        var ccRecipients = config.CcRecipients?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>();
+        var (networkIssues, dmzIssues) = PartitionByDmz(effectiveIssues);
+        var networkRecipients = SplitEmails(config.Recipients);
+        var networkCc = SplitEmails(config.CcRecipients);
+        var dmzRecipients = SplitEmails(config.DmzRecipients);
+        var dmzCc = SplitEmails(config.DmzCcRecipients);
 
-        if (recipients.Count == 0)
+        var anyMailSent = false;
+        var anyMailFailed = false;
+        var summary = new List<string>();
+
+        // Mail 1: Red — solo si hay instancias de red Y destinatarios configurados.
+        if (networkIssues.Count > 0 && networkRecipients.Count > 0)
         {
-            _logger.LogWarning("No hay destinatarios configurados para alertas de backup {Type}", typeName);
-            return (false, "No hay destinatarios configurados");
+            var body = GenerateAlertEmailBody(networkIssues, alertType, isTest: false, scopeLabel: "Red");
+            var ok = await _smtpService.SendEmailWithCcAsync(
+                networkRecipients, networkCc,
+                $"[DBA] Alerta: {networkIssues.Count} Instancia(s) en Red con Backups {typeName} Atrasados",
+                body,
+                $"BackupAlert{typeName}Network");
+
+            await RegisterHistoryAsync(config.Id, alertType, networkRecipients.Count, networkCc.Count, networkIssues, ok, "Red");
+            if (ok) { anyMailSent = true; summary.Add($"Red: {networkIssues.Count} instancias → {networkRecipients.Count} TO"); }
+            else    { anyMailFailed = true; summary.Add("Red: error al enviar"); }
+        }
+        else if (networkIssues.Count > 0)
+        {
+            _logger.LogWarning("Hay {Count} backups {Type} atrasados en red pero no hay destinatarios configurados", networkIssues.Count, typeName);
+            summary.Add($"Red: {networkIssues.Count} instancias sin destinatarios (no se envió)");
         }
 
-        var htmlBody = GenerateAlertEmailBody(effectiveIssues, alertType, isTest: false);
-
-        var success = await _smtpService.SendEmailWithCcAsync(
-            recipients,
-            ccRecipients,
-            $"[DBA] Alerta: {effectiveIssues.Count} Instancia(s) con Backups {typeName} Atrasados",
-            htmlBody,
-            $"BackupAlert{typeName}"
-        );
-
-        // Registrar en historial (hora Argentina)
-        var history = new BackupAlertHistory
+        // Mail 2: DMZ — solo si hay instancias DMZ Y destinatarios DMZ configurados.
+        // Si DmzRecipients está vacío, se omite intencionalmente (decisión del usuario).
+        if (dmzIssues.Count > 0 && dmzRecipients.Count > 0)
         {
-            ConfigId = config.Id,
-            AlertType = alertType,
-            SentAt = LocalClockAR.Now,
-            RecipientCount = recipients.Count,
-            CcCount = ccRecipients.Count,
-            InstancesAffected = string.Join(",", effectiveIssues.Select(i => !string.IsNullOrEmpty(i.DisplayName) ? i.DisplayName : i.InstanceName)),
-            Success = success,
-            ErrorMessage = success ? null : "Error al enviar email"
-        };
+            var body = GenerateAlertEmailBody(dmzIssues, alertType, isTest: false, scopeLabel: "DMZ");
+            var ok = await _smtpService.SendEmailWithCcAsync(
+                dmzRecipients, dmzCc,
+                $"[DBA] Alerta: {dmzIssues.Count} Instancia(s) DMZ con Backups {typeName} Atrasados",
+                body,
+                $"BackupAlert{typeName}Dmz");
 
-        _context.BackupAlertHistories.Add(history);
-        
-        if (success)
+            await RegisterHistoryAsync(config.Id, alertType, dmzRecipients.Count, dmzCc.Count, dmzIssues, ok, "DMZ");
+            if (ok) { anyMailSent = true; summary.Add($"DMZ: {dmzIssues.Count} instancias → {dmzRecipients.Count} TO"); }
+            else    { anyMailFailed = true; summary.Add("DMZ: error al enviar"); }
+        }
+        else if (dmzIssues.Count > 0)
+        {
+            _logger.LogInformation(
+                "Hay {Count} backups {Type} atrasados en DMZ pero no hay destinatarios DMZ configurados (no se envía)",
+                dmzIssues.Count, typeName);
+            summary.Add($"DMZ: {dmzIssues.Count} instancias sin destinatarios DMZ (omitido)");
+        }
+
+        if (anyMailSent)
         {
             config.LastAlertSentAt = LocalClockAR.Now;
+            await _context.SaveChangesAsync();
         }
-        
-        await _context.SaveChangesAsync();
 
-        return success
-            ? (true, $"Alerta {typeName} enviada a {recipients.Count} destinatarios para {effectiveIssues.Count} backups atrasados")
-            : (false, "Error al enviar alerta");
+        if (summary.Count == 0)
+        {
+            return (true, $"Alerta {typeName}: nada que notificar");
+        }
+
+        var summaryText = $"Alerta {typeName}: " + string.Join(" | ", summary);
+        return anyMailFailed ? (false, summaryText) : (true, summaryText);
+    }
+
+    private async Task RegisterHistoryAsync(
+        int configId, BackupAlertType alertType,
+        int recipientCount, int ccCount,
+        List<BackupIssueSummaryDto> issues, bool success, string scopeLabel)
+    {
+        _context.BackupAlertHistories.Add(new BackupAlertHistory
+        {
+            ConfigId = configId,
+            AlertType = alertType,
+            SentAt = LocalClockAR.Now,
+            RecipientCount = recipientCount,
+            CcCount = ccCount,
+            InstancesAffected = $"[{scopeLabel}] " + string.Join(",",
+                issues.Select(i => !string.IsNullOrEmpty(i.DisplayName) ? i.DisplayName : i.InstanceName)),
+            Success = success,
+            ErrorMessage = success ? null : $"Error al enviar email ({scopeLabel})"
+        });
+        await _context.SaveChangesAsync();
+    }
+
+    private static List<string> SplitEmails(string? commaSeparated) =>
+        commaSeparated?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+            ?? new List<string>();
+
+    private static (List<BackupIssueSummaryDto> network, List<BackupIssueSummaryDto> dmz) PartitionByDmz(
+        List<BackupIssueSummaryDto> issues)
+    {
+        var network = new List<BackupIssueSummaryDto>();
+        var dmz = new List<BackupIssueSummaryDto>();
+        foreach (var issue in issues)
+        {
+            var name = !string.IsNullOrEmpty(issue.DisplayName) ? issue.DisplayName : issue.InstanceName;
+            if (name.Contains("DMZ", StringComparison.OrdinalIgnoreCase)
+                || issue.InstanceName.Contains("DMZ", StringComparison.OrdinalIgnoreCase))
+                dmz.Add(issue);
+            else
+                network.Add(issue);
+        }
+        return (network, dmz);
     }
 
     /// <summary>
@@ -420,17 +506,18 @@ public class BackupAlertService : IBackupAlertService
     }
 
     /// <summary>
-    /// Genera el HTML del email de alerta - Formato minimalista y profesional
+    /// Genera el HTML del email de alerta - Formato minimalista y profesional.
+    /// scopeLabel ("Red" o "DMZ") distingue visualmente qué grupo de instancias incluye.
     /// </summary>
-    private string GenerateAlertEmailBody(List<BackupIssueSummaryDto> issues, BackupAlertType alertType, bool isTest)
+    private string GenerateAlertEmailBody(List<BackupIssueSummaryDto> issues, BackupAlertType alertType, bool isTest, string scopeLabel = "Red")
     {
         var now = LocalClockAR.Now;
         var typeName = alertType == BackupAlertType.Full ? "FULL" : "LOG";
-        var testNotice = isTest 
-            ? "<p style='color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; margin-bottom: 16px;'><strong>Nota:</strong> Este es un email de prueba.</p>" 
+        var testNotice = isTest
+            ? "<p style='color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; margin-bottom: 16px;'><strong>Nota:</strong> Este es un email de prueba.</p>"
             : "";
 
-        var issueRows = string.Join("", issues.Select(issue => 
+        var issueRows = string.Join("", issues.Select(issue =>
         {
             // Usar DisplayName (nombre del AG si aplica, sino InstanceName)
             var displayName = !string.IsNullOrEmpty(issue.DisplayName) ? issue.DisplayName : issue.InstanceName;
@@ -440,9 +527,12 @@ public class BackupAlertService : IBackupAlertService
                 </tr>";
         }));
 
+        var scopeDescription = scopeLabel == "DMZ"
+            ? "en servidores DMZ"
+            : "en servidores en red";
         var description = alertType == BackupAlertType.Full
-            ? "backups FULL (completos) atrasados"
-            : "backups de LOG (transaccionales) atrasados";
+            ? $"backups FULL (completos) atrasados {scopeDescription}"
+            : $"backups de LOG (transaccionales) atrasados {scopeDescription}";
 
         return $@"
 <!DOCTYPE html>
@@ -477,7 +567,7 @@ public class BackupAlertService : IBackupAlertService
     <hr style='border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;'>
     
     <p style='font-size: 11px; color: #888;'>
-        Alerta automática de Backups {typeName} generada el {now:dd/MM/yyyy} a las {now:HH:mm} hs (Argentina)
+        Alerta automática de Backups {typeName} ({scopeLabel}) generada el {now:dd/MM/yyyy} a las {now:HH:mm} hs (Argentina)
     </p>
     
 </body>

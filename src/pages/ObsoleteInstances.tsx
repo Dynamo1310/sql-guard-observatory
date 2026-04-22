@@ -100,25 +100,33 @@ const ENGINE_LIFECYCLE: Record<EngineKind, VersionLifecycle[]> = {
     { version: '2014',    name: 'SQL Server 2014',    endOfSupport: '2024-07-09' },
     { version: '2016',    name: 'SQL Server 2016',    endOfSupport: '2026-07-14' },
   ],
+  // PostgreSQL on Amazon RDS — fechas de fin de soporte estándar
+  // https://docs.aws.amazon.com/es_es/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-release-calendar.html
   'PostgreSQL': [
-    { version: '11', name: 'PostgreSQL 11', endOfSupport: '2024-02-29' },
-    { version: '12', name: 'PostgreSQL 12', endOfSupport: '2025-02-28' },
-    { version: '13', name: 'PostgreSQL 13', endOfSupport: '2026-02-28' },
-    { version: '14', name: 'PostgreSQL 14', endOfSupport: '2026-11-12' },
-    { version: '15', name: 'PostgreSQL 15', endOfSupport: '2027-11-11' },
-    { version: '16', name: 'PostgreSQL 16', endOfSupport: '2028-11-09' },
-    { version: '17', name: 'PostgreSQL 17', endOfSupport: '2029-11-08' },
+    { version: '9.6', name: 'PostgreSQL 9.6', endOfSupport: '2021-11-11' },
+    { version: '10',  name: 'PostgreSQL 10',  endOfSupport: '2022-11-10' },
+    { version: '11',  name: 'PostgreSQL 11',  endOfSupport: '2024-02-29' },
+    { version: '12',  name: 'PostgreSQL 12',  endOfSupport: '2025-02-28' },
+    { version: '13',  name: 'PostgreSQL 13',  endOfSupport: '2026-02-28' },
+    { version: '14',  name: 'PostgreSQL 14',  endOfSupport: '2027-02-28' },
+    { version: '15',  name: 'PostgreSQL 15',  endOfSupport: '2028-02-29' },
+    { version: '16',  name: 'PostgreSQL 16',  endOfSupport: '2029-02-28' },
+    { version: '17',  name: 'PostgreSQL 17',  endOfSupport: '2030-02-28' },
+    { version: '18',  name: 'PostgreSQL 18',  endOfSupport: '2031-02-28' },
   ],
+  // Redis OSS on Amazon ElastiCache — fechas de fin de soporte estándar
+  // https://docs.aws.amazon.com/es_es/AmazonElastiCache/latest/dg/extended-support-versions.html
+  // Versiones sin EOS publicada (7.x) se consideran soportadas.
   'Redis': [
-    { version: '2.6', name: 'Redis 2.6', endOfSupport: '2024-04-30' },
-    { version: '2.8', name: 'Redis 2.8', endOfSupport: '2024-04-30' },
-    { version: '3.2', name: 'Redis 3.2', endOfSupport: '2024-04-30' },
-    { version: '4.0', name: 'Redis 4.0', endOfSupport: '2024-08-31' },
-    { version: '5.0', name: 'Redis 5.0', endOfSupport: '2024-08-31' },
-    { version: '6.0', name: 'Redis 6.0', endOfSupport: '2024-08-31' },
+    { version: '4', name: 'Redis OSS 4', endOfSupport: '2026-01-31' },
+    { version: '5', name: 'Redis OSS 5', endOfSupport: '2026-01-31' },
+    { version: '6', name: 'Redis OSS 6', endOfSupport: '2027-01-31' },
   ],
+  // Amazon DocumentDB — fechas de fin de soporte estándar
+  // https://docs.aws.amazon.com/es_es/documentdb/latest/developerguide/docdb-version-support-dates.html
+  // Versiones sin EOS publicada (4.0, 5.0, 8.0) se consideran soportadas.
   'DocumentDB': [
-    { version: '3.6', name: 'DocumentDB 3.6', endOfSupport: '2023-04-30' },
+    { version: '3.6', name: 'DocumentDB 3.6', endOfSupport: '2026-03-30' },
   ],
 };
 
@@ -960,11 +968,11 @@ export default function ObsoleteInstances() {
                 Fuentes: {' '}
                 <a href="https://learn.microsoft.com/en-us/lifecycle/products/?products=sql-server" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Microsoft Lifecycle</a>
                 {' • '}
-                <a href="https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AWS RDS PostgreSQL</a>
+                <a href="https://docs.aws.amazon.com/es_es/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-release-calendar.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AWS RDS PostgreSQL</a>
                 {' • '}
-                <a href="https://docs.aws.amazon.com/AmazonElastiCache/latest/rg-ug/supported-engine-versions.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AWS ElastiCache Redis</a>
+                <a href="https://docs.aws.amazon.com/es_es/AmazonElastiCache/latest/dg/extended-support-versions.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AWS ElastiCache Redis</a>
                 {' • '}
-                <a href="https://docs.aws.amazon.com/documentdb/latest/developerguide/engine-versions.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AWS DocumentDB</a>
+                <a href="https://docs.aws.amazon.com/es_es/documentdb/latest/developerguide/docdb-version-support-dates.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">AWS DocumentDB</a>
               </span>
             </p>
           </div>

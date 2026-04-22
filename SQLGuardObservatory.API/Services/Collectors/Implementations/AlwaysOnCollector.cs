@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
+using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
 using SQLGuardObservatory.API.Services;
@@ -26,17 +27,25 @@ namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 /// </summary>
 public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics>
 {
+    private readonly IConfiguration _configuration;
+
     public override string CollectorName => "AlwaysOn";
     public override string DisplayName => "AlwaysOn";
+
+    // AlwaysOn es el único collector que releva también instancias DMZ: lo hace
+    // ruteando la query vía linked server en el jump server (DMZ:JumpServer).
+    protected override bool IncludeDMZ => true;
 
     public AlwaysOnCollector(
         ILogger<AlwaysOnCollector> logger,
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        IServiceScopeFactory scopeFactory) 
+        IServiceScopeFactory scopeFactory,
+        IConfiguration configuration)
         : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
+        _configuration = configuration;
     }
 
     protected override Task<string> GetQueryForVersionAsync(int sqlMajorVersion, CancellationToken ct)
@@ -71,12 +80,17 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
         string query,
         CancellationToken ct)
     {
+        // Las instancias DMZ no son alcanzables directamente desde el backend:
+        // rutamos la query a través del linked server configurado en el jump.
+        var (targetInstance, effectiveQuery) = DmzQueryRouter.Route(_configuration, instance, query);
+        var (_, effectiveFallbackQuery) = DmzQueryRouter.Route(_configuration, instance, GetFallbackRoleQuery());
+
         var result = new AlwaysOnMetrics();
 
         // Si la instancia no tiene AlwaysOn habilitado según la API, verificar de todas formas
         try
         {
-            var dataTable = await ExecuteQueryAsync(instance.InstanceName, query, timeoutSeconds, ct);
+            var dataTable = await ExecuteQueryAsync(targetInstance, effectiveQuery, timeoutSeconds, ct);
 
             if (dataTable.Rows.Count == 0)
             {
@@ -85,7 +99,7 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
                 try
                 {
                     var fallbackTable = await ExecuteQueryAsync(
-                        instance.InstanceName, GetFallbackRoleQuery(), timeoutSeconds, ct);
+                        targetInstance, effectiveFallbackQuery, timeoutSeconds, ct);
 
                     if (fallbackTable.Rows.Count > 0)
                     {
@@ -94,7 +108,7 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
                         var role = GetString(fallbackTable.Rows[0], "Role") ?? "";
                         result.IsPrimary = role.Equals("PRIMARY", StringComparison.OrdinalIgnoreCase);
                         result.PrimaryReplicaName = GetString(fallbackTable.Rows[0], "PrimaryReplicaName");
-                        result.Datacenter = DetermineDatacenter(result.AGName, result.PrimaryReplicaName);
+                        // Datacenter lo resuelve OverviewSummaryCacheService con info del par completo.
                         result.WorstState = "N/A";
                         result.DatabaseCount = 0;
                         return result;
@@ -147,7 +161,7 @@ public class AlwaysOnCollector : CollectorBase<AlwaysOnCollector.AlwaysOnMetrics
                 var role = GetString(row, "Role") ?? "";
                 result.IsPrimary = role.Equals("PRIMARY", StringComparison.OrdinalIgnoreCase);
                 result.PrimaryReplicaName = GetString(row, "PrimaryReplicaName");
-                result.Datacenter = DetermineDatacenter(result.AGName, result.PrimaryReplicaName);
+                // Datacenter lo resuelve OverviewSummaryCacheService con info del par completo.
             }
 
             var dbName = GetString(row, "DatabaseName") ?? "";
@@ -412,24 +426,6 @@ ELSE
 BEGIN
     SELECT NULL WHERE 1=0;
 END";
-    }
-
-    private static string? DetermineDatacenter(string? agName, string? primaryReplica)
-    {
-        if (string.IsNullOrEmpty(agName) || string.IsNullOrEmpty(primaryReplica)) return null;
-        var replica = primaryReplica.ToUpperInvariant();
-        var ag = agName.ToUpperInvariant();
-
-        if (ag == "SSPR14ODMAG" || ag == "SSPR16SOAAG" || ag == "SSPR14AONAG" || ag == "SSPR16BPMAG")
-        {
-            if (replica.EndsWith("-01") || replica.EndsWith("\\01")) return "Mitre";
-            if (replica.EndsWith("-02") || replica.EndsWith("\\02")) return "Martínez";
-            return null;
-        }
-
-        if (replica.EndsWith("01") || replica.EndsWith("02")) return "Mitre";
-        if (replica.EndsWith("51") || replica.EndsWith("52")) return "Martínez";
-        return null;
     }
 
     public class AlwaysOnMetrics

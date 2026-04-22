@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
+using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
 using SQLGuardObservatory.API.Services;
@@ -39,18 +40,24 @@ public class MaintenanceCollector : CollectorBase<MaintenanceCollector.Maintenan
     private HashSet<string> _checkdbExceptions = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _indexOptimizeExceptions = new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly IConfiguration _configuration;
+
     public override string CollectorName => "Maintenance";
     public override string DisplayName => "Mantenimientos";
     protected override bool IncludeAWS => true;
+    // Las instancias DMZ se relevan ruteando la query vía linked server en el jump.
+    protected override bool IncludeDMZ => true;
 
     public MaintenanceCollector(
         ILogger<MaintenanceCollector> logger,
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        IServiceScopeFactory scopeFactory) 
+        IServiceScopeFactory scopeFactory,
+        IConfiguration configuration)
         : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -113,7 +120,8 @@ INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
 LEFT JOIN sys.dm_hadr_availability_replica_states ars ON ar.replica_id = ars.replica_id
 ORDER BY ag.name, ar.replica_server_name";
 
-                var agData = await ExecuteQueryAsync(instance.InstanceName, agQuery, 10, ct, instance.HostingSite, instance.Ambiente);
+                var (agTarget, agRouted) = DmzQueryRouter.Route(_configuration, instance, agQuery);
+                var agData = await ExecuteQueryAsync(agTarget, agRouted, 10, ct, instance.HostingSite, instance.Ambiente);
 
                 foreach (DataRow row in agData.Rows)
                 {
@@ -230,35 +238,36 @@ ORDER BY ag.name, ar.replica_server_name";
         {
             // === QUERY CHECKDB JOBS con retry ===
             var checkdbQuery = instance.IsAWS ? GetCheckdbJobsQueryRDS() : GetCheckdbJobsQuery();
+            var (checkdbTarget, checkdbRouted) = DmzQueryRouter.Route(_configuration, instance, checkdbQuery);
             DataTable? checkdbData = null;
-            
+
             // Intento 1 con timeout normal
             try
             {
-                checkdbData = await ExecuteQueryAsync(instance.InstanceName, checkdbQuery, TIMEOUT_INITIAL, ct, instance.HostingSite, instance.Ambiente);
+                checkdbData = await ExecuteQueryAsync(checkdbTarget, checkdbRouted, TIMEOUT_INITIAL, ct, instance.HostingSite, instance.Ambiente);
             }
             catch (Exception ex1)
             {
                 await Task.Delay(500, ct);
-                
+
                 // Intento 2: en AWS usar sp_help_job en C# (no requiere permisos directos en msdb tables)
                 // En on-premise reintentar con timeout extendido
                 try
                 {
                     if (instance.IsAWS)
                     {
-                        _logger.LogInformation("Query directa CHECKDB falló en RDS {Instance} ({Error}), usando sp_help_job fallback en C#", 
+                        _logger.LogInformation("Query directa CHECKDB falló en RDS {Instance} ({Error}), usando sp_help_job fallback en C#",
                             instance.InstanceName, ex1.Message);
                         checkdbData = await ExecuteSpHelpJobFallbackAsync(instance, "IntegrityCheck", TIMEOUT_RETRY, ct);
                     }
                     else
                     {
-                        checkdbData = await ExecuteQueryAsync(instance.InstanceName, checkdbQuery, TIMEOUT_RETRY, ct, instance.HostingSite, instance.Ambiente);
+                        checkdbData = await ExecuteQueryAsync(checkdbTarget, checkdbRouted, TIMEOUT_RETRY, ct, instance.HostingSite, instance.Ambiente);
                     }
                 }
                 catch (Exception ex2)
                 {
-                    _logger.LogWarning("Query CHECKDB falló en {Instance}, asumiendo 0 jobs: {Error}", 
+                    _logger.LogWarning("Query CHECKDB falló en {Instance}, asumiendo 0 jobs: {Error}",
                         instance.InstanceName, ex2.Message);
                     checkdbData = new DataTable();
                 }
@@ -268,29 +277,30 @@ ORDER BY ag.name, ar.replica_server_name";
 
             // === QUERY INDEXOPTIMIZE JOBS con retry ===
             var indexOptQuery = instance.IsAWS ? GetIndexOptimizeJobsQueryRDS() : GetIndexOptimizeJobsQuery();
+            var (indexOptTarget, indexOptRouted) = DmzQueryRouter.Route(_configuration, instance, indexOptQuery);
             DataTable? indexOptData = null;
-            
+
             // Intento 1 con timeout normal
             try
             {
-                indexOptData = await ExecuteQueryAsync(instance.InstanceName, indexOptQuery, TIMEOUT_INITIAL, ct, instance.HostingSite, instance.Ambiente);
+                indexOptData = await ExecuteQueryAsync(indexOptTarget, indexOptRouted, TIMEOUT_INITIAL, ct, instance.HostingSite, instance.Ambiente);
             }
             catch (Exception ex1)
             {
                 await Task.Delay(500, ct);
-                
+
                 // Intento 2: en AWS usar sp_help_job fallback en C#
                 try
                 {
                     if (instance.IsAWS)
                     {
-                        _logger.LogInformation("Query directa IndexOptimize falló en RDS {Instance} ({Error}), usando sp_help_job fallback en C#", 
+                        _logger.LogInformation("Query directa IndexOptimize falló en RDS {Instance} ({Error}), usando sp_help_job fallback en C#",
                             instance.InstanceName, ex1.Message);
                         indexOptData = await ExecuteSpHelpJobFallbackAsync(instance, "IndexOptimize", TIMEOUT_RETRY, ct);
                     }
                     else
                     {
-                        indexOptData = await ExecuteQueryAsync(instance.InstanceName, indexOptQuery, TIMEOUT_RETRY, ct, instance.HostingSite, instance.Ambiente);
+                        indexOptData = await ExecuteQueryAsync(indexOptTarget, indexOptRouted, TIMEOUT_RETRY, ct, instance.HostingSite, instance.Ambiente);
                     }
                 }
                 catch (Exception ex2)

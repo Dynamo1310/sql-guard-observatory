@@ -64,7 +64,21 @@ public class BackupAlertConfig
     /// </summary>
     [MaxLength(2000)]
     public string CcRecipients { get; set; } = "";
-    
+
+    /// <summary>
+    /// Destinatarios (TO) específicos para servidores DMZ. Si queda vacío, no se envía
+    /// mail por atrasos de backups en instancias DMZ (los DBAs administran esos backups
+    /// y deciden explícitamente a quién alertar).
+    /// </summary>
+    [MaxLength(2000)]
+    public string? DmzRecipients { get; set; }
+
+    /// <summary>
+    /// Destinatarios en copia (CC) específicos para servidores DMZ.
+    /// </summary>
+    [MaxLength(2000)]
+    public string? DmzCcRecipients { get; set; }
+
     public DateTime? LastRunAt { get; set; }
     
     public DateTime? LastAlertSentAt { get; set; }

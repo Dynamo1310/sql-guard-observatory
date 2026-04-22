@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SQLGuardObservatory.API.Data;
+using SQLGuardObservatory.API.Helpers;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
 using System.Data;
@@ -52,14 +53,21 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
     private int _logThresholdHours = DEFAULT_LOG_THRESHOLD_HOURS;
     private int _graceMinutesAfterFull = DEFAULT_GRACE_MINUTES_AFTER_FULL;
 
+    private readonly IConfiguration _configuration;
+
+    // Las instancias DMZ se relevan ruteando la query vía linked server en el jump.
+    protected override bool IncludeDMZ => true;
+
     public BackupsCollector(
         ILogger<BackupsCollector> logger,
         ICollectorConfigService configService,
         ISqlConnectionFactory connectionFactory,
         IInstanceProvider instanceProvider,
-        IServiceScopeFactory scopeFactory) 
+        IServiceScopeFactory scopeFactory,
+        IConfiguration configuration)
         : base(logger, configService, connectionFactory, instanceProvider, scopeFactory)
     {
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -90,7 +98,8 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                     INNER JOIN sys.availability_replicas ar ON ag.group_id = ar.group_id
                     ORDER BY ag.name, ar.replica_server_name";
 
-                var dataTable = await ExecuteQueryAsync(instance.InstanceName, query, 10, ct);
+                var (target, routedQuery) = DmzQueryRouter.Route(_configuration, instance, query);
+                var dataTable = await ExecuteQueryAsync(target, routedQuery, 10, ct);
 
                 foreach (DataRow row in dataTable.Rows)
                 {
@@ -231,7 +240,8 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                     _logger.LogInformation("{Instance} - Usando query SQL 2005 fallback", instance.InstanceName);
                 }
 
-                dataTable = await ExecuteQueryAsync(instance.InstanceName, currentQuery, currentTimeout, ct);
+                var (target, routedQuery) = DmzQueryRouter.Route(_configuration, instance, currentQuery);
+                dataTable = await ExecuteQueryAsync(target, routedQuery, currentTimeout, ct);
                 result.HasViewServerState = true;
                 break;
             }
@@ -251,7 +261,8 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
                     try
                     {
                         var fallbackQuery = isSql2005 ? GetSQL2005Query(cutoffDate) : GetModernQuery(cutoffDate);
-                        dataTable = await ExecuteQueryAsync(instance.InstanceName, fallbackQuery, timeoutSeconds * 2, ct);
+                        var (fbTarget, fbRouted) = DmzQueryRouter.Route(_configuration, instance, fallbackQuery);
+                        dataTable = await ExecuteQueryAsync(fbTarget, fbRouted, timeoutSeconds * 2, ct);
                         break;
                     }
                     catch
@@ -557,13 +568,31 @@ public class BackupsCollector : CollectorBase<BackupsCollector.BackupsMetrics>
     /// </summary>
     protected override async Task PostProcessAsync(List<CollectorInstanceResult> results, CancellationToken ct)
     {
-        if (_alwaysOnGroups.Count == 0)
+        if (_alwaysOnGroups.Count > 0)
         {
-            return;
+            _logger.LogInformation("Sincronizando backups entre nodos AlwaysOn...");
+            await SyncAlwaysOnBackupsAsync(results, ct);
         }
 
-        _logger.LogInformation("Sincronizando backups entre nodos AlwaysOn...");
+        // Refrescar el caché del Overview para que los cambios de Backups se vean en el dashboard.
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var cacheService = scope.ServiceProvider.GetService<IOverviewSummaryCacheService>();
+            if (cacheService != null)
+            {
+                await cacheService.RefreshCacheAsync("BackupsCollector", ct);
+                _logger.LogDebug("Overview cache refreshed after BackupsCollector");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error refreshing Overview cache after BackupsCollector");
+        }
+    }
 
+    private async Task SyncAlwaysOnBackupsAsync(List<CollectorInstanceResult> results, CancellationToken ct)
+    {
         foreach (var agGroup in _alwaysOnGroups.Values)
         {
             var nodeNames = agGroup.Nodes;

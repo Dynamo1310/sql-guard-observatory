@@ -27,7 +27,17 @@ public class BackupAlertConfigDto
     /// Lista de destinatarios en copia (CC)
     /// </summary>
     public List<string> CcRecipients { get; set; } = new();
-    
+
+    /// <summary>
+    /// Destinatarios (TO) específicos para instancias DMZ. Vacío = no alertar por DMZ.
+    /// </summary>
+    public List<string> DmzRecipients { get; set; } = new();
+
+    /// <summary>
+    /// Destinatarios en copia (CC) específicos para instancias DMZ.
+    /// </summary>
+    public List<string> DmzCcRecipients { get; set; } = new();
+
     public string? LastRunAt { get; set; }
     public string? LastAlertSentAt { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -60,6 +70,8 @@ public class UpdateBackupAlertRequest
     public int? AlertIntervalMinutes { get; set; }
     public List<string>? Recipients { get; set; }
     public List<string>? CcRecipients { get; set; }
+    public List<string>? DmzRecipients { get; set; }
+    public List<string>? DmzCcRecipients { get; set; }
 }
 
 /// <summary>
