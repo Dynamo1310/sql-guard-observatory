@@ -9,7 +9,7 @@ import {
   Database, Search, RefreshCw, Edit, ChevronUp, ChevronDown,
   SlidersHorizontal, BarChart3, Eye, EyeOff,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Plus, Minus, Server, Expand, Shrink,
+  Plus, Minus, Server, Expand, Shrink, Download,
 } from 'lucide-react';
 import {
   basesSinUsoApi,
@@ -53,6 +53,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
@@ -647,6 +648,89 @@ export default function BasesSinUso() {
     return String(value);
   };
 
+  // ==================== EXPORT ====================
+
+  const formatExportValue = (key: string, value: unknown): string => {
+    if (value == null) return '';
+    if (key === 'dataMB') return ((value as number) / 1024).toFixed(2);
+    if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+    const dateKeys = ['fecha', 'Date', 'cachedAt', 'sourceTimestamp'];
+    if (dateKeys.some(k => key.includes(k))) return formatDate(value as string);
+    return String(value);
+  };
+
+  const exportToCsv = () => {
+    if (!filteredAndSortedItems.length) return;
+    const headers = ALL_COLUMNS.map(c => `"${c.label}"`).join(',');
+    const rows = filteredAndSortedItems.map(item =>
+      ALL_COLUMNS.map(c => {
+        const val = formatExportValue(c.key, (item as Record<string, unknown>)[c.key]);
+        return `"${val.replace(/"/g, '""')}"`;
+      }).join(',')
+    );
+    const csv = '﻿' + [headers, ...rows].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `racionalizacion-sql-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportToExcel = async () => {
+    if (!filteredAndSortedItems.length) return;
+    const ExcelJS = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'SQL Guard Observatory';
+    workbook.created = new Date();
+
+    const worksheet = workbook.addWorksheet('Racionalización SQL');
+    worksheet.columns = ALL_COLUMNS.map(c => ({ header: c.label, key: c.key, width: 20 }));
+
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0066CC' } };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    filteredAndSortedItems.forEach(item => {
+      const row: Record<string, string> = {};
+      ALL_COLUMNS.forEach(c => {
+        row[c.key] = formatExportValue(c.key, (item as Record<string, unknown>)[c.key]);
+      });
+      worksheet.addRow(row);
+    });
+
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.eachCell(cell => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          };
+        });
+        if (rowNumber % 2 === 0) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
+        }
+      }
+    });
+
+    worksheet.addRow([]);
+    const totalRow = worksheet.addRow([`Total: ${filteredAndSortedItems.length} bases`]);
+    totalRow.font = { bold: true };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `racionalizacion-sql-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // ==================== RENDER ====================
 
   const resumen = data?.resumen;
@@ -686,6 +770,24 @@ export default function BasesSinUso() {
             <RefreshCw className={cn("h-4 w-4", refreshCacheMutation.isPending && "animate-spin")} />
             Recalcular
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1" disabled={!filteredAndSortedItems.length}>
+                <Download className="h-4 w-4" />
+                Descargar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Exportar vista actual</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={exportToCsv}>
+                CSV (.csv)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportToExcel}>
+                Excel (.xlsx)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
