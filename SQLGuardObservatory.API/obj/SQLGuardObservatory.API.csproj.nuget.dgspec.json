@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\tobia\\OneDrive\\Desktop\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj": {}
+    "C:\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj": {}
   },
   "projects": {
-    "C:\\Users\\tobia\\OneDrive\\Desktop\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj": {
+    "C:\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\tobia\\OneDrive\\Desktop\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj",
+        "projectUniqueName": "C:\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj",
         "projectName": "SQLGuardObservatory.API",
-        "projectPath": "C:\\Users\\tobia\\OneDrive\\Desktop\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj",
-        "packagesPath": "C:\\Users\\tobia\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\tobia\\OneDrive\\Desktop\\sql-guard-observatory\\SQLGuardObservatory.API\\obj\\",
+        "projectPath": "C:\\sql-guard-observatory\\SQLGuardObservatory.API\\SQLGuardObservatory.API.csproj",
+        "packagesPath": "C:\\Users\\Pablo\\.nuget\\packages\\",
+        "outputPath": "C:\\sql-guard-observatory\\SQLGuardObservatory.API\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\tobia\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\Pablo\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -24,6 +24,7 @@
         },
         "frameworks": {
           "net8.0": {
+            "framework": "net8.0",
             "targetAlias": "net8.0",
             "projectReferences": {}
           }
@@ -32,10 +33,17 @@
           "warnAsError": [
             "NU1605"
           ]
-        }
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.300"
       },
       "frameworks": {
         "net8.0": {
+          "framework": "net8.0",
           "targetAlias": "net8.0",
           "dependencies": {
             "AspNetCore.HealthChecks.SqlServer": {
@@ -124,6 +132,24 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[8.0.27, 8.0.27]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Host.win-x64",
+              "version": "[8.0.27, 8.0.27]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[8.0.27, 8.0.27]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[8.0.27, 8.0.27]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.AspNetCore.App": {
               "privateAssets": "none"
@@ -132,7 +158,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.126/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.300/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

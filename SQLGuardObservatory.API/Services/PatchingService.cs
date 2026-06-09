@@ -150,8 +150,9 @@ public class PatchingService : IPatchingService
         
         // Siempre devolver datos del cache (aunque estén "viejos")
         // La actualización solo se hace cuando el usuario presiona el botón Actualizar
+        var cutoffLastChecked = DateTime.Now.AddDays(-4);
         var cachedData = await _context.ServerPatchStatusCache
-            .Where(s => s.ConnectionSuccess) // Solo servidores con conexión exitosa
+            .Where(s => s.ConnectionSuccess && s.LastChecked >= cutoffLastChecked) // Solo conexión exitosa y verificados en los últimos 4 días
             .ToListAsync();
         _logger.LogInformation("⏱️ [{ElapsedMs}ms] Datos de cache obtenidos ({Count} registros)", stopwatch.ElapsedMilliseconds, cachedData.Count);
         
@@ -174,9 +175,9 @@ public class PatchingService : IPatchingService
         _logger.LogInformation("No hay datos en cache, realizando carga inicial para compliance {Year}", targetYear);
         await RefreshPatchStatusCacheAsync(targetYear);
         
-        // Devolver datos actualizados (solo los que tienen conexión exitosa)
+        // Devolver datos actualizados (solo conexión exitosa y verificados en los últimos 4 días)
         var freshData = await _context.ServerPatchStatusCache
-            .Where(s => s.ConnectionSuccess)
+            .Where(s => s.ConnectionSuccess && s.LastChecked >= cutoffLastChecked)
             .ToListAsync();
         
         var configs = await GetComplianceConfigsDictionary(targetYear);
