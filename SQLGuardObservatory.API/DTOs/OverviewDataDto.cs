@@ -25,6 +25,7 @@ public class OverviewPageDataDto
     public List<OverviewBackupIssueDto> BackupIssues { get; set; } = new();
     public List<OverviewCriticalDiskDto> CriticalDisks { get; set; } = new();
     public List<OverviewMaintenanceOverdueDto> MaintenanceOverdue { get; set; } = new();
+    public List<OverviewDatabaseStateDto> DatabaseStates { get; set; } = new();
     
     // Timestamp de última actualización
     public DateTime? LastUpdate { get; set; }
@@ -143,6 +144,18 @@ public class OverviewMaintenanceOverdueDto
     public bool CheckdbVencido { get; set; }
     public bool IndexOptimizeVencido { get; set; }
     public string? AgName { get; set; }
+}
+
+/// <summary>
+/// Base en estado anormal (state distinto de ONLINE/OFFLINE, o acceso restringido)
+/// </summary>
+public class OverviewDatabaseStateDto
+{
+    public string InstanceName { get; set; } = string.Empty;
+    public string? Ambiente { get; set; }
+    public string DatabaseName { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public string UserAccess { get; set; } = string.Empty;
 }
 
 /// <summary>

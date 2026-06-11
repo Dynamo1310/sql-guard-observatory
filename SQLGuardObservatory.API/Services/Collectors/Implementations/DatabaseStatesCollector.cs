@@ -3,6 +3,7 @@ using SQLGuardObservatory.API.Data;
 using SQLGuardObservatory.API.Models.Collectors;
 using SQLGuardObservatory.API.Models.HealthScoreV3;
 using System.Data;
+using System.Text.Json;
 
 namespace SQLGuardObservatory.API.Services.Collectors.Implementations;
 
@@ -63,6 +64,7 @@ public class DatabaseStatesCollector : CollectorBase<DatabaseStatesCollector.Dat
     {
         foreach (DataRow row in table.Rows)
         {
+            var dbName = GetString(row, "DatabaseName") ?? "";
             var stateDesc = GetString(row, "StateDesc") ?? "";
             var userAccess = GetString(row, "UserAccess") ?? "";
 
@@ -90,6 +92,15 @@ public class DatabaseStatesCollector : CollectorBase<DatabaseStatesCollector.Dat
             {
                 result.SingleUserCount++;
             }
+
+            // El query ya devuelve solo bases en estado anormal (ver GetDefaultQuery),
+            // así que persistimos el detalle de cada una para el Overview ("Estados de Bases").
+            result.ProblematicDatabases.Add(new DbStateDetail
+            {
+                DatabaseName = dbName,
+                State = stateDesc,
+                UserAccess = userAccess
+            });
         }
     }
 
@@ -140,7 +151,10 @@ public class DatabaseStatesCollector : CollectorBase<DatabaseStatesCollector.Dat
             RecoveryPendingCount = data.RecoveryPendingCount,
             SingleUserCount = data.SingleUserCount,
             RestoringCount = data.RestoringCount,
-            SuspectPageCount = data.SuspectPageCount
+            SuspectPageCount = data.SuspectPageCount,
+            // Detalle por base en estado anormal (array JSON plano, sin doble encode).
+            // Lo consume OverviewSummaryCacheService para la tabla "Estados de Bases".
+            DatabaseStateDetails = JsonSerializer.Serialize(data.ProblematicDatabases)
         };
 
         await SaveWithScopedContextAsync(async context =>
@@ -153,16 +167,20 @@ public class DatabaseStatesCollector : CollectorBase<DatabaseStatesCollector.Dat
     protected override string GetDefaultQuery(int sqlMajorVersion)
     {
         return @"
--- Database states problemáticos (OFFLINE excluido - es intencional)
--- Solo reportamos: SUSPECT, EMERGENCY, RECOVERY_PENDING, RESTORING
-SELECT 
+-- Bases en estado ANORMAL: state_desc <> ONLINE/OFFLINE (OFFLINE es intencional),
+-- o con acceso restringido (SINGLE_USER/RESTRICTED_USER) aunque estén ONLINE.
+-- Se excluyen bases read-only y standby (log shipping) por ser intencionales.
+SELECT
     d.name AS DatabaseName,
     d.state_desc AS StateDesc,
     d.user_access_desc AS UserAccess
 FROM sys.databases d
 WHERE d.database_id > 4
   AND d.name NOT IN ('tempdb')
-  AND d.state_desc NOT IN ('ONLINE', 'OFFLINE'); -- OFFLINE es intencional, no es problema
+  AND d.is_read_only = 0
+  AND d.is_in_standby = 0
+  AND (d.state_desc NOT IN ('ONLINE', 'OFFLINE')
+       OR d.user_access_desc <> 'MULTI_USER');
 
 -- Suspect pages (indica corrupción de datos)
 SELECT COUNT(*) AS SuspectPageCount
@@ -190,6 +208,22 @@ WHERE event_type IN (1, 2, 3);"; // 1=823 I/O error, 2=bad checksum, 3=torn page
         public int SingleUserCount { get; set; }
         public int RestoringCount { get; set; }
         public int SuspectPageCount { get; set; }
+
+        /// <summary>
+        /// Detalle de las bases en estado anormal (nombre + estado + acceso).
+        /// Se serializa a InstanceHealth_DatabaseStates.DatabaseStateDetails.
+        /// </summary>
+        public List<DbStateDetail> ProblematicDatabases { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Detalle de una base en estado anormal para el Overview ("Estados de Bases").
+    /// </summary>
+    public class DbStateDetail
+    {
+        public string DatabaseName { get; set; } = string.Empty;
+        public string State { get; set; } = string.Empty;
+        public string UserAccess { get; set; } = string.Empty;
     }
 }
 

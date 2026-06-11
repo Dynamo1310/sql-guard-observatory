@@ -66,21 +66,20 @@ function Get-DatabaseStatesStatus {
     param([string]$Instance)
     
     $query = @"
--- Database States (excluye OFFLINE - puede ser intencional por mantenimiento)
-SELECT 
+-- Bases en estado ANORMAL: state_desc <> ONLINE/OFFLINE (OFFLINE es intencional),
+-- o con acceso restringido (SINGLE_USER/RESTRICTED_USER) aunque estén ONLINE.
+-- Se excluyen bases read-only y standby (log shipping) por ser intencionales.
+SELECT
     d.name AS DatabaseName,
     d.state_desc AS State,
-    d.user_access_desc AS UserAccess,
-    d.is_in_standby AS IsStandby,
-    CASE 
-        WHEN d.state_desc IN ('SUSPECT', 'EMERGENCY', 'RECOVERY_PENDING') THEN 1
-        WHEN d.user_access_desc = 'SINGLE_USER' THEN 1
-        ELSE 0
-    END AS IsProblematic
+    d.user_access_desc AS UserAccess
 FROM sys.databases d
 WHERE d.database_id > 4
-  AND d.state_desc <> 'OFFLINE'  -- Excluir bases offline (mantenimiento intencional)
-ORDER BY IsProblematic DESC, State;
+  AND d.is_read_only = 0
+  AND d.is_in_standby = 0
+  AND (d.state_desc NOT IN ('ONLINE', 'OFFLINE')
+       OR d.user_access_desc <> 'MULTI_USER')
+ORDER BY d.state_desc, d.name;
 
 -- Suspect Pages
 SELECT COUNT(*) AS SuspectPageCount
@@ -103,10 +102,17 @@ WHERE last_update_date > DATEADD(DAY, -30, GETDATE());
         $restoringCount = ($dbStates | Where-Object { $_.State -eq 'RESTORING' }).Count
         $suspectPageCount = if ($suspectPages.Count -gt 0) { $suspectPages[0].SuspectPageCount } else { 0 }
         
-        # Detalles de DBs problemáticas
-        $problematicDBs = $dbStates | Where-Object { $_.IsProblematic -eq 1 } | Select-Object DatabaseName, State, UserAccess
-        $details = $problematicDBs | ConvertTo-Json -Compress
-        if ($null -eq $details -or $details -eq "") { $details = "[]" }
+        # Detalle de TODAS las bases en estado anormal (el query ya las filtró).
+        # Forzamos forma de array JSON aun con 0 o 1 base (Windows PowerShell 5.1 no
+        # tiene ConvertTo-Json -AsArray y desenvuelve los arrays de un solo elemento).
+        $abnormalDBs = @($dbStates | Select-Object DatabaseName, State, UserAccess)
+        if ($abnormalDBs.Count -eq 0) {
+            $details = "[]"
+        } elseif ($abnormalDBs.Count -eq 1) {
+            $details = "[" + ($abnormalDBs[0] | ConvertTo-Json -Compress) + "]"
+        } else {
+            $details = $abnormalDBs | ConvertTo-Json -Compress
+        }
         
         return @{
             OfflineCount = $offlineCount
@@ -286,7 +292,7 @@ foreach ($instance in $instances) {
         SingleUserCount = $dbStatus.SingleUserCount
         RestoringCount = $dbStatus.RestoringCount
         SuspectPageCount = $dbStatus.SuspectPageCount
-        DatabaseStateDetails = ($dbStatus.Details | ConvertTo-Json -Compress)
+        DatabaseStateDetails = $dbStatus.Details
     }
 }
 

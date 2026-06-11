@@ -1998,6 +1998,7 @@ export interface OverviewDataOptimizedDto {
   backupIssues: OverviewBackupIssueDto[];
   criticalDisks: OverviewCriticalDiskDto[];
   maintenanceOverdue: OverviewMaintenanceOverdueDto[];
+  databaseStates: OverviewDatabaseStateDto[];
 
   // Timestamp
   lastUpdate?: string;
@@ -2056,6 +2057,14 @@ export interface OverviewMaintenanceOverdueDto {
   checkdbVencido: boolean;
   indexOptimizeVencido: boolean;
   agName?: string;
+}
+
+export interface OverviewDatabaseStateDto {
+  instanceName: string;
+  ambiente?: string;
+  databaseName: string;
+  state: string;
+  userAccess: string;
 }
 
 /**

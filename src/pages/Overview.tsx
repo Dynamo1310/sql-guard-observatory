@@ -130,6 +130,7 @@ export default function Overview() {
   const { sortedData: sortedBackupIssues, requestSort: requestSortBackups, getSortIndicator: getSortIndicatorBackups } = useTableSort(data?.backupIssues ?? []);
   const { sortedData: sortedCriticalDisks, requestSort: requestSortDisks, getSortIndicator: getSortIndicatorDisks } = useTableSort(data?.criticalDisks ?? []);
   const { sortedData: sortedMaintenanceOverdue, requestSort: requestSortMaintenance, getSortIndicator: getSortIndicatorMaintenance } = useTableSort(data?.maintenanceOverdue ?? []);
+  const { sortedData: sortedDatabaseStates, requestSort: requestSortDbStates, getSortIndicator: getSortIndicatorDbStates } = useTableSort(data?.databaseStates ?? []);
 
   if (loading) {
     return (
@@ -888,6 +889,95 @@ export default function Overview() {
                         <h3 className="text-lg font-semibold mb-2">No hay mantenimiento atrasado</h3>
                         <p className="text-muted-foreground">
                           Todo el mantenimiento de Producción está al día.
+                        </p>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tercera fila: Estados de Bases */}
+      <div className="grid gap-4 grid-cols-1">
+        <Card className="animate-slide-up delay-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-amber-500" />
+              Estados de Bases
+              <Badge variant="outline" className="font-medium text-muted-foreground">
+                Producción
+              </Badge>
+              {sortedDatabaseStates.length > 0 && (
+                <Badge variant="secondary" className="font-medium">
+                  {sortedDatabaseStates.length}
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription>
+              Bases en estado anormal (distinto de ONLINE/OFFLINE, o con acceso restringido)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[400px] overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => requestSortDbStates('instanceName')}
+                    >
+                      Instancia {getSortIndicatorDbStates('instanceName')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => requestSortDbStates('databaseName')}
+                    >
+                      Base {getSortIndicatorDbStates('databaseName')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
+                      onClick={() => requestSortDbStates('state')}
+                    >
+                      Estado {getSortIndicatorDbStates('state')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
+                      onClick={() => requestSortDbStates('userAccess')}
+                    >
+                      Acceso {getSortIndicatorDbStates('userAccess')}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedDatabaseStates.length > 0 ? (
+                    sortedDatabaseStates.map((db, idx) => {
+                      const st = (db.state || '').toUpperCase();
+                      const esCritico = st === 'SUSPECT' || st === 'EMERGENCY' || st === 'RECOVERY_PENDING';
+                      return (
+                        <TableRow key={idx}>
+                          <TableCell className="font-medium">{db.instanceName}</TableCell>
+                          <TableCell className="font-medium">{db.databaseName}</TableCell>
+                          <TableCell className="text-center">
+                            <StatusBadge status={esCritico ? 'critical' : 'warning'}>
+                              {db.state || 'N/A'}
+                            </StatusBadge>
+                          </TableCell>
+                          <TableCell className="text-center text-sm text-muted-foreground">
+                            {db.userAccess || '-'}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-12">
+                        <Database className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">No hay bases en estado anormal</h3>
+                        <p className="text-muted-foreground">
+                          Todas las bases de Producción están ONLINE.
                         </p>
                       </TableCell>
                     </TableRow>

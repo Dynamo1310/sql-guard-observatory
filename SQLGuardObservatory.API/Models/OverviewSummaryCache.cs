@@ -103,6 +103,12 @@ public class OverviewSummaryCache
     /// Estructura: List&lt;OverviewMaintenanceOverdueDto&gt;
     /// </summary>
     public string? MaintenanceOverdueJson { get; set; }
+
+    /// <summary>
+    /// Lista de bases en estado anormal serializada en JSON
+    /// Estructura: List&lt;OverviewDatabaseStateDto&gt;
+    /// </summary>
+    public string? DatabaseStatesJson { get; set; }
     
     // ========================================
     // Metadata

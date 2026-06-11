@@ -95,20 +95,22 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             var exclusionService = scope.ServiceProvider.GetRequiredService<IServerExclusionService>();
             var excludedServers = await exclusionService.GetExcludedServerNamesAsync(ct);
 
-            // Ejecutar las 5 queries en paralelo
+            // Ejecutar las queries en paralelo
             var healthScoresTask = GetProductionHealthScoresAsync(ct);
             var criticalDisksTask = GetProductionCriticalDisksAsync(ct);
             var maintenanceTask = GetProductionMaintenanceOverdueAsync(context, ct);
             var backupBreachesTask = GetProductionBackupBreachesAsync(ct);
             var agHealthTask = GetProductionAGHealthAsync(ct);
+            var databaseStatesTask = GetProductionDatabaseStatesAsync(ct);
 
-            await Task.WhenAll(healthScoresTask, criticalDisksTask, maintenanceTask, backupBreachesTask, agHealthTask);
+            await Task.WhenAll(healthScoresTask, criticalDisksTask, maintenanceTask, backupBreachesTask, agHealthTask, databaseStatesTask);
 
             var healthScores = healthScoresTask.Result;
             var criticalDisks = criticalDisksTask.Result;
             var maintenanceOverdue = maintenanceTask.Result;
             var backupBreaches = backupBreachesTask.Result;
             var agHealthStatuses = agHealthTask.Result;
+            var databaseStates = databaseStatesTask.Result;
 
             // Filtrar instancias excluidas globalmente de todos los resultados
             if (excludedServers.Count > 0)
@@ -127,6 +129,9 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
                     .ToList();
                 agHealthStatuses = agHealthStatuses
                     .Where(a => !IsInstanceExcluded(a.InstanceName, excludedServers))
+                    .ToList();
+                databaseStates = databaseStates
+                    .Where(d => !IsInstanceExcluded(d.InstanceName, excludedServers))
                     .ToList();
 
                 _logger.LogDebug(
@@ -179,6 +184,7 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
             cache.BackupIssuesJson = JsonSerializer.Serialize(backupIssues, _jsonOptions);
             cache.CriticalDisksJson = JsonSerializer.Serialize(criticalDisks, _jsonOptions);
             cache.MaintenanceOverdueJson = JsonSerializer.Serialize(maintenanceOverdue, _jsonOptions);
+            cache.DatabaseStatesJson = JsonSerializer.Serialize(databaseStates, _jsonOptions);
 
             // Metadata
             cache.LastUpdatedUtc = DateTime.UtcNow;
@@ -273,6 +279,12 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
         {
             result.MaintenanceOverdue = JsonSerializer.Deserialize<List<OverviewMaintenanceOverdueDto>>(
                 cache.MaintenanceOverdueJson, _jsonOptions) ?? new();
+        }
+
+        if (!string.IsNullOrEmpty(cache.DatabaseStatesJson))
+        {
+            result.DatabaseStates = JsonSerializer.Deserialize<List<OverviewDatabaseStateDto>>(
+                cache.DatabaseStatesJson, _jsonOptions) ?? new();
         }
 
         return result;
@@ -411,6 +423,110 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
         }
 
         return results.OrderBy(d => d.RealPorcentajeLibre).ToList();
+    }
+
+    /// <summary>
+    /// Obtiene las bases en estado anormal de producción a partir del último snapshot
+    /// por instancia en InstanceHealth_DatabaseStates, aplanando el JSON DatabaseStateDetails.
+    /// </summary>
+    private async Task<List<OverviewDatabaseStateDto>> GetProductionDatabaseStatesAsync(CancellationToken ct)
+    {
+        var results = new List<OverviewDatabaseStateDto>();
+
+        var query = @"
+            WITH LatestDbStates AS (
+                SELECT
+                    InstanceName,
+                    Ambiente,
+                    DatabaseStateDetails,
+                    ROW_NUMBER() OVER (PARTITION BY InstanceName ORDER BY CollectedAtUtc DESC) AS rn
+                FROM dbo.InstanceHealth_DatabaseStates
+                WHERE Ambiente = 'Produccion'
+            )
+            SELECT InstanceName, Ambiente, DatabaseStateDetails
+            FROM LatestDbStates
+            WHERE rn = 1";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using var command = new SqlCommand(query, connection);
+        command.CommandTimeout = 30;
+
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var instanceName = reader.GetString(0);
+            var ambiente = reader.IsDBNull(1) ? null : reader.GetString(1);
+            var detailsJson = reader.IsDBNull(2) ? null : reader.GetString(2);
+
+            var details = ParseDatabaseStateDetails(detailsJson, instanceName);
+            foreach (var d in details)
+            {
+                if (string.IsNullOrWhiteSpace(d.DatabaseName))
+                    continue;
+
+                results.Add(new OverviewDatabaseStateDto
+                {
+                    InstanceName = instanceName,
+                    Ambiente = ambiente,
+                    DatabaseName = d.DatabaseName,
+                    State = d.State ?? string.Empty,
+                    UserAccess = d.UserAccess ?? string.Empty
+                });
+            }
+        }
+
+        return results
+            .OrderBy(d => d.InstanceName)
+            .ThenBy(d => d.DatabaseName)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Deserializa DatabaseStateDetails de forma defensiva. El collector C# guarda un array
+    /// JSON plano; datos legacy del script PowerShell podían venir doble-encodeados
+    /// (un string JSON dentro de otro), así que se intenta desenvolver una vez si hace falta.
+    /// </summary>
+    private List<DbStateDetailJson> ParseDatabaseStateDetails(string? detailsJson, string instanceName)
+    {
+        if (string.IsNullOrWhiteSpace(detailsJson))
+            return new();
+
+        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var trimmed = detailsJson!.TrimStart();
+
+            // Doble-encode legacy: el valor es un string JSON ("[...]") en vez de un array.
+            if (trimmed.StartsWith("\""))
+            {
+                try
+                {
+                    detailsJson = JsonSerializer.Deserialize<string>(detailsJson, opts);
+                    if (string.IsNullOrWhiteSpace(detailsJson))
+                        return new();
+                    continue;
+                }
+                catch (JsonException)
+                {
+                    return new();
+                }
+            }
+
+            try
+            {
+                return JsonSerializer.Deserialize<List<DbStateDetailJson>>(detailsJson, opts) ?? new();
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Error parseando DatabaseStateDetails para {Instance}", instanceName);
+                return new();
+            }
+        }
+
+        return new();
     }
 
     /// <summary>
@@ -1125,6 +1241,16 @@ public class OverviewSummaryCacheService : IOverviewSummaryCacheService
         /// v3.5: Indica si es un disco crítico del sistema (C, E, F, G, H)
         /// </summary>
         public bool? IsCriticalSystemDisk { get; set; }
+    }
+
+    /// <summary>
+    /// Clase auxiliar para deserializar el JSON de DatabaseStateDetails
+    /// </summary>
+    private class DbStateDetailJson
+    {
+        public string DatabaseName { get; set; } = string.Empty;
+        public string? State { get; set; }
+        public string? UserAccess { get; set; }
     }
 
     /// <summary>
